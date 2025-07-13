@@ -4,11 +4,31 @@ import { Download } from 'lucide-react';
 
 const SignatureMocktails: React.FC = () => {
   const mocktails = [
-    { 
-      name: "", 
-      flavor: "",
-      image: ""
+    {
+      name: 'bicerin',
+      flavor: '',
+      image: '/public/mocktails/bicerin.jpg'
     },
+    {
+      name: 'blood orange espresso tonic',
+      flavor: '',
+      image: '/public/mocktails/blood orange espresso tonic.JPG'
+    },
+    {
+      name: 'piccante',
+      flavor: '',
+      image: '/public/mocktails/piccante.JPG'
+    },
+    {
+      name: 'signor bianca',
+      flavor: '',
+      image: '/public/mocktails/signor bianca.png'
+    },
+    {
+      name: 'viola and sambuco',
+      flavor: '',
+      image: '/public/mocktails/viola and sambuco.png'
+    }
   ];
 
   return (

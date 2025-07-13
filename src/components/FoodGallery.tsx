@@ -2,14 +2,18 @@ import React from 'react';
 
 const FoodGallery: React.FC = () => {
   const dishes = [
-    { name: "Spaghetti all'Assassina", image: "/public/food/assassina.jpg" },
-    { name: "Aglio Olio e Pepperoncino", image: "/public/food/aglio.jpg" },
-    { name: "Tiella Barese", image: "/public/food/tielle.jpg" },
-    { name: "Margarita", image: "/public/food/margarita.jpg" },
-    { name: "Bicerin", image: "/public/food/bicerin.jpg" },
-    { name: "Tiramisu", image: "/public/food/tiramisu.jpg" },
-    { name: "Pistachio Affogato", image: "/public/food/pistaAffo.jpg" }
-    
+    { name: 'assassina', image: '/public/food/assassina.jpg' },
+    { name: 'aglio', image: '/public/food/aglio.jpg' },
+    { name: 'tielle', image: '/public/food/tielle.jpg' },
+    { name: 'margarita', image: '/public/food/margarita.jpg' },
+    { name: 'tiramisu', image: '/public/food/tiramisu.jpg' },
+    { name: 'pistaAffo', image: '/public/food/pistaAffo.jpg' },
+    { name: 'arrosticini', image: '/public/food/arrosticini.JPG' },
+    { name: 'boozy donna', image: '/public/food/boozy donna.JPG' },
+    { name: 'idk1', image: '/public/food/idk1.JPG' },
+    { name: 'idk2', image: '/public/food/idk2.JPG' },
+    { name: 'piemontese', image: '/public/food/piemontese.JPG' },
+    { name: 'pollo alla cacciatora', image: '/public/food/pollo alla cacciatora.JPG' }
   ];
 
   return (

@@ -2,13 +2,37 @@ import React from 'react';
 
 const PlaceGallery: React.FC = () => {
   const places = [
-    { 
-      name: "Dining Room", 
-      image: "/public/atmosphere/dining.jpg"
+    {
+      name: 'dining',
+      image: '/public/atmosphere/dining.jpg'
     },
-    { 
-      name: "Facade", 
-      image: "/public/atmosphere/outsideLOGO.jpg"
+    {
+      name: 'outsideLOGO',
+      image: '/public/atmosphere/outsideLOGO.jpg'
+    },
+    {
+      name: 'ambience',
+      image: '/public/atmosphere/ambience.JPG'
+    },
+    {
+      name: 'ceiling decor',
+      image: '/public/atmosphere/ceiling decor.png'
+    },
+    {
+      name: 'front mirror',
+      image: '/public/atmosphere/front mirror.png'
+    },
+    {
+      name: 'painting board',
+      image: '/public/atmosphere/painting board.JPG'
+    },
+    {
+      name: 'room',
+      image: '/public/atmosphere/room.png'
+    },
+    {
+      name: 'table',
+      image: '/public/atmosphere/table.png'
     }
   ];
 
