@@ -8,27 +8,13 @@ const images = [
 
 const OurStory: React.FC = () => {
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [isTransitioning, setIsTransitioning] = useState(true);
-
-  const extendedImages = [...images, images[0]];
 
   useEffect(() => {
     const interval = setInterval(() => {
-      setCurrentIndex((prev) => prev + 1);
+      setCurrentIndex((prev) => (prev + 1) % images.length);
     }, 3200); // 3.2 seconds
     return () => clearInterval(interval);
   }, []);
-
-  useEffect(() => {
-    if (currentIndex === images.length) {
-      const timeout = setTimeout(() => {
-        setIsTransitioning(false);
-        setCurrentIndex(0);
-      }, 800); // match transition duration
-      return () => clearTimeout(timeout);
-    }
-    setIsTransitioning(true);
-  }, [currentIndex]);
 
   return (
     <section id = "our-story" className="py-20 bg-[#F9F9F9]">
@@ -55,13 +41,10 @@ const OurStory: React.FC = () => {
           {/* Rotating Image Carousel */}
           <div className="relative overflow-hidden rounded-2xl shadow-2xl h-[400px]">
             <div
-              className="flex"
-              style={{
-                transform: `translateX(-${currentIndex * 100}%)`,
-                transition: isTransitioning ? 'transform 800ms ease-in-out' : 'none',
-              }}
+              className="flex transition-transform duration-[800ms] ease-in-out"
+              style={{ transform: `translateX(-${currentIndex * 100}%)` }}
             >
-              {extendedImages.map((src, idx) => (
+              {images.map((src, idx) => (
                 <img
                   key={idx}
                   src={src}

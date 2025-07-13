@@ -6,27 +6,27 @@ const SignatureMocktails: React.FC = () => {
   const mocktails = [
     {
       name: "Bicerin",
-      flavor: "Espresso, chocolate & cream",
+      flavor: "Espresso, chocolate \& cream",
       image: "/public/mocktails/bicerin.jpg"
     },
     {
-      name: "blood orange espresso tonic",
-      flavor: "",
+      name: "Espresso Tonic",
+      flavor: "Espresso, blood orange \& ginger ale",
       image: "/public/mocktails/blood orange espresso tonic.JPG"
     },
     {
-      name: "piccante",
-      flavor: "",
+      name: "Piccante",
+      flavor: "Pineapple, birds eye chili \& salt",
       image: "/public/mocktails/piccante.JPG"
     },
     {
-      name: "signor bianca",
-      flavor: "",
+      name: "Signor Bianca",
+      flavor: "Dragonfruit, coconut water \& honey",
       image: "/public/mocktails/signor bianca.png"
     },
     {
-      name: "viola and sambuco",
-      flavor: "",
+      name: "Viola and Sambuco",
+      flavor: "Blueberries, basil leaves, lavender \& ginger ale and Elderflower, cucumber \& black tea",
       image: "/public/mocktails/viola and sambuco.png"
     }
   ];
@@ -83,10 +83,12 @@ const SignatureMocktails: React.FC = () => {
 
         {/* Download Full Menu Button */}
         <div className="text-center">
-          <button className="inline-flex items-center space-x-2 bg-[#6B8B59] hover:bg-[#5a7349] text-white font-['Montserrat'] font-semibold px-8 py-4 rounded-lg transform hover:scale-105 hover:shadow-xl transition-all duration-300 uppercase tracking-wide">
-            <Download className="w-5 h-5" />
-            <span>Download Full Menu</span>
-          </button>
+        <a href="/public/Menu%20-%20Expanded.pdf" download>
+            <button className="inline-flex items-center space-x-2 bg-[#6B8B59] hover:bg-[#5a7349] text-white font-['Montserrat'] font-semibold px-8 py-4 rounded-lg transform hover:scale-105 hover:shadow-xl transition-all duration-300 uppercase tracking-wide">
+              <Download className="w-5 h-5" />
+              <span>Download Full Menu</span>
+            </button>
+          </a>
         </div>
       </div>
 
