@@ -1,10 +1,15 @@
 import React, { useEffect, useState } from 'react';
 
-const images = [
-  '/public/food/handmaking.jpg',
-  '/public/food/aglio.jpg',
-  '/public/team/alice.jpg',
+const imageFiles = [
+  'cut.JPG',
+  'dinner.JPG',
+  'handmaking.jpg',
+  'oven.JPG',
+  'shape.JPG',
+  'stuff.JPG'
 ];
+
+const images = imageFiles.map((file) => `/public/our_story/${file}`);
 
 const OurStory: React.FC = () => {
   const [currentIndex, setCurrentIndex] = useState(0);
