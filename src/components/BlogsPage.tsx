@@ -47,7 +47,7 @@ const BlogsPage: React.FC = () => {
       date: "2024-11-20",
       excerpt: "How Via Bianca is revolutionizing the mocktail scene with Italian-inspired zero-proof beverages.",
       url: "#",
-      image: "/public/food/bicerin.jpg"
+      image: "/public/mocktails/bicerin.jpg"
     },
     {
       title: "From Puglia to Delhi: A Culinary Journey",
@@ -103,7 +103,7 @@ const BlogsPage: React.FC = () => {
       date: "2024-09-30",
       excerpt: "How Via Bianca creates perfect harmony between food and non-alcoholic beverages.",
       url: "#",
-      image: "/public/food/bicerin.jpg"
+      image: "/public/mocktails/bicerin.jpg"
     }
   ];
 

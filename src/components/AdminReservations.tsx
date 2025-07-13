@@ -114,6 +114,7 @@ const AdminReservations = () => {
                       <td className="px-6 py-4 whitespace-nowrap">
                         <select
                           value={reservation.status}
+                          // eslint-disable-next-line @typescript-eslint/no-explicit-any
                           onChange={(e) => updateReservationStatus(reservation.id, e.target.value as any)}
                           className={`text-sm rounded-full px-3 py-1 border ${
                             reservation.status === 'booked' ? 'bg-blue-100 text-blue-800 border-blue-200' :
