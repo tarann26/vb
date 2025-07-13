@@ -2,20 +2,20 @@ import React from 'react';
 
 const FoodGallery: React.FC = () => {
   const dishFiles = [
-    "aglio.jpg",
-    "americana.png",
-    "arrosticini.JPG",
-    "assassina.jpg",
-    "boozy donna.JPG",
-    "idk1.JPG",
-    "idk2.JPG",
-    "margarita.jpg",
-    "piemontese.JPG",
-    "pistaAffo.jpg",
     "pizza1.JPG",
     "pizza2.JPG",
+    "margarita.jpg",
+    "Spaghetti alla'Assassina.jpg",
+    "boozy donna.JPG",
+    "aglio e pepperoncini.jpg",
     "pollo alla cacciatora.JPG",
     "tielle.jpg",
+    "americana.png",
+    "arrosticini.JPG",
+    "idk1.JPG",
+    "idk2.JPG",
+    "bonet piemontese.JPG",
+    "pistaAffo.jpg",
     "tiramisu.jpg"
   ];
 
