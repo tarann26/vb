@@ -10,7 +10,7 @@ const NewsPress: React.FC = () => {
       date: "2024",
       excerpt: "Chef Kamalika Anand's latest venture showcases authentic Puglian cuisine with handcrafted pastas and zero-proof cocktails.",
       url: "https://www.bwhotelier.com/article/via-bianca-brings-regional-italian-flair-to-delhis-dining-scene-558510",
-      image: "src/images/hotelier.png"
+      image: "/public/press/hotelier.png"
     },
     {
       title: "Via Bianca Pastificio & Ristorante Delhi",
@@ -18,7 +18,7 @@ const NewsPress: React.FC = () => {
       date: "2024",
       excerpt: "A deep dive into the authentic Italian dining experience that's capturing hearts in Greater Kailash.",
       url: "https://www.delhiroyale.in/post/via-bianca-pastificio-ristorante-delhi",
-      image: "src/images/royale.png"
+      image: "/public/press/royale.png"
     },
     {
       title: "Le Cordon Bleu Alum Chef Kamalika Anand Debuts Via Bianca in Delhi",
@@ -26,7 +26,7 @@ const NewsPress: React.FC = () => {
       date: "2024",
       excerpt: "From Michelin-starred kitchens to Delhi's dining scene, Chef Kamalika brings her expertise to Via Bianca.",
       url: "https://www.restaurantindia.in/news/le-cordon-bleu-alum-chef-kamalika-anand-debuts-via-bianca-in-delhi.n12908",
-      image: "src/images/restaurantindia.png"
+      image: "/public/press/restaurantindia.png"
     }
   ];
 

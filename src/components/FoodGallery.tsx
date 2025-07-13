@@ -1,20 +1,32 @@
 import React from 'react';
 
 const FoodGallery: React.FC = () => {
-  const dishes = [
-    { name: "arrosticini", image: "/public/food/arrosticini.JPG" },
-    { name: "Spaghetti all'Assassina", image: "/public/food/assassina.jpg" },
-    { name: "Aglio Olio e Pepperoncino", image: "/public/food/aglio.jpg" },
-    { name: "boozy donna", image: "/public/food/boozy donna.JPG" },
-    { name: "pollo alla cacciatora", image: "/public/food/pollo alla cacciatora.JPG" },
-    { name: "Tiella Barese", image: "/public/food/tielle.jpg" },
-    { name: "Margarita", image: "/public/food/margarita.jpg" },
-    { name: "idk1", image: "/public/food/idk1.JPG" },
-    { name: "idk2", image: "/public/food/idk2.JPG" },
-    { name: "piemontese", image: "/public/food/piemontese.JPG" },
-    { name: "Tiramisu", image: "/public/food/tiramisu.jpg" },
-    { name: "Pistachio Affogato", image: "/public/food/pistaAffo.jpg" }
+  const dishFiles = [
+    "aglio.jpg",
+    "americana.png",
+    "arrosticini.JPG",
+    "assassina.jpg",
+    "boozy donna.JPG",
+    "idk1.JPG",
+    "idk2.JPG",
+    "margarita.jpg",
+    "piemontese.JPG",
+    "pistaAffo.jpg",
+    "pizza1.JPG",
+    "pizza2.JPG",
+    "pollo alla cacciatora.JPG",
+    "tielle.jpg",
+    "tiramisu.jpg"
   ];
+
+  const dishes = dishFiles.map((file) => ({
+    name: file
+      .replace(/\.[^/.]+$/, "")
+      .split(" ")
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(" "),
+    image: `/public/food/${file}`,
+  }));
 
   return (
     <section id ="menu" className="py-20 bg-white">
