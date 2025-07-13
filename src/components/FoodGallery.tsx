@@ -6,7 +6,6 @@ const FoodGallery: React.FC = () => {
     { name: "Aglio Olio e Pepperoncino", image: "/public/food/aglio.jpg" },
     { name: "Tiella Barese", image: "/public/food/tielle.jpg" },
     { name: "Margarita", image: "/public/food/margarita.jpg" },
-    { name: "Bicerin", image: "/public/food/bicerin.jpg" },
     { name: "Tiramisu", image: "/public/food/tiramisu.jpg" },
     { name: "Pistachio Affogato", image: "/public/food/pistaAffo.jpg" }
     
