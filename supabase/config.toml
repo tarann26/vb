@@ -1,0 +1,8 @@
+
+project_id = "etxlpwasuhlezdfczfte"
+
+[functions.send-reservation]
+verify_jwt = false
+
+[functions.send-followup]
+verify_jwt = false
