@@ -7,8 +7,14 @@ const FoodGallery: React.FC = () => {
     { name: "Tiella Barese", image: "/public/food/tielle.jpg" },
     { name: "Margarita", image: "/public/food/margarita.jpg" },
     { name: "Tiramisu", image: "/public/food/tiramisu.jpg" },
-    { name: "Pistachio Affogato", image: "/public/food/pistaAffo.jpg" }
-    
+    { name: "Pistachio Affogato", image: "/public/food/pistaAffo.jpg" },
+    { name: "arrosticini", image: "/public/food/arrosticini.JPG" },
+    { name: "boozy donna", image: "/public/food/boozy donna.JPG" },
+    { name: "idk1", image: "/public/food/idk1.JPG" },
+    { name: "idk2", image: "/public/food/idk2.JPG" },
+    { name: "piemontese", image: "/public/food/piemontese.JPG" },
+    { name: "pollo alla cacciatora", image: "/public/food/pollo alla cacciatora.JPG" }
+
   ];
 
   return (
