@@ -8,30 +8,36 @@ const Hero: React.FC = () => {
 
 
  return (
-   <section className="min-h-screen bg-white relative flex items-center justify-center overflow-hidden">
+  <section className="min-h-screen bg-white relative flex items-center justify-center overflow-hidden">
+    {/* brick background */}
+    <img
+      src="/hero/brick.jpg"
+      alt=""
+      className="absolute inset-0 -z-20 w-full h-full object-cover opacity-20"
+    />
      {/* ===== Collage ===== */}
      <div className="absolute inset-0 grid grid-cols-6 grid-rows-6 gap-1">
-       {[
-         // [src, extraTailwindClasses]
-         ['https://images.pexels.com/photos/1279330/pexels-photo-1279330.jpeg', 'col-span-2 row-span-2'],
-         ['https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg', 'col-start-5 col-span-2 row-span-2'],
-         ['https://images.pexels.com/photos/1438672/pexels-photo-1438672.jpeg', 'col-span-2 row-start-5 row-span-2'],
-         ['https://images.pexels.com/photos/1410235/pexels-photo-1410235.jpeg', 'col-start-5 col-span-2 row-start-5 row-span-2'],
-         // thin edge fillers…
-         ['https://images.pexels.com/photos/1633578/pexels-photo-1633578.jpeg', 'col-start-3 col-span-2 row-span-1'],
-         ['https://images.pexels.com/photos/1435904/pexels-photo-1435904.jpeg', 'col-start-3 col-span-2 row-start-6 row-span-1'],
-         ['https://images.pexels.com/photos/1279330/pexels-photo-1279330.jpeg', 'col-span-1 row-start-3 row-span-2'],
-         ['https://images.pexels.com/photos/1640774/pexels-photo-1640774.jpeg', 'col-start-6 col-span-1 row-start-3 row-span-2'],
-         // subtle middle accents (kept, but you can drop if you like)
-         ['https://images.pexels.com/photos/1279330/pexels-photo-1279330.jpeg', 'col-start-3 col-span-1 row-start-2'],
-         ['https://images.pexels.com/photos/1438672/pexels-photo-1438672.jpeg', 'col-start-4 col-span-1 row-start-2'],
-         ['https://images.pexels.com/photos/1410235/pexels-photo-1410235.jpeg', 'col-start-2 col-span-1 row-start-3'],
-         ['https://images.pexels.com/photos/1633578/pexels-photo-1633578.jpeg', 'col-start-5 col-span-1 row-start-3'],
-         ['https://images.pexels.com/photos/1435904/pexels-photo-1435904.jpeg', 'col-start-2 col-span-1 row-start-4'],
-         ['https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg', 'col-start-5 col-span-1 row-start-4'],
-         ['https://images.pexels.com/photos/1640774/pexels-photo-1640774.jpeg', 'col-start-3 col-span-1 row-start-5'],
-         ['https://images.pexels.com/photos/1279330/pexels-photo-1279330.jpeg', 'col-start-4 col-span-1 row-start-5'],
-       ].map(([src, cls], i) => (
+      {[
+        // [src, extraTailwindClasses]
+        ['/hero/bus.jpeg', 'col-span-2 row-span-2'],
+        ['/hero/Screenshot 2025-07-13 at 20.46.28.png', 'col-start-5 col-span-2 row-span-2'],
+        ['/hero/Screenshot 2025-07-13 at 20.46.05.png', 'col-span-2 row-start-5 row-span-2'],
+        ['/hero/farfalle2.png', 'col-start-5 col-span-2 row-start-5 row-span-2'],
+        // thin edge fillers…
+        ['/hero/Screenshot 2025-07-13 at 20.46.05.png', 'col-start-3 col-span-2 row-span-1'],
+        ['/hero/bus.jpeg', 'col-start-3 col-span-2 row-start-6 row-span-1'],
+        ['/hero/Screenshot 2025-07-13 at 20.46.28.png', 'col-span-1 row-start-3 row-span-2'],
+        ['/hero/farfalle2.png', 'col-start-6 col-span-1 row-start-3 row-span-2'],
+        // subtle middle accents (kept, but you can drop if you like)
+        ['/hero/bus.jpeg', 'col-start-3 col-span-1 row-start-2'],
+        ['/hero/Screenshot 2025-07-13 at 20.46.05.png', 'col-start-4 col-span-1 row-start-2'],
+        ['/hero/Screenshot 2025-07-13 at 20.46.28.png', 'col-start-2 col-span-1 row-start-3'],
+        ['/hero/farfalle2.png', 'col-start-5 col-span-1 row-start-3'],
+        ['/hero/bus.jpeg', 'col-start-2 col-span-1 row-start-4'],
+        ['/hero/Screenshot 2025-07-13 at 20.46.05.png', 'col-start-5 col-span-1 row-start-4'],
+        ['/hero/Screenshot 2025-07-13 at 20.46.28.png', 'col-start-3 col-span-1 row-start-5'],
+        ['/hero/farfalle2.png', 'col-start-4 col-span-1 row-start-5'],
+      ].map(([src, cls], i) => (
          <div key={i} className={`${cls} relative overflow-hidden`}>
            <img
              src={src as string}
