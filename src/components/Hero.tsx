@@ -19,10 +19,10 @@ const Hero: React.FC = () => {
      <div className="absolute inset-0 grid grid-cols-6 grid-rows-6 gap-1">
       {[
         // [src, extraTailwindClasses]
-        ['/hero/farfalle3.png', 'col-span-2 row-span-2'],
+        ['', 'col-span-2 row-span-2'],
         ['/hero/scene.png', 'col-start-5 col-span-2 row-span-2'],
-        ['/hero/postcard.png', 'col-span-2 row-start-5 row-span-2'],
-        ['/hero/farfalle2.png', 'col-start-5 col-span-2 row-start-5 row-span-2'],
+        ['', 'col-span-2 row-start-5 row-span-2'],
+        ['/hero/farfalle3.png', 'col-start-5 col-span-2 row-start-5 row-span-2'],
         // thin edge fillers…
         ['/hero/farfalle1.png', 'col-start-3 col-span-2 row-span-1'],
         ['/public/atmosphere/dining.jpg', 'col-start-3 col-span-2 row-start-6 row-span-1'],
@@ -87,11 +87,14 @@ const Hero: React.FC = () => {
 
 
        <button
-         onClick={() => navigate('/reservation')}
-         className="bg-[#6B8B59] hover:bg-[#5a7349] text-white px-8 py-4 rounded-lg font-semibold uppercase tracking-wide shadow-lg hover:shadow-xl transition-all duration-300"
-       >
-         Reserve a Table
-       </button>
+  onClick={() =>
+    window.open('https://wa.me/919211791188?text=Hi%2C%20I%20want%20to%20reserve%20a%20table', '_blank')
+  }
+  className="bg-[#6B8B59] hover:bg-[#5a7349] text-white px-8 py-4 rounded-lg font-semibold uppercase tracking-wide shadow-lg hover:shadow-xl transition-all duration-300"
+>
+  Reserve a Table
+</button>
+
      </div>
 
 

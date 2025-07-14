@@ -5,7 +5,6 @@ import OurStory from './components/OurStory';
 import PlaceGallery from './components/PlaceGallery';
 import FoodGallery from './components/FoodGallery';
 import SignatureMocktails from './components/SignatureMocktails';
-import ChefGallery from './components/ChefGallery';
 import BlogTeaser from './components/BlogTeaser';
 import VisitUs from './components/VisitUs';
 import Footer from './components/Footer';
@@ -22,7 +21,6 @@ function HomePage() {
       <PlaceGallery />
       <FoodGallery />
       <SignatureMocktails />
-      <ChefGallery />
       <BlogTeaser />
       <VisitUs />
       <Footer />
