@@ -19,24 +19,24 @@ const Hero: React.FC = () => {
      <div className="absolute inset-0 grid grid-cols-6 grid-rows-6 gap-1">
       {[
         // [src, extraTailwindClasses]
-        ['/hero/bus.jpeg', 'col-span-2 row-span-2'],
-        ['/hero/Screenshot 2025-07-13 at 20.46.28.png', 'col-start-5 col-span-2 row-span-2'],
-        ['/hero/Screenshot 2025-07-13 at 20.46.05.png', 'col-span-2 row-start-5 row-span-2'],
+        ['/hero/farfalle3.png', 'col-span-2 row-span-2'],
+        ['/hero/scene.png', 'col-start-5 col-span-2 row-span-2'],
+        ['/hero/postcard.png', 'col-span-2 row-start-5 row-span-2'],
         ['/hero/farfalle2.png', 'col-start-5 col-span-2 row-start-5 row-span-2'],
         // thin edge fillers…
-        ['/hero/Screenshot 2025-07-13 at 20.46.05.png', 'col-start-3 col-span-2 row-span-1'],
-        ['/hero/bus.jpeg', 'col-start-3 col-span-2 row-start-6 row-span-1'],
-        ['/hero/Screenshot 2025-07-13 at 20.46.28.png', 'col-span-1 row-start-3 row-span-2'],
-        ['/hero/farfalle2.png', 'col-start-6 col-span-1 row-start-3 row-span-2'],
-        // subtle middle accents (kept, but you can drop if you like)
+        ['/hero/farfalle1.png', 'col-start-3 col-span-2 row-span-1'],
+        ['/public/atmosphere/dining.jpg', 'col-start-3 col-span-2 row-start-6 row-span-1'],
+        ['/public/atmosphere/ambience.JPG', 'col-span-1 row-start-3 row-span-2'],
+        ['/hero/bus.jpeg', 'col-start-6 col-span-1 row-start-3 row-span-2'],        // subtle middle accents (kept, but you can drop if you like)
         ['/hero/bus.jpeg', 'col-start-3 col-span-1 row-start-2'],
-        ['/hero/Screenshot 2025-07-13 at 20.46.05.png', 'col-start-4 col-span-1 row-start-2'],
-        ['/hero/Screenshot 2025-07-13 at 20.46.28.png', 'col-start-2 col-span-1 row-start-3'],
-        ['/hero/farfalle2.png', 'col-start-5 col-span-1 row-start-3'],
-        ['/hero/bus.jpeg', 'col-start-2 col-span-1 row-start-4'],
-        ['/hero/Screenshot 2025-07-13 at 20.46.05.png', 'col-start-5 col-span-1 row-start-4'],
-        ['/hero/Screenshot 2025-07-13 at 20.46.28.png', 'col-start-3 col-span-1 row-start-5'],
-        ['/hero/farfalle2.png', 'col-start-4 col-span-1 row-start-5'],
+        ['/public/atmosphere/ceiling decor.png', 'col-start-3 col-span-1 row-start-2'],
+        ['/public/our_story/oven.JPG', 'col-start-4 col-span-1 row-start-2'],
+        ['/public/atmosphere/front mirror.png', 'col-start-2 col-span-1 row-start-3'],
+        ['/hero/building.png', 'col-start-5 col-span-1 row-start-3'],
+        ['/public/our_story/stuff.JPG', 'col-start-2 col-span-1 row-start-4'],
+        ['/public/atmosphere/room.png', 'col-start-5 col-span-1 row-start-4'],
+        ['/public/our_story/cut.JPG', 'col-start-3 col-span-1 row-start-5'],
+        ['/hero/farfalle.png', 'col-start-4 col-span-1 row-start-5'],
       ].map(([src, cls], i) => (
          <div key={i} className={`${cls} relative overflow-hidden`}>
            <img
