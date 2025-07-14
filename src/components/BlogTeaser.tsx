@@ -1,4 +1,5 @@
 import React from 'react';
+import FadeIn from './FadeIn';
 import { ExternalLink, Calendar, ArrowRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -33,6 +34,7 @@ const BlogTeaser: React.FC = () => {
   ];
 
   return (
+    <FadeIn>
     <section id="blogs" className="py-20 bg-slate-50">
       <div className="max-w-7xl mx-auto px-4">
         <div className="text-center mb-16">
@@ -118,6 +120,7 @@ const BlogTeaser: React.FC = () => {
         </div>
       </div>
     </section>
+    </FadeIn>
   );
 };
 

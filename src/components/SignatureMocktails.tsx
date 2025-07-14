@@ -1,5 +1,6 @@
 
 import React from 'react';
+import FadeIn from './FadeIn';
 import { Download } from 'lucide-react';
 
 const SignatureMocktails: React.FC = () => {
@@ -32,6 +33,7 @@ const SignatureMocktails: React.FC = () => {
   ];
 
   return (
+    <FadeIn>
     <section className="py-20 bg-[#FFFDF8] relative overflow-hidden">
       {/* Sparkling bubble background */}
       <div className="absolute inset-0 pointer-events-none">
@@ -111,6 +113,7 @@ const SignatureMocktails: React.FC = () => {
         }
       `}</style>
     </section>
+    </FadeIn>
   );
 };
 

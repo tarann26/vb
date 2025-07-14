@@ -1,13 +1,18 @@
 import React from 'react';
 import { ChefHat } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { motion, useScroll, useTransform } from 'framer-motion';
+import FadeIn from './FadeIn';
 
 
 const Hero: React.FC = () => {
  const navigate = useNavigate();
+ const { scrollY } = useScroll();
+ const collageY = useTransform(scrollY, [0, 600], [0, -150]);
 
 
  return (
+  <FadeIn>
   <section className="min-h-screen bg-white relative flex items-center justify-center overflow-hidden">
     {/* brick background */}
     <img
@@ -16,7 +21,7 @@ const Hero: React.FC = () => {
       className="absolute inset-0 -z-20 w-full h-full object-cover opacity-20"
     />
      {/* ===== Collage ===== */}
-     <div className="absolute inset-0 grid grid-cols-6 grid-rows-6 gap-1">
+     <motion.div style={{ y: collageY }} className="absolute inset-0 grid grid-cols-6 grid-rows-6 gap-1">
       {[
         // [src, extraTailwindClasses]
         ['/hero/bus.jpeg', 'col-span-2 row-span-2'],
@@ -46,7 +51,7 @@ const Hero: React.FC = () => {
            />
          </div>
        ))}
-     </div>
+     </motion.div>
 
 
      {/* ===== White strip (blocks collage under the content) ===== */}
@@ -100,6 +105,7 @@ const Hero: React.FC = () => {
        <ChefHat className="w-6 h-6 text-[#6B8B59]" />
      </div>
    </section>
+  </FadeIn>
  );
 };
 

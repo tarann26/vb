@@ -1,4 +1,5 @@
 import React from 'react';
+import FadeIn from './FadeIn';
 
 const ChefGallery: React.FC = () => {
   const chefs = [
@@ -11,6 +12,7 @@ const ChefGallery: React.FC = () => {
   ];
 
   return (
+    <FadeIn>
     <section className="py-20 bg-slate-800">
       <div className="max-w-7xl mx-auto px-4">
         <h2 className="font-['Montserrat'] text-4xl md:text-5xl font-bold text-white text-center mb-16">
@@ -52,6 +54,7 @@ const ChefGallery: React.FC = () => {
         }
       `}</style>
     </section>
+    </FadeIn>
   );
 };
 

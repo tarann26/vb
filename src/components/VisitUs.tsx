@@ -1,9 +1,11 @@
 import React from 'react';
+import FadeIn from './FadeIn';
 import { Navigation } from 'lucide-react';
 
 const VisitUs: React.FC = () => {
   return (
-    <section id= "visit" className="py-20 bg-[#F9F9F9]">
+    <FadeIn>
+    <section id="visit" className="py-20 bg-[#F9F9F9]">
       <div className="max-w-4xl mx-auto px-4">
         <h2 className="font-['Montserrat'] text-4xl md:text-5xl font-bold text-[#222] text-center mb-16">
           Visit Us
@@ -40,6 +42,7 @@ const VisitUs: React.FC = () => {
         </div>
       </div>
     </section>
+    </FadeIn>
   );
 };
 

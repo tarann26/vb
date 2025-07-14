@@ -1,4 +1,5 @@
 import React from 'react';
+import FadeIn from './FadeIn';
 
 const PlaceGallery: React.FC = () => {
   const places = [
@@ -13,8 +14,9 @@ const PlaceGallery: React.FC = () => {
   ];
 
   return (
-    <section id="gallery" className="py-20 bg-[#F9F9F9]">
-      <div className="max-w-7xl mx-auto px-4">
+    <FadeIn>
+      <section id="gallery" className="py-20 bg-[#F9F9F9]">
+        <div className="max-w-7xl mx-auto px-4">
         <h2 className="font-['Montserrat'] text-4xl md:text-5xl font-bold text-[#222] text-center mb-16">
           Atmosfera
         </h2>
@@ -49,6 +51,7 @@ const PlaceGallery: React.FC = () => {
         }
       `}</style>
     </section>
+    </FadeIn>
   );
 };
 

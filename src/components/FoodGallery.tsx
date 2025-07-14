@@ -1,4 +1,5 @@
 import React from 'react';
+import FadeIn from './FadeIn';
 
 const FoodGallery: React.FC = () => {
   const dishFiles = [
@@ -29,8 +30,9 @@ const FoodGallery: React.FC = () => {
   }));
 
   return (
-    <section id ="menu" className="py-20 bg-white">
-      <div className="max-w-7xl mx-auto px-4">
+    <FadeIn>
+      <section id="menu" className="py-20 bg-white">
+        <div className="max-w-7xl mx-auto px-4">
         <h2 className="font-['Montserrat'] text-4xl md:text-5xl font-bold text-[#222] text-center mb-16">
           Hand-crafted Pastas & Wood-Fired Classics
         </h2>
@@ -69,6 +71,7 @@ const FoodGallery: React.FC = () => {
         }
       `}</style>
     </section>
+    </FadeIn>
   );
 };
 

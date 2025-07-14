@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import FadeIn from './FadeIn';
 
 const imageFiles = [
   'cut.JPG',
@@ -22,8 +23,9 @@ const OurStory: React.FC = () => {
   }, []);
 
   return (
-    <section id = "our-story" className="py-20 bg-[#F9F9F9]">
-      <div className="max-w-7xl mx-auto px-4">
+    <FadeIn>
+      <section id="our-story" className="py-20 bg-[#F9F9F9]">
+        <div className="max-w-7xl mx-auto px-4">
         <div className="grid lg:grid-cols-2 gap-12 items-center">
           {/* Story Text */}
           <div className="space-y-6">
@@ -66,6 +68,7 @@ const OurStory: React.FC = () => {
         </div>
       </div>
     </section>
+    </FadeIn>
   );
 };
 
