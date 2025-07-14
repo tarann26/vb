@@ -80,10 +80,11 @@ const Hero: React.FC = () => {
 
        {/* reservation numbers */}
        <div className="mb-8">
-         <p className="font-['Montserrat'] text-sm tracking-wide uppercase text-[#6B8B59]">For reservations</p>
-         <p className="font-['Open_Sans'] text-lg font-semibold text-[#222]">+91&nbsp;92115&nbsp;63311</p>
-         <p className="font-['Open_Sans'] text-lg font-semibold text-[#222]">+91&nbsp;92117&nbsp;91188</p>
-       </div>
+          <p className="font-['Montserrat'] text-xl font-bold tracking-wide uppercase text-[#6B8B59]">For reservations</p>
+          <p className="font-['Open_Sans'] text-lg font-semibold text-[#222]">+91&nbsp;92115&nbsp;63311</p>
+          <p className="font-['Open_Sans'] text-lg font-semibold text-[#222]">+91&nbsp;92117&nbsp;91188</p>
+        </div>
+
 
 
        <button

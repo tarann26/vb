@@ -37,12 +37,24 @@ const Navbar: React.FC = () => {
       </div>
 
       {/* Links */}
-      <div className="space-x-6 text-sm font-['Montserrat'] tracking-wider text-[#6B8B59] uppercase">
-        <a href="#our-story" className="hover:text-[#222] transition">Our Story</a>
-        <a href="#gallery" className="hover:text-[#222] transition">Gallery</a>
-        <a href="#menu" className="hover:text-[#222] transition">Menu</a>
-        <a href="#blogs" className="hover:text-[#222] transition">Stories</a>
-        <a href="#visit" className="hover:text-[#222] transition">Visit Us</a>
+     {/* Links and social */}
+     <div className="flex items-center space-x-6">
+        <div className="space-x-6 text-sm font-['Montserrat'] tracking-wider text-[#6B8B59] uppercase">
+          <a href="#our-story" className="hover:text-[#222] transition">Our Story</a>
+          <a href="#gallery" className="hover:text-[#222] transition">Gallery</a>
+          <a href="#menu" className="hover:text-[#222] transition">Menu</a>
+          <a href="#blogs" className="hover:text-[#222] transition">Stories</a>
+          <a href="#visit" className="hover:text-[#222] transition">Visit Us</a>
+        </div>
+        <a
+          href="https://instagram.com/viabiancadelhi"
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Follow Via Bianca on Instagram"
+          className="text-[#6B8B59] hover:text-[#222] transition"
+        >
+          <Instagram className="h-5 w-5" />
+        </a>
       </div>
     </nav>
   );

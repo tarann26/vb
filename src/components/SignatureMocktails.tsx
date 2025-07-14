@@ -44,7 +44,7 @@ const SignatureMocktails: React.FC = () => {
       <div className="max-w-7xl mx-auto px-4 relative">
         <div className="text-center mb-16">
           <h2 className="font-['Montserrat'] text-4xl md:text-5xl font-bold text-[#222] mb-6">
-            Zero-Proof, Full Flavor
+          Crafted Mocktails
           </h2>
           <p className="font-['Open_Sans'] text-gray-700 max-w-2xl mx-auto leading-relaxed">
             Our signature mocktails celebrate the vibrant herbs and fresh ingredients of Italian gardens. 
@@ -86,7 +86,7 @@ const SignatureMocktails: React.FC = () => {
         <a href="/public/Menu%20-%20Expanded.pdf" download>
             <button className="inline-flex items-center space-x-2 bg-[#6B8B59] hover:bg-[#5a7349] text-white font-['Montserrat'] font-semibold px-8 py-4 rounded-lg transform hover:scale-105 hover:shadow-xl transition-all duration-300 uppercase tracking-wide">
               <Download className="w-5 h-5" />
-              <span>Download Full Menu</span>
+              <span>Open Full Menu</span>
             </button>
           </a>
         </div>
