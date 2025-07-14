@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Instagram} from 'lucide-react';
 
 const Navbar: React.FC = () => {
   const [showNavbar, setShowNavbar] = useState(true);

@@ -22,7 +22,7 @@ const Hero: React.FC = () => {
         ['', 'col-span-2 row-span-2'],
         ['/hero/scene.png', 'col-start-5 col-span-2 row-span-2'],
         ['', 'col-span-2 row-start-5 row-span-2'],
-        ['/hero/farfalle3.png', 'col-start-5 col-span-2 row-start-5 row-span-2'],
+        ['/hero/farfalle1.png', 'col-start-5 col-span-2 row-start-5 row-span-2'],
         // thin edge fillers…
         ['/hero/farfalle1.png', 'col-start-3 col-span-2 row-span-1'],
         ['/public/atmosphere/dining.jpg', 'col-start-3 col-span-2 row-start-6 row-span-1'],
