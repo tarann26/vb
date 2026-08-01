@@ -11,10 +11,12 @@ import Footer from './components/Footer';
 import ReservationPage from './components/ReservationPage';
 import AdminReservations from './components/AdminReservations';
 import BlogsPage from './components/BlogsPage';
+import SeoHead from './components/SeoHead';
 
 function HomePage() {
   return (
     <div className="min-h-screen">
+      <SeoHead />
       <Navbar />
       <Hero />
       <OurStory />

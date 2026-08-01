@@ -1,5 +1,6 @@
 import React from 'react';
 import { Instagram, Linkedin, Clock, MapPin, Phone } from 'lucide-react';
+import { site } from '../content';
 
 const Footer: React.FC = () => {
   return (
@@ -10,9 +11,9 @@ const Footer: React.FC = () => {
           <div className="space-y-6">
             <div className="flex items-center space-x-3">
               <div>
-                <h3 className="font-['Parisienne'] text-2xl text-[#6B8B59]">Via Bianca</h3>
+                <h3 className="font-['Parisienne'] text-2xl text-[#6B8B59]">{site.name}</h3>
                 <p className="font-['Montserrat'] text-sm uppercase tracking-wide text-gray-400">
-                  Pastificio & Ristorante
+                  {site.tagline}
                 </p>
               </div>
             </div>
@@ -21,8 +22,9 @@ const Footer: React.FC = () => {
               <div className="flex items-start space-x-3">
                 <MapPin className="mt-0.5 h-5 w-5 flex-shrink-0 text-[#6B8B59]" />
                 <p className="text-gray-300">
-                  N-Block Market, Greater Kailash I<br />
-                  New Delhi 110048
+                  {site.address.street}
+                  <br />
+                  {site.address.locality} {site.address.postalCode}
                 </p>
               </div>
 
@@ -32,8 +34,9 @@ const Footer: React.FC = () => {
                   <p className="font-semibold text-gray-300">For Reservations:</p>
                 </div>
                 <div className="ml-8 space-y-1">
-                  <p className="text-white">+91 92115 63311</p>
-                  <p className="text-white">+91 92117 91188</p>
+                  {site.phones.map((phone) => (
+                    <p key={phone} className="text-white">{phone}</p>
+                  ))}
                 </div>
               </div>
             </div>
@@ -48,14 +51,12 @@ const Footer: React.FC = () => {
               </h4>
 
               <div className="grid grid-cols-2 gap-4 font-['Open_Sans'] text-sm">
-                <div>
-                  <p className="mb-1 text-gray-400">Monday – Friday</p>
-                  <p className="text-white">12:00 PM – 11:30 PM</p>
-                </div>
-                <div>
-                  <p className="mb-1 text-gray-400">Saturday – Sunday</p>
-                  <p className="text-white">12:00 PM – 11:30 AM</p>
-                </div>
+                {site.hours.map((h) => (
+                  <div key={h.label}>
+                    <p className="mb-1 text-gray-400">{h.label}</p>
+                    <p className="text-white">{h.value}</p>
+                  </div>
+                ))}
               </div>
             </div>
 
@@ -65,7 +66,7 @@ const Footer: React.FC = () => {
 
               {/* Instagram */}
               <a
-                href="https://instagram.com/viabiancadelhi"
+                href={site.socials.instagram}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="rounded-full bg-[#6B8B59] p-3 transition-all duration-300 transform hover:scale-110 hover:bg-[#5a7349]"
@@ -75,15 +76,17 @@ const Footer: React.FC = () => {
               </a>
 
               {/* LinkedIn */}
-              <a
-                href="https://linkedin.com/company/viabiancadelhi"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="rounded-full bg-[#6B8B59] p-3 transition-all duration-300 transform hover:scale-110 hover:bg-[#5a7349]"
-                aria-label="Connect with Via Bianca on LinkedIn"
-              >
-                <Linkedin className="h-5 w-5" />
-              </a>
+              {site.socials.linkedin && (
+                <a
+                  href={site.socials.linkedin}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="rounded-full bg-[#6B8B59] p-3 transition-all duration-300 transform hover:scale-110 hover:bg-[#5a7349]"
+                  aria-label="Connect with Via Bianca on LinkedIn"
+                >
+                  <Linkedin className="h-5 w-5" />
+                </a>
+              )}
             </div>
           </div>
         </div>
@@ -91,7 +94,7 @@ const Footer: React.FC = () => {
         {/* ---------- Copyright ---------- */}
         <div className="mt-12 border-t border-gray-700 pt-8 text-center">
           <p className="font-['Open_Sans'] text-sm text-gray-400">
-            © 2024 Via Bianca Pastificio & Ristorante. All rights reserved.
+            © {site.copyrightYear} {site.name} {site.tagline}. All rights reserved.
           </p>
         </div>
       </div>
