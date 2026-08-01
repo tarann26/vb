@@ -1,0 +1,107 @@
+[
+  {
+    "id": "linguine-aglio-olio-peperoncino",
+    "name": "Linguine Aglio Olio e Peperoncino",
+    "description": "From the humble homes of Calabria, classic spicy and garlic pasta topped with crunchy herb breadcrumbs",
+    "image": "/food/Aglio e Pepperoncini.jpg",
+    "tags": ["vegan", "spicy"]
+  },
+  {
+    "id": "americana-puccia",
+    "name": "Americana",
+    "description": "Pure comfort in a Puglian puccia sandwich with pork ham, cheese sauce and caramelised onions",
+    "image": "/food/americana.png",
+    "tags": ["non-veg", "dairy", "chef's hat"]
+  },
+  {
+    "id": "suppli",
+    "name": "Supplì",
+    "description": "Roman style saffron arancini stuffed with fior di latte cheese and minced chicken ragù, fried to perfection",
+    "image": "/food/arrosticini.JPG",
+    "tags": ["non-veg", "dairy", "chef's hat"]
+  },
+  {
+    "id": "bonet-piemontese",
+    "name": "Bonet Piemontese",
+    "description": "Traditional Piedmontese baked chocolate custard with caramel and hazelnuts",
+    "image": "/food/bonet piemontese.JPG",
+    "tags": ["dairy", "nuts"]
+  },
+  {
+    "id": "boozy-donna",
+    "name": "Boozy Donna",
+    "description": "Handcut long pasta simmered in a citrusy prawn bisque with grilled jumbo prawns",
+    "image": "/food/boozy donna.JPG",
+    "tags": ["seafood", "egg", "chef's hat"]
+  },
+  {
+    "id": "gamberi-pistacchio",
+    "name": "Gamberi",
+    "description": "Grilled, pistachio-crusted prawns with citrusy lemon aioli, served with rocket and confit tomato",
+    "image": "/food/idk1.JPG",
+    "tags": ["seafood", "nuts", "gluten free", "chef's hat"]
+  },
+  {
+    "id": "bruschetta-ricotta-miele-piccante",
+    "name": "Bruschetta con Ricotta e Miele Piccante",
+    "description": "Homemade ricotta generously topped on in-house crisp bread with hot honey and seeds",
+    "image": "/food/idk2.JPG",
+    "tags": ["veg", "dairy"]
+  },
+  {
+    "id": "margherita",
+    "name": "Margherita",
+    "description": "Fior di latte cheese, marinara and fresh basil on our 24-hour fermented Neapolitan-style base",
+    "image": "/food/margarita.jpg",
+    "tags": ["veg", "dairy"]
+  },
+  {
+    "id": "affogato-pistacchio",
+    "name": "Affogato Pistacchio",
+    "description": "Hot espresso poured over our indulgent and nutty pistachio gelato",
+    "image": "/food/pistaAffo.jpg",
+    "tags": ["dairy", "nuts"]
+  },
+  {
+    "id": "pizza-spiced-meat",
+    "name": "Pizza",
+    "description": "Wood-fired pizza with tomato sauce, mozzarella and a spiced meat topping — exact variant unconfirmed",
+    "image": "/food/pizza1.JPG",
+    "tags": ["non-veg"]
+  },
+  {
+    "id": "bianca",
+    "name": "Bianca",
+    "description": "Artisanal cheeses, bechamel, confit garlic and rocket leaves",
+    "image": "/food/pizza2.JPG",
+    "tags": ["veg", "dairy"]
+  },
+  {
+    "id": "cappelletti-pollo-tartufo-pecorino",
+    "name": "Cappelletti al Pollo con Tartufo e Pecorino",
+    "description": "Creamy chicken stuffed pasta served in a pecorino cheese and porcini mushroom sauce, garnished with fresh truffle",
+    "image": "/food/pollo alla cacciatora.JPG",
+    "tags": ["non-veg", "egg", "dairy", "chef's hat"]
+  },
+  {
+    "id": "spaghetti-allassassina",
+    "name": "Spaghetti all'Assassina",
+    "description": "Pan burnt spaghetti tossed in our house secret spicy tomato sauce, served with burrata on top",
+    "image": "/food/Spaghetti alla'Assassina.jpg",
+    "tags": ["veg", "dairy", "spicy", "chef's hat"]
+  },
+  {
+    "id": "risotto-ai-gamberi",
+    "name": "Risotto",
+    "description": "Saffron-hued risotto served with grilled prawns — exact menu item unconfirmed",
+    "image": "/food/tielle.jpg",
+    "tags": ["seafood"]
+  },
+  {
+    "id": "tiramisu",
+    "name": "Tiramisu",
+    "description": "The ultimate Italian dessert — mascarpone, espresso-soaked ladyfingers and cocoa",
+    "image": "/food/tiramisu.jpg",
+    "tags": ["egg", "dairy", "alcohol", "chef's hat"]
+  }
+]
