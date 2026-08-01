@@ -65,7 +65,7 @@
   {
     "id": "pizza-spiced-meat",
     "name": "Pizza",
-    "description": "Wood-fired pizza with tomato sauce, mozzarella and a spiced meat topping — exact variant unconfirmed",
+    "description": "Wood-fired pizza with tomato sauce, mozzarella and a spiced meat topping",
     "image": "/food/pizza1.JPG",
     "tags": ["non-veg"]
   },
@@ -93,7 +93,7 @@
   {
     "id": "risotto-ai-gamberi",
     "name": "Risotto",
-    "description": "Saffron-hued risotto served with grilled prawns — exact menu item unconfirmed",
+    "description": "Saffron-hued risotto served with grilled prawns",
     "image": "/food/tielle.jpg",
     "tags": ["seafood"]
   },
