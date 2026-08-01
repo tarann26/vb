@@ -43,6 +43,9 @@ const Navbar: React.FC = () => {
      {/* Links and social */}
      <div className="flex items-center space-x-6">
         <div className="hidden md:flex space-x-6 text-sm font-['Montserrat'] tracking-wider text-[#6B8B59] uppercase">
+          {/* Below md this list is already display:none via `hidden`; skipping
+              the render while the mobile panel is open just keeps a single
+              live set of nav links in the DOM instead of two. */}
           {!isMenuOpen &&
             NAV_LINKS.map((link) => (
               <a key={link.href} href={link.href} className="hover:text-[#222] transition">
