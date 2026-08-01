@@ -1061,14 +1061,29 @@ The three Our Story paragraphs are placeholder text ending in literal ellipses. 
 - Consumes: `StoryContent`, `MenuFile`, `Galleries` types.
 - Produces: `story` and `menus` exports from `src/content`.
 
-- [ ] **Step 1: Copy the PDFs into public/**
+- [ ] **Step 1: Compress the PDFs into public/menus/**
+
+The source PDFs are 39MB and 54MB. Do not copy them in raw. Whatever lands in `public/menus/` is committed, and git history is permanent, so compressing afterwards in A2 would leave the 93MB originals in the pack forever. Compress first, commit once.
+
+Ghostscript 10.04 is installed at `/usr/local/bin/gs`. Note that `gs` is aliased to `git status` in this shell, so call the absolute path.
 
 ```bash
-cp "New Menu/Via Bianca Food Menu/Printable Files/Via Bianca Menu - With Prices Expanded.pdf" "public/menus/food-menu.pdf"
-cp "New Menu/Via Bianca Drinks Menu/Printable Files/Drink Menu (with pricing).pdf" "public/menus/drinks-menu.pdf"
+mkdir -p public/menus
+/usr/local/bin/gs -sDEVICE=pdfwrite -dCompatibilityLevel=1.5 -dPDFSETTINGS=/ebook \
+  -dNOPAUSE -dQUIET -dBATCH -sOutputFile=public/menus/food-menu.pdf \
+  "New Menu/Via Bianca Food Menu/Printable Files/Via Bianca Menu - With Prices Expanded.pdf"
+/usr/local/bin/gs -sDEVICE=pdfwrite -dCompatibilityLevel=1.5 -dPDFSETTINGS=/ebook \
+  -dNOPAUSE -dQUIET -dBATCH -sOutputFile=public/menus/drinks-menu.pdf \
+  "New Menu/Via Bianca Drinks Menu/Printable Files/Drink Menu (with pricing).pdf"
 ```
 
-Create `public/menus/` first. These are 39MB and 54MB respectively; A2 compresses them. The existing `public/Menu - Expanded.pdf` stays where it is.
+Expected: roughly 12MB and 8.7MB, a 77% reduction. Verified visually lossless at this setting; the tile border and dietary-tag colours survive intact.
+
+`/screen` and `/printer` both produce the same 12MB, so DPI downsampling is not the lever here. The floor comes from the decorative border artwork's pixel dimensions. Getting below 12MB needs the border re-exported at web resolution, which is a job for A2, not this task. Confirm the sizes you get and record them.
+
+`New Menu/` is gitignored, so the uncompressed originals stay on the owner's disk and out of git.
+
+The existing `public/Menu - Expanded.pdf` stays where it is. It is already tracked, and removing it would not shrink history.
 
 - [ ] **Step 2: Write menus.json**
 
