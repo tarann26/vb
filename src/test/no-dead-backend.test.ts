@@ -23,9 +23,26 @@ describe('dead backend', () => {
     expect(app).not.toContain('path="/reservation"');
   });
 
-  it('keeps the reservation components on disk for later revival', () => {
-    expect(existsSync('src/components/AdminReservations.tsx')).toBe(true);
-    expect(existsSync('src/components/ReservationForm.tsx')).toBe(true);
-    expect(existsSync('src/components/ReservationPage.tsx')).toBe(true);
+  it('still routes to /blogs', () => {
+    const app = readFileSync('src/App.tsx', 'utf8');
+    expect(app).toContain('path="/blogs"');
+  });
+
+  // The owner's constraint names all seven files below as never-delete,
+  // regardless of whether this task's route removal touched them. Driven
+  // from one array + it.each so an eighth protected file later is a
+  // one-line addition rather than a new hand-written block.
+  const protectedComponents = [
+    'AdminReservations.tsx',
+    'ReservationForm.tsx',
+    'ReservationPage.tsx',
+    'ChefGallery.tsx',
+    'NewsPress.tsx',
+    'SignatureMocktails.tsx',
+    'BlogsPage.tsx',
+  ];
+
+  it.each(protectedComponents)('keeps %s on disk for later revival', (file) => {
+    expect(existsSync(`src/components/${file}`)).toBe(true);
   });
 });
