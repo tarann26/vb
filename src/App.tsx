@@ -4,7 +4,7 @@ import Hero from './components/Hero';
 import OurStory from './components/OurStory';
 import PlaceGallery from './components/PlaceGallery';
 import FoodGallery from './components/FoodGallery';
-import SignatureMocktails from './components/SignatureMocktails';
+import Drinks from './components/Drinks';
 import BlogTeaser from './components/BlogTeaser';
 import VisitUs from './components/VisitUs';
 import Footer from './components/Footer';
@@ -22,7 +22,7 @@ function HomePage() {
       <OurStory />
       <PlaceGallery />
       <FoodGallery />
-      <SignatureMocktails />
+      <Drinks />
       <BlogTeaser />
       <VisitUs />
       <Footer />
