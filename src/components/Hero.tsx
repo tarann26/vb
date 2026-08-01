@@ -1,5 +1,6 @@
 import React from 'react';
 import { ChefHat } from 'lucide-react';
+import { site, galleries } from '../content';
 
 
 const Hero: React.FC = () => {
@@ -14,30 +15,10 @@ const Hero: React.FC = () => {
     />
      {/* ===== Collage ===== */}
      <div className="absolute inset-0 grid grid-cols-6 grid-rows-6 gap-1">
-      {[
-        // [src, extraTailwindClasses]
-        ['', 'col-span-2 row-span-2'],
-        ['/hero/scene.png', 'col-start-5 col-span-2 row-span-2'],
-        ['', 'col-span-2 row-start-5 row-span-2'],
-        ['/hero/farfalle1.png', 'col-start-5 col-span-2 row-start-5 row-span-2'],
-        // thin edge fillers…
-        ['/hero/farfalle1.png', 'col-start-3 col-span-2 row-span-1'],
-        ['/public/atmosphere/dining.jpg', 'col-start-3 col-span-2 row-start-6 row-span-1'],
-        ['/public/atmosphere/ambience.JPG', 'col-span-1 row-start-3 row-span-2'],
-        ['/hero/bus.jpeg', 'col-start-6 col-span-1 row-start-3 row-span-2'],        // subtle middle accents (kept, but you can drop if you like)
-        ['/hero/bus.jpeg', 'col-start-3 col-span-1 row-start-2'],
-        ['/public/atmosphere/ceiling decor.png', 'col-start-3 col-span-1 row-start-2'],
-        ['/public/our_story/oven.JPG', 'col-start-4 col-span-1 row-start-2'],
-        ['/public/atmosphere/front mirror.png', 'col-start-2 col-span-1 row-start-3'],
-        ['/hero/building.png', 'col-start-5 col-span-1 row-start-3'],
-        ['/public/our_story/stuff.JPG', 'col-start-2 col-span-1 row-start-4'],
-        ['/public/atmosphere/room.png', 'col-start-5 col-span-1 row-start-4'],
-        ['/public/our_story/cut.JPG', 'col-start-3 col-span-1 row-start-5'],
-        ['/hero/farfalle.png', 'col-start-4 col-span-1 row-start-5'],
-      ].map(([src, cls], i) => (
-         <div key={i} className={`${cls} relative overflow-hidden`}>
+      {galleries.heroCollage.map(({ src, className }, i) => (
+         <div key={i} className={`${className} relative overflow-hidden`}>
            <img
-             src={src as string}
+             src={src}
              alt=""
              className="w-full h-full object-cover opacity-90 hover:opacity-100 transition-opacity duration-500"
            />
@@ -78,15 +59,20 @@ const Hero: React.FC = () => {
        {/* reservation numbers */}
        <div className="mb-8">
           <p className="font-['Montserrat'] text-xl font-bold tracking-wide uppercase text-[#6B8B59]">For reservations</p>
-          <p className="font-['Open_Sans'] text-lg font-semibold text-[#222]">+91&nbsp;92115&nbsp;63311</p>
-          <p className="font-['Open_Sans'] text-lg font-semibold text-[#222]">+91&nbsp;92117&nbsp;91188</p>
+          {site.phones.map((phone, i) => (
+            <p key={i} className="font-['Open_Sans'] text-lg font-semibold text-[#222]">{phone}</p>
+          ))}
         </div>
 
 
 
        <button
   onClick={() =>
-    window.open('https://wa.me/919211791188?text=Hi%2C%20I%20want%20to%20reserve%20a%20table', '_blank')
+    window.open(
+      `https://wa.me/${site.whatsapp.number}?text=${encodeURIComponent(site.whatsapp.prefilledMessage)}`,
+      '_blank',
+      'noopener',
+    )
   }
   className="bg-[#6B8B59] hover:bg-[#5a7349] text-white px-8 py-4 rounded-lg font-semibold uppercase tracking-wide shadow-lg hover:shadow-xl transition-all duration-300"
 >
