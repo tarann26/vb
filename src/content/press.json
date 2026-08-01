@@ -1,0 +1,110 @@
+[
+  {
+    "id": "bw-hotelier-regional-flair",
+    "title": "Via Bianca Brings Regional Italian Flair to Delhi's Dining Scene",
+    "publication": "BW Hotelier",
+    "date": "2024-12-15",
+    "excerpt": "Chef Kamalika Anand's latest venture showcases authentic Puglian cuisine with handcrafted pastas and zero-proof cocktails.",
+    "url": "https://www.bwhotelier.com/article/via-bianca-brings-regional-italian-flair-to-delhis-dining-scene-558510",
+    "image": "/press/hotelier.png"
+  },
+  {
+    "id": "delhi-royale-pastificio-ristorante",
+    "title": "Via Bianca Pastificio & Ristorante Delhi",
+    "publication": "Delhi Royale",
+    "date": "2024-12-10",
+    "excerpt": "A deep dive into the authentic Italian dining experience that's capturing hearts in Greater Kailash.",
+    "url": "https://www.delhiroyale.in/post/via-bianca-pastificio-ristorante-delhi",
+    "image": "/press/royale.png"
+  },
+  {
+    "id": "restaurant-india-cordon-bleu-debut",
+    "title": "Le Cordon Bleu Alum Chef Kamalika Anand Debuts Via Bianca in Delhi",
+    "publication": "Restaurant India",
+    "date": "2024-12-05",
+    "excerpt": "From Michelin-starred kitchens to Delhi's dining scene, Chef Kamalika brings her expertise to Via Bianca.",
+    "url": "https://www.restaurantindia.in/news/le-cordon-bleu-alum-chef-kamalika-anand-debuts-via-bianca-in-delhi.n12908",
+    "image": "/press/restaurantindia.png"
+  },
+  {
+    "id": "food-wine-india-handmade-pasta",
+    "title": "The Art of Handmade Pasta: Via Bianca's Traditional Approach",
+    "publication": "Food & Wine India",
+    "date": "2024-11-28",
+    "excerpt": "Exploring the traditional pasta-making techniques that make Via Bianca's dishes truly authentic.",
+    "url": null,
+    "image": "/food/Aglio e Pepperoncini.jpg"
+  },
+  {
+    "id": "mixology-magazine-zero-proof-cocktails",
+    "title": "Zero-Proof Cocktails: The Future of Italian Dining",
+    "publication": "Mixology Magazine",
+    "date": "2024-11-20",
+    "excerpt": "How Via Bianca is revolutionizing the mocktail scene with Italian-inspired zero-proof beverages.",
+    "url": null,
+    "image": "/mocktails/bicerin.jpg"
+  },
+  {
+    "id": "travel-leisure-india-puglia-to-delhi",
+    "title": "From Puglia to Delhi: A Culinary Journey",
+    "publication": "Travel + Leisure India",
+    "date": "2024-11-15",
+    "excerpt": "Chef Kamalika Anand brings the authentic flavors of Southern Italy to the heart of Delhi.",
+    "url": null,
+    "image": "/food/tielle.jpg"
+  },
+  {
+    "id": "dessert-today-perfect-tiramisu",
+    "title": "The Perfect Tiramisu: Secrets from Via Bianca's Kitchen",
+    "publication": "Dessert Today",
+    "date": "2024-11-08",
+    "excerpt": "Unveiling the techniques behind Via Bianca's award-winning tiramisu recipe.",
+    "url": null,
+    "image": "/food/tiramisu.jpg"
+  },
+  {
+    "id": "green-restaurant-guide-sustainable-dining",
+    "title": "Sustainable Italian Dining in Delhi",
+    "publication": "Green Restaurant Guide",
+    "date": "2024-10-30",
+    "excerpt": "How Via Bianca combines authentic Italian cuisine with sustainable practices.",
+    "url": null,
+    "image": "/food/margarita.jpg"
+  },
+  {
+    "id": "culinary-trends-regional-italian-cuisine",
+    "title": "The Rise of Regional Italian Cuisine in India",
+    "publication": "Culinary Trends",
+    "date": "2024-10-22",
+    "excerpt": "Via Bianca leads the movement bringing regional Italian specialties to Indian diners.",
+    "url": null,
+    "image": "/food/Spaghetti alla'Assassina.jpg"
+  },
+  {
+    "id": "chefs-table-kamalika-journey",
+    "title": "Chef Kamalika's Journey: From Le Cordon Bleu to Delhi",
+    "publication": "Chef's Table",
+    "date": "2024-10-15",
+    "excerpt": "An exclusive interview with Chef Kamalika Anand about her culinary philosophy and journey.",
+    "url": null,
+    "image": "/team/alice.jpg"
+  },
+  {
+    "id": "pizza-today-wood-fired-pizza",
+    "title": "Wood-Fired Pizza: The Italian Way at Via Bianca",
+    "publication": "Pizza Today",
+    "date": "2024-10-08",
+    "excerpt": "Exploring the traditional wood-fired techniques that create Via Bianca's perfect pizzas.",
+    "url": null,
+    "image": "/food/margarita.jpg"
+  },
+  {
+    "id": "beverage-industry-food-cocktail-pairing",
+    "title": "The Perfect Pairing: Italian Food and Zero-Proof Cocktails",
+    "publication": "Beverage Industry",
+    "date": "2024-09-30",
+    "excerpt": "How Via Bianca creates perfect harmony between food and non-alcoholic beverages.",
+    "url": null,
+    "image": "/mocktails/bicerin.jpg"
+  }
+]

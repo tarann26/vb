@@ -1,119 +1,17 @@
 import React, { useState } from 'react';
 import { ExternalLink, Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { press } from '../content';
 
 const BlogsPage: React.FC = () => {
   const navigate = useNavigate();
   const [currentPage, setCurrentPage] = useState(1);
   const articlesPerPage = 10;
 
-  // Extended articles list with more entries
-  const allArticles = [
-    {
-      title: "Via Bianca Brings Regional Italian Flair to Delhi's Dining Scene",
-      publication: "BW Hotelier",
-      date: "2024-12-15",
-      excerpt: "Chef Kamalika Anand's latest venture showcases authentic Puglian cuisine with handcrafted pastas and zero-proof cocktails.",
-      url: "https://www.bwhotelier.com/article/via-bianca-brings-regional-italian-flair-to-delhis-dining-scene-558510",
-      image: "/public/press/hotelier.png"
-    },
-    {
-      title: "Via Bianca Pastificio & Ristorante Delhi",
-      publication: "Delhi Royale",
-      date: "2024-12-10",
-      excerpt: "A deep dive into the authentic Italian dining experience that's capturing hearts in Greater Kailash.",
-      url: "https://www.delhiroyale.in/post/via-bianca-pastificio-ristorante-delhi",
-      image: "/public/press/royale.png"
-    },
-    {
-      title: "Le Cordon Bleu Alum Chef Kamalika Anand Debuts Via Bianca in Delhi",
-      publication: "Restaurant India",
-      date: "2024-12-05",
-      excerpt: "From Michelin-starred kitchens to Delhi's dining scene, Chef Kamalika brings her expertise to Via Bianca.",
-      url: "https://www.restaurantindia.in/news/le-cordon-bleu-alum-chef-kamalika-anand-debuts-via-bianca-in-delhi.n12908",
-      image: "/public/press/restaurantindia.png"
-    },
-    {
-      title: "The Art of Handmade Pasta: Via Bianca's Traditional Approach",
-      publication: "Food & Wine India",
-      date: "2024-11-28",
-      excerpt: "Exploring the traditional pasta-making techniques that make Via Bianca's dishes truly authentic.",
-      url: "#",
-      image: "/public/food/aglio.jpg"
-    },
-    {
-      title: "Zero-Proof Cocktails: The Future of Italian Dining",
-      publication: "Mixology Magazine",
-      date: "2024-11-20",
-      excerpt: "How Via Bianca is revolutionizing the mocktail scene with Italian-inspired zero-proof beverages.",
-      url: "#",
-      image: "/public/mocktails/bicerin.jpg"
-    },
-    {
-      title: "From Puglia to Delhi: A Culinary Journey",
-      publication: "Travel + Leisure India",
-      date: "2024-11-15",
-      excerpt: "Chef Kamalika Anand brings the authentic flavors of Southern Italy to the heart of Delhi.",
-      url: "#",
-      image: "/public/food/tielle.jpg"
-    },
-    {
-      title: "The Perfect Tiramisu: Secrets from Via Bianca's Kitchen",
-      publication: "Dessert Today",
-      date: "2024-11-08",
-      excerpt: "Unveiling the techniques behind Via Bianca's award-winning tiramisu recipe.",
-      url: "#",
-      image: "/public/food/tiramisu.jpg"
-    },
-    {
-      title: "Sustainable Italian Dining in Delhi",
-      publication: "Green Restaurant Guide",
-      date: "2024-10-30",
-      excerpt: "How Via Bianca combines authentic Italian cuisine with sustainable practices.",
-      url: "#",
-      image: "/public/food/margarita.jpg"
-    },
-    {
-      title: "The Rise of Regional Italian Cuisine in India",
-      publication: "Culinary Trends",
-      date: "2024-10-22",
-      excerpt: "Via Bianca leads the movement bringing regional Italian specialties to Indian diners.",
-      url: "#",
-      image: "/public/food/assassina.jpg"
-    },
-    {
-      title: "Chef Kamalika's Journey: From Le Cordon Bleu to Delhi",
-      publication: "Chef's Table",
-      date: "2024-10-15",
-      excerpt: "An exclusive interview with Chef Kamalika Anand about her culinary philosophy and journey.",
-      url: "#",
-      image: "/public/team/alice.jpg"
-    },
-    {
-      title: "Wood-Fired Pizza: The Italian Way at Via Bianca",
-      publication: "Pizza Today",
-      date: "2024-10-08",
-      excerpt: "Exploring the traditional wood-fired techniques that create Via Bianca's perfect pizzas.",
-      url: "#",
-      image: "/public/food/margarita.jpg"
-    },
-    {
-      title: "The Perfect Pairing: Italian Food and Zero-Proof Cocktails",
-      publication: "Beverage Industry",
-      date: "2024-09-30",
-      excerpt: "How Via Bianca creates perfect harmony between food and non-alcoholic beverages.",
-      url: "#",
-      image: "/public/mocktails/bicerin.jpg"
-    }
-  ];
-
-  // Sort articles by date (newest first)
-  const sortedArticles = allArticles.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-
-  // Calculate pagination
-  const totalPages = Math.ceil(sortedArticles.length / articlesPerPage);
+  // Calculate pagination. press.json is already sorted newest first at source.
+  const totalPages = Math.ceil(press.length / articlesPerPage);
   const startIndex = (currentPage - 1) * articlesPerPage;
-  const currentArticles = sortedArticles.slice(startIndex, startIndex + articlesPerPage);
+  const currentArticles = press.slice(startIndex, startIndex + articlesPerPage);
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
@@ -201,16 +99,18 @@ const BlogsPage: React.FC = () => {
                     {article.excerpt}
                   </p>
                   
-                  <a 
-                    href={article.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center space-x-2 text-[#6B8B59] hover:text-[#5a7349] font-['Montserrat'] font-semibold text-sm uppercase tracking-wide transition-colors duration-300"
-                    aria-label={`Read full article: ${article.title}`}
-                  >
-                    <span>Read Article</span>
-                    <ExternalLink className="w-4 h-4" />
-                  </a>
+                  {article.url && (
+                    <a
+                      href={article.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center space-x-2 text-[#6B8B59] hover:text-[#5a7349] font-['Montserrat'] font-semibold text-sm uppercase tracking-wide transition-colors duration-300"
+                      aria-label={`Read full article: ${article.title}`}
+                    >
+                      <span>Read Article</span>
+                      <ExternalLink className="w-4 h-4" />
+                    </a>
+                  )}
                 </div>
               </article>
             ))}

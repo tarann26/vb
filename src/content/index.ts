@@ -2,11 +2,13 @@ import siteRaw from './site.json';
 import galleriesRaw from './galleries.json';
 import dishesRaw from './dishes.json';
 import drinksRaw from './drinks.json';
-import type { SiteContent, Galleries, Dish, Drink } from './types';
+import pressRaw from './press.json';
+import type { SiteContent, Galleries, Dish, Drink, Article } from './types';
 
 export const site: SiteContent = siteRaw;
 export const galleries: Galleries = galleriesRaw;
 export const dishes: Dish[] = dishesRaw;
+export const press: Article[] = pressRaw;
 
 // drinks.json's `category` field is a plain string in the JSON module's inferred
 // type, wider than Drink['category']. A type annotation alone can't narrow it and

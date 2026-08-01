@@ -39,7 +39,7 @@ export interface Article {
   publication: string;
   date: string;
   excerpt: string;
-  url: string;
+  url: string | null;
   image: string;
 }
 
