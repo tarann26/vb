@@ -1,11 +1,8 @@
 import React from 'react';
 import { ChefHat } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
 
 
 const Hero: React.FC = () => {
- const navigate = useNavigate();
-
 
  return (
   <section className="min-h-screen bg-white relative flex items-center justify-center overflow-hidden">
