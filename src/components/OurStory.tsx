@@ -1,22 +1,12 @@
 import React, { useEffect, useState } from 'react';
-
-const imageFiles = [
-  'cut.JPG',
-  'dinner.JPG',
-  'handmaking.jpg',
-  'oven.JPG',
-  'shape.JPG',
-  'stuff.JPG'
-];
-
-const images = imageFiles.map((file) => `/public/our_story/${file}`);
+import { story, galleries } from '../content';
 
 const OurStory: React.FC = () => {
   const [currentIndex, setCurrentIndex] = useState(0);
 
   useEffect(() => {
     const interval = setInterval(() => {
-      setCurrentIndex((prev) => (prev + 1) % images.length);
+      setCurrentIndex((prev) => (prev + 1) % galleries.ourStory.length);
     }, 3200); // 3.2 seconds
     return () => clearInterval(interval);
   }, []);
@@ -28,18 +18,12 @@ const OurStory: React.FC = () => {
           {/* Story Text */}
           <div className="space-y-6">
             <h2 className="font-['Montserrat'] text-4xl md:text-5xl font-bold text-[#222] mb-8">
-              Our Story
+              {story.heading}
             </h2>
             <div className="space-y-4 font-['Open_Sans'] text-gray-700 leading-relaxed">
-              <p>
-                Chef Kamalika Anand's culinary journey began in the prestigious kitchens of Michelin-starred restaurants...
-              </p>
-              <p>
-                At Via Bianca, every strand of pasta is crafted fresh daily using time-honored techniques...
-              </p>
-              <p>
-                Our philosophy is simple: great food begins with great ingredients...
-              </p>
+              {story.paragraphs.map((paragraph, idx) => (
+                <p key={idx}>{paragraph}</p>
+              ))}
             </div>
           </div>
 
@@ -49,11 +33,11 @@ const OurStory: React.FC = () => {
               className="flex transition-transform duration-[800ms] ease-in-out"
               style={{ transform: `translateX(-${currentIndex * 100}%)` }}
             >
-              {images.map((src, idx) => (
+              {galleries.ourStory.map((image, idx) => (
                 <img
                   key={idx}
-                  src={src}
-                  alt={`Slide ${idx}`}
+                  src={image.src}
+                  alt={image.alt}
                   className="w-full flex-shrink-0 object-cover h-[400px]"
                 />
               ))}

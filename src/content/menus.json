@@ -1,0 +1,4 @@
+[
+  { "id": "food", "label": "Food Menu", "file": "/menus/food-menu.pdf" },
+  { "id": "drinks", "label": "Drinks Menu", "file": "/menus/drinks-menu.pdf" }
+]

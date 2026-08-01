@@ -1,5 +1,6 @@
 import React from 'react';
-import { drinks } from '../content';
+import { Download } from 'lucide-react';
+import { drinks, menus } from '../content';
 import type { Drink } from '../content';
 
 const hasImage = (drink: Drink): drink is Drink & { image: string } => drink.image !== null;
@@ -97,6 +98,18 @@ const Drinks: React.FC = () => {
             </div>
           );
         })}
+
+        {/* Download Full Menu Buttons */}
+        <div className="text-center flex flex-wrap justify-center gap-4">
+          {menus.map((menu) => (
+            <a key={menu.id} href={menu.file} download>
+              <button className="inline-flex items-center space-x-2 bg-[#6B8B59] hover:bg-[#5a7349] text-white font-['Montserrat'] font-semibold px-8 py-4 rounded-lg transform hover:scale-105 hover:shadow-xl transition-all duration-300 uppercase tracking-wide">
+                <Download className="w-5 h-5" />
+                <span>{menu.label}</span>
+              </button>
+            </a>
+          ))}
+        </div>
       </div>
 
       <style>{`
