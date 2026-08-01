@@ -1,3 +1,7 @@
+// Note: the image and download-link paths below are /public/-prefixed and
+// will 404 in production (Vite serves public/ at the root, not at
+// /public/). Not fixed here because this component is not rendered
+// anywhere in the app.
 
 import React from 'react';
 import { Download } from 'lucide-react';

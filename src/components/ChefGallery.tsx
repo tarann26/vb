@@ -1,3 +1,7 @@
+// Note: the image path below is /public/-prefixed and will 404 in
+// production (Vite serves public/ at the root, not at /public/). Not
+// fixed here because this component is not rendered anywhere in the app.
+
 import React from 'react';
 
 const ChefGallery: React.FC = () => {

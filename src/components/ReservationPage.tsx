@@ -1,3 +1,12 @@
+// Parked 2026-07-31. The Supabase project was retired, so this page is
+// unrouted and excluded from tsconfig.app.json. To revive: restore a
+// client at src/integrations/supabase/client.ts, add auth to the admin
+// page, remove this file from the tsconfig exclude list, and re-register
+// the route in App.tsx.
+// Also: the "Back to Home" button below navigates with
+// window.location.href = '/' instead of the router's navigate('/'), which
+// forces a full page reload. Unreachable while unrouted, so left as-is
+// for whoever revives this page.
 
 import React from 'react';
 import ReservationForm from './ReservationForm';

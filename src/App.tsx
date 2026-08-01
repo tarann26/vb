@@ -8,8 +8,6 @@ import Drinks from './components/Drinks';
 import BlogTeaser from './components/BlogTeaser';
 import VisitUs from './components/VisitUs';
 import Footer from './components/Footer';
-import ReservationPage from './components/ReservationPage';
-import AdminReservations from './components/AdminReservations';
 import BlogsPage from './components/BlogsPage';
 import SeoHead from './components/SeoHead';
 
@@ -35,8 +33,6 @@ function App() {
     <Router>
       <Routes>
         <Route path="/" element={<HomePage />} />
-        <Route path="/reservation" element={<ReservationPage />} />
-        <Route path="/admin" element={<AdminReservations />} />
         <Route path="/blogs" element={<BlogsPage />} />
       </Routes>
     </Router>

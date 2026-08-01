@@ -1,3 +1,8 @@
+// Parked 2026-07-31. The Supabase project was retired, so this page is
+// unrouted and excluded from tsconfig.app.json. To revive: restore a
+// client at src/integrations/supabase/client.ts, add auth to the admin
+// page, remove this file from the tsconfig exclude list, and re-register
+// the route in App.tsx.
 
 import React, { useState } from 'react';
 import { supabase } from '../integrations/supabase/client';
