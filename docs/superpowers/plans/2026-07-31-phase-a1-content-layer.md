@@ -180,7 +180,7 @@ Case sensitivity matters here and is easy to get wrong. `fs.existsSync` on macOS
 
 **Interfaces:**
 - Consumes: nothing.
-- Produces: `collectAssetPaths(): string[]` from `src/content/index.ts`, returning every asset path referenced anywhere in the content layer. Every later task that adds a content file must extend this function. Also exports the typed content objects consumed by Tasks 3 through 9.
+- Produces: the typed content exports consumed by Tasks 3 through 9, and the guardrail test in `src/content/__tests__/assets.test.ts`, which discovers asset paths by walking every JSON file in `src/content/`. Later tasks add a JSON file and a typed export; discovery needs no registration.
 
 - [ ] **Step 1: Allow JSON imports**
 
@@ -302,6 +302,16 @@ Values below come from the existing footer and `index.html`, with two correction
 ```
 
 - [ ] **Step 4: Create the barrel**
+
+> **Superseded during execution (2026-08-01).** Review of this task found that a hand-registered
+> `collectAssetPaths()` fails silently when a later task forgets to extend it: `it.each` still passes
+> while covering one path out of sixty-one. The human approved replacing registration with discovery.
+> As shipped in `c61bc12`: `collectAssetPaths()` does not exist, the barrel holds only typed exports,
+> and the test walks every JSON file in `src/content/` itself. The barrel must never import `node:fs`
+> or use `import.meta.glob`, because components import it and it is bundled for the browser.
+> The same review also found `as SiteContent` accepts a `site.json` missing a required field, where an
+> annotation does not. Every content export uses `const x: T = raw`, never `as`.
+> The code blocks below are the original text, kept for the record.
 
 `src/content/index.ts`:
 
@@ -586,17 +596,14 @@ In `src/content/index.ts`:
 import galleriesRaw from './galleries.json';
 import type { Galleries } from './types';
 
-export const galleries = galleriesRaw as Galleries;
-
-export function collectAssetPaths(): string[] {
-  return [
-    site.seo.ogImage,
-    ...galleries.atmosphere.map((i) => i.src),
-    ...galleries.ourStory.map((i) => i.src),
-    ...galleries.heroCollage.map((i) => i.src),
-  ];
-}
+export const galleries: Galleries = galleriesRaw;
 ```
+
+The test in `src/content/__tests__/assets.test.ts` discovers asset paths by walking every JSON
+file in `src/content/`, so there is nothing to register. Adding the file above is all that is
+required for its paths to be checked. Use a type annotation, never `as`: an annotation catches a
+missing required field, a cast does not.
+
 
 - [ ] **Step 3: Run the guardrail**
 
@@ -705,10 +712,14 @@ Keep the existing `image` filenames. Renaming files is a separate concern handle
 import dishesRaw from './dishes.json';
 import type { Dish } from './types';
 
-export const dishes = dishesRaw as Dish[];
+export const dishes: Dish[] = dishesRaw;
 ```
 
-Add `...dishes.map((d) => d.image)` to `collectAssetPaths()`.
+The test in `src/content/__tests__/assets.test.ts` discovers asset paths by walking every JSON
+file in `src/content/`, so there is nothing to register. Adding the file above is all that is
+required for its paths to be checked. Use a type annotation, never `as`: an annotation catches a
+missing required field, a cast does not.
+
 
 - [ ] **Step 4: Run the guardrail**
 
@@ -842,10 +853,17 @@ Fill in the remaining four mocktails and the full cocktail and wine lists from t
 import drinksRaw from './drinks.json';
 import type { Drink } from './types';
 
-export const drinks = drinksRaw as Drink[];
+export const drinks: Drink[] = drinksRaw;
 ```
 
-Add `...drinks.map((d) => d.image).filter((i): i is string => i !== null)` to `collectAssetPaths()`.
+The test in `src/content/__tests__/assets.test.ts` discovers asset paths by walking every JSON
+file in `src/content/`, so there is nothing to register. Adding the file above is all that is
+required for its paths to be checked. Use a type annotation, never `as`: an annotation catches a
+missing required field, a cast does not.
+
+The walk tolerates `null`, which is what `Drink.image` carries for wine entries, and Task 2 added a
+regression test pinning that. No filtering is needed here.
+
 
 - [ ] **Step 3: Write the failing test**
 
@@ -961,10 +979,14 @@ If a URL has not arrived by the time this task runs, leave that entry out of `pr
 import pressRaw from './press.json';
 import type { Article } from './types';
 
-export const press = pressRaw as Article[];
+export const press: Article[] = pressRaw;
 ```
 
-Add `...press.map((a) => a.image)` to `collectAssetPaths()`.
+The test in `src/content/__tests__/assets.test.ts` discovers asset paths by walking every JSON
+file in `src/content/`, so there is nothing to register. Adding the file above is all that is
+required for its paths to be checked. Use a type annotation, never `as`: an annotation catches a
+missing required field, a cast does not.
+
 
 - [ ] **Step 3: Write the failing test**
 
@@ -1077,11 +1099,15 @@ import storyRaw from './story.json';
 import menusRaw from './menus.json';
 import type { StoryContent, MenuFile } from './types';
 
-export const story = storyRaw as StoryContent;
-export const menus = menusRaw as MenuFile[];
+export const story: StoryContent = storyRaw;
+export const menus: MenuFile[] = menusRaw;
 ```
 
-Add `...menus.map((m) => m.file)` to `collectAssetPaths()`.
+The test in `src/content/__tests__/assets.test.ts` discovers asset paths by walking every JSON
+file in `src/content/`, so there is nothing to register. Adding the file above is all that is
+required for its paths to be checked. Use a type annotation, never `as`: an annotation catches a
+missing required field, a cast does not.
+
 
 - [ ] **Step 5: Write the failing test**
 
