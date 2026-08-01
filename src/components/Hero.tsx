@@ -60,7 +60,7 @@ const Hero: React.FC = () => {
        <div className="mb-8">
           <p className="font-['Montserrat'] text-xl font-bold tracking-wide uppercase text-[#6B8B59]">For reservations</p>
           {site.phones.map((phone, i) => (
-            <p key={i} className="font-['Open_Sans'] text-lg font-semibold text-[#222]">{phone}</p>
+            <p key={i} className="font-['Open_Sans'] text-lg font-semibold text-[#222] whitespace-nowrap">{phone}</p>
           ))}
         </div>
 

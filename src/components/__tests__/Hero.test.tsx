@@ -15,11 +15,67 @@ describe('Hero', () => {
   });
 
   it('places every collage image in a distinct grid cell', () => {
-    const cells = galleries.heroCollage.map((i) => {
-      const col = i.className.match(/col-start-\d+/)?.[0] ?? 'col-auto';
-      const row = i.className.match(/row-start-\d+/)?.[0] ?? 'row-auto';
+    // Filter to only entries with at least one explicit placement (col-start or row-start).
+    // Auto-placed entries (no explicit col or row) have no collision risk; CSS grid handles them.
+    const explicitlyPlaced = galleries.heroCollage.filter((i) => {
+      const hasCol = /col-start-\d+/.test(i.className);
+      const hasRow = /row-start-\d+/.test(i.className);
+      return hasCol || hasRow;
+    });
+
+    const cells = explicitlyPlaced.map((i) => {
+      const col = i.className.match(/col-start-\d+/)?.[0];
+      const row = i.className.match(/row-start-\d+/)?.[0];
       return `${col}:${row}`;
     });
+
     expect(new Set(cells).size).toBe(cells.length);
+  });
+
+  it('does not false-positive when multiple entries are auto-placed', () => {
+    // Prove that auto-placed entries don't cause spurious collisions
+    const fixture = [
+      { src: '/hero/scene.png', className: 'col-start-5 col-span-2 row-span-2' },
+      { src: '/hero/auto1.png', className: 'col-span-2 row-span-2' }, // auto-placed
+      { src: '/hero/auto2.png', className: 'col-span-2 row-span-1' }, // also auto-placed, different span
+    ];
+
+    const explicitlyPlaced = fixture.filter((i) => {
+      const hasCol = /col-start-\d+/.test(i.className);
+      const hasRow = /row-start-\d+/.test(i.className);
+      return hasCol || hasRow;
+    });
+
+    const cells = explicitlyPlaced.map((i) => {
+      const col = i.className.match(/col-start-\d+/)?.[0];
+      const row = i.className.match(/row-start-\d+/)?.[0];
+      return `${col}:${row}`;
+    });
+
+    // Should pass: only the explicitly-placed entry is checked; auto-placed ones are skipped
+    expect(new Set(cells).size).toBe(cells.length);
+  });
+
+  it('detects when two entries occupy the same explicit grid cell', () => {
+    // Prove that the test catches genuine collisions
+    const fixture = [
+      { src: '/hero/scene.png', className: 'col-start-3 col-span-1 row-start-2' },
+      { src: '/hero/ceiling.png', className: 'col-start-3 col-span-1 row-start-2' }, // collision
+    ];
+
+    const explicitlyPlaced = fixture.filter((i) => {
+      const hasCol = /col-start-\d+/.test(i.className);
+      const hasRow = /row-start-\d+/.test(i.className);
+      return hasCol || hasRow;
+    });
+
+    const cells = explicitlyPlaced.map((i) => {
+      const col = i.className.match(/col-start-\d+/)?.[0];
+      const row = i.className.match(/row-start-\d+/)?.[0];
+      return `${col}:${row}`;
+    });
+
+    // Should fail: both entries map to the same cell
+    expect(new Set(cells).size).not.toBe(cells.length);
   });
 });
