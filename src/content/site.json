@@ -18,10 +18,9 @@
     "linkedin": "https://linkedin.com/company/viabiancadelhi"
   },
   "hours": [
-    { "label": "Monday – Friday", "value": "12:00 PM – 11:30 PM" },
-    { "label": "Saturday – Sunday", "value": "12:00 PM – 11:30 PM" }
+    { "days": ["Mo", "Tu", "We", "Th", "Fr"], "opens": "12:00", "closes": "23:30" },
+    { "days": ["Sa", "Su"], "opens": "12:00", "closes": "23:30" }
   ],
-  "structuredDataHours": ["Mo-Su 12:00-23:30"],
   "seo": {
     "title": "Via Bianca - Pastificio & Ristorante | Authentic Italian Dining in Delhi",
     "description": "Via Bianca Pastificio & Ristorante - Authentic Italian dining in Greater Kailash, Delhi. Hand-crafted pastas, wood-fired classics, and a full bar by Chef Kamalika Anand.",

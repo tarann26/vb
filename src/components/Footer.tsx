@@ -1,6 +1,7 @@
 import React from 'react';
 import { Instagram, Linkedin, Clock, MapPin, Phone } from 'lucide-react';
 import { site } from '../content';
+import { formatDayRange, formatTimeRange } from '../content/hours';
 
 const Footer: React.FC = () => {
   return (
@@ -52,9 +53,9 @@ const Footer: React.FC = () => {
 
               <div className="grid grid-cols-2 gap-4 font-['Open_Sans'] text-sm">
                 {site.hours.map((h) => (
-                  <div key={h.label}>
-                    <p className="mb-1 text-gray-400">{h.label}</p>
-                    <p className="text-white">{h.value}</p>
+                  <div key={h.days.join(',')}>
+                    <p className="mb-1 text-gray-400">{formatDayRange(h.days)}</p>
+                    <p className="text-white">{formatTimeRange(h.opens, h.closes)}</p>
                   </div>
                 ))}
               </div>

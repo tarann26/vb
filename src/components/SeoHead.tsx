@@ -1,5 +1,6 @@
 import React from 'react';
 import { site } from '../content';
+import { toSchemaOpeningHours } from '../content/hours';
 
 const SeoHead: React.FC = () => {
   const json = {
@@ -17,7 +18,7 @@ const SeoHead: React.FC = () => {
     telephone: site.phones[0],
     servesCuisine: 'Italian',
     priceRange: '$$',
-    openingHours: site.structuredDataHours,
+    openingHours: site.hours.map(toSchemaOpeningHours),
     chef: { '@type': 'Person', name: 'Kamalika Anand' },
   };
   return <script type="application/ld+json">{JSON.stringify(json)}</script>;

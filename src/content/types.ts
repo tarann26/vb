@@ -1,6 +1,7 @@
 export interface Hours {
-  label: string;
-  value: string;
+  days: string[]; // two-letter schema.org codes: Mo Tu We Th Fr Sa Su, in week order
+  opens: string; // 24-hour "HH:MM"
+  closes: string; // 24-hour "HH:MM"
 }
 
 export interface SiteContent {
@@ -12,7 +13,6 @@ export interface SiteContent {
   whatsapp: { number: string; prefilledMessage: string };
   socials: { instagram: string; linkedin: string | null };
   hours: Hours[];
-  structuredDataHours: string[];
   seo: { title: string; description: string; keywords: string; ogImage: string; url: string };
   copyrightYear: number;
 }
