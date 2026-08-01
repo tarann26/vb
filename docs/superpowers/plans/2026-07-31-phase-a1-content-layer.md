@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- **No visual redesign.** The rendered output of every component must look the same before and after, except where the spec explicitly changes content.
+- **No restyling.** Do not change the palette, type scale, spacing, border radii, shadows or layout of any existing element. Tailwind classes on elements that already exist stay byte-identical. This constraint forbids redesign; it does not forbid the new elements this plan mandates (the mobile menu in Task 12, dish descriptions in Task 5, carousel edge fades in Task 13, the Drinks section in Task 6). New elements must adopt the existing visual language rather than introduce a new one.
 - **No component file is deleted.** `ChefGallery.tsx`, `NewsPress.tsx`, `AdminReservations.tsx`, `ReservationForm.tsx`, `ReservationPage.tsx`, `SignatureMocktails.tsx` and `BlogsPage.tsx` all stay on disk. Routes may be unregistered; files may not be removed.
 - **No new runtime services.** No CDN, no image service, no database, no account with a quota. Build-time and dev-time tooling only.
 - **Asset paths never start with `/public/`.** Vite serves `public/` at the root. `/public/x.jpg` 404s in a production build.
@@ -141,9 +141,11 @@ Expected: PASS.
 - [ ] **Step 7: Run the build and fix what it surfaces**
 
 Run: `npm run build`
-Expected: FAIL on `src/components/Hero.tsx:7` with `'navigate' is declared but its value is never read.`
+Expected: FAIL. At minimum `src/components/Hero.tsx:7`, `'navigate' is declared but its value is never read.` (TS6133).
 
-Fix by deleting line 7 (`const navigate = useNavigate();`) and the now-unused `useNavigate` import on line 3. Hero's only button uses `window.open` for WhatsApp, so nothing else changes.
+Fix that one by deleting line 7 (`const navigate = useNavigate();`) and the now-unused `useNavigate` import on line 3. Hero's only button uses `window.open` for WhatsApp, so nothing else changes.
+
+`tsc` has never run on this codebase, so other strict-mode errors may surface. Fix each with the minimum change that preserves current runtime behaviour. Do not disable a rule, do not add `any`, and do not delete a component to make an error go away. If an error cannot be fixed without changing behaviour, stop and report it rather than guessing.
 
 Re-run `npm run build`. Expected: PASS.
 
@@ -423,9 +425,13 @@ describe('Footer', () => {
     });
   });
 
-  it('omits the LinkedIn link when content has none', () => {
+  it('renders the LinkedIn link only when content provides one', () => {
+    render(<Footer />);
+    const link = screen.queryByLabelText(/LinkedIn/i);
     if (site.socials.linkedin === null) {
-      expect(screen.queryByLabelText(/LinkedIn/i)).toBeNull();
+      expect(link).toBeNull();
+    } else {
+      expect(link).toHaveAttribute('href', site.socials.linkedin);
     }
   });
 });
