@@ -10,6 +10,7 @@ import VisitUs from './components/VisitUs';
 import Footer from './components/Footer';
 import BlogsPage from './components/BlogsPage';
 import SeoHead from './components/SeoHead';
+import NotFound from './components/NotFound';
 
 function HomePage() {
   return (
@@ -28,13 +29,20 @@ function HomePage() {
   );
 }
 
+export function AppRoutes() {
+  return (
+    <Routes>
+      <Route path="/" element={<HomePage />} />
+      <Route path="/blogs" element={<BlogsPage />} />
+      <Route path="*" element={<NotFound />} />
+    </Routes>
+  );
+}
+
 function App() {
   return (
     <Router>
-      <Routes>
-        <Route path="/" element={<HomePage />} />
-        <Route path="/blogs" element={<BlogsPage />} />
-      </Routes>
+      <AppRoutes />
     </Router>
   );
 }
