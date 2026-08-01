@@ -20,7 +20,17 @@ describe('Drinks', () => {
 
   it('describes only drinks that exist', () => {
     render(<Drinks />);
-    ['basil-lime spritz', 'rosemary-grapefruit fizz', 'espresso-orange tonic'].forEach((ghost) => {
+    [
+      // Ghosts from the original intro copy: described drinks that were never on the menu.
+      'basil-lime spritz',
+      'rosemary-grapefruit fizz',
+      'espresso-orange tonic',
+      // Retired from the current printed menu: must not silently reappear.
+      'Bicerin',
+      'Espresso Tonic',
+      'Signor Bianca',
+      'Sambuco',
+    ].forEach((ghost) => {
       expect(screen.queryByText(new RegExp(ghost, 'i'))).toBeNull();
     });
   });

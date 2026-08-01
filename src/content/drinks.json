@@ -1,38 +1,59 @@
 [
   {
-    "id": "bicerin",
-    "name": "Bicerin",
-    "description": "Espresso, chocolate & cream",
+    "id": "viola",
+    "name": "Viola",
+    "description": "A medley of blueberries and lavender with fresh basil",
     "category": "mocktail",
-    "image": "/mocktails/bicerin.jpg"
+    "image": null
   },
   {
-    "id": "espresso-tonic",
-    "name": "Espresso Tonic",
-    "description": "Espresso, blood orange & ginger ale",
+    "id": "madre",
+    "name": "Madre",
+    "description": "A balance of litchi and coconut with a touch of pomegranate",
     "category": "mocktail",
-    "image": "/mocktails/blood orange espresso tonic.JPG"
+    "image": null
   },
   {
     "id": "piccante",
     "name": "Piccante",
-    "description": "Pineapple, birds eye chili & salt",
+    "description": "A Via Bianca classic mocktail with pineapple and secret chilli salt",
     "category": "mocktail",
     "image": "/mocktails/piccante.JPG"
   },
   {
-    "id": "signor-bianca",
-    "name": "Signor Bianca",
-    "description": "Dragonfruit, coconut water & honey",
+    "id": "fresca",
+    "name": "Fresca",
+    "description": "A tropical paradise blend of orange, passion fruit and lemon",
     "category": "mocktail",
-    "image": "/mocktails/signor bianca.png"
+    "image": null
   },
   {
-    "id": "viola-and-sambuco",
-    "name": "Viola and Sambuco",
-    "description": "Blueberries, basil leaves, lavender & ginger ale and Elderflower, cucumber & black tea",
+    "id": "sano",
+    "name": "Sano",
+    "description": "A fizzy combination of blueberry crush, chia seeds and lemon",
     "category": "mocktail",
-    "image": "/mocktails/viola and sambuco.png"
+    "image": null
+  },
+  {
+    "id": "kiwi",
+    "name": "Kiwi",
+    "description": "A refreshing blend of kiwi and cucumber with a hint of lemon",
+    "category": "mocktail",
+    "image": null
+  },
+  {
+    "id": "da-goa",
+    "name": "da Goa",
+    "description": "Inspired by Chef Kamalika's recent travel to Goa, a refreshing concoction of kokum, cranberry and secret chilli salt",
+    "category": "mocktail",
+    "image": null
+  },
+  {
+    "id": "fragola-sorbetto",
+    "name": "Fragola Sorbetto",
+    "description": "For all our teetotallers, a scoop of refreshing strawberry sorbet in a glass of faux sparkling wine",
+    "category": "mocktail",
+    "image": null
   },
   {
     "id": "estate",

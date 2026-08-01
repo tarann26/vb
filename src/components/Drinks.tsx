@@ -2,6 +2,8 @@ import React from 'react';
 import { drinks } from '../content';
 import type { Drink } from '../content';
 
+const hasImage = (drink: Drink): drink is Drink & { image: string } => drink.image !== null;
+
 const CATEGORY_ORDER: { key: Drink['category']; heading: string }[] = [
   { key: 'mocktail', heading: 'Mocktails' },
   { key: 'cocktail', heading: 'Cocktails' },
@@ -42,11 +44,11 @@ const Drinks: React.FC = () => {
               </h3>
 
               {/* Drinks with photography: horizontal scroll of cards */}
-              {items.some((drink) => drink.image) && (
+              {items.some(hasImage) && (
                 <div className="overflow-x-auto scrollbar-hide mb-8">
                   <div className="flex space-x-8 pb-4" style={{ width: 'max-content' }}>
                     {items
-                      .filter((drink) => drink.image)
+                      .filter(hasImage)
                       .map((drink) => (
                         <div
                           key={drink.id}
@@ -54,7 +56,7 @@ const Drinks: React.FC = () => {
                         >
                           <div className="h-80 relative">
                             <img
-                              src={drink.image as string}
+                              src={drink.image}
                               alt={drink.name}
                               className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
                               loading="lazy"
