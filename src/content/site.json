@@ -1,0 +1,33 @@
+{
+  "name": "Via Bianca",
+  "tagline": "Pastificio & Ristorante",
+  "strapline": "Sip Italiano, Taste the Soul of Puglia",
+  "address": {
+    "street": "N-Block Market, Greater Kailash I",
+    "locality": "New Delhi",
+    "postalCode": "110048",
+    "country": "IN"
+  },
+  "phones": ["+91 92115 63311", "+91 92117 91188"],
+  "whatsapp": {
+    "number": "919211791188",
+    "prefilledMessage": "Hi, I want to reserve a table"
+  },
+  "socials": {
+    "instagram": "https://instagram.com/viabiancadelhi",
+    "linkedin": "https://linkedin.com/company/viabiancadelhi"
+  },
+  "hours": [
+    { "label": "Monday – Friday", "value": "12:00 PM – 11:30 PM" },
+    { "label": "Saturday – Sunday", "value": "12:00 PM – 11:30 PM" }
+  ],
+  "structuredDataHours": ["Mo-Su 12:00-23:30"],
+  "seo": {
+    "title": "Via Bianca - Pastificio & Ristorante | Authentic Italian Dining in Delhi",
+    "description": "Via Bianca Pastificio & Ristorante - Authentic Italian dining in Greater Kailash, Delhi. Hand-crafted pastas, wood-fired classics, and a full bar by Chef Kamalika Anand.",
+    "keywords": "Italian restaurant Delhi, handmade pasta, Via Bianca, Greater Kailash dining, authentic Italian food, Chef Kamalika Anand",
+    "ogImage": "/atmosphere/dining.jpg",
+    "url": "https://viabiancadelhi.com"
+  },
+  "copyrightYear": 2026
+}
