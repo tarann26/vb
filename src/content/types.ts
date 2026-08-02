@@ -85,3 +85,24 @@ export interface MenuFile {
   label: string;
   file: string;
 }
+
+export interface NavLink {
+  href: string;
+  label: string;
+}
+
+export interface Copy {
+  nav: { wordmark: string; links: NavLink[]; instagramLabel: string; menuLabel: string };
+  hero: { logoName: string; logoTagline: string; reservationsLabel: string; reserveButton: string };
+  atmosphere: { heading: string };
+  food: { heading: string };
+  drinks: { heading: string; intro: string; mocktails: string; cocktails: string; wine: string };
+  press: { heading: string; intro: string; readArticle: string; viewAll: string };
+  visit: { heading: string; navigateButton: string; mapTitle: string };
+  footer: {
+    hoursHeading: string; followLabel: string; reservationsLabel: string;
+    rightsSuffix: string; instagramLabel: string; linkedinLabel: string;
+  };
+  blogsPage: { title: string; subtitle: string; heading: string; intro: string; back: string; previous: string; next: string };
+  notFound: { heading: string; back: string };
+}

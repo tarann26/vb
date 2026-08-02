@@ -1,12 +1,12 @@
 import React from 'react';
-import { galleries } from '../content';
+import { galleries, copy } from '../content';
 
 const PlaceGallery: React.FC = () => {
   return (
     <section id="gallery" className="py-20 bg-[#F9F9F9]">
       <div className="max-w-7xl mx-auto px-4">
         <h2 className="font-['Montserrat'] text-4xl md:text-5xl font-bold text-[#222] text-center mb-16">
-          Atmosfera
+          {copy.atmosphere.heading}
         </h2>
 
         {/* Horizontal scroll container */}

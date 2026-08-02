@@ -1,14 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Instagram, Menu, X } from 'lucide-react';
-import { site } from '../content';
-
-const NAV_LINKS = [
-  { href: '#our-story', label: 'Our Story' },
-  { href: '#gallery', label: 'Gallery' },
-  { href: '#menu', label: 'Menu' },
-  { href: '#blogs', label: 'Stories' },
-  { href: '#visit', label: 'Visit Us' },
-];
+import { site, copy } from '../content';
 
 const Navbar: React.FC = () => {
   const [showNavbar, setShowNavbar] = useState(true);
@@ -37,7 +29,7 @@ const Navbar: React.FC = () => {
     >
       {/* Logo */}
       <div className="text-3xl font-['Parisienne'] text-[#222]">
-        Via Bianca
+        {copy.nav.wordmark}
       </div>
 
       {/* Links and social */}
@@ -47,7 +39,7 @@ const Navbar: React.FC = () => {
             data-testid="desktop-nav-links"
             className="space-x-6 text-sm font-['Montserrat'] tracking-wider text-[#6B8B59] uppercase"
           >
-            {NAV_LINKS.map((link) => (
+            {copy.nav.links.map((link) => (
               <a key={link.href} href={link.href} className="hover:text-[#222] transition">
                 {link.label}
               </a>
@@ -59,7 +51,7 @@ const Navbar: React.FC = () => {
             href={site.socials.instagram}
             target="_blank"
             rel="noopener noreferrer"
-            aria-label="Follow Via Bianca on Instagram"
+            aria-label={copy.nav.instagramLabel}
             className="text-[#6B8B59] hover:text-[#222] transition"
           >
             <Instagram className="h-5 w-5" />
@@ -67,7 +59,7 @@ const Navbar: React.FC = () => {
         )}
         <button
           type="button"
-          aria-label="Menu"
+          aria-label={copy.nav.menuLabel}
           aria-expanded={isMenuOpen}
           onClick={() => setIsMenuOpen((open) => !open)}
           className="md:hidden text-[#6B8B59] hover:text-[#222] transition"
@@ -81,7 +73,7 @@ const Navbar: React.FC = () => {
           data-testid="mobile-nav-panel"
           className="absolute top-full left-0 right-0 md:hidden bg-white shadow-md flex flex-col items-start px-6 py-4 space-y-4 text-sm font-['Montserrat'] tracking-wider text-[#6B8B59] uppercase"
         >
-          {NAV_LINKS.map((link) => (
+          {copy.nav.links.map((link) => (
             <a
               key={link.href}
               href={link.href}

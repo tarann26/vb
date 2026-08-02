@@ -1,0 +1,42 @@
+import { describe, it, expect } from 'vitest';
+import { copy, assertCopy } from '../index';
+
+const strings = (obj: unknown, path = ''): [string, string][] =>
+  typeof obj === 'string'
+    ? [[path, obj]]
+    : Array.isArray(obj)
+      ? obj.flatMap((v, i) => strings(v, `${path}[${i}]`))
+      : obj && typeof obj === 'object'
+        ? Object.entries(obj).flatMap(([k, v]) => strings(v, path ? `${path}.${k}` : k))
+        : [];
+
+describe('copy', () => {
+  const all = strings(copy);
+
+  it('finds strings to check', () => {
+    expect(all.length).toBeGreaterThan(20);
+  });
+
+  it.each(all)('%s is not blank', (_path, value) => {
+    expect(value.trim().length).toBeGreaterThan(0);
+  });
+
+  it('has one nav link per anchor, all fragments', () => {
+    expect(copy.nav.links.length).toBe(5);
+    copy.nav.links.forEach((l) => expect(l.href).toMatch(/^#/));
+  });
+});
+
+describe('assertCopy', () => {
+  it('rejects a blank string, naming its path', () => {
+    const bad = structuredClone(copy) as unknown as Record<string, Record<string, string>>;
+    bad.atmosphere.heading = '   ';
+    expect(() => assertCopy(bad)).toThrow(/atmosphere\.heading/);
+  });
+
+  it('rejects an empty nav link list', () => {
+    const bad = structuredClone(copy) as unknown as { nav: { links: unknown[] } };
+    bad.nav.links = [];
+    expect(() => assertCopy(bad)).toThrow(/nav\.links/);
+  });
+});

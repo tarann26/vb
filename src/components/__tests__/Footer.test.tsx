@@ -39,9 +39,13 @@ describe('Footer LinkedIn link', () => {
 
   it('renders the LinkedIn link when content provides a URL', async () => {
     vi.resetModules();
-    vi.doMock('../../content', () => ({
-      site: { ...site, socials: { ...site.socials, linkedin: 'https://linkedin.com/company/test-fixture' } },
-    }));
+    vi.doMock('../../content', async () => {
+      const actual = await vi.importActual<typeof import('../../content')>('../../content');
+      return {
+        ...actual,
+        site: { ...actual.site, socials: { ...actual.site.socials, linkedin: 'https://linkedin.com/company/test-fixture' } },
+      };
+    });
     const { default: FooterWithLink } = await import('../Footer');
 
     render(<FooterWithLink />);
@@ -54,9 +58,13 @@ describe('Footer LinkedIn link', () => {
 
   it('omits the LinkedIn link when content has none', async () => {
     vi.resetModules();
-    vi.doMock('../../content', () => ({
-      site: { ...site, socials: { ...site.socials, linkedin: null } },
-    }));
+    vi.doMock('../../content', async () => {
+      const actual = await vi.importActual<typeof import('../../content')>('../../content');
+      return {
+        ...actual,
+        site: { ...actual.site, socials: { ...actual.site.socials, linkedin: null } },
+      };
+    });
     const { default: FooterWithoutLink } = await import('../Footer');
 
     render(<FooterWithoutLink />);

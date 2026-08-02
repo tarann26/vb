@@ -1,0 +1,65 @@
+{
+  "nav": {
+    "wordmark": "Via Bianca",
+    "links": [
+      { "href": "#our-story", "label": "Our Story" },
+      { "href": "#gallery", "label": "Gallery" },
+      { "href": "#menu", "label": "Menu" },
+      { "href": "#blogs", "label": "Stories" },
+      { "href": "#visit", "label": "Visit Us" }
+    ],
+    "instagramLabel": "Follow Via Bianca on Instagram",
+    "menuLabel": "Menu"
+  },
+  "hero": {
+    "logoName": "Via Bianca",
+    "logoTagline": "Pastificio & Ristorante",
+    "reservationsLabel": "For reservations",
+    "reserveButton": "Reserve a Table"
+  },
+  "atmosphere": {
+    "heading": "Atmosfera"
+  },
+  "food": {
+    "heading": "Hand-crafted Pastas & Wood-Fired Classics"
+  },
+  "drinks": {
+    "heading": "Drinks",
+    "intro": "Our bar pours a full Italian programme alongside our zero-proof mocktails: prosecco spritzes, rosé and classic cocktails from the bar team, and a wine list running from everyday Chianti to a Barolo DOCG and a Brunello di Montalcino.",
+    "mocktails": "Mocktails",
+    "cocktails": "Cocktails",
+    "wine": "Wine"
+  },
+  "press": {
+    "heading": "Latest Stories",
+    "intro": "Discover what food critics and culinary experts are saying about Via Bianca's authentic Italian experience and Chef Kamalika's innovative approach to traditional cuisine.",
+    "readArticle": "Read Article",
+    "viewAll": "View All Stories"
+  },
+  "visit": {
+    "heading": "Visit Us",
+    "navigateButton": "Navigate",
+    "mapTitle": "Via Bianca Location - N-Block Market, Greater Kailash I"
+  },
+  "footer": {
+    "hoursHeading": "Opening Hours",
+    "followLabel": "Follow Us:",
+    "reservationsLabel": "For Reservations:",
+    "rightsSuffix": ". All rights reserved.",
+    "instagramLabel": "Follow Via Bianca on Instagram",
+    "linkedinLabel": "Connect with Via Bianca on LinkedIn"
+  },
+  "blogsPage": {
+    "title": "Via Bianca Stories",
+    "subtitle": "Press & Articles",
+    "heading": "All Stories",
+    "intro": "Discover the complete collection of articles, reviews, and features about Via Bianca's culinary journey and authentic Italian dining experience.",
+    "back": "← Back to Home",
+    "previous": "Previous",
+    "next": "Next"
+  },
+  "notFound": {
+    "heading": "Page not found",
+    "back": "Back to home"
+  }
+}

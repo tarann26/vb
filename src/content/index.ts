@@ -5,6 +5,7 @@ import drinksRaw from './drinks.json';
 import pressRaw from './press.json';
 import storyRaw from './story.json';
 import menusRaw from './menus.json';
+import copyRaw from './copy.json';
 import type {
   SiteContent,
   Galleries,
@@ -14,6 +15,7 @@ import type {
   StoryContent,
   MenuFile,
   Hours,
+  Copy,
 } from './types';
 
 const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/; // 24-hour "HH:MM"
@@ -74,5 +76,46 @@ export const drinks: Drink[] = drinksRaw.map((raw) => {
   }
   return { ...raw, category };
 });
+
+// Recurses through the raw copy.json shape checking every string leaf for
+// blank content, building a dotted/bracketed path (e.g. "footer.followLabel"
+// or "nav.links[0].label") for the error message.
+function assertNonBlank(value: unknown, path: string): void {
+  if (typeof value === 'string') {
+    if (value.trim().length === 0) {
+      throw new Error(`content/copy.json: "${path}" must not be blank`);
+    }
+    return;
+  }
+  if (Array.isArray(value)) {
+    value.forEach((item, i) => assertNonBlank(item, `${path}[${i}]`));
+    return;
+  }
+  if (value && typeof value === 'object') {
+    Object.entries(value).forEach(([key, v]) =>
+      assertNonBlank(v, path ? `${path}.${key}` : key),
+    );
+  }
+}
+
+// Every field in Copy is already `string` (or an array of a string-only
+// record), so a plain type annotation on copyRaw type-checks fine without
+// this guard -- unlike drinks.category or hours.days, nothing here needs
+// runtime narrowing. What a type annotation cannot catch is a field left
+// blank, or the nav link list emptied out entirely (still a valid
+// `NavLink[]`, just one with no links to render). This guard rejects both,
+// naming the offending path so a bad edit to copy.json fails loudly at
+// import time instead of rendering invisible text or a menu with nothing in
+// it.
+export function assertCopy(raw: unknown): Copy {
+  const navLinks = (raw as { nav?: { links?: unknown[] } }).nav?.links;
+  if (!Array.isArray(navLinks) || navLinks.length === 0) {
+    throw new Error('content/copy.json: "nav.links" must not be empty');
+  }
+  assertNonBlank(raw, '');
+  return raw as Copy;
+}
+
+export const copy: Copy = assertCopy(copyRaw);
 
 export * from './types';

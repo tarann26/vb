@@ -1,12 +1,13 @@
 import React from 'react';
 import { Navigation } from 'lucide-react';
+import { copy } from '../content';
 
 const VisitUs: React.FC = () => {
   return (
     <section id= "visit" className="py-20 bg-[#F9F9F9]">
       <div className="max-w-4xl mx-auto px-4">
         <h2 className="font-['Montserrat'] text-4xl md:text-5xl font-bold text-[#222] text-center mb-16">
-          Visit Us
+          {copy.visit.heading}
         </h2>
         
         <div className="bg-white rounded-3xl shadow-2xl overflow-hidden">
@@ -20,7 +21,7 @@ const VisitUs: React.FC = () => {
               allowFullScreen
               loading="lazy"
               referrerPolicy="no-referrer-when-downgrade"
-              title="Via Bianca Location - N-Block Market, Greater Kailash I"
+              title={copy.visit.mapTitle}
             ></iframe>
           </div>
           
@@ -33,7 +34,7 @@ const VisitUs: React.FC = () => {
             >
                 <button className="inline-flex items-center space-x-2 bg-[#6B8B59] hover:bg-[#5a7349] text-white font-['Montserrat'] font-bold px-8 py-4 rounded-lg transform hover:scale-105 hover:shadow-xl transition-all duration-300 uppercase tracking-wide">
                   <Navigation className="w-5 h-5" />
-                  <span>Navigate</span>
+                  <span>{copy.visit.navigateButton}</span>
                 </button>
             </a>
           </div>
