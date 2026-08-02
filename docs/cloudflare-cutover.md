@@ -71,22 +71,32 @@ problem.
 
 ## 4. Enable Web Analytics
 
-Enable Cloudflare Web Analytics for the site, then:
+Cloudflare offers two ways to wire up Web Analytics. **Use only the first one below.** Mixing
+both puts two beacon scripts on every page, and Cloudflare counts each beacon's pageview
+independently — the owner would see roughly double the real traffic with no error, warning, or
+obvious tell that anything was wrong.
 
-1. Copy the analytics token Cloudflare gives you.
-2. In `index.html`, replace the placeholder `CLOUDFLARE_ANALYTICS_TOKEN` with that token (it
-   appears once, in the `data-cf-beacon` attribute on the beacon `<script>` tag near the end of
-   `<body>`).
-3. Update `src/test/analytics.test.ts` — it has a test asserting the placeholder token is
-   present (`uses a placeholder token that must be replaced at cutover`). Once the real token is
-   in `index.html`, that assertion will fail; update it to check for the real token instead (or
-   just check that the placeholder string is no longer present).
-4. Run `npm test` to confirm the suite is still green, then commit and deploy the change.
-5. This commit triggers a new Cloudflare deploy. Before moving on to Step 5 (DNS), **re-run both
-   Step 3 checks against this new deployment's preview URL** — a hard refresh on `/blogs` still
-   returns the page, and the build log still reports 48 images. It's a one-line token swap and
-   low risk, but Step 3 said to check for real rather than assume, and that applies to every
-   deploy that happens before DNS points here, not just the first one.
+- **Dashboard toggle for this Pages project (use this one).** In the Cloudflare dashboard, go to
+  Workers & Pages → this project → **Analytics** → **Web Analytics** → **Enable**. That's the
+  whole step. Cloudflare then injects its own beacon into every response it serves for this
+  project — the `*.pages.dev` preview, the eventual custom domain, and every deploy after this
+  one — automatically, with no token to copy anywhere and no file in this repository to edit.
+  This repository deliberately ships with **no** beacon `<script>` in `index.html` (see the
+  comment there) and a test (`src/test/analytics.test.ts`) that fails if one is added back by
+  hand, specifically so nobody re-introduces the second-beacon failure mode by "helpfully"
+  wiring up analytics in code that Cloudflare is already handling.
+- **Manual snippet, for a site not on Cloudflare at all (do not use this one here).** Cloudflare
+  also documents copying a token into a hand-placed `<script>` tag, for sites that aren't
+  Cloudflare Pages or Workers projects. That path does not apply to this project — do not add
+  that script to `index.html`. If the dashboard ever shows you a manual snippet instead of a
+  one-click **Enable** for this Pages project, stop and double-check you're looking at the Pages
+  project's own Analytics tab rather than the generic "Add a site" flow.
+
+Once enabled, this commit-free dashboard change takes effect on the next request Cloudflare
+serves for the project — there is nothing to commit or redeploy for this step. Still, before
+moving on to Step 5 (DNS), **re-run both Step 3 checks against the preview URL** — a hard refresh
+on `/blogs` still returns the page, and the build log still reports 48 images. That costs nothing
+and Step 3 said to check for real rather than assume.
 
 **What this analytics setup gives you, and what it doesn't.** Free Cloudflare Web Analytics
 reports page views, referrers, device/browser split, and Web Vitals, broken down per page. **It

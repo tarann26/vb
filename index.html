@@ -42,7 +42,14 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
-    <script defer src="https://static.cloudflareinsights.com/beacon.min.js"
-            data-cf-beacon='{"token": "CLOUDFLARE_ANALYTICS_TOKEN"}'></script>
+    <!--
+      No Cloudflare beacon <script> here, on purpose. Web Analytics for this
+      site is enabled at the Cloudflare Pages project level (dashboard >
+      Workers & Pages > this project > Analytics > Web Analytics > Enable),
+      not by hand-placing a snippet. Cloudflare injects its own beacon into
+      every response it serves for the project once that is on -- see
+      docs/cloudflare-cutover.md Step 4. Adding a beacon script here as well
+      would put two on the page and double-count every visit.
+    -->
   </body>
 </html>

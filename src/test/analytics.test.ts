@@ -1,20 +1,23 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 
+// Cloudflare Web Analytics for this site is enabled at the Pages project
+// level (dashboard > Workers & Pages > this project > Analytics > Web
+// Analytics > Enable), not by hand-placing a beacon <script> in index.html.
+// For a Pages project, Cloudflare injects the beacon into every response it
+// serves once that is on -- the *.pages.dev preview, the custom domain, and
+// every subsequent deploy -- with no token to copy into this repository and
+// nothing here that can go stale. See docs/cloudflare-cutover.md Step 4.
+//
+// This guards the failure mode that decision exists to prevent: someone
+// who wants analytics and doesn't know it is already enabled at the
+// dashboard level hand-places a beacon script here too. Two beacons on one
+// page means two page-view counts for every visit -- the exact metric the
+// owner asked for, silently doubled.
 describe('analytics', () => {
-  it('loads cloudflare web analytics', () => {
+  it('does not hand-place a Cloudflare beacon, which Cloudflare already injects for this Pages project', () => {
     const html = readFileSync('index.html', 'utf8');
-    expect(html).toContain('static.cloudflareinsights.com/beacon.min.js');
-  });
-
-  it('loads it deferred so it cannot block rendering', () => {
-    const html = readFileSync('index.html', 'utf8');
-    const tag = html.match(/<script[^>]*cloudflareinsights[^>]*>/)?.[0] ?? '';
-    expect(tag).toMatch(/\bdefer\b/);
-  });
-
-  it('uses a placeholder token that must be replaced at cutover', () => {
-    const html = readFileSync('index.html', 'utf8');
-    expect(html).toContain('CLOUDFLARE_ANALYTICS_TOKEN');
+    expect(html).not.toContain('cloudflareinsights.com');
+    expect(html).not.toMatch(/data-cf-beacon/);
   });
 });
