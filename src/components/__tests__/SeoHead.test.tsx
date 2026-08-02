@@ -40,7 +40,7 @@ describe('SeoHead', () => {
 });
 
 // The regression this whole arrangement exists to prevent: index.html is
-// served for every route by vercel.json's SPA rewrite, so a canonical
+// served for every route by public/_redirects' SPA rewrite, so a canonical
 // declared there pointed /blogs at the homepage -- telling Google not to
 // index a page public/sitemap.xml explicitly asks it to index.
 describe('canonical url per route', () => {

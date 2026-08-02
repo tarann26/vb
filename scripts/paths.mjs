@@ -3,14 +3,15 @@ import { join, extname, basename, relative, sep } from 'node:path';
 // Where a source photo lands in public/, and how big it is allowed to be.
 //
 // This module is deliberately free of `sharp` (and of every other native or
-// heavyweight dependency). `vercel.json`'s buildCommand runs
-// `npm run test:deploy`, which runs scripts/__tests__/images.test.mjs; the
-// logic that test covers is pure string and number manipulation. When that
-// logic lived in images.mjs, importing it pulled sharp's native binding into
-// every production deploy for nothing, so any sharp install or load failure
-// on the build machine would block a deploy that never needed to encode an
-// image. Keep it that way: nothing here may import sharp, and nothing here
-// may import a module that does.
+// heavyweight dependency). The Cloudflare Pages build command documented in
+// docs/cloudflare-cutover.md runs `npm run test:deploy`, which runs
+// scripts/__tests__/images.test.mjs; the logic that test covers is pure
+// string and number manipulation. When that logic lived in images.mjs,
+// importing it pulled sharp's native binding into every production deploy
+// for nothing, so any sharp install or load failure on the build machine
+// would block a deploy that never needed to encode an image. Keep it that
+// way: nothing here may import sharp, and nothing here may import a module
+// that does.
 
 export const SOURCE = 'assets-source';
 export const OUT = 'public';

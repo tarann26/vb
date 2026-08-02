@@ -76,7 +76,7 @@ it('gives the share preview a description that names the neighbourhood', () => {
   expect(description).not.toBe(site.strapline);
 });
 
-// vercel.json rewrites every route to this one file, so any canonical
+// public/_redirects rewrites every route to this one file, so any canonical
 // declared here is also served on /blogs -- which public/sitemap.xml asks
 // Google to index. The homepage's self-canonical lives in SeoHead.tsx (see
 // SeoHead.test.tsx); this asserts the static copy has not come back.

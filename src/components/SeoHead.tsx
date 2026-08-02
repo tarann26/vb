@@ -4,7 +4,7 @@ import { toSchemaOpeningHours } from '../content/hours';
 
 // Mounted only by HomePage, which is what makes the canonical below correct.
 //
-// index.html deliberately carries no <link rel="canonical">: vercel.json
+// index.html deliberately carries no <link rel="canonical">: public/_redirects
 // rewrites every route to that one file, so a canonical there would tell
 // Google that /blogs is a duplicate of the homepage even as
 // public/sitemap.xml asks for /blogs to be indexed. Declaring it from a

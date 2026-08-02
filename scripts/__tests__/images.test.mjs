@@ -1,9 +1,10 @@
 import { describe, it, expect } from 'vitest';
 // Imported from paths.mjs, not images.mjs: this file runs inside
-// `npm run test:deploy`, which is `vercel.json`'s buildCommand, and
-// images.mjs loads sharp's native binding at module scope. Nothing below
-// encodes anything, so nothing below should be able to fail on a machine
-// where sharp will not install or load.
+// `npm run test:deploy`, part of the Cloudflare Pages build command
+// documented in docs/cloudflare-cutover.md, and images.mjs loads sharp's
+// native binding at module scope. Nothing below encodes anything, so
+// nothing below should be able to fail on a machine where sharp will not
+// install or load.
 import {
   outputPathFor,
   findCollisions,
