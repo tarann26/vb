@@ -1,25 +1,15 @@
 import { describe, it, expect } from 'vitest';
 import { readdirSync, readFileSync } from 'node:fs';
-import { join, posix, basename } from 'node:path';
+import { join, relative, basename } from 'node:path';
 import { site } from '../index';
+import { publicFiles as onDisk } from '../../test/publicFiles';
 
 const CONTENT_DIR = join(process.cwd(), 'src', 'content');
-const PUBLIC_DIR = join(process.cwd(), 'public');
+const SRC_DIR = join(process.cwd(), 'src');
 
 // Leading slash + a known asset extension. Deliberately excludes bare URLs
 // (site.seo.url, socials) which have no leading slash.
 const ASSET_PATH_PATTERN = /^\/.+\.(jpg|jpeg|png|webp|avif|svg|pdf)$/i;
-
-function listFiles(dir: string, prefix = ''): string[] {
-  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
-    entry.isDirectory()
-      ? listFiles(join(dir, entry.name), posix.join(prefix, entry.name))
-      : [posix.join('/', prefix, entry.name)],
-  );
-}
-
-// Built from readdir, not existsSync: macOS is case-insensitive and Vercel is not.
-const onDisk = new Set(listFiles(PUBLIC_DIR));
 
 // Every .json file directly under src/content is content data; __tests__ holds
 // test code, not content, so it is excluded from the walk.
@@ -45,14 +35,62 @@ function collectAssetPathsFromValue(value: unknown, found: string[]): void {
   }
 }
 
+// Not every live asset path lives in src/content. `/hero/brick.webp` is
+// hardcoded in Hero.tsx and again in index.css as the whole-page
+// `body::before` texture, and index.html hardcodes the favicon -- so a walk
+// of the JSON alone leaves the single most globally visible image on the
+// site unguarded. Rename its source, and `npm run images` prunes the
+// derivative while every test, tsc and the deploy gate stay green: the site
+// silently loses its hero backdrop and its page texture.
+//
+// Matches a quoted (or url(...)-wrapped) literal that starts at the site
+// root and ends in an asset extension. Anchoring on the opening delimiter
+// plus "/" is what keeps absolute URLs out: the og:image tag's
+// "https://viabiancadelhi.com/og-image.jpg" begins with an "h", so it is
+// never mistaken for a public/ path.
+const CODE_ASSET_PATTERN = /["'`(](\/[^"'`()\n]+\.(?:jpg|jpeg|png|webp|avif|svg|pdf))["'`)]/gi;
+
+const CODE_EXTENSIONS = ['.tsx', '.ts', '.css'];
+
+// __tests__ directories and src/test hold fixtures and assertions full of
+// asset-shaped strings that were never meant to resolve (`/hero/auto1.png`,
+// `assets-source/food/margarita.png`). Walking them would mean chasing
+// paths that do not and should not exist.
+function listCodeFiles(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (entry.name === '__tests__') return [];
+      if (relative(SRC_DIR, full) === 'test') return [];
+      return listCodeFiles(full);
+    }
+    return CODE_EXTENSIONS.some((ext) => entry.name.endsWith(ext)) ? [full] : [];
+  });
+}
+
+function collectAssetPathsFromCode(source: string, found: string[]): void {
+  for (const match of source.matchAll(CODE_ASSET_PATTERN)) {
+    found.push(match[1]);
+  }
+}
+
 // Discovery, not registration: every content JSON file is parsed and walked
-// here, so a new content file with a broken path fails the suite with no
+// here, and every component, stylesheet and index.html is scanned for the
+// same paths, so a new file with a broken path fails the suite with no
 // other edit required anywhere.
+//
+// This deliberately includes the parked components (ChefGallery.tsx,
+// SignatureMocktails.tsx), which are kept on disk for later revival and
+// whose paths all resolve today. If one of them ever stops resolving, that
+// is precisely the thing worth knowing before someone un-parks it.
 function discoverAssetPaths(): string[] {
   const found: string[] = [];
   for (const file of listContentJsonFiles(CONTENT_DIR)) {
     const data: unknown = JSON.parse(readFileSync(file, 'utf-8'));
     collectAssetPathsFromValue(data, found);
+  }
+  for (const file of [...listCodeFiles(SRC_DIR), join(process.cwd(), 'index.html')]) {
+    collectAssetPathsFromCode(readFileSync(file, 'utf-8'), found);
   }
   return found;
 }
@@ -95,10 +133,24 @@ function discoverImageKeyValues(): ImageKeyEntry[] {
 }
 
 describe('content assets', () => {
-  const paths = discoverAssetPaths();
+  // De-duplicated only for the report: a path can legitimately appear in
+  // two places (dining.webp is in both galleries.atmosphere and
+  // galleries.heroCollage; brick.webp is in both Hero.tsx and index.css)
+  // and checking it twice tells nobody anything.
+  const paths = [...new Set(discoverAssetPaths())];
 
   it('discovers at least one asset by walking every JSON file in src/content', () => {
     expect(paths.length).toBeGreaterThan(0);
+  });
+
+  // Without this, a regex that quietly matched nothing outside the JSON
+  // would leave the whole code scan vacuous while the suite stayed green --
+  // which is the exact failure mode the scan was added to close.
+  it('discovers the paths hardcoded outside src/content too', () => {
+    expect(paths).toContain('/hero/brick.webp'); // Hero.tsx and src/index.css
+    expect(paths).toContain('/favicon.svg'); // index.html
+    expect(paths).toContain('/team/kamalika-anand.webp'); // parked ChefGallery.tsx
+    expect(paths).toContain('/menus/food-menu.pdf'); // parked SignatureMocktails.tsx
   });
 
   it.each(paths)('%s exists in public/ with exact case', (path) => {
@@ -109,7 +161,7 @@ describe('content assets', () => {
     expect(path.startsWith('/public/')).toBe(false);
   });
 
-  it('excludes non-asset strings such as site.seo.url', () => {
+  it('excludes absolute urls such as index.html\'s og:image', () => {
     expect(paths).not.toContain(site.seo.url);
     expect(paths.some((path) => path.includes('viabiancadelhi.com'))).toBe(false);
   });
