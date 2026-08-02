@@ -191,9 +191,9 @@ Eight plans, each producing working software on its own.
 
 | # | Plan | Owns | Depends on |
 |---|---|---|---|
-| 1 | Migrate hosting to Cloudflare | `_headers`, `_redirects`, cron trigger, Web Analytics, the WhatsApp conversion event. Also moves image generation into the build command and **deletes `scripts/__tests__/freshness.test.mjs`**, since derivatives stop being committed (D4). | — |
+| 1 | Migrate hosting to Cloudflare | `_headers`, `_redirects`, Web Analytics, the WhatsApp conversion event. Also moves image generation into the build command and **deletes `scripts/__tests__/freshness.test.mjs`**, since derivatives stop being committed (D4). | — |
 | 2 | Content model | Prose moved out of components; the page and section model; `enabled`, `order` and `publishAt` fields; **build-time filtering of future-dated content** (D9); updated guards and tests. | — |
-| 3 | Worker | Auth, signed tokens, rate limiting, content validation mirroring the test rules, GitHub commit, photo upload with HEIC conversion and format detection. | 1 |
+| 3 | Worker | Auth, signed tokens, rate limiting, content validation mirroring the test rules, GitHub commit, photo upload with HEIC conversion and format detection. **Also the scheduled-rebuild cron trigger**, which was originally assigned to Plan 1 in error: a Cloudflare cron has to run inside a Worker, and no Worker exists until this plan. | 1 |
 | 4 | Dashboard | Type-generated forms, list add/remove/reorder, PDF replacement, hours, scheduling UI, publish status polling. | 2, 3 |
 | 5 | Edit mode | In-place image replacement and text editing on the real site. | 2, 3 |
 | 6 | Collage editing | Drag to move and resize on pointer devices; tap-and-buttons on touch; Tailwind safelist and the test pinning it. | 2, 5 |
