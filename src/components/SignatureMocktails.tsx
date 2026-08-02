@@ -1,7 +1,7 @@
-// Note: the image and download-link paths below are /public/-prefixed and
-// will 404 in production (Vite serves public/ at the root, not at
-// /public/). Not fixed here because this component is not rendered
-// anywhere in the app.
+// Parked: this component is not rendered anywhere in the app. The image
+// and download-link paths below have been corrected to drop the /public/
+// prefix (Vite serves public/ at the root, not at /public/), so they are
+// not a landmine for whoever revives this file.
 
 import React from 'react';
 import { Download } from 'lucide-react';
@@ -11,27 +11,27 @@ const SignatureMocktails: React.FC = () => {
     {
       name: "Bicerin",
       flavor: "Espresso, chocolate & cream",
-      image: "/public/mocktails/bicerin.jpg"
+      image: "/mocktails/bicerin.jpg"
     },
     {
       name: "Espresso Tonic",
       flavor: "Espresso, blood orange & ginger ale",
-      image: "/public/mocktails/blood orange espresso tonic.JPG"
+      image: "/mocktails/blood orange espresso tonic.JPG"
     },
     {
       name: "Piccante",
       flavor: "Pineapple, birds eye chili & salt",
-      image: "/public/mocktails/piccante.JPG"
+      image: "/mocktails/piccante.JPG"
     },
     {
       name: "Signor Bianca",
       flavor: "Dragonfruit, coconut water & honey",
-      image: "/public/mocktails/signor bianca.png"
+      image: "/mocktails/signor bianca.png"
     },
     {
       name: "Viola and Sambuco",
       flavor: "Blueberries, basil leaves, lavender & ginger ale and Elderflower, cucumber & black tea",
-      image: "/public/mocktails/viola and sambuco.png"
+      image: "/mocktails/viola and sambuco.png"
     }
   ];
 
@@ -87,7 +87,7 @@ const SignatureMocktails: React.FC = () => {
 
         {/* Download Full Menu Button */}
         <div className="text-center">
-        <a href="/public/Menu%20-%20Expanded.pdf" download>
+        <a href="/Menu%20-%20Expanded.pdf" download>
             <button className="inline-flex items-center space-x-2 bg-[#6B8B59] hover:bg-[#5a7349] text-white font-['Montserrat'] font-semibold px-8 py-4 rounded-lg transform hover:scale-105 hover:shadow-xl transition-all duration-300 uppercase tracking-wide">
               <Download className="w-5 h-5" />
               <span>Open Full Menu</span>

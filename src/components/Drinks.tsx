@@ -84,10 +84,10 @@ const Drinks: React.FC = () => {
               )}
 
               {/* Drinks without photography: name-and-description list */}
-              {items.some((drink) => !drink.image) && (
+              {items.some((drink) => !hasImage(drink)) && (
                 <ul className="max-w-3xl mx-auto grid grid-cols-1 sm:grid-cols-2 gap-x-12 gap-y-6">
                   {items
-                    .filter((drink) => !drink.image)
+                    .filter((drink) => !hasImage(drink))
                     .map((drink) => (
                       <li key={drink.id} className="text-center sm:text-left">
                         <h4 className="font-['Parisienne'] text-2xl text-[#6B8B59] mb-1">

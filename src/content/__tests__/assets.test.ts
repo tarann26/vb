@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readdirSync, readFileSync } from 'node:fs';
-import { join, posix } from 'node:path';
+import { join, posix, basename } from 'node:path';
 import { site } from '../index';
 
 const CONTENT_DIR = join(process.cwd(), 'src', 'content');
@@ -57,6 +57,43 @@ function discoverAssetPaths(): string[] {
   return found;
 }
 
+const IMAGE_KEY_NAMES = new Set(['image', 'src', 'file']);
+
+interface ImageKeyEntry {
+  path: string;
+  value: unknown;
+}
+
+// collectAssetPathsFromValue above only collects strings that already match
+// ASSET_PATH_PATTERN, so a malformed value under an image-ish key -- an
+// empty string, or a path missing its leading slash -- is invisible to it by
+// construction: the value that most needs checking is exactly the one that
+// gets skipped. This walk instead keys off the *property name* (image, src,
+// file) and records whatever value sits there, well-formed or not, so the
+// test below can assert on it directly.
+function collectImageKeyValues(value: unknown, path: string, found: ImageKeyEntry[]): void {
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => collectImageKeyValues(item, `${path}[${index}]`, found));
+  } else if (value !== null && typeof value === 'object') {
+    Object.entries(value).forEach(([key, item]) => {
+      const nextPath = `${path}.${key}`;
+      if (IMAGE_KEY_NAMES.has(key)) {
+        found.push({ path: nextPath, value: item });
+      }
+      collectImageKeyValues(item, nextPath, found);
+    });
+  }
+}
+
+function discoverImageKeyValues(): ImageKeyEntry[] {
+  const found: ImageKeyEntry[] = [];
+  for (const file of listContentJsonFiles(CONTENT_DIR)) {
+    const data: unknown = JSON.parse(readFileSync(file, 'utf-8'));
+    collectImageKeyValues(data, basename(file), found);
+  }
+  return found;
+}
+
 describe('content assets', () => {
   const paths = discoverAssetPaths();
 
@@ -82,4 +119,22 @@ describe('content assets', () => {
       collectAssetPathsFromValue({ image: null, nested: { image: null } }, []),
     ).not.toThrow();
   });
+});
+
+describe('image-like fields (image/src/file) are null or a valid asset path', () => {
+  const entries = discoverImageKeyValues();
+
+  it('discovers at least one image-like field to check', () => {
+    expect(entries.length).toBeGreaterThan(0);
+  });
+
+  it.each(entries.map((entry) => [entry.path, entry] as const))(
+    '%s is null or matches the asset path pattern',
+    (_path, entry) => {
+      const isValid =
+        entry.value === null ||
+        (typeof entry.value === 'string' && ASSET_PATH_PATTERN.test(entry.value));
+      expect(isValid).toBe(true);
+    },
+  );
 });

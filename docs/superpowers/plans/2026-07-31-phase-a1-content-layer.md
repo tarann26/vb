@@ -1787,7 +1787,7 @@ git commit -m "fix(motion): scope smooth scroll, honour reduced motion, add caro
 
 ## Handed to A2
 
-Not in this plan: the image pipeline (199MB to roughly 2MB, `assets-source/` split), font loading moved out of `@import`, favicon, `og:image` and `twitter:image`, `robots.txt`, `sitemap.xml`, canonical URL, the duplicate hero `h1`/`h2`, PDF compression, renaming `public/team/alice.jpg` (it is labelled as Chef Kamalika Anand and is only referenced by the parked `ChefGallery.tsx`, so it moves with the image pipeline), and the README.
+Not in this plan: the image pipeline (199MB to roughly 2MB, `assets-source/` split), font loading moved out of `@import`, favicon, `og:image` and `twitter:image`, `robots.txt`, `sitemap.xml`, canonical URL, the duplicate hero `h1`/`h2`, renaming `public/team/alice.jpg` (it is labelled as Chef Kamalika Anand; it is referenced by `src/content/press.json` and rendered on the live `/blogs` page, not only by the parked `ChefGallery.tsx`, so renaming it in A2 must also update `press.json`), and the README. PDF compression is done, not handed off: Task 8 already compressed both menu PDFs with Ghostscript, 93MB down to 21MB.
 
 A1 deliberately leaves the site heavy. It will be correct, honest and mobile-usable, but still slow until A2 lands.
 

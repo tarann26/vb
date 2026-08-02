@@ -1,6 +1,7 @@
-// Note: the image path below is /public/-prefixed and will 404 in
-// production (Vite serves public/ at the root, not at /public/). Not
-// fixed here because this component is not rendered anywhere in the app.
+// Parked: this component is not rendered anywhere in the app. The image
+// path below has been corrected to drop the /public/ prefix (Vite serves
+// public/ at the root, not at /public/), so it is not a landmine for
+// whoever revives this file.
 
 import React from 'react';
 
@@ -9,7 +10,7 @@ const ChefGallery: React.FC = () => {
     { 
       name: "Chef Kamalika Anand", 
       role: "Executive Chef & Founder",
-      image: "/public/team/alice.jpg"
+      image: "/team/alice.jpg"
     },
     
   ];
