@@ -1,6 +1,7 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import worker from '../index';
-import { hashPassword, parseCookie, verifyToken } from '../auth';
+import { hashPassword, parseCookie, verifyToken, signToken } from '../auth';
+import { makeGitHubStub, utf8, NEW_COMMIT_SHA, type GitHubStub } from './githubStub';
 
 // Runs under this repo's single jsdom Vitest environment (see
 // vitest.config.ts's comment on that decision) -- fetch/Request/Response
@@ -34,8 +35,33 @@ async function buildEnv() {
     KV: new FakeKV() as unknown as KVNamespace,
     ADMIN_PASSWORD_HASH: await hashPassword(PASSWORD),
     TOKEN_SECRET,
+    // Real values in production (wrangler.toml); the shape only matters
+    // here, since GitHub itself is always a stubbed `fetch` in this file's
+    // /api/publish tests -- see githubStub.ts.
+    GITHUB_OWNER: 'tarann26',
+    GITHUB_REPO: 'vb',
+    GITHUB_BRANCH: 'main',
+    GITHUB_TOKEN: 'index-test-github-token-not-real',
   };
 }
+
+// The smallest site.json shape that satisfies validateSite/assertHours
+// (src/content/validate.ts, src/content/guards.ts) with zero problems --
+// hand-built here rather than read off disk, so this test doesn't start
+// failing the moment a future, legitimate edit to the real site.json
+// changes its shape.
+const VALID_SITE = {
+  name: 'Via Bianca',
+  tagline: 'A Roman trattoria',
+  strapline: 'Handmade pasta, Delhi',
+  address: { street: '1 Test Street', locality: 'Test Locality', postalCode: '110001', country: 'India' },
+  phones: ['+911234567890'],
+  whatsapp: { number: '+911234567890', prefilledMessage: 'Hi, I would like to book a table.' },
+  socials: { instagram: 'https://instagram.com/viabianca' },
+  hours: [{ days: ['Mo'], opens: '09:00', closes: '22:00' }],
+  seo: { title: 'Via Bianca', description: 'A Roman trattoria in Delhi.' },
+  copyrightYear: 2026,
+};
 
 describe('worker entry point', () => {
   let env: Awaited<ReturnType<typeof buildEnv>>;
@@ -182,6 +208,117 @@ describe('worker entry point', () => {
       }
       const otherIp = await worker.fetch(loginRequest({ password: PASSWORD }, '9.9.9.9'), env);
       expect(otherIp.status).toBe(204);
+    });
+  });
+
+  describe('POST /api/publish', () => {
+    // The order this whole task is built around: verify token -> parse ->
+    // validate every file -> commit only if every file passed. Each test
+    // below proves one link of that chain by checking not just the HTTP
+    // status but that `stub.calls` -- every request that would have reached
+    // GitHub -- stayed empty. Asserting the status alone would pass even if
+    // a bug let the Worker call GitHub first and only reject afterwards.
+    let stub: GitHubStub;
+
+    beforeEach(() => {
+      stub = makeGitHubStub();
+      vi.stubGlobal('fetch', stub.fetch);
+    });
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    async function sessionCookie(): Promise<string> {
+      const expiresAt = Math.floor(Date.now() / 1000) + 3600;
+      const token = await signToken(TOKEN_SECRET, expiresAt);
+      return `vb_session=${token}`;
+    }
+
+    function publishRequest(body: unknown, cookie?: string): Request {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (cookie) headers['Cookie'] = cookie;
+      return new Request('https://viabiancadelhi.com/api/publish', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body),
+      });
+    }
+
+    it('an unauthenticated publish is 401 and makes no GitHub call', async () => {
+      const response = await worker.fetch(
+        publishRequest({ files: [utf8('src/content/site.json', JSON.stringify(VALID_SITE))] }),
+        env,
+      );
+      expect(response.status).toBe(401);
+      expect(stub.calls).toHaveLength(0);
+    });
+
+    // A cookie signed under a *different* secret than this env's
+    // TOKEN_SECRET -- distinct from having no cookie at all, and the more
+    // dangerous failure mode: verifyToken must actually check the
+    // signature, not just "a vb_session cookie is present".
+    it('a forged session cookie is also 401 and makes no GitHub call', async () => {
+      const forgedToken = await signToken('a-different-secret-entirely', Math.floor(Date.now() / 1000) + 3600);
+      const response = await worker.fetch(
+        publishRequest(
+          { files: [utf8('src/content/site.json', JSON.stringify(VALID_SITE))] },
+          `vb_session=${forgedToken}`,
+        ),
+        env,
+      );
+      expect(response.status).toBe(401);
+      expect(stub.calls).toHaveLength(0);
+    });
+
+    it('one invalid file among valid ones is 422, lists the problem, and makes no GitHub call', async () => {
+      const cookie = await sessionCookie();
+      const response = await worker.fetch(
+        publishRequest(
+          {
+            files: [
+              utf8('src/content/site.json', JSON.stringify(VALID_SITE)),
+              // Missing every required field -- id, name, description,
+              // image, tags -- so validateContent must report problems for
+              // dishes.json even though site.json alongside it is fine.
+              utf8('src/content/dishes.json', JSON.stringify([{}])),
+            ],
+          },
+          cookie,
+        ),
+        env,
+      );
+      expect(response.status).toBe(422);
+      const body = (await response.json()) as { problems: { field: string; message: string }[] };
+      expect(body.problems.length).toBeGreaterThan(0);
+      expect(stub.calls).toHaveLength(0);
+    });
+
+    it('malformed JSON in one file is 422 (not a 500), and makes no GitHub call', async () => {
+      const cookie = await sessionCookie();
+      const response = await worker.fetch(
+        publishRequest({ files: [utf8('src/content/site.json', '{not valid json')] }, cookie),
+        env,
+      );
+      expect(response.status).toBe(422);
+      const body = (await response.json()) as { problems: { field: string; message: string }[] };
+      expect(body.problems).toEqual([{ field: 'src/content/site.json', message: 'This file is not valid JSON.' }]);
+      expect(stub.calls).toHaveLength(0);
+    });
+
+    it('publishes every valid file in one commit and returns its sha', async () => {
+      const cookie = await sessionCookie();
+      const response = await worker.fetch(
+        publishRequest({ files: [utf8('src/content/site.json', JSON.stringify(VALID_SITE))] }, cookie),
+        env,
+      );
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as { sha: string };
+      expect(body).toEqual({ sha: NEW_COMMIT_SHA });
+      // The real GitHub mechanics (base_tree, parents, blob encoding) are
+      // github.test.ts's job; this only proves the Worker actually reached
+      // commitFiles on a fully valid publish.
+      expect(stub.calls.some((c) => c.method === 'PATCH')).toBe(true);
     });
   });
 });

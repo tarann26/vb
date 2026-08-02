@@ -1,17 +1,21 @@
 // The admin Worker's entry point. `/api/*` on the site's own zone is the
 // only thing routed to this Worker (see wrangler.toml); every path other
-// than /api/health and POST /api/login still replies 404 until a later
-// task adds a real route.
+// than /api/health, POST /api/login and POST /api/publish still replies 404
+// until a later task adds a real route.
 //
 // Deliberately typed against `@cloudflare/workers-types` (tsconfig.worker.json)
 // rather than tsconfig.node.json: this file needs `Response`/`Request`/`fetch`/
 // `crypto`, none of which tsconfig.node.json's ES2023-only `lib` declares.
-import { verifyPassword, signToken } from './auth';
+import { verifyPassword, signToken, verifyToken, parseCookie } from './auth';
 import { checkLoginRate, recordLoginFailure, clearLoginFailures } from './ratelimit';
+import { commitFiles, type CommitFile, type GitHubEnv } from './github';
+import { validateContent, type ValidationProblem } from '../src/content/validate';
 
-// Grows as later tasks need more bindings (GITHUB_TOKEN in Task 5, etc.) --
-// only what this file actually reads belongs here.
-export interface Env {
+// Grows as later tasks need more bindings -- only what this file actually
+// reads belongs here. GITHUB_OWNER/REPO/BRANCH/TOKEN come in via GitHubEnv
+// (worker/github.ts), which also owns the vars' shape so there's one
+// definition, not two that could drift.
+export interface Env extends GitHubEnv {
   KV: KVNamespace;
   ADMIN_PASSWORD_HASH: string;
   TOKEN_SECRET: string;
@@ -88,6 +92,83 @@ async function handleLogin(request: Request, env: Env): Promise<Response> {
   });
 }
 
+// path -> filename, e.g. "src/content/dishes.json" -> "dishes.json". Hand
+// rolled rather than imported from "node:path": validateContent (Task 2)
+// keys its RULES table by bare filename, not by the full repo-relative path
+// the dashboard sends, and pulling in a Node built-in for one string split
+// isn't worth it in a Worker.
+function basename(path: string): string {
+  const slash = path.lastIndexOf('/');
+  return slash === -1 ? path : path.slice(slash + 1);
+}
+
+function isPublishFile(value: unknown): value is CommitFile {
+  if (!value || typeof value !== 'object') return false;
+  const { path, content, encoding } = value as Record<string, unknown>;
+  return typeof path === 'string' && typeof content === 'string' && (encoding === 'utf-8' || encoding === 'base64');
+}
+
+async function handlePublish(request: Request, env: Env): Promise<Response> {
+  // 1. Verify token -- first, and unconditionally. Nothing below this line
+  // runs for an unauthenticated request, which in particular means no
+  // GitHub call of any kind: a bad or missing session cookie can't spend
+  // any of the N+5 subrequests a real publish costs (see github.ts), let
+  // alone write anything.
+  const token = parseCookie(request.headers.get('Cookie'), 'vb_session');
+  const now = Math.floor(Date.now() / 1000);
+  if (!token || !(await verifyToken(env.TOKEN_SECRET, token, now))) {
+    return json(401, { message: 'Not authenticated.' });
+  }
+
+  // 2. Parse. A malformed envelope (not JSON, no `files` array, a file
+  // missing `path`/`content`/`encoding`) is a clean 400 here -- distinct
+  // from step 3 below, which is about the *content* of otherwise
+  // well-formed files.
+  let files: CommitFile[];
+  let message: string;
+  try {
+    const body: unknown = await request.json();
+    const rawFiles = (body as { files?: unknown } | null)?.files;
+    if (!Array.isArray(rawFiles) || rawFiles.length === 0 || !rawFiles.every(isPublishFile)) {
+      return json(400, { message: 'No files to publish.' });
+    }
+    files = rawFiles;
+    const rawMessage = (body as { message?: unknown } | null)?.message;
+    message = typeof rawMessage === 'string' && rawMessage.trim().length > 0 ? rawMessage : 'Update site content';
+  } catch {
+    return json(400, { message: 'Invalid request body.' });
+  }
+
+  // 3. Validate every file before committing any of them. `validateContent`
+  // (Task 2) never throws, but `JSON.parse` on her submitted content -- not
+  // on the request envelope parsed in step 2 -- can, and this try/catch is
+  // what keeps a malformed file body from becoming a 500 reading "something
+  // went wrong" one line before the function whose entire contract is
+  // "never throws".
+  const problems: ValidationProblem[] = files.flatMap((f) => {
+    if (f.encoding !== 'utf-8') return [];
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(f.content);
+    } catch {
+      return [{ field: f.path, message: 'This file is not valid JSON.' }];
+    }
+    return validateContent(basename(f.path), parsed);
+  });
+  if (problems.length) return json(422, { problems });
+
+  // 4. Commit only if every file passed. commitFiles carries its own,
+  // independent path allowlist (worker/github.ts) -- so a request that
+  // somehow reached this point with a path outside src/content/ or
+  // assets-source/ still can't make it to GitHub.
+  try {
+    const { sha } = await commitFiles(env, files, message);
+    return json(200, { sha });
+  } catch (error) {
+    return json(502, { message: error instanceof Error ? error.message : 'Publish failed.' });
+  }
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -111,6 +192,10 @@ export default {
 
     if (url.pathname === '/api/login' && request.method === 'POST') {
       return handleLogin(request, env);
+    }
+
+    if (url.pathname === '/api/publish' && request.method === 'POST') {
+      return handlePublish(request, env);
     }
 
     return new Response('Not found', { status: 404 });
