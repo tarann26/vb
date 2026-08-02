@@ -37,6 +37,7 @@
 | `src/content/index.ts` | Typed re-export barrel. Components import from here, never from raw JSON. |
 | `src/content/__tests__/assets.test.ts` | Asserts every content asset path resolves, exact case. |
 | `src/content/__tests__/shape.test.ts` | Asserts required fields are present and non-empty. |
+| `src/content/__tests__/site.test.ts` | Asserts the `assertHours` runtime guard rejects bad day codes and malformed times. Added during the final fix wave. |
 | `src/components/Drinks.tsx` | Merged, removable drinks section. |
 | `src/components/NotFound.tsx` | 404 route. |
 | `src/components/ErrorBoundary.tsx` | Top-level render guard. |
@@ -1778,7 +1779,17 @@ git commit -m "fix(motion): scope smooth scroll, honour reduced motion, add caro
 
 - [ ] `npm run build` passes with `tsc -b` enabled.
 - [ ] `npx vitest run` passes.
-- [ ] `grep -rn "/public/" src/ index.html` returns nothing.
+- [x] No `/public/`-prefixed path literal remains in `src/` or `index.html`.
+
+  The original wording was `grep -rn "/public/" src/ index.html` returns nothing, which is wrong as
+  an acceptance test: the string legitimately survives in two test assertions that check for its
+  *absence* (`src/content/__tests__/assets.test.ts`, `src/components/__tests__/PlaceGallery.test.tsx`)
+  and in the park comments in `ChefGallery.tsx` and `SignatureMocktails.tsx` that explain the
+  correction. Zero path literals remain, which is the property that actually matters. Use:
+
+  ```bash
+  grep -rn '"/public/\|'"'"'/public/' src/ index.html
+  ```
 - [ ] Every asset in the content layer resolves case-sensitively, enforced by the guardrail test.
 - [ ] No component reads a hardcoded dish name, article, phone number, or opening time.
 - [ ] The homepage renders correctly at 375px, 768px and 1440px with no horizontal overflow.
