@@ -172,9 +172,15 @@ Step 5 exists because of step 4. Once a bad edit cannot break the site, the new 
 
 ### Analytics
 
-Cloudflare Web Analytics: free, no cookie banner required, one script tag. Gives page views, referrers, device split and per-page traffic.
+Cloudflare Web Analytics: free, no cookie banner required, no script tag in this repository —
+enabled from the Pages dashboard, which injects its own beacon. Gives page views, referrers,
+device split and per-page traffic.
 
-Plus one custom event: **taps on the WhatsApp reservation button**, because that is the single action on the site that becomes revenue.
+The WhatsApp reservation button tap count — the single action on the site that becomes revenue —
+is a separate mechanism, owned by Plan 3, not this one: Cloudflare's free Web Analytics has no
+custom-event API (verified by downloading the real beacon and finding zero occurrences of
+`trackEvent`), so it cannot ride along on the beacon above. It is counted server-side by the
+Worker instead.
 
 ## Phase C content
 
