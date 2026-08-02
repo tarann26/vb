@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { HomePage } from '../../App';
 import { copy, story, sections, assertSections } from '../index';
@@ -11,16 +11,6 @@ import type { SectionId } from '../index';
 // `Record<SectionId, string>` for the same reason App.tsx's own dispatch
 // map is: dropping a section here is a `tsc` failure, not silently reduced
 // coverage.
-//
-// hero's marker is deliberately `reserveButton`, not `copy.hero.logoName`
-// ("Via Bianca") -- logoName collides with `copy.nav.wordmark`, which is
-// also "Via Bianca" and renders unconditionally in Navbar regardless of
-// whether Hero itself renders. Verified: with Hero stubbed to render
-// nothing, a `logoName`-based marker check still finds "Via Bianca" (via
-// the wordmark) and passes vacuously; only the document-order check below
-// then catches the stub, which means the marker check contributes zero
-// coverage for hero specifically. `reserveButton` ("Reserve a Table")
-// appears nowhere outside Hero.tsx.
 const MARKER: Record<SectionId, string> = {
   hero: copy.hero.reserveButton,
   ourStory: story.heading,
@@ -31,16 +21,30 @@ const MARKER: Record<SectionId, string> = {
   visit: copy.visit.heading,
 };
 
-// Structural anchors -- the DOM `id` each section renders, per the plan's
+// Structural roots -- the DOM element each section renders, per the plan's
 // own SectionId/anchor mapping table (deliberately not the same strings as
-// the SectionId itself). Used only to check *document order*, never
-// content, so unlike MARKER these must NOT be owner-editable text: the plan
-// forbids renaming these ids (bookmarked URLs), so pinning them here carries
-// none of the content-coupling hazard pinning copy.json prose would.
-// `hero` has no id of its own -- its <section> is unannotated -- but it's
-// the only section that renders an <h1>, so that's used as its anchor.
+// the SectionId itself). `hero` has no id of its own in the live markup, so
+// Hero.tsx now carries a `data-testid="hero"` purely for this purpose --
+// invisible, zero visual effect, the same pattern NavBar.tsx already uses
+// for `desktop-nav-links`/`mobile-nav-panel`.
+//
+// Used two ways below: to check *document order*, and to *scope* every
+// MARKER lookup to that section's own subtree instead of the whole
+// document. Scoping is what makes a marker assertion trustworthy on its
+// own: `story.heading` ("Our Story") and `copy.visit.heading` ("Visit Us")
+// are each, coincidentally, identical to their own nav link's label, which
+// renders in <nav> whenever the *section* is enabled regardless of whether
+// the section's own component rendered anything at all. An unscoped
+// `screen.queryByText` lookup for either marker is satisfied by the nav
+// link alone, so it stays "found" even when the section's own component is
+// stubbed to render nothing -- verified directly (see sectionMarkerPresent
+// below): stubbing OurStory or VisitUs to `() => null` left an unscoped
+// lookup passing, and only a separate structural check (document order)
+// caught it. Scoping to the section's own root -- which the nav link is
+// never inside -- closes that gap for every marker, present and future,
+// without relying on any of today's copy happening to be unique.
 const SECTION_SELECTOR: Record<SectionId, string> = {
-  hero: 'h1',
+  hero: '[data-testid="hero"]',
   ourStory: '#our-story',
   atmosphere: '#gallery',
   food: '#menu',
@@ -51,15 +55,31 @@ const SECTION_SELECTOR: Record<SectionId, string> = {
 
 const SECTION_IDS: SectionId[] = sections.map((s) => s.id);
 
+function sectionRoot(id: SectionId): HTMLElement | null {
+  return document.querySelector<HTMLElement>(SECTION_SELECTOR[id]);
+}
+
+// Whether `id`'s marker text is present *inside that section's own root*.
+// False both when the root itself never rendered (the section's dispatch
+// entry returned nothing, or rendered the wrong component under a
+// different root) and when the root rendered but doesn't contain its own
+// marker text. Either way this is a direct, scoped check -- not an
+// inference from some other assertion (e.g. document order) going red.
+function sectionMarkerPresent(id: SectionId): boolean {
+  const root = sectionRoot(id);
+  if (!root) return false;
+  return within(root).queryAllByText(MARKER[id]).length > 0;
+}
+
 function isBefore(a: Element, b: Element): boolean {
   return (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
 }
 
-// Resolves each id's structural anchor in the current document and asserts
+// Resolves each id's structural root in the current document and asserts
 // they appear in exactly the given order.
 function assertDocumentOrder(ids: SectionId[]): void {
   const nodes = ids.map((id) => {
-    const node = document.querySelector(SECTION_SELECTOR[id]);
+    const node = sectionRoot(id);
     if (!node) {
       throw new Error(`Expected a "${SECTION_SELECTOR[id]}" element for section "${id}"`);
     }
@@ -85,7 +105,7 @@ describe('homepage sections', () => {
 
     const enabledIds = sections.filter((s) => s.enabled).map((s) => s.id);
     enabledIds.forEach((id) => {
-      expect(screen.queryAllByText(MARKER[id]).length).toBeGreaterThan(0);
+      expect(sectionMarkerPresent(id)).toBe(true);
     });
     assertDocumentOrder(enabledIds);
   });
@@ -101,7 +121,9 @@ describe('homepage sections', () => {
   // disabling it, covered separately below) closes that gap: every section
   // gets a turn as the one that's "off", with every other enabled section
   // (and, where it has one, the disabled section's nav link) checked in the
-  // same run.
+  // same run -- each via the scoped `sectionMarkerPresent`, so a bystander
+  // check genuinely tests that bystander's own component, not just whether
+  // its marker text happens to appear anywhere on the page.
   it.each(SECTION_IDS.filter((id) => id !== 'hero'))(
     'omits %s (and its nav link, if any) when disabled, and renders every other enabled section',
     async (targetId) => {
@@ -130,8 +152,7 @@ describe('homepage sections', () => {
       );
 
       SECTION_IDS.forEach((id) => {
-        const present = screen.queryAllByText(MARKER[id]).length > 0;
-        expect(present).toBe(id !== targetId);
+        expect(sectionMarkerPresent(id)).toBe(id !== targetId);
       });
 
       const link = copy.nav.links.find((l) => l.section === targetId);

@@ -82,14 +82,38 @@ export const drinks: Drink[] = drinksRaw.map((raw) => {
 
 // The single runtime source of truth for the SectionId union -- TS erases
 // the type at runtime, so isSectionId/assertSections/narrowSectionId below
-// all check membership and completeness against this array rather than each
-// re-deriving their own copy of the seven literals. When Plan 7 extends
-// SectionId, this is the one place (plus the type union itself) that needs
-// the new member added; assertSections's completeness check then enforces
-// it automatically instead of silently accepting an incomplete list.
-const SECTION_IDS: readonly SectionId[] = [
-  'hero', 'ourStory', 'atmosphere', 'food', 'drinks', 'press', 'visit',
-];
+// all check membership and completeness against this rather than each
+// re-deriving their own copy of the seven literals.
+//
+// Deliberately a `Record<SectionId, true>`, not a plain `SectionId[]`
+// literal: an array literal only gets each *element* checked against
+// SectionId, never that every member of the union is present, so it would
+// silently stop enforcing completeness the moment SectionId grows (e.g. in
+// Plan 7) without this file being touched -- confirmed by adding a member
+// to SectionId and fixing only what `tsc -b` flagged (App.tsx's
+// SECTION_COMPONENTS and the test file's MARKER/SECTION_SELECTOR): the
+// array-literal version left `tsc -b` clean and the suite green with the
+// new section entirely unenforced by assertSections. A record literal
+// missing a key fails to compile, matching the guarantee
+// SECTION_COMPONENTS/MARKER/SECTION_SELECTOR already have.
+//
+// `Object.keys` is typed `string[]` regardless of the object it's called
+// on -- a known TS limitation -- so recovering a `SectionId[]` needs one
+// narrowing assertion here. This is not a laundering cast the way
+// `link.section as SectionId` was: that cast hid a real gap (a value that
+// was never checked against SectionId at all), where here the object
+// literal above has already been fully checked against SectionId by the
+// time this line runs -- there's nothing left for the assertion to hide.
+const SECTION_ID_SET: Record<SectionId, true> = {
+  hero: true,
+  ourStory: true,
+  atmosphere: true,
+  food: true,
+  drinks: true,
+  press: true,
+  visit: true,
+};
+const SECTION_IDS = Object.keys(SECTION_ID_SET) as SectionId[];
 
 // Shared by assertSections (validating sections.json's `id`) and assertCopy
 // (validating copy.json's `nav.links[].section`) -- both need to know
