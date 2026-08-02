@@ -22,7 +22,15 @@ this GitHub repository.
 
 ## 2. Set the build configuration
 
-- **Build command:** `npm run test:deploy && npm run build`
+- **Build command:** `npm run images && npm run test:deploy && npm run build`
+  Yes, `npm run images` runs twice — once here, once again inside `npm run build` (which runs
+  `npm run images && tsc -b && vite build`). That costs about six seconds. It is not a mistake:
+  `npm run test:deploy` runs the test suite, and Task 2 of the migration plan made `public/`
+  derivatives untracked, so on a fresh clone (exactly what Cloudflare builds from) they do not
+  exist until `npm run images` has run at least once. Run the test gate before those derivatives
+  exist and the asset and OG-image tests fail — not because anything is broken, but because
+  nothing has generated the images they check for yet. Run `npm run images` here first and the
+  gate tests what it's supposed to: a real build, gated by tests that see the real output.
 - **Output directory:** `dist`
 - **Node version:** read it from `.nvmrc` at the repo root rather than typing a number into the
   dashboard from memory — Cloudflare Pages picks up `.nvmrc` automatically. If the dashboard asks

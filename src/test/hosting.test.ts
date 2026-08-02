@@ -29,3 +29,28 @@ describe('cloudflare hosting config', () => {
     unhashed.forEach((block) => expect(block).not.toContain('immutable'));
   });
 });
+
+describe('documented cloudflare build command', () => {
+  // Task 2 made public/ derivatives untracked, so a fresh clone (exactly what
+  // Cloudflare builds from) has none until `npm run images` runs. `npm run
+  // test:deploy` runs the suite that checks those derivatives exist. Run the
+  // test gate before the images step and the gate fails on a machine that did
+  // nothing wrong -- it just hasn't generated the files it's checking for
+  // yet. This extracts the actual documented command and checks the ordering
+  // rather than merely asserting the word "images" appears somewhere in the
+  // document, which would pass even if the document only mentioned images in
+  // passing without running them first.
+  it('runs `npm run images` before `npm run test:deploy`', () => {
+    const doc = readFileSync('docs/cloudflare-cutover.md', 'utf8');
+    const match = doc.match(/\*\*Build command:\*\*\s*`([^`]+)`/);
+    expect(match).not.toBeNull();
+    const command = match![1];
+
+    const imagesIndex = command.indexOf('npm run images');
+    const testDeployIndex = command.indexOf('npm run test:deploy');
+
+    expect(imagesIndex).toBeGreaterThanOrEqual(0);
+    expect(testDeployIndex).toBeGreaterThanOrEqual(0);
+    expect(imagesIndex).toBeLessThan(testDeployIndex);
+  });
+});
