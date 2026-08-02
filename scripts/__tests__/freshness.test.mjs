@@ -16,6 +16,20 @@ function hash(buffer) {
 // public/*.webp silently keeps serving the old photo while every other test
 // -- which only checks that a path resolves, never what it contains --
 // stays green.
+//
+// DO NOT wire this file into `npm run test:deploy` / `vercel.json`'s
+// buildCommand, and do not remove the --exclude in package.json's
+// "test:deploy" script that keeps it out. Byte-identical WebP output across
+// platforms is not guaranteed: the committed derivatives were encoded on
+// macOS, Vercel builds on Linux with a different prebuilt sharp binary that
+// may embed a different libwebp build or take different SIMD paths. If the
+// bytes differ for a purely platform reason, this test fails and blocks
+// every deploy -- worse than the gap the deploy-time test run exists to
+// close. This test's job is to catch a developer forgetting to regenerate
+// derivatives locally (an authoring-time concern); `npm test` still runs it
+// for exactly that. It is deliberately the one test in the suite whose
+// result depends on the machine it runs on, so it is deliberately the one
+// test excluded from the deploy gate.
 describe('derivative freshness', () => {
   it('every committed public/ derivative matches a fresh re-encode of its source', async () => {
     const sources = await listSources();

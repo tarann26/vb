@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "test": "vitest run",
+    "test:deploy": "vitest run --exclude \"**/freshness.test.mjs\"",
     "test:watch": "vitest",
     "preview": "vite preview",
     "images": "node scripts/images.mjs"
