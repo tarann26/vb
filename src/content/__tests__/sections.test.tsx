@@ -11,8 +11,18 @@ import type { SectionId } from '../index';
 // `Record<SectionId, string>` for the same reason App.tsx's own dispatch
 // map is: dropping a section here is a `tsc` failure, not silently reduced
 // coverage.
+//
+// hero's marker is deliberately `reserveButton`, not `copy.hero.logoName`
+// ("Via Bianca") -- logoName collides with `copy.nav.wordmark`, which is
+// also "Via Bianca" and renders unconditionally in Navbar regardless of
+// whether Hero itself renders. Verified: with Hero stubbed to render
+// nothing, a `logoName`-based marker check still finds "Via Bianca" (via
+// the wordmark) and passes vacuously; only the document-order check below
+// then catches the stub, which means the marker check contributes zero
+// coverage for hero specifically. `reserveButton` ("Reserve a Table")
+// appears nowhere outside Hero.tsx.
 const MARKER: Record<SectionId, string> = {
-  hero: copy.hero.logoName,
+  hero: copy.hero.reserveButton,
   ourStory: story.heading,
   atmosphere: copy.atmosphere.heading,
   food: copy.food.heading,
@@ -100,8 +110,16 @@ describe('homepage sections', () => {
         const actual = await vi.importActual<typeof import('../../content')>('../../content');
         return {
           ...actual,
-          sections: actual.sections.map((s) =>
-            (s.id === targetId ? { ...s, enabled: false } : s)),
+          // Every section except targetId is forced *enabled* here,
+          // regardless of what today's real sections.json happens to have
+          // toggled -- otherwise this test is only valid by coincidence
+          // (when every other section happens to already be on), which is
+          // exactly the invariance-under-content-edit hazard this whole fix
+          // exists to close. Confirmed by running this suite against a real
+          // sections.json with `atmosphere` disabled: without this line,
+          // five of these six cases fail on an unrelated section's marker,
+          // for a content reason, not a regression.
+          sections: actual.sections.map((s) => ({ ...s, enabled: s.id !== targetId })),
         };
       });
       const { HomePage: MockedHomePage } = await import('../../App');
@@ -133,10 +151,12 @@ describe('homepage sections', () => {
     vi.resetModules();
     vi.doMock('../../content', async () => {
       const actual = await vi.importActual<typeof import('../../content')>('../../content');
-      const byId = new Map(actual.sections.map((s: { id: SectionId }) => [s.id, s] as const));
       return {
         ...actual,
-        sections: scrambled.map((id) => byId.get(id)),
+        // Every section forced enabled here too, for the same reason as the
+        // disable-loop test above: this must hold regardless of today's
+        // real toggle state, not just when everything happens to be on.
+        sections: scrambled.map((id) => ({ id, enabled: true })),
       };
     });
     const { HomePage: MockedHomePage } = await import('../../App');
