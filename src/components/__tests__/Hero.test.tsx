@@ -10,7 +10,16 @@ describe('Hero', () => {
     const h1s = container.querySelectorAll('h1');
     expect(h1s).toHaveLength(1);
     expect(h1s[0].textContent).toBe(site.name);
-    expect(h1s[0].closest('[aria-hidden="true"]')).toBeNull();
+    // Anchor to the decorative logo circle's structural class rather than to
+    // aria-hidden's presence: pre-fix, the circle carries no aria-hidden at
+    // all, so a check keyed on that attribute is satisfied vacuously in both
+    // the buggy and fixed markup. `.rounded-full` is the one stable handle
+    // on the circle (the only rounded-full element in Hero.tsx) and its
+    // relationship to the h1 genuinely differs between the two states: the
+    // h1 used to live inside it, now it is a sibling below it.
+    const circle = container.querySelector('.rounded-full');
+    expect(circle?.getAttribute('aria-hidden')).toBe('true');
+    expect(h1s[0].closest('.rounded-full')).toBeNull();
   });
 
   it('never renders an image with an empty src', () => {
