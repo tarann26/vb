@@ -156,6 +156,56 @@ describe('press article required fields are non-blank', () => {
   );
 });
 
+// `publishAt` (Dish, Drink, Article) is optional and, as of this writing,
+// unused by any real content -- so this can't be a plain `it.each` over
+// "items that have one" (that would generate zero test cases today and
+// stay silently untested until the day the owner actually schedules
+// something). Instead, one test node per real item -- present for every
+// dish/drink/article regardless of whether that item is scheduled, per this
+// file's own `article.url !== null` pattern above -- with the assertion
+// itself conditional. Verified individually by breaking: temporarily set a
+// dish's `publishAt` to `"2026-02-30"` (a bad round trip) and to
+// `"next tuesday"` (fails the regex), confirmed that dish's own test node
+// goes red both times, reverted.
+describe('publishAt is a real YYYY-MM-DD calendar date where present', () => {
+  const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+  // A build failure names this exact function's job: `/^\d{4}-\d{2}-\d{2}$/`
+  // alone accepts "2026-02-30" (a syntactically valid but nonexistent
+  // date); `Date` silently rolls that over to March 2nd rather than
+  // throwing, so the round trip through `toISOString` is what catches it.
+  function isRealCalendarDate(value: string): boolean {
+    return ISO_DATE_PATTERN.test(value) && new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value;
+  }
+
+  it.each(dishes.map((d) => [d.id, d] as const))(
+    'dish %s: publishAt, when present, is a real YYYY-MM-DD date',
+    (_id, dish) => {
+      if (dish.publishAt !== undefined) {
+        expect(isRealCalendarDate(dish.publishAt)).toBe(true);
+      }
+    },
+  );
+
+  it.each(drinks.map((d) => [d.id, d] as const))(
+    'drink %s: publishAt, when present, is a real YYYY-MM-DD date',
+    (_id, drink) => {
+      if (drink.publishAt !== undefined) {
+        expect(isRealCalendarDate(drink.publishAt)).toBe(true);
+      }
+    },
+  );
+
+  it.each(press.map((a) => [a.id, a] as const))(
+    'press %s: publishAt, when present, is a real YYYY-MM-DD date',
+    (_id, article) => {
+      if (article.publishAt !== undefined) {
+        expect(isRealCalendarDate(article.publishAt)).toBe(true);
+      }
+    },
+  );
+});
+
 describe('menu required fields are non-blank', () => {
   it.each(menus.map((m) => [m.id, m] as const))(
     '%s has non-blank id, label and file',

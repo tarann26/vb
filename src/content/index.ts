@@ -146,7 +146,7 @@ export function assertSections(raw: unknown): Section[] {
     if (!entry || typeof entry !== 'object') {
       throw new Error(`content/sections.json: entry [${i}] is not an object`);
     }
-    const { id, enabled } = entry as { id?: unknown; enabled?: unknown };
+    const { id, enabled, publishAt } = entry as { id?: unknown; enabled?: unknown; publishAt?: unknown };
     if (!isSectionId(id)) {
       throw new Error(`content/sections.json: invalid section id "${String(id)}" at [${i}]`);
     }
@@ -156,6 +156,16 @@ export function assertSections(raw: unknown): Section[] {
     seen.add(id);
     if (typeof enabled !== 'boolean') {
       throw new Error(`content/sections.json: "enabled" must be a boolean for section "${id}"`);
+    }
+    // Dish/Drink/Article can be scheduled (see src/content/publish.ts and
+    // plugins/filter-unpublished.ts); Section deliberately cannot. A
+    // future-dated hero would be either a hard build failure (the plugin's
+    // own filter never runs on sections.json) or a silently heroless
+    // homepage (if a filter ever were added for it) depending on which of
+    // those two runs first -- an ambiguity that's cheaper to forbid than to
+    // resolve. `enabled: false` already covers the founder's real need.
+    if (publishAt !== undefined) {
+      throw new Error(`content/sections.json: "publishAt" is not supported on sections (section "${id}")`);
     }
     return { id, enabled };
   });

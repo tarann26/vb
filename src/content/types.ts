@@ -32,7 +32,17 @@ export interface SiteContent {
   copyrightYear: number;
 }
 
-export interface Dish {
+// Shared by Dish, Drink and Article -- an ISO `YYYY-MM-DD` date after which
+// the item is live. Absent means "always published". Deliberately not on
+// `Section`: see the comment on `assertSections` in src/content/index.ts for
+// why a future-dated section is rejected outright rather than supported.
+// Filtering on this field happens in the Vite build (plugins/filter-unpublished.ts),
+// never in the browser -- see that file for why.
+type Schedulable = {
+  publishAt?: string;
+};
+
+export interface Dish extends Schedulable {
   id: string;
   name: string;
   description: string;
@@ -46,7 +56,7 @@ export interface Dish {
   tags: string[];
 }
 
-export interface Drink {
+export interface Drink extends Schedulable {
   id: string;
   name: string;
   description: string;
@@ -54,7 +64,7 @@ export interface Drink {
   image: string | null;
 }
 
-export interface Article {
+export interface Article extends Schedulable {
   id: string;
   title: string;
   publication: string;
