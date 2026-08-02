@@ -2,10 +2,16 @@ import { describe, it, expect } from 'vitest';
 import { validateContent } from '../validate';
 import type { Dish, Drink, Article, StoryContent, Copy, Section, SiteContent, Galleries, MenuFile } from '../types';
 
-import sectionsRaw from '../sections.json';
-import siteRaw from '../site.json';
-import galleriesRaw from '../galleries.json';
-import menusRaw from '../menus.json';
+// Every fixture in this file is hand-built against the real types, not read
+// from the repo's own content/*.json. A negative fixture built by cloning
+// live content and mutating one field (e.g. `structuredClone(galleriesRaw)`
+// then `bad.atmosphere[0].alt = ''`) is only as safe as an assumption about
+// that live file's shape that this file does not control -- `atmosphere[0]`
+// existing, say. If a future edit ever emptied that array, the clone-based
+// version would throw a raw TypeError before `validateContent` is even
+// called, which is a crash in *this test*, not evidence about the rule.
+// Every fixture below is a complete, self-contained object literal instead,
+// so nothing in this file depends on what is currently committed.
 
 // Fixtures built against the real types (src/content/types.ts), not
 // against a guess: Dish requires `tags`, Drink requires `description`,
@@ -307,27 +313,28 @@ describe('validateContent: retired-drink rules (moved from Drinks.test.tsx)', ()
 
 describe('validateContent: structural rules on the remaining files', () => {
   it('rejects sections.json with hero disabled', () => {
-    const bad = structuredClone(sectionsRaw).map((s) => (s.id === 'hero' ? { ...s, enabled: false } : s));
+    const bad = validSections.map((s) => (s.id === 'hero' ? { ...s, enabled: false } : s));
     const problems = validateContent('sections.json', bad);
     expect(messages(problems)).toMatch(/hero/i);
   });
 
   it('rejects site.json with no phone numbers', () => {
-    const bad = { ...structuredClone(siteRaw), phones: [] };
+    const bad = { ...validSite, phones: [] };
     const problems = validateContent('site.json', bad);
     expect(messages(problems)).toMatch(/phone/i);
   });
 
   it('rejects galleries.json with an image missing alt text', () => {
-    const bad = structuredClone(galleriesRaw);
-    bad.atmosphere[0].alt = '';
+    const bad: Galleries = {
+      ...validGalleries,
+      atmosphere: [{ ...validGalleries.atmosphere[0], alt: '' }],
+    };
     const problems = validateContent('galleries.json', bad);
     expect(messages(problems)).toMatch(/alt/i);
   });
 
   it('rejects menus.json with a menu missing a label', () => {
-    const bad = structuredClone(menusRaw);
-    bad[0].label = '';
+    const bad: MenuFile[] = [{ ...validMenus[0], label: '' }];
     const problems = validateContent('menus.json', bad);
     expect(messages(problems)).toMatch(/label/i);
   });
