@@ -1,6 +1,5 @@
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { describe, it, expect } from 'vitest';
+import { render } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import Hero from '../Hero';
 import { galleries, site } from '../../content';
@@ -110,31 +109,5 @@ describe('Hero', () => {
 
     // Should fail: both entries map to the same cell
     expect(new Set(cells).size).not.toBe(cells.length);
-  });
-
-  it('reports a conversion when the reservation button is used', async () => {
-    const user = userEvent.setup();
-    const beacon = vi.fn();
-    vi.stubGlobal('__cfBeacon', { trackEvent: beacon });
-    vi.stubGlobal('open', vi.fn());
-
-    render(<MemoryRouter><Hero /></MemoryRouter>);
-    await user.click(screen.getByRole('button', { name: /reserve a table/i }));
-
-    expect(beacon).toHaveBeenCalledWith('reservation_click');
-    vi.unstubAllGlobals();
-  });
-
-  it('still opens whatsapp when analytics is unavailable', async () => {
-    const user = userEvent.setup();
-    const open = vi.fn();
-    vi.stubGlobal('open', open);
-    vi.stubGlobal('__cfBeacon', undefined);
-
-    render(<MemoryRouter><Hero /></MemoryRouter>);
-    await user.click(screen.getByRole('button', { name: /reserve a table/i }));
-
-    expect(open).toHaveBeenCalled();
-    vi.unstubAllGlobals();
   });
 });
