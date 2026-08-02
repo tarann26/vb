@@ -15,48 +15,18 @@ import type {
   Article,
   StoryContent,
   MenuFile,
-  Hours,
   Copy,
   Section,
-  SectionId,
 } from './types';
+import { assertHours, assertSections, assertCopy, assertDrinkCategory, narrowSectionId } from './guards';
 
-const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/; // 24-hour "HH:MM"
-
-// site.json's `hours[].days` field is a plain string[] in the JSON module's
-// inferred type, wider than Hours['days'] (DayCode[]). As with drinks.category
-// below, an annotation alone can't narrow it and a blind `as` would silently
-// accept a typo'd day code (e.g. "Xx", which hours.ts's WEEK_ORDER.indexOf
-// would read as -1 and misreport as contiguous with Monday), an empty `days`
-// array, or a malformed opens/closes string. This guard narrows via runtime
-// checks instead, so any of those throw at import time rather than rendering
-// "undefined" text or bad JSON-LD to a customer.
-export function assertHours(raw: { days: string[]; opens: string; closes: string }): Hours {
-  if (raw.days.length === 0) {
-    throw new Error('content/site.json: an hours entry has an empty "days" array');
-  }
-  const days = raw.days.map((day) => {
-    if (
-      day !== 'Mo' &&
-      day !== 'Tu' &&
-      day !== 'We' &&
-      day !== 'Th' &&
-      day !== 'Fr' &&
-      day !== 'Sa' &&
-      day !== 'Su'
-    ) {
-      throw new Error(`content/site.json: invalid day code "${day}" in hours entry`);
-    }
-    return day;
-  });
-  if (!TIME_PATTERN.test(raw.opens)) {
-    throw new Error(`content/site.json: invalid "opens" time "${raw.opens}", expected 24-hour HH:MM`);
-  }
-  if (!TIME_PATTERN.test(raw.closes)) {
-    throw new Error(`content/site.json: invalid "closes" time "${raw.closes}", expected 24-hour HH:MM`);
-  }
-  return { days, opens: raw.opens, closes: raw.closes };
-}
+// Re-exported so existing importers (site.test.ts, copy.test.ts,
+// sections.test.tsx) that import these three guards from `./index` keep
+// working -- they were index.ts's own exports before their bodies moved to
+// guards.ts. assertDrinkCategory, isSectionId and narrowSectionId were never
+// part of index.ts's public surface and aren't re-exported here; a Worker
+// (or any other future consumer) reaches them directly via `./guards`.
+export { assertHours, assertSections, assertCopy };
 
 export const site: SiteContent = {
   ...siteRaw,
@@ -70,205 +40,15 @@ export const menus: MenuFile[] = menusRaw;
 
 // drinks.json's `category` field is a plain string in the JSON module's inferred
 // type, wider than Drink['category']. A type annotation alone can't narrow it and
-// a blind `as Drink[]` would silently accept a typo'd category. This guard
-// narrows via runtime equality checks instead, so an invalid category throws.
-export const drinks: Drink[] = drinksRaw.map((raw) => {
-  const { category } = raw;
-  if (category !== 'mocktail' && category !== 'cocktail' && category !== 'wine') {
-    throw new Error(`content/drinks.json: invalid category "${category}" for drink "${raw.id}"`);
-  }
-  return { ...raw, category };
-});
-
-// The single runtime source of truth for the SectionId union -- TS erases
-// the type at runtime, so isSectionId/assertSections/narrowSectionId below
-// all check membership and completeness against this rather than each
-// re-deriving their own copy of the seven literals.
-//
-// Deliberately a `Record<SectionId, true>`, not a plain `SectionId[]`
-// literal: an array literal only gets each *element* checked against
-// SectionId, never that every member of the union is present, so it would
-// silently stop enforcing completeness the moment SectionId grows (e.g. in
-// Plan 7) without this file being touched -- confirmed by adding a member
-// to SectionId and fixing only what `tsc -b` flagged (App.tsx's
-// SECTION_COMPONENTS and the test file's MARKER/SECTION_SELECTOR): the
-// array-literal version left `tsc -b` clean and the suite green with the
-// new section entirely unenforced by assertSections. A record literal
-// missing a key fails to compile, matching the guarantee
-// SECTION_COMPONENTS/MARKER/SECTION_SELECTOR already have.
-//
-// `Object.keys` is typed `string[]` regardless of the object it's called
-// on -- a known TS limitation -- so recovering a `SectionId[]` needs one
-// narrowing assertion here. This is not a laundering cast the way
-// `link.section as SectionId` was: that cast hid a real gap (a value that
-// was never checked against SectionId at all), where here the object
-// literal above has already been fully checked against SectionId by the
-// time this line runs -- there's nothing left for the assertion to hide.
-const SECTION_ID_SET: Record<SectionId, true> = {
-  hero: true,
-  ourStory: true,
-  atmosphere: true,
-  food: true,
-  drinks: true,
-  press: true,
-  visit: true,
-};
-const SECTION_IDS = Object.keys(SECTION_ID_SET) as SectionId[];
-
-// Shared by assertSections (validating sections.json's `id`) and assertCopy
-// (validating copy.json's `nav.links[].section`) -- both need to know
-// whether an arbitrary value is one of the seven real SectionIds.
-function isSectionId(value: unknown): value is SectionId {
-  return typeof value === 'string' && (SECTION_IDS as readonly string[]).includes(value);
-}
-
-// sections.json's `id` field is a plain string in the JSON module's inferred
-// type, wider than Section['id'] (SectionId) -- same widening problem as
-// drinks.category above. A blind `as Section[]` would silently accept a
-// typo'd id, permanently orphaning that section's component (App.tsx's
-// dispatch map would never be reached for it) or, worse, colliding with a
-// real one. This guard narrows and validates via runtime checks instead.
-//
-// Two rules apply on top of "is this array well-formed, with every id valid
-// and none repeated": every SectionId must appear exactly once (a dashboard
-// write that drops one silently deletes that section from the homepage --
-// this used to only be checked for `hero`, which meant a partial write
-// losing e.g. `visit` type-checked and passed the old guard), and `hero`
-// specifically must be enabled. A homepage with no hero is not a state this
-// plan supports, and the founder disabling it by a single accidental toggle
-// is worse than her being unable to.
-export function assertSections(raw: unknown): Section[] {
-  if (!Array.isArray(raw)) {
-    throw new Error('content/sections.json: expected an array of sections');
-  }
-  const seen = new Set<SectionId>();
-  const result = raw.map((entry, i) => {
-    if (!entry || typeof entry !== 'object') {
-      throw new Error(`content/sections.json: entry [${i}] is not an object`);
-    }
-    const { id, enabled, publishAt } = entry as { id?: unknown; enabled?: unknown; publishAt?: unknown };
-    if (!isSectionId(id)) {
-      throw new Error(`content/sections.json: invalid section id "${String(id)}" at [${i}]`);
-    }
-    if (seen.has(id)) {
-      throw new Error(`content/sections.json: duplicate section id "${id}"`);
-    }
-    seen.add(id);
-    if (typeof enabled !== 'boolean') {
-      throw new Error(`content/sections.json: "enabled" must be a boolean for section "${id}"`);
-    }
-    // Dish/Drink/Article can be scheduled (see src/content/publish.ts and
-    // plugins/filter-unpublished.ts); Section deliberately cannot. A
-    // future-dated hero would be either a hard build failure (the plugin's
-    // own filter never runs on sections.json) or a silently heroless
-    // homepage (if a filter ever were added for it) depending on which of
-    // those two runs first -- an ambiguity that's cheaper to forbid than to
-    // resolve. `enabled: false` already covers the founder's real need.
-    if (publishAt !== undefined) {
-      throw new Error(`content/sections.json: "publishAt" is not supported on sections (section "${id}")`);
-    }
-    return { id, enabled };
-  });
-  const missing = SECTION_IDS.filter((id) => !seen.has(id));
-  if (missing.length > 0) {
-    throw new Error(`content/sections.json: missing required section(s) "${missing.join('", "')}"`);
-  }
-  const hero = result.find((section) => section.id === 'hero');
-  if (!hero?.enabled) {
-    throw new Error('content/sections.json: "hero" cannot be disabled');
-  }
-  return result;
-}
+// a blind `as Drink[]` would silently accept a typo'd category. assertDrinkCategory
+// (src/content/guards.ts) narrows via runtime equality checks instead, so an
+// invalid category throws.
+export const drinks: Drink[] = drinksRaw.map((raw, index) => ({
+  ...raw,
+  category: assertDrinkCategory(raw, index),
+}));
 
 export const sections: Section[] = assertSections(sectionsRaw);
-
-// Recurses through the raw copy.json shape checking every string leaf for
-// blank content, building a dotted/bracketed path (e.g. "footer.followLabel"
-// or "nav.links[0].label") for the error message.
-function assertNonBlank(value: unknown, path: string): void {
-  if (typeof value === 'string') {
-    if (value.trim().length === 0) {
-      throw new Error(`content/copy.json: "${path}" must not be blank`);
-    }
-    return;
-  }
-  if (Array.isArray(value)) {
-    value.forEach((item, i) => assertNonBlank(item, `${path}[${i}]`));
-    return;
-  }
-  if (value && typeof value === 'object') {
-    Object.entries(value).forEach(([key, v]) =>
-      assertNonBlank(v, path ? `${path}.${key}` : key),
-    );
-  }
-}
-
-// Every field in Copy is `string` (or an array of a string-only record)
-// except `nav.links[].section`, which is a SectionId -- narrower than the
-// plain `string` JSON gives it, the same widening problem as drinks.category
-// above. A plain type annotation can't narrow that one field, so a typo'd
-// section id there is checked here instead. What a type annotation also
-// can't catch is a field left blank, or the nav link list emptied out
-// entirely (still a valid `NavLink[]`, just one with no links to render).
-// This guard rejects all three, naming the offending path so a bad edit to
-// copy.json fails loudly at import time instead of rendering invisible
-// text, a menu with nothing in it, or a nav link that never highlights as
-// enabled/disabled.
-export function assertCopy(raw: unknown): Copy {
-  const navLinks = (raw as { nav?: { links?: unknown[] } }).nav?.links;
-  if (!Array.isArray(navLinks) || navLinks.length === 0) {
-    throw new Error('content/copy.json: "nav.links" must not be empty');
-  }
-  navLinks.forEach((link, i) => {
-    const { section, label, href } = link as { section?: unknown; label?: unknown; href?: unknown };
-    if (!isSectionId(section)) {
-      throw new Error(`content/copy.json: invalid "section" "${String(section)}" at nav.links[${i}]`);
-    }
-    // `label` and `href` decide whether the link is legible and whether it
-    // actually goes anywhere. Neither is caught by assertNonBlank: a number
-    // (e.g. `"label": 42`, a JSON authoring mistake) falls through every
-    // branch of assertNonBlank (it only recurses into strings, arrays and
-    // objects), so it renders as literal "42" text with the empty-string
-    // guard never tripping. `href` is checked for the "#"-fragment shape
-    // only here -- whether it names a real, currently-rendered anchor is a
-    // DOM-level question the "every visible nav link points at a real
-    // anchor" test in sections.test.tsx covers instead.
-    if (typeof label !== 'string') {
-      throw new Error(`content/copy.json: "label" must be a string at nav.links[${i}]`);
-    }
-    if (typeof href !== 'string' || !href.startsWith('#')) {
-      throw new Error(`content/copy.json: "href" must be a "#"-prefixed fragment at nav.links[${i}]`);
-    }
-  });
-  assertNonBlank(raw, '');
-  return raw as Copy;
-}
-
-// copyRaw's `nav.links[].section` is typed `string` by the JSON module (see
-// assertCopy's comment above), which does not structurally satisfy `Copy`'s
-// `SectionId`-typed field. A cast (`as SectionId`) would "fix" the type
-// error but accepts `string | undefined` and `string | number` just as
-// happily as a real SectionId, silently defeating the `satisfies Copy`
-// check below. `narrowSectionId`'s parameter is typed `string` (not
-// `unknown`), so passing it a value that isn't definitely a string -- e.g.
-// `link.section` when one array element is missing that key, which widens
-// the field to `string | undefined` across the whole array -- is itself a
-// compile error, not just a runtime one.
-//
-// Its own runtime throw is belt and braces, not the sole guard against a
-// bad value: this function runs first, while building `assertCopy`'s input
-// below, but `assertCopy`'s own `navLinks.forEach` independently re-checks
-// `isSectionId` on this exact same `section` field immediately afterwards
-// (see above). So an invalid section still throws even with this check
-// disabled -- confirmed directly: mutating this function's throw to a
-// no-op leaves the suite green, because assertCopy's check is what's
-// actually catching it, not this one.
-function narrowSectionId(section: string, path: string): SectionId {
-  if (!isSectionId(section)) {
-    throw new Error(`content/copy.json: invalid "section" "${section}" at ${path}`);
-  }
-  return section;
-}
 
 const copyWithNarrowedNavSections = {
   ...copyRaw,
