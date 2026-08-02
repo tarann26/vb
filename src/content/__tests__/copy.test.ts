@@ -21,8 +21,13 @@ describe('copy', () => {
     expect(value.trim().length).toBeGreaterThan(0);
   });
 
-  it('has one nav link per anchor, all fragments', () => {
-    expect(copy.nav.links.length).toBe(5);
+  it('has at least one nav link, all fragments', () => {
+    // Not pinned to today's count (5): adding or removing a nav link is a
+    // legitimate content edit, and assertCopy already rejects an empty list
+    // (see the "rejects an empty nav link list" test below) -- pinning an
+    // exact count here would fail the deploy gate on that edit while adding
+    // no coverage assertCopy doesn't already provide.
+    expect(copy.nav.links.length).toBeGreaterThan(0);
     copy.nav.links.forEach((l) => expect(l.href).toMatch(/^#/));
   });
 });

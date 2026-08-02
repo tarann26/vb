@@ -68,11 +68,25 @@ describe('copy-rendered', () => {
   });
 
   it('Drinks renders its heading, intro and category labels from copy.drinks', async () => {
+    // `drinks` is mocked alongside `copy.drinks`, not left live: Drinks.tsx
+    // renders `null` for any category with zero items (see Drinks.tsx's
+    // `if (items.length === 0) return null`), so if a real content edit ever
+    // deletes every drink in one category, a live `drinks` here would make
+    // that category's heading assertion below fail for a content reason, not
+    // a hardcoded-string reason. The fixture guarantees all three categories
+    // are present. Follows the same pattern this file already uses for
+    // `press` in the BlogTeaser/BlogsPage tests below.
+    const fixtureDrinks = [
+      { id: 'fixture-mocktail', name: 'Fixture Mocktail', description: 'x', category: 'mocktail' as const, image: null },
+      { id: 'fixture-cocktail', name: 'Fixture Cocktail', description: 'x', category: 'cocktail' as const, image: null },
+      { id: 'fixture-wine', name: 'Fixture Wine', description: 'x', category: 'wine' as const, image: null },
+    ];
     vi.resetModules();
     vi.doMock('../../content', async () => {
       const actual = await vi.importActual<typeof import('../../content')>('../../content');
       return {
         ...actual,
+        drinks: fixtureDrinks,
         copy: {
           ...actual.copy,
           drinks: {

@@ -1,22 +1,49 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import BlogsPage from '../BlogsPage';
-import { press } from '../../content';
 
-// Pinned to specific ids, not a `press.find((a) => a.url === null)` predicate: a
-// dynamic lookup would silently retarget itself to the next null-url entry if this
-// specific record's url ever changed, masking a regression instead of catching it.
-const NULL_URL_ARTICLE_ID = 'food-wine-india-handmade-pasta';
-const LINKED_ARTICLE_ID = 'bw-hotelier-regional-flair';
+// `press` is mocked to a two-article fixture -- one with `url: null`, one
+// with a real url -- rather than pinned to specific ids in the live
+// press.json. The spec's own "Blocked on the founder" list names nine press
+// URLs still outstanding; the moment any one of them (including
+// food-wine-india-handmade-pasta, previously pinned here directly) is
+// supplied, a live-content assertion on that id would fail the deploy gate
+// for a legitimate edit. A fixture guarantees both branches -- url present
+// and url null -- are exercised on every run regardless of what today's
+// press.json holds. Follows the same mock-`press` pattern already used in
+// copy-rendered.test.tsx's BlogTeaser/BlogsPage tests.
+const nullUrlArticle = {
+  id: 'fixture-null-url',
+  title: 'Fixture Article Without A Url',
+  publication: 'Fixture Publication',
+  date: '2026-01-01',
+  excerpt: 'Fixture excerpt text.',
+  url: null,
+  image: '/fixture.jpg',
+};
+const linkedArticle = {
+  id: 'fixture-linked',
+  title: 'Fixture Article With A Url',
+  publication: 'Fixture Publication',
+  date: '2026-01-02',
+  excerpt: 'Fixture excerpt text.',
+  url: 'https://example.com/fixture',
+  image: '/fixture.jpg',
+};
 
 describe('BlogsPage', () => {
-  it('renders no "Read Article" link for an article whose url is null', () => {
-    const article = press.find((a) => a.id === NULL_URL_ARTICLE_ID);
-    if (!article) {
-      throw new Error(`Fixture assumption broken: press.json no longer has an article with id "${NULL_URL_ARTICLE_ID}"`);
-    }
-    expect(article.url).toBeNull();
+  afterEach(() => {
+    vi.doUnmock('../../content');
+    vi.resetModules();
+  });
+
+  it('renders no "Read Article" link for an article whose url is null', async () => {
+    vi.resetModules();
+    vi.doMock('../../content', async () => {
+      const actual = await vi.importActual<typeof import('../../content')>('../../content');
+      return { ...actual, press: [nullUrlArticle, linkedArticle] };
+    });
+    const { default: BlogsPage } = await import('../BlogsPage');
 
     render(
       <MemoryRouter>
@@ -25,16 +52,17 @@ describe('BlogsPage', () => {
     );
 
     expect(
-      screen.queryByRole('link', { name: `Read full article: ${article.title}` }),
+      screen.queryByRole('link', { name: `Read full article: ${nullUrlArticle.title}` }),
     ).not.toBeInTheDocument();
   });
 
-  it('renders a "Read Article" link for an article whose url is set', () => {
-    const article = press.find((a) => a.id === LINKED_ARTICLE_ID);
-    if (!article) {
-      throw new Error(`Fixture assumption broken: press.json no longer has an article with id "${LINKED_ARTICLE_ID}"`);
-    }
-    expect(article.url).not.toBeNull();
+  it('renders a "Read Article" link for an article whose url is set', async () => {
+    vi.resetModules();
+    vi.doMock('../../content', async () => {
+      const actual = await vi.importActual<typeof import('../../content')>('../../content');
+      return { ...actual, press: [nullUrlArticle, linkedArticle] };
+    });
+    const { default: BlogsPage } = await import('../BlogsPage');
 
     render(
       <MemoryRouter>
@@ -43,7 +71,7 @@ describe('BlogsPage', () => {
     );
 
     expect(
-      screen.getByRole('link', { name: `Read full article: ${article.title}` }),
+      screen.getByRole('link', { name: `Read full article: ${linkedArticle.title}` }),
     ).toBeInTheDocument();
   });
 });

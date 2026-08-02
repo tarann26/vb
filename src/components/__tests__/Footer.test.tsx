@@ -10,11 +10,15 @@ describe('Footer', () => {
     expect(screen.getByText(new RegExp(`© ${site.copyrightYear}`))).toBeInTheDocument();
   });
 
-  it('never shows a closing time in the morning', () => {
-    render(<Footer />);
-    site.hours.forEach((h) => {
-      expect(formatTimeRange(h.opens, h.closes)).not.toMatch(/–\s*\d{1,2}:\d{2}\s*AM/);
-    });
+  it('formats a same-day range without an AM closing time', () => {
+    // Fixture, not live site.hours: a closing time past midnight (e.g.
+    // "00:30") is a real, documented shape (see hours.ts's formatTimeRange
+    // comment -- the restaurant now has a bar service that closes after
+    // midnight), and that AM closing time is the *correct* rendering of
+    // that fact, not a bug. Asserting against live content here would fail
+    // the deploy gate the moment the owner enters a legitimate past-midnight
+    // closing time. This fixture only pins the same-day case.
+    expect(formatTimeRange('12:00', '23:30')).not.toMatch(/–\s*\d{1,2}:\d{2}\s*AM/);
   });
 
   it('renders every phone number from content', () => {
