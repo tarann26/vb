@@ -33,28 +33,44 @@ const API = 'https://api.github.com';
 // repository -- this check is the only thing standing between a malformed
 // or hostile publish request and a rewritten `.github/workflows/`,
 // `package.json`, or `wrangler.toml`. Two independent conditions, both
-// required:
+// required, and both load-bearing on their own (confirmed by a security
+// review: removing only the `..` check lets `assets-source/../wrangler.toml`
+// through, because `..` and `wrangler.toml` parse as two ordinary-looking
+// segments the anchored regexes below don't otherwise object to):
 //
 //  1. No path may contain `..`, checked as a plain substring before
 //     anything else. This does NOT reject `.github/workflows/evil.yml` or
 //     `package.json` -- neither string contains two consecutive dots -- so
 //     it is necessary but not sufficient on its own.
 //  2. The path must positively match one of the two shapes this Worker is
-//     allowed to touch. Each shape is anchored (`^...$`) and each segment
-//     is `[^/]+` -- no slash allowed inside a segment -- so a value like
-//     `src/content/x/../../package.json` cannot satisfy the shape even if
-//     (hypothetically) the `..` check above were skipped: it has an extra
-//     path segment the anchored pattern doesn't allow.
+//     allowed to touch. Each character class is deliberately narrow, not
+//     just `[^/]+` -- a security review found the wider version admitted
+//     junk that names no real repository path (percent-encoded sequences,
+//     embedded whitespace/newlines, uppercase content filenames, arbitrary
+//     length), some of which only surfaced as an opaque GitHub 422 later
+//     rather than a clean rejection here. `[a-z0-9-]+\.json` matches all
+//     nine real files under src/content/ today (see github.test.ts's
+//     `still accepts the real content file` block); `[A-Za-z0-9 ._-]+`
+//     matches every real assets-source/<category>/<file> checked in the
+//     same suite except one apostrophe'd filename -- see that test's own
+//     comment for why that specific gap is recorded, not fixed.
 //
 // Together they cover both attack shapes: traversal sequences, and
 // requests that simply name a path outside the two allowed directories
 // without using `..` at all.
-const CONTENT_PATH = /^src\/content\/[^/]+\.json$/;
-const ASSET_PATH = /^assets-source\/[^/]+\/[^/]+$/;
+const CONTENT_PATH = /^src\/content\/[a-z0-9-]+\.json$/;
+const ASSET_PATH = /^assets-source\/[a-z0-9_-]+\/[A-Za-z0-9 ._-]+$/;
+
+// Distinguishable from a generic Error so a caller (worker/index.ts's
+// handlePublish) can map a bad *path* to a 400 -- a client-side mistake --
+// rather than the 502 every other commitFiles failure gets, which would
+// otherwise misdirect diagnosis toward "GitHub is broken" for what is
+// actually "the request named a path outside the allowlist".
+export class DisallowedPathError extends Error {}
 
 function assertAllowedPath(path: string): void {
   if (path.includes('..') || !(CONTENT_PATH.test(path) || ASSET_PATH.test(path))) {
-    throw new Error(
+    throw new DisallowedPathError(
       `refuses to write to path "${path}" -- only src/content/<name>.json and assets-source/<category>/<file> are allowed`,
     );
   }
@@ -79,6 +95,22 @@ function repoUrl(env: GitHubEnv, path: string): string {
   return `${API}/repos/${env.GITHUB_OWNER}/${env.GITHUB_REPO}${path}`;
 }
 
+// Only `status` used to survive into a thrown message ("... (GitHub
+// returned 403)"), dropping GitHub's own, far more actionable explanation
+// (e.g. "Resource not accessible by personal access token" for a token
+// missing `contents:write`) -- a difference that matters to a
+// non-technical owner trying to tell "something I can fix" from "the
+// internet is broken". Reads `res.text()`, GitHub's own response BODY,
+// never the request's own headers (where `env.GITHUB_TOKEN` actually
+// lives) -- so there is no mechanism here for the token itself to end up
+// echoed into a thrown message. Capped at 200 characters so an unexpectedly
+// huge or non-JSON error body can't balloon a thrown message.
+async function describeFailure(res: Response): Promise<string> {
+  const text = await res.text().catch(() => '');
+  const snippet = text.slice(0, 200).trim();
+  return snippet ? ` -- ${snippet}` : '';
+}
+
 // GET /git/ref/heads/{branch} -- singular "ref". Read side: the current tip
 // of the branch Cloudflare Pages builds from. Read fresh at the start of
 // every publish, never cached, so the tree and commit built below are
@@ -88,10 +120,20 @@ async function getBranchHeadSha(env: GitHubEnv): Promise<string> {
   const url = repoUrl(env, `/git/ref/heads/${env.GITHUB_BRANCH}`);
   const res = await fetch(url, { headers: ghHeaders(env) });
   if (!res.ok) {
-    throw new Error(`could not read the current ${env.GITHUB_BRANCH} branch (GitHub returned ${res.status})`);
+    throw new Error(`could not read the current ${env.GITHUB_BRANCH} branch (GitHub returned ${res.status})${await describeFailure(res)}`);
   }
-  const body = (await res.json()) as { object: { sha: string } };
-  return body.object.sha;
+  const body = (await res.json()) as { object?: { sha?: unknown } };
+  const sha = body.object?.sha;
+  // A security review's exact reproduction: GitHub can answer 200 OK with a
+  // body that is present but malformed (`{ object: {} }`, no `sha` at all).
+  // `res.ok` alone doesn't catch that -- only checking the shape of what
+  // came back does. Without this, `sha` would be `undefined`, and every
+  // caller downstream (createTree's `parents`, createCommit's `parents`)
+  // would silently build a commit with no real parent instead of failing.
+  if (typeof sha !== 'string' || sha.length === 0) {
+    throw new Error(`could not read the current ${env.GITHUB_BRANCH} branch -- GitHub's response had no commit sha`);
+  }
+  return sha;
 }
 
 // GET /git/commits/{sha} -- the commit's tree sha, which is what "create a
@@ -100,10 +142,26 @@ async function getCommitTreeSha(env: GitHubEnv, commitSha: string): Promise<stri
   const url = repoUrl(env, `/git/commits/${commitSha}`);
   const res = await fetch(url, { headers: ghHeaders(env) });
   if (!res.ok) {
-    throw new Error(`could not read commit ${commitSha} (GitHub returned ${res.status})`);
+    throw new Error(`could not read commit ${commitSha} (GitHub returned ${res.status})${await describeFailure(res)}`);
   }
-  const body = (await res.json()) as { tree: { sha: string } };
-  return body.tree.sha;
+  const body = (await res.json()) as { tree?: { sha?: unknown } };
+  const sha = body.tree?.sha;
+  // The exact scenario a security review reproduced and named the most
+  // dangerous finding in this task: a 200 OK with `{ tree: {} }` (no `sha`)
+  // used to flow straight through -- `baseTreeSha` became `undefined`,
+  // `JSON.stringify` silently DROPPED the `base_tree` key from createTree's
+  // request body entirely (it does not serialise as `null`; the key simply
+  // isn't there), and the run continued straight through to the ref update.
+  // That is precisely "a tree built without base_tree" -- the single most
+  // destructive bug this whole task exists to prevent -- reached via a
+  // malformed read instead of a missing line of code. Checking the shape
+  // here, before `baseTreeSha` is ever used, closes that path entirely: no
+  // blob, tree, commit or ref-update call happens once this throws, since
+  // this is the second call commitFiles ever makes.
+  if (typeof sha !== 'string' || sha.length === 0) {
+    throw new Error(`could not read the base tree of commit ${commitSha} -- GitHub's response had no tree sha`);
+  }
+  return sha;
 }
 
 // POST /git/blobs -- one per file. `encoding` travels through unchanged
@@ -118,7 +176,7 @@ async function createBlob(env: GitHubEnv, file: CommitFile): Promise<string> {
     body: JSON.stringify({ content: file.content, encoding: file.encoding }),
   });
   if (!res.ok) {
-    throw new Error(`could not upload "${file.path}" (GitHub returned ${res.status})`);
+    throw new Error(`could not upload "${file.path}" (GitHub returned ${res.status})${await describeFailure(res)}`);
   }
   const body = (await res.json()) as { sha: string };
   return body.sha;
@@ -146,7 +204,7 @@ async function createTree(
     }),
   });
   if (!res.ok) {
-    throw new Error(`could not build the tree (GitHub returned ${res.status})`);
+    throw new Error(`could not build the tree (GitHub returned ${res.status})${await describeFailure(res)}`);
   }
   const body = (await res.json()) as { sha: string };
   return body.sha;
@@ -163,7 +221,7 @@ async function createCommit(env: GitHubEnv, treeSha: string, parentSha: string, 
     body: JSON.stringify({ message, tree: treeSha, parents: [parentSha] }),
   });
   if (!res.ok) {
-    throw new Error(`could not create the commit (GitHub returned ${res.status})`);
+    throw new Error(`could not create the commit (GitHub returned ${res.status})${await describeFailure(res)}`);
   }
   const body = (await res.json()) as { sha: string };
   return body.sha;
@@ -189,7 +247,7 @@ async function updateBranchHead(env: GitHubEnv, commitSha: string): Promise<void
     if (res.status === 422) {
       throw new Error('someone else published while you were editing -- reload and try again');
     }
-    throw new Error(`could not update ${env.GITHUB_BRANCH} (GitHub returned ${res.status})`);
+    throw new Error(`could not update ${env.GITHUB_BRANCH} (GitHub returned ${res.status})${await describeFailure(res)}`);
   }
 }
 

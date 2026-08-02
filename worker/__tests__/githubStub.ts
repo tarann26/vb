@@ -32,7 +32,23 @@ export interface GitHubStub {
   bodies: Record<string, unknown>[];
 }
 
-export function makeGitHubStub(opts: { failOn?: string; failStatus?: number } = {}): GitHubStub {
+export function makeGitHubStub(
+  opts: {
+    failOn?: string;
+    failStatus?: number;
+    // Raw response body text for the `failOn` case. Defaults to a small JSON
+    // object; a test that wants to prove GitHub's own error text survives
+    // into the thrown message passes a realistic-looking one here.
+    failBody?: string;
+    // Reproduces a GitHub response that is 200 OK but malformed: the ref (or
+    // its commit) answers with an object that has no `sha` at all, rather
+    // than erroring outright. See github.ts's own comment on why this is
+    // checked explicitly instead of trusting `body.object.sha` /
+    // `body.tree.sha` to be a string.
+    malformedRefSha?: boolean;
+    malformedTreeSha?: boolean;
+  } = {},
+): GitHubStub {
   const calls: RecordedCall[] = [];
   const bodies: Record<string, unknown>[] = [];
   let blobCount = 0;
@@ -57,21 +73,24 @@ export function makeGitHubStub(opts: { failOn?: string; failStatus?: number } = 
     // get-commit-for-the-base-tree-sha call, and the test would still go
     // green, just not for the reason its name claims.
     if (opts.failOn && url.endsWith(opts.failOn)) {
-      return new Response(JSON.stringify({ message: 'stubbed failure' }), {
+      return new Response(opts.failBody ?? JSON.stringify({ message: 'stubbed failure' }), {
         status: opts.failStatus ?? 500,
       });
     }
 
     // GET /git/ref/heads/{branch} -- singular "ref", the read side.
     if (method === 'GET' && /\/git\/ref\/heads\/[^/]+$/.test(url)) {
-      return new Response(JSON.stringify({ object: { sha: BASE_COMMIT_SHA } }), { status: 200 });
+      return new Response(JSON.stringify({ object: opts.malformedRefSha ? {} : { sha: BASE_COMMIT_SHA } }), {
+        status: 200,
+      });
     }
 
     // GET /git/commits/{sha} -- fetches the base commit's tree sha.
     if (method === 'GET' && /\/git\/commits\/[^/]+$/.test(url)) {
-      return new Response(JSON.stringify({ sha: BASE_COMMIT_SHA, tree: { sha: BASE_TREE_SHA } }), {
-        status: 200,
-      });
+      return new Response(
+        JSON.stringify({ sha: BASE_COMMIT_SHA, tree: opts.malformedTreeSha ? {} : { sha: BASE_TREE_SHA } }),
+        { status: 200 },
+      );
     }
 
     if (method === 'POST' && url.endsWith('/git/blobs')) {

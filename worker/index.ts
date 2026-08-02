@@ -8,7 +8,7 @@
 // `crypto`, none of which tsconfig.node.json's ES2023-only `lib` declares.
 import { verifyPassword, signToken, verifyToken, parseCookie } from './auth';
 import { checkLoginRate, recordLoginFailure, clearLoginFailures } from './ratelimit';
-import { commitFiles, type CommitFile, type GitHubEnv } from './github';
+import { commitFiles, DisallowedPathError, type CommitFile, type GitHubEnv } from './github';
 import { validateContent, type ValidationProblem } from '../src/content/validate';
 
 // Grows as later tasks need more bindings -- only what this file actually
@@ -133,6 +133,16 @@ async function handlePublish(request: Request, env: Env): Promise<Response> {
       return json(400, { message: 'No files to publish.' });
     }
     files = rawFiles;
+    // Security review Minor 1: two entries for the same path produce two
+    // blobs and two tree entries with the same path; GitHub's tree API
+    // keeps the *last* one, not both, so she'd silently get one of two
+    // edits she believed were both applied, with no error anywhere. Checked
+    // here, in the same "malformed envelope" step as the array-shape check
+    // above -- a request naming one path twice is malformed the same way a
+    // request missing `path` is, before content validation is ever reached.
+    if (new Set(files.map((f) => f.path)).size !== files.length) {
+      return json(400, { message: 'The same file was sent twice.' });
+    }
     const rawMessage = (body as { message?: unknown } | null)?.message;
     message = typeof rawMessage === 'string' && rawMessage.trim().length > 0 ? rawMessage : 'Update site content';
   } catch {
@@ -146,7 +156,17 @@ async function handlePublish(request: Request, env: Env): Promise<Response> {
   // went wrong" one line before the function whose entire contract is
   // "never throws".
   const problems: ValidationProblem[] = files.flatMap((f) => {
-    if (f.encoding !== 'utf-8') return [];
+    // `encoding` is client-supplied. A security review found that labelling
+    // any file `'base64'` -- including one whose *path* is a `.json` file
+    // under src/content/ -- skipped validateContent entirely: this used to
+    // be a bare `if (f.encoding !== 'utf-8') return [];` with no exception,
+    // so a request could opt a content file out of validation just by
+    // mislabelling its own encoding. A `.json` path always gets checked
+    // regardless of what `encoding` claims; only a genuinely non-JSON path
+    // (an image under assets-source/) is exempt from JSON parsing here.
+    if (f.encoding !== 'utf-8') {
+      return f.path.endsWith('.json') ? [{ field: f.path, message: 'This file must be sent as text.' }] : [];
+    }
     let parsed: unknown;
     try {
       parsed = JSON.parse(f.content);
@@ -165,6 +185,12 @@ async function handlePublish(request: Request, env: Env): Promise<Response> {
     const { sha } = await commitFiles(env, files, message);
     return json(200, { sha });
   } catch (error) {
+    // A disallowed path is a client mistake, not a GitHub failure -- give it
+    // its own 400 rather than falling into the generic 502 below, which
+    // would misdirect diagnosis toward "GitHub is broken".
+    if (error instanceof DisallowedPathError) {
+      return json(400, { message: error.message });
+    }
     return json(502, { message: error instanceof Error ? error.message : 'Publish failed.' });
   }
 }

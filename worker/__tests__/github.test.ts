@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { commitFiles, type GitHubEnv } from '../github';
+import { commitFiles, DisallowedPathError, type GitHubEnv } from '../github';
 import {
   BASE_COMMIT_SHA,
   BASE_TREE_SHA,
@@ -112,6 +112,51 @@ describe('commitFiles', () => {
     ).rejects.toThrow(/someone else published/i);
   });
 
+  // Security review reproduction (Important 1): a 200 OK response that is
+  // malformed rather than an HTTP error -- GitHub answers with an object
+  // that has no `sha` at all. Before this was guarded, `baseTreeSha` became
+  // `undefined`, `JSON.stringify` silently DROPPED the `base_tree` key
+  // entirely (it does not serialise as `"base_tree":null` or similar --
+  // the key just isn't there), and the run continued straight through to
+  // the PATCH: exactly the "tree built without base_tree" catastrophe this
+  // whole task exists to prevent, except triggered by a malformed read
+  // instead of a missing line of code.
+  it('rejects when the base commit has no tree sha, rather than silently omitting base_tree', async () => {
+    const badStub = makeGitHubStub({ malformedTreeSha: true });
+    await expect(
+      commitFiles(envWith(badStub), [utf8('src/content/dishes.json', '[]')], 'm'),
+    ).rejects.toThrow();
+    // getCommitTreeSha is the second call commitFiles ever makes -- before
+    // any blob, tree, commit or ref-update request -- so nothing should
+    // have been written at all, not just "the ref wasn't updated".
+    expect(badStub.calls.some((c) => c.method === 'POST' || c.method === 'PATCH')).toBe(false);
+  });
+
+  it('rejects when the branch ref has no commit sha', async () => {
+    const badStub = makeGitHubStub({ malformedRefSha: true });
+    await expect(
+      commitFiles(envWith(badStub), [utf8('src/content/dishes.json', '[]')], 'm'),
+    ).rejects.toThrow();
+    expect(badStub.calls.some((c) => c.method === 'POST' || c.method === 'PATCH')).toBe(false);
+  });
+
+  // Security review Minor 3: only the HTTP status used to survive into the
+  // thrown message ("... (GitHub returned 403)"), dropping GitHub's own,
+  // much more actionable explanation. The request headers (where the token
+  // actually lives) are never read back into any error message here -- only
+  // `res.text()`, GitHub's own response body -- so there is no path for the
+  // token itself to end up in a thrown message via this mechanism.
+  it("includes the start of GitHub's own error body in the thrown message, not just the status", async () => {
+    const badStub = makeGitHubStub({
+      failOn: '/git/blobs',
+      failStatus: 403,
+      failBody: JSON.stringify({ message: 'Resource not accessible by personal access token' }),
+    });
+    await expect(
+      commitFiles(envWith(badStub), [utf8('src/content/dishes.json', '[]')], 'm'),
+    ).rejects.toThrow(/Resource not accessible by personal access token/);
+  });
+
   it('sends a photo as base64, not as a mangled string', async () => {
     await commitFiles(
       envWith(stub),
@@ -142,21 +187,76 @@ describe('commitFiles', () => {
       'package.json',
       'assets-source/../wrangler.toml',
       'assets-source/food/../../package.json',
+      // Security review Minor 4: junk filenames the looser `[^/]+` character
+      // class used to admit even though they name no real repository path
+      // and several would only surface as an opaque GitHub 422 later.
+      'src/content/%2e%2e%2fpackage.json', // literal percent-encoding, not a real slash
+      'src/content/a .json', // space -- not a real content filename
+      'src/content/a\nb.json', // embedded newline
+      'src/content/UPPER.json', // uppercase -- not a real content filename shape
     ])('refuses to write %s', async (path) => {
       await expect(commitFiles(NO_FETCH_ENV, [utf8(path, 'x')], 'm')).rejects.toThrow(/path/i);
     });
 
-    it('accepts a well-formed content path and a well-formed asset path', async () => {
+    // Every content file this Worker's validateContent (Task 2) actually
+    // recognises must still be a legal commitFiles path -- the allowlist
+    // tightened in response to Minor 4 must not accidentally start
+    // rejecting one of the nine real files it exists to allow.
+    it.each([
+      'copy.json',
+      'dishes.json',
+      'drinks.json',
+      'galleries.json',
+      'menus.json',
+      'press.json',
+      'sections.json',
+      'site.json',
+      'story.json',
+    ])('still accepts the real content file %s', async (name) => {
+      await commitFiles(envWith(stub), [utf8(`src/content/${name}`, '{}')], 'm');
+      expect(stub.calls.some((c) => c.method === 'POST' && c.url.endsWith('/git/blobs'))).toBe(true);
+    });
+
+    it('accepts a well-formed content path and a well-formed asset path, including a space and an uppercase extension', async () => {
       // Positive control for the allowlist tests above: if the regexes were
       // ever tightened into rejecting everything, the negative tests would
       // all still pass for the wrong reason. This proves the legitimate
-      // shapes still get through to fetch.
+      // shapes still get through to fetch -- including a real asset
+      // filename shape (space, then `.JPG`), not just the simplest case.
       await commitFiles(
         envWith(stub),
-        [utf8('src/content/site.json', '{}'), { path: 'assets-source/hero/postcard.png', content: 'AA', encoding: 'base64' }],
+        [
+          utf8('src/content/site.json', '{}'),
+          { path: 'assets-source/hero/postcard.png', content: 'AA', encoding: 'base64' },
+          { path: 'assets-source/atmosphere/painting board.JPG', content: 'AA', encoding: 'base64' },
+        ],
         'm',
       );
-      expect(stub.calls.filter((c) => c.method === 'POST' && c.url.endsWith('/git/blobs'))).toHaveLength(2);
+      expect(stub.calls.filter((c) => c.method === 'POST' && c.url.endsWith('/git/blobs'))).toHaveLength(3);
+    });
+
+    // Recorded, not fixed -- same disposition the review gave
+    // `assets-source/Menu - Expanded.pdf` (rejected for having only one path
+    // segment; left alone since no upload path can reach it). This tightened
+    // filename character class (`[A-Za-z0-9 ._-]+`) also rejects an
+    // apostrophe, and the repository already has one real committed asset
+    // with one (`assets-source/food/Spaghetti alla'Assassina.jpg`). That
+    // file was added directly via `git add`, never through commitFiles, and
+    // Task 6's photo uploads are content-addressed (a generated stem, not
+    // the browser's original filename), so no known future write path needs
+    // an apostrophe to reach GitHub through this function. If that ever
+    // changes, widen the asset regex rather than assuming this comment is
+    // still true.
+    it('rejects an apostrophe in an asset filename, a real repository file this function is never asked to write', async () => {
+      await expect(
+        commitFiles(NO_FETCH_ENV, [utf8(`assets-source/food/Spaghetti alla'Assassina.jpg`, 'x')], 'm'),
+      ).rejects.toThrow(/path/i);
+    });
+
+    it('throws a distinguishable DisallowedPathError, not a generic Error, so callers can map it to a 4xx', async () => {
+      await expect(commitFiles(NO_FETCH_ENV, [utf8('package.json', 'x')], 'm')).rejects.toBeInstanceOf(
+        DisallowedPathError,
+      );
     });
   });
 });

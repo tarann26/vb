@@ -306,6 +306,79 @@ describe('worker entry point', () => {
       expect(stub.calls).toHaveLength(0);
     });
 
+    // Security review reproduction (Important 2): `encoding` is
+    // client-supplied, and step 3's `flatMap` used to skip `validateContent`
+    // entirely for any file that wasn't declared `'utf-8'` -- so a request
+    // could opt a JSON file out of validation just by mislabelling its
+    // encoding as `'base64'`. Before this was guarded, this exact request
+    // committed `site.json` on `main` as the literal bytes "not json at
+    // all", passing validateContent (never even called), returning 200 with
+    // a sha -- while the next build breaks (guards.ts asserts at import) and
+    // the dashboard shows a false "published" success. That's the
+    // silent-evaporation failure the spec is built around, reached through
+    // the encoding field the brief's own Step 4 snippet left unguarded.
+    it('a JSON path mislabelled as base64 is still validated, not silently waved through', async () => {
+      const cookie = await sessionCookie();
+      const response = await worker.fetch(
+        publishRequest(
+          { files: [{ path: 'src/content/site.json', content: btoa('not json at all'), encoding: 'base64' }] },
+          cookie,
+        ),
+        env,
+      );
+      expect(response.status).toBe(422);
+      const body = (await response.json()) as { problems: { field: string; message: string }[] };
+      expect(body.problems.length).toBeGreaterThan(0);
+      expect(stub.calls).toHaveLength(0);
+    });
+
+    // Security review Minor 1: two entries for the same path produce two
+    // blobs and two tree entries; GitHub's tree API keeps the *last* one
+    // for a repeated path, so she could publish what she believes are two
+    // different edits and silently get only one of them, with no error at
+    // all.
+    it('the same path sent twice is 400 (not silently resolved by GitHub keeping the last one), and makes no GitHub call', async () => {
+      const cookie = await sessionCookie();
+      const response = await worker.fetch(
+        publishRequest(
+          {
+            files: [
+              utf8('src/content/site.json', JSON.stringify(VALID_SITE)),
+              utf8('src/content/site.json', JSON.stringify({ ...VALID_SITE, name: 'A different name' })),
+            ],
+          },
+          cookie,
+        ),
+        env,
+      );
+      expect(response.status).toBe(400);
+      expect(stub.calls).toHaveLength(0);
+    });
+
+    // Security review Minor 2: a disallowed path on a non-`.json`, non-utf-8
+    // file (an image, in the shape Task 6 will actually send) skips content
+    // validation entirely -- step 3 only inspects `.json` paths -- and
+    // reaches `commitFiles`, whose own allowlist throws
+    // `DisallowedPathError`. That used to fall into handlePublish's generic
+    // catch and answer 502 -- "GitHub is broken" -- for what is actually a
+    // client mistake. It must answer 400, and it must still make no GitHub
+    // call (assertAllowedPath runs before any fetch in commitFiles
+    // regardless of which HTTP status ultimately gets returned). Not
+    // `package.json` here -- that ends in `.json` and would instead be
+    // caught by the previous test's guard, which is a different code path.
+    it('a disallowed path on a non-JSON file is 400, not 502, and makes no GitHub call', async () => {
+      const cookie = await sessionCookie();
+      const response = await worker.fetch(
+        publishRequest(
+          { files: [{ path: '.github/workflows/evil.yml', content: 'AA', encoding: 'base64' }] },
+          cookie,
+        ),
+        env,
+      );
+      expect(response.status).toBe(400);
+      expect(stub.calls).toHaveLength(0);
+    });
+
     it('publishes every valid file in one commit and returns its sha', async () => {
       const cookie = await sessionCookie();
       const response = await worker.fetch(
