@@ -28,7 +28,12 @@ They share one spec because C's content determines B's templates, and B's sectio
 
 - **No payments, ever, on this site.** The membership booklet, the ₹4,000 kids' classes and the retail bread line all involve money, and all of them route to WhatsApp. Payments need identity, refunds, reconciliation and a different risk profile; they do not ride along with a content editor.
 - **No user accounts, roles or permissions.** One shared password.
-- **No analytics beyond visitor counts and one conversion event.**
+- **No analytics beyond visitor counts and one WhatsApp-click conversion count.** The two are not
+  the same mechanism: visitor counts come from Cloudflare's free Web Analytics beacon, which has
+  no custom-event API (verified against the real shipped beacon, not just its docs), so the
+  conversion count cannot ride along on it. It is logged server-side by the Plan 3 Worker instead
+  (see the Plan 1 and Plan 3 rows under Implementation plans). Nothing beyond these two is in
+  scope.
 - **No CMS vendor.** Content stays in the repository.
 - **No server.** Nothing is rented, patched or backed up.
 
@@ -192,9 +197,9 @@ Eight plans, each producing working software on its own.
 
 | # | Plan | Owns | Depends on |
 |---|---|---|---|
-| 1 | Migrate hosting to Cloudflare | `_headers`, `_redirects`, Web Analytics, the WhatsApp conversion event. Also moves image generation into the build command and **deletes `scripts/__tests__/freshness.test.mjs`**, since derivatives stop being committed (D4). | — |
+| 1 | Migrate hosting to Cloudflare | `_headers`, `_redirects`, Web Analytics (page views only). Also moves image generation into the build command and **deletes `scripts/__tests__/freshness.test.mjs`**, since derivatives stop being committed (D4). **Does not own the WhatsApp conversion count** — Cloudflare's free Web Analytics beacon has no custom-event API (verified against the real shipped beacon, not just its docs), so a client-side attempt to wire one up was built, found fictional, and removed. See Plan 3. | — |
 | 2 | Content model | Prose moved out of components; the page and section model; `enabled`, `order` and `publishAt` fields; **build-time filtering of future-dated content** (D9); updated guards and tests. | — |
-| 3 | Worker | Auth, signed tokens, rate limiting, content validation mirroring the test rules, GitHub commit, photo upload with HEIC conversion and format detection. **Also the scheduled-rebuild cron trigger**, which was originally assigned to Plan 1 in error: a Cloudflare cron has to run inside a Worker, and no Worker exists until this plan. | 1 |
+| 3 | Worker | Auth, signed tokens, rate limiting, content validation mirroring the test rules, GitHub commit, photo upload with HEIC conversion and format detection. **Also the scheduled-rebuild cron trigger**, which was originally assigned to Plan 1 in error: a Cloudflare cron has to run inside a Worker, and no Worker exists until this plan. **Also the WhatsApp conversion count**, moved here for the same reason: it needs server-side logging, and no server-side code exists before this plan's Worker. | 1 |
 | 4 | Dashboard | Type-generated forms, list add/remove/reorder, PDF replacement, hours, scheduling UI, publish status polling. | 2, 3 |
 | 5 | Edit mode | In-place image replacement and text editing on the real site. | 2, 3 |
 | 6 | Collage editing | Drag to move and resize on pointer devices; tap-and-buttons on touch; Tailwind safelist and the test pinning it. | 2, 5 |
