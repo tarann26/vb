@@ -12,6 +12,16 @@ import { join, extname, basename, relative, sep } from 'node:path';
 // would block a deploy that never needed to encode an image. Keep it that
 // way: nothing here may import sharp, and nothing here may import a module
 // that does.
+//
+// scripts/__tests__/images.derivatives.test.mjs (a later addition) DOES
+// import sharp, on purpose -- it proves the encode pipeline actually works,
+// which no sharp-free test can. It stays out of the guarantee above by
+// being excluded from `test:deploy` directly in package.json's script
+// (`vitest run --exclude scripts/__tests__/images.derivatives.test.mjs`),
+// not by living outside Vitest's default test glob -- so `npm run
+// test:deploy` really does stay sharp-free, and `npm run test`/`vitest run`
+// (which do run it) are what a developer runs locally, same as any other
+// test in this repo.
 
 export const SOURCE = 'assets-source';
 export const OUT = 'public';

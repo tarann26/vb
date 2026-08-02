@@ -20,7 +20,7 @@
 // Node's real, unshadowed fetch implementation is not just a workaround --
 // it is the more faithful environment for what this code actually is.
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { handleUpload, sha256Hex, uploadPath, type UploadEnv } from '../upload';
+import { handleUpload, uploadPath, type UploadEnv } from '../upload';
 import { signToken } from '../auth';
 import { envWith, makeGitHubStub, type GitHubStub } from './githubStub';
 
@@ -39,10 +39,33 @@ function isobmff(brand: string): Uint8Array {
   return new Uint8Array([0, 0, 0, 0x18, ...enc('ftyp'), ...enc(brand), 0, 0, 0, 0]);
 }
 
-const JPEG_BYTES = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 0, 0, 0, 0x4a, 0x46, 0x49, 0x46]);
-const PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
+// Complete, not just correctly-headed: JPEG_BYTES ends in the real EOI
+// marker (FF D9) and PNG_BYTES contains a real IEND chunk marker, so both
+// pass `looksComplete` (worker/upload.ts) the same way a real, fully
+// transferred photo would -- these are the "should succeed" fixtures used
+// throughout this file, not the truncated ones exercised below.
+const JPEG_BYTES = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 0, 0, 0, 0x4a, 0x46, 0x49, 0x46, 0xff, 0xd9]);
+const PNG_BYTES = new Uint8Array([
+  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0, ...enc('IEND'), 0xae, 0x42, 0x60, 0x82,
+]);
 const HEIC_BYTES = isobmff('heic');
 const NOT_AN_IMAGE = enc('this is a PDF or some other unrelated file, not a photo at all');
+
+// Correct magic bytes, garbage/incomplete payload -- what a connection
+// dropped mid-upload, or a hostile client testing the boundary, produces.
+// Each is missing exactly the trailer `looksComplete` checks for its
+// format.
+const TRUNCATED_JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4, 5, 6, 7, 8]); // no FF D9
+const TRUNCATED_PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4]); // no IEND
+const TRUNCATED_GIF = new Uint8Array([...enc('GIF89a'), 1, 2, 3, 4]); // does not end 0x3B
+// RIFF/WEBP whose declared chunk size (bytes 4-7, LE) claims far more data
+// than the buffer actually holds.
+const TRUNCATED_WEBP = new Uint8Array([...enc('RIFF'), 0xff, 0xff, 0x00, 0x00, ...enc('WEBP')]);
+// Valid TIFF magic, garbage payload -- deliberately NOT expected to be
+// caught by looksComplete (see that function's own comment on why TIFF has
+// no cheap trailer check); this is the DNG/ProRAW-shaped case that Fix 2 in
+// scripts/images.mjs exists to catch downstream instead.
+const GARBAGE_TIFF = new Uint8Array([0x49, 0x49, 0x2a, 0x00, 1, 2, 3, 4, 5, 6, 7, 8]);
 
 async function sessionCookie(): Promise<string> {
   const expiresAt = Math.floor(Date.now() / 1000) + 3600;
@@ -81,45 +104,24 @@ function bodyThatThrowsIfRead(): ReadableStream<Uint8Array> {
   });
 }
 
-describe('sha256Hex', () => {
-  // FIPS 180-4's own published test vectors.
-  it('matches the known SHA-256 of the empty string', () => {
-    expect(sha256Hex(new Uint8Array(0))).toBe(
-      'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
-    );
-  });
-
-  it('matches the known SHA-256 of "abc"', () => {
-    expect(sha256Hex(enc('abc'))).toBe('ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
-  });
-
-  // Cross-checked against the real crypto.subtle.digest -- not just against
-  // more hand-copied hex strings -- for sizes that land exactly on, just
-  // under, and just over SHA-256's 64-byte block boundary, where an
-  // off-by-one in the padding logic would most likely show up.
-  it.each([1, 55, 56, 57, 63, 64, 65, 1000, 65536])(
-    'matches crypto.subtle.digest for a %i-byte buffer',
-    async (size) => {
-      const bytes = new Uint8Array(size);
-      for (let i = 0; i < size; i++) bytes[i] = (i * 2654435761) % 256;
-      const expected = await crypto.subtle.digest('SHA-256', bytes);
-      const expectedHex = Array.from(new Uint8Array(expected))
-        .map((b) => b.toString(16).padStart(2, '0'))
-        .join('');
-      expect(sha256Hex(bytes)).toBe(expectedHex);
-    },
-  );
-});
+// sha256Hex was deleted (security review, Task 6 follow-up): the hand-rolled
+// synchronous SHA-256 existed only because the brief declared `uploadPath`
+// synchronous. `uploadPath` is now async and calls `crypto.subtle.digest`
+// directly -- the real primitive, not a from-scratch substitute -- so there
+// is no longer a standalone hash function here to unit-test; `uploadPath`'s
+// own tests below cover it through its one real behavior (content-addressed
+// paths), and `crypto.subtle`'s own correctness is not this codebase's to
+// verify.
 
 describe('uploadPath', () => {
-  it('builds a content-addressed path under assets-source/<category>/', () => {
-    const path = uploadPath('food', enc('a photo'), 'png');
+  it('builds a content-addressed path under assets-source/<category>/', async () => {
+    const path = await uploadPath('food', enc('a photo'), 'png');
     expect(path).toMatch(/^assets-source\/food\/[0-9a-f]{12}\.png$/);
   });
 
-  it('never collides two different photos', () => {
-    const a = uploadPath('food', enc('photo A'), 'jpeg');
-    const b = uploadPath('food', enc('photo B'), 'jpeg');
+  it('never collides two different photos', async () => {
+    const a = await uploadPath('food', enc('photo A'), 'jpeg');
+    const b = await uploadPath('food', enc('photo B'), 'jpeg');
     expect(a).not.toBe(b);
   });
 
@@ -127,17 +129,17 @@ describe('uploadPath', () => {
   // the route level, the same photo submitted twice) mapping to the same
   // public/ output and tripping scripts/paths.mjs's findCollisions(), which
   // makes the whole image build write nothing and exit 1.
-  it('uploading the same photo twice is idempotent, not duplicated', () => {
+  it('uploading the same photo twice is idempotent, not duplicated', async () => {
     const bytes = enc('identical photo bytes');
-    const first = uploadPath('food', bytes, 'jpeg');
-    const second = uploadPath('food', bytes, 'jpeg');
+    const first = await uploadPath('food', bytes, 'jpeg');
+    const second = await uploadPath('food', bytes, 'jpeg');
     expect(first).toBe(second);
   });
 
-  it('uses the extension the caller passes, not the category or any filename', () => {
-    expect(uploadPath('hero', enc('x'), 'avif')).toMatch(/\.avif$/);
-    expect(uploadPath('hero', enc('x'), 'tiff')).toMatch(/\.tiff$/);
-    expect(uploadPath('hero', enc('x'), 'gif')).toMatch(/\.gif$/);
+  it('uses the extension the caller passes, not the category or any filename', async () => {
+    expect(await uploadPath('hero', enc('x'), 'avif')).toMatch(/\.avif$/);
+    expect(await uploadPath('hero', enc('x'), 'tiff')).toMatch(/\.tiff$/);
+    expect(await uploadPath('hero', enc('x'), 'gif')).toMatch(/\.gif$/);
   });
 });
 
@@ -239,6 +241,52 @@ describe('POST /api/upload', () => {
     expect(stub.calls).toHaveLength(0);
   });
 
+  // Security review finding: `detectFormat` reads only magic bytes, so a
+  // file with a correct header and a garbage or truncated payload (a
+  // connection dropped mid-upload; a hostile client probing the boundary)
+  // used to sail straight through detection and get committed to
+  // assets-source/ -- reproduced concretely against the pre-fix code: all
+  // four of these buffers got a 200 and a real commit. `npm run images`
+  // then failed to encode them ("Input file has corrupt header..."), which
+  // -- before scripts/images.mjs's Fix 2 below -- failed `npm run images`
+  // outright, so `npm run build` failed on every subsequent deploy with no
+  // link back to the upload that caused it. `looksComplete`
+  // (worker/upload.ts) catches the four formats with a cheap, well-defined
+  // trailer; each case below is missing exactly that trailer.
+  describe('truncated or corrupted files with otherwise-valid magic bytes', () => {
+    it.each([
+      ['jpeg', TRUNCATED_JPEG],
+      ['png', TRUNCATED_PNG],
+      ['gif', TRUNCATED_GIF],
+      ['webp', TRUNCATED_WEBP],
+    ] as const)('rejects a truncated %s (400, not committed)', async (_format, bytes) => {
+      env = freshEnv();
+      const cookie = await sessionCookie();
+      const response = await handleUpload(uploadRequest({ category: 'food', file: { bytes }, cookie }), env);
+      expect(response.status).toBe(400);
+      const body = (await response.json()) as { message: string };
+      expect(body.message.toLowerCase()).toContain('incomplete');
+      expect(stub.calls).toHaveLength(0);
+    });
+
+    // The deliberate boundary, not a gap: TIFF has no cheap trailer to
+    // check (see looksComplete's own comment -- DNG/ProRAW carries fully
+    // well-formed TIFF structure and is still undecodable by sharp, so
+    // "structurally complete" doesn't imply "decodable" for this format the
+    // way it does for the four above). This still commits; the safety net
+    // for it is scripts/images.mjs's Fix 2, proved separately in
+    // scripts/__tests__/images.derivatives.test.mjs.
+    it('does not (and is not meant to) catch a structurally-intact-but-undecodable TIFF', async () => {
+      env = freshEnv();
+      const cookie = await sessionCookie();
+      const response = await handleUpload(
+        uploadRequest({ category: 'food', file: { bytes: GARBAGE_TIFF }, cookie }),
+        env,
+      );
+      expect(response.status).toBe(200);
+    });
+  });
+
   it('rejects an over-25MB upload using Content-Length, before the body is ever read', async () => {
     env = freshEnv();
     const cookie = await sessionCookie();
@@ -257,7 +305,13 @@ describe('POST /api/upload', () => {
     const response = await handleUpload(request, env);
     expect(response.status).toBe(413);
     const body = (await response.json()) as { message: string };
-    expect(body.message).toContain('26.0MB');
+    // "This upload", not "This photo": at this point the only thing known
+    // is Content-Length, which is the whole multipart request (photo plus
+    // envelope), not the photo alone -- see the pre-check's own comment.
+    // Two decimal places, not one, so a boundary case (a photo sized right
+    // at 25MB) can't render as "This photo is 25.0MB; the limit is 25MB",
+    // which reads as a contradiction rather than useful guidance.
+    expect(body.message).toBe('This upload is 26.00MB; the limit is 25MB.');
     expect(stub.calls).toHaveLength(0);
   });
 
@@ -276,7 +330,9 @@ describe('POST /api/upload', () => {
     );
     expect(response.status).toBe(413);
     const body = (await response.json()) as { message: string };
-    expect(body.message).toContain('26.0MB');
+    // Here "This photo" is accurate: bytes.length at this point really is
+    // just the file field's own byte count, no multipart envelope included.
+    expect(body.message).toBe('This photo is 26.00MB; the limit is 25MB.');
     expect(stub.calls).toHaveLength(0);
   });
 

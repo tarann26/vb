@@ -104,6 +104,21 @@ export async function build({ log = () => {} } = {}) {
 
   const expectedOutputs = new Set(sources.map(outputPathFor));
   let total = 0;
+  // A source sharp cannot decode -- a truncated upload that slipped past
+  // worker/upload.ts's own completeness check, a hand-edited commit, or a
+  // container format (DNG/ProRAW-shaped TIFF) `detectFormat` correctly
+  // names but sharp still can't read -- is SKIPPED, not fatal. A photo
+  // sitting unreferenced in assets-source/ (which is exactly where an
+  // uploaded-but-not-yet-attached photo lives) breaks nothing: the asset
+  // guardrail (src/content/__tests__/assets.test.ts) only fails the build
+  // once a content file actually references a path with no derivative --
+  // so that check still catches the case that matters, while one unusable
+  // file no longer holds the entire site hostage the way any single
+  // encode failure used to (see this array's history: it was merged into
+  // `failures` below and any non-empty `failures` set process.exitCode = 1,
+  // so one bad photo failed `npm run images`, which failed every deploy,
+  // with no way for her to remove it herself).
+  const skipped = [];
   const failures = [];
   for (const src of sources) {
     const out = outputPathFor(src);
@@ -115,8 +130,8 @@ export async function build({ log = () => {} } = {}) {
       log(`${src} -> ${out} (${(size / 1024).toFixed(0)}KB @ ${maxWidthFor(src)}px)`);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      failures.push({ src, out, message });
-      log(`FAILED ${src}: ${message}`);
+      skipped.push({ src, out, message });
+      log(`WARNING: skipped ${src} -- sharp could not decode it (${message})`);
     }
   }
 
@@ -124,6 +139,13 @@ export async function build({ log = () => {} } = {}) {
   // that replacing its source photo refreshes it like every other
   // derivative. Left out of `expectedOutputs` on purpose: it is a JPEG at
   // the top level of public/, which prune() never walks.
+  //
+  // Unlike a source-photo encode failure above, an OG-card failure stays in
+  // `failures` (fatal, exitCode 1): og-image.jpg is not an owner-uploaded
+  // photo sitting unreferenced until she attaches it to something -- it is
+  // a single hardcoded, site-wide asset (index.html's og:image tag) that is
+  // always expected to exist, so silently skipping it would ship a broken
+  // share card with no signal anywhere that it happened.
   try {
     await encodeOgImage().toFile(OG_OUTPUT);
     const { size } = await stat(OG_OUTPUT);
@@ -135,9 +157,15 @@ export async function build({ log = () => {} } = {}) {
     log(`FAILED ${OG_SOURCE}: ${message}`);
   }
 
+  // prune() is unaffected by a skip: `expectedOutputs` already includes
+  // every source in `sources` regardless of whether sharp succeeded on it
+  // this run (see prune()'s own comment), so a transient or permanent
+  // encode failure never causes an earlier, still-good derivative to be
+  // deleted -- and a source that has NEVER successfully encoded has no
+  // derivative to delete in the first place.
   const pruned = await prune(expectedOutputs);
   for (const path of pruned) log(`pruned stale derivative: ${path}`);
-  return { count: sources.length, totalBytes: total, failures, pruned, collisions: [] };
+  return { count: sources.length, totalBytes: total, failures, skipped, pruned, collisions: [] };
 }
 
 // import.meta.url is percent-encoded (spaces become %20); process.argv[1] is
@@ -147,7 +175,7 @@ export async function build({ log = () => {} } = {}) {
 // import.meta.filename is the resolved absolute path, unencoded, so it
 // compares correctly against argv[1] on every platform.
 if (import.meta.filename === process.argv[1]) {
-  const { count, totalBytes, failures, pruned, collisions } = await build({ log: console.log });
+  const { count, totalBytes, failures, skipped, pruned, collisions } = await build({ log: console.log });
   if (collisions.length > 0) {
     console.error(
       `\n${collisions.length} filename collision(s) -- nothing was written. Two source ` +
@@ -164,6 +192,22 @@ if (import.meta.filename === process.argv[1]) {
     );
     if (pruned.length > 0) {
       console.log(`${pruned.length} stale derivative(s) pruned`);
+    }
+    // Loud, but not fatal: process.exitCode is deliberately untouched here
+    // -- see build()'s own comment on why one undecodable source shouldn't
+    // hold the whole site hostage. The filename is printed first and on its
+    // own so it's the thing that's obvious to spot and go delete.
+    if (skipped.length > 0) {
+      console.warn(
+        `\n${'='.repeat(72)}\n${skipped.length} source file(s) could not be decoded and were SKIPPED ` +
+          `(no derivative was written for them):\n${'='.repeat(72)}`,
+      );
+      for (const s of skipped) console.warn(`  ${s.src}\n    ${s.message}`);
+      console.warn(
+        `\nIf nothing in src/content/ references these yet, the build is still fine --\n` +
+          `this is only a problem once something points at one of them. Delete or\n` +
+          `replace the file(s) above to clear this warning.`,
+      );
     }
     if (failures.length > 0) {
       console.error(`\n${failures.length} failure(s):`);

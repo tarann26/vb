@@ -74,109 +74,87 @@ const EXT: Record<Format, string> = {
 // the file is silently invisible to the build -- never encoded, its
 // derivative never created, and the build fails later on the missing
 // public/ asset with no mention of why this specific upload caused it.
-export function uploadPath(category: string, bytes: Uint8Array, format: Format): string {
-  return `assets-source/${category}/${sha256Hex(bytes).slice(0, 12)}.${EXT[format]}`;
+//
+// Async, using the real `crypto.subtle.digest`, not a hand-rolled
+// synchronous SHA-256 -- an earlier version of this function had one, kept
+// synchronous only so it matched this task's brief literally. A security
+// review correctly called that the wrong trade: the hand-rolled version
+// allocated a second, padded copy of the input (at the 25MB cap, that's a
+// real extra allocation inside a 128MB Workers isolate already holding the
+// multipart body, the raw bytes, and a base64 copy of it), bought nothing in
+// return (hashing an occasional owner-initiated upload is not a
+// CPU-budget-sensitive hot path either way), and re-implemented a primitive
+// the platform already provides correctly and natively. `commitFiles`
+// (called from `handleUpload`, an already-async handler) is the only real
+// caller, so there was never a genuine synchronous-composition need this
+// was buying.
+export async function uploadPath(category: string, bytes: Uint8Array, format: Format): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  const hex = Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+  return `assets-source/${category}/${hex.slice(0, 12)}.${EXT[format]}`;
 }
 
 // ---------------------------------------------------------------------------
-// A from-scratch, synchronous SHA-256 (FIPS 180-4). Not `crypto.subtle
-// .digest`: uploadPath above is a plain synchronous function on purpose (a
-// composable path-builder, not something every caller has to `await`
-// through), and SubtleCrypto's digest is inherently Promise-based -- there
-// is no synchronous Web Crypto hash to call instead. This is the same
-// category of trade-off as this file's neighbour worker/auth.ts hand-rolling
-// `timingSafeEqual` because the Cloudflare-only `crypto.subtle
-// .timingSafeEqual` doesn't exist in this repo's test environment: the
-// built-in API's shape doesn't fit a real constraint, so this is a
-// deliberately small, standard, heavily-tested substitute rather than a
-// dependency.
+// A second, cheap check for whether a file's *end* is where a well-formed
+// file of its detected format would put it. `detectFormat` only reads the
+// first dozen-ish bytes; a photo cut off mid-transfer (a flaky connection, a
+// browser tab killed mid-upload) can carry a perfectly valid header and then
+// just stop. Reaching assets-source/ that way isn't merely cosmetic:
+// scripts/images.mjs's `build()` calls sharp on every source, and a
+// truncated file makes sharp fail with "premature end of JPEG image" or
+// similar -- Fix (2) in that file keeps one such failure from taking the
+// whole build down, but she would still get no useful signal until the next
+// deploy quietly skipped her photo. Catching it here, before the commit,
+// lets her be told immediately, with the actual file still in hand to
+// retry.
 //
-// Verified against `crypto.subtle.digest('SHA-256', ...)` for 14 buffer
-// sizes spanning and straddling the 64-byte block boundary (0, 1, 2, 55,
-// 56, 57, 63, 64, 65, 100, 1000, 65536, 1000000, 5000001 bytes) plus the
-// FIPS 180-4 test vectors for the empty string and "abc" -- see
-// worker/__tests__/upload.test.ts's `sha256Hex` block. A 25MB buffer (this
-// route's own size cap) hashes in well under 200ms on ordinary hardware --
-// a real, one-off, owner-initiated action, not a per-request hot path like
-// worker/auth.ts's PBKDF2, so the Workers CPU-time budget that shapes that
-// file's iteration count isn't the same kind of concern here.
-const SHA256_K = [
-  0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
-  0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
-  0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
-  0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
-  0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
-  0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
-  0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
-  0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
-] as const;
-
-function rotr(x: number, n: number): number {
-  return (x >>> n) | (x << (32 - n));
+// Deliberately narrower than full format validation: only the formats with
+// a cheap, well-defined end-of-file marker get a check (JPEG's EOI marker,
+// PNG's IEND chunk, GIF's trailer byte, RIFF's declared chunk size). AVIF
+// and TIFF have no equally cheap trailer to check -- and TIFF in particular
+// can be perfectly well-formed structurally and still be undecodable:
+// iPhone ProRAW writes DNG, which carries valid TIFF magic bytes
+// (`detectFormat` correctly reports `'tiff'`) and a fully intact,
+// untruncated structure, yet sharp still can't decode it, because DNG's
+// pixel data isn't what a plain TIFF reader expects. That isn't truncation,
+// so no trailer check catches it -- it is exactly the case
+// scripts/images.mjs's build()-level skip (Fix 2) exists to catch instead,
+// downstream, without taking the whole build down over it.
+function looksComplete(bytes: Uint8Array, format: Format): boolean {
+  switch (format) {
+    case 'jpeg':
+      return bytes.length >= 2 && bytes[bytes.length - 2] === 0xff && bytes[bytes.length - 1] === 0xd9;
+    case 'png':
+      return containsAscii(bytes, 'IEND');
+    case 'gif':
+      return bytes.length >= 1 && bytes[bytes.length - 1] === 0x3b;
+    case 'webp': {
+      // RIFF's declared chunk size (bytes 4-7, little-endian) is the byte
+      // count of everything AFTER the 8-byte "RIFF"+size header itself, so
+      // a well-formed file's total length is exactly that plus 8.
+      if (bytes.length < 8) return false;
+      const declaredChunkSize = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(4, true);
+      return declaredChunkSize + 8 === bytes.length;
+    }
+    default:
+      // avif/tiff/heic: no cheap trailer check exists -- see this
+      // function's own comment above for why that's a deliberate boundary,
+      // not an oversight.
+      return true;
+  }
 }
 
-export function sha256Hex(data: Uint8Array): string {
-  const h = Uint32Array.from([
-    0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
-  ]);
-
-  // Pad: the message, then a single 1-bit (0x80), then zero bits, then the
-  // original bit length as a big-endian 64-bit integer, out to a multiple
-  // of 64 bytes.
-  const bitLength = data.length * 8;
-  const paddedLength = Math.ceil((data.length + 1 + 8) / 64) * 64;
-  const padded = new Uint8Array(paddedLength);
-  padded.set(data);
-  padded[data.length] = 0x80;
-  const view = new DataView(padded.buffer);
-  // Splitting the 64-bit length into two 32-bit halves this way is exact
-  // for any file this route will ever see (the 25MB cap is nowhere near
-  // Number's safe-integer ceiling), unlike a BigInt shift that would be
-  // needed for a truly unbounded input.
-  view.setUint32(paddedLength - 4, bitLength >>> 0, false);
-  view.setUint32(paddedLength - 8, Math.floor(bitLength / 0x100000000), false);
-
-  const w = new Uint32Array(64);
-  for (let offset = 0; offset < paddedLength; offset += 64) {
-    for (let i = 0; i < 16; i++) w[i] = view.getUint32(offset + i * 4, false);
-    for (let i = 16; i < 64; i++) {
-      const s0 = rotr(w[i - 15], 7) ^ rotr(w[i - 15], 18) ^ (w[i - 15] >>> 3);
-      const s1 = rotr(w[i - 2], 17) ^ rotr(w[i - 2], 19) ^ (w[i - 2] >>> 10);
-      w[i] = (w[i - 16] + s0 + w[i - 7] + s1) | 0;
+function containsAscii(bytes: Uint8Array, needle: string): boolean {
+  const target = new TextEncoder().encode(needle);
+  outer: for (let i = 0; i <= bytes.length - target.length; i++) {
+    for (let j = 0; j < target.length; j++) {
+      if (bytes[i + j] !== target[j]) continue outer;
     }
-
-    let [a, b, c, d, e, f, g, hh] = h;
-    for (let i = 0; i < 64; i++) {
-      const bigS1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25);
-      const ch = (e & f) ^ (~e & g);
-      const temp1 = (hh + bigS1 + ch + SHA256_K[i] + w[i]) | 0;
-      const bigS0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22);
-      const maj = (a & b) ^ (a & c) ^ (b & c);
-      const temp2 = (bigS0 + maj) | 0;
-
-      hh = g;
-      g = f;
-      f = e;
-      e = (d + temp1) | 0;
-      d = c;
-      c = b;
-      b = a;
-      a = (temp1 + temp2) | 0;
-    }
-
-    h[0] = (h[0] + a) | 0;
-    h[1] = (h[1] + b) | 0;
-    h[2] = (h[2] + c) | 0;
-    h[3] = (h[3] + d) | 0;
-    h[4] = (h[4] + e) | 0;
-    h[5] = (h[5] + f) | 0;
-    h[6] = (h[6] + g) | 0;
-    h[7] = (h[7] + hh) | 0;
+    return true;
   }
-
-  return Array.from(h)
-    .map((n) => (n >>> 0).toString(16).padStart(8, '0'))
-    .join('');
+  return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -207,8 +185,12 @@ function json(status: number, body: unknown): Response {
   });
 }
 
+// Two decimals, not one: at "1.0MB" of precision, a 25.00MB upload and the
+// 25MB limit it just tripped can render close enough to look identical,
+// which reads as a self-contradicting error rather than useful guidance on
+// how much to shrink the file.
 function megabytes(bytes: number): string {
-  return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
+  return `${(bytes / (1024 * 1024)).toFixed(2)}MB`;
 }
 
 export async function handleUpload(request: Request, env: UploadEnv): Promise<Response> {
@@ -228,12 +210,18 @@ export async function handleUpload(request: Request, env: UploadEnv): Promise<Re
   // Blob's exact size before sending), so this is the common case; it is
   // still only a best-effort pre-check, not the only guard -- see the
   // post-read check in step 4, which is what actually protects against a
-  // missing or understated header.
+  // missing or understated header. Worded "This upload", not "This photo":
+  // Content-Length at this point is the whole multipart request (the photo
+  // plus its envelope and the `category` field), not the photo alone, so
+  // calling it "the photo" here would overstate its size by a few dozen
+  // bytes -- small in absolute terms, but exactly the kind of thing that
+  // makes "This photo is 25.00MB; the limit is 25MB" read as a contradiction
+  // to someone trying to figure out how much to shrink it.
   const contentLengthHeader = request.headers.get('Content-Length');
   if (contentLengthHeader !== null) {
     const contentLength = Number(contentLengthHeader);
     if (Number.isFinite(contentLength) && contentLength > MAX_UPLOAD_BYTES) {
-      return json(413, { message: `This photo is ${megabytes(contentLength)}; the limit is 25MB.` });
+      return json(413, { message: `This upload is ${megabytes(contentLength)}; the limit is 25MB.` });
     }
   }
 
@@ -288,9 +276,19 @@ export async function handleUpload(request: Request, env: UploadEnv): Promise<Re
     });
   }
 
+  // 5b. Truncation/completeness -- see looksComplete's own comment for
+  // exactly what this does and does not catch. A file that fails this is
+  // structurally broken in a way sharp will refuse to encode later; better
+  // she hears that now, with the file still in hand to re-upload, than in a
+  // deploy that quietly skips it (scripts/images.mjs Fix 2) with no
+  // connection back to this specific upload.
+  if (!looksComplete(bytes, format)) {
+    return json(400, { message: 'This photo looks incomplete or corrupted. Try uploading it again.' });
+  }
+
   // 6. Commit. uploadPath's stem is content-addressed (see that function's
   // own comment), never derived from `fileField.name`.
-  const path = uploadPath(category, bytes, format);
+  const path = await uploadPath(category, bytes, format);
   const file: CommitFile = { path, content: bytesToBase64(bytes), encoding: 'base64' };
 
   try {
