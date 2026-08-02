@@ -216,22 +216,53 @@ Unrelated to Steps 1–9 above (no ordering dependency on DNS, Pages, or the KV 
 required before `POST /api/login` (Task 4 of the worker plan) can ever succeed. `env.ADMIN_PASSWORD_HASH`
 and `env.TOKEN_SECRET` are Worker secrets, not `wrangler.toml` vars — `wrangler.toml` carries only
 non-secret bindings by design, and `src/test/secrets.test.ts` fails the build if a real password
-hash or token ever lands in a committed file. With neither secret set, every login attempt fails
-closed (`verifyPassword`/`verifyToken` have nothing to check the attempt against), not silently.
+hash or token ever lands in a committed file.
 
-1. Generate the stored-hash value with `node scripts/hash-password.mjs`. It prompts for the
-   password on stderr and prints only the `pbkdf2$<iterations>$<saltB64>$<hashB64>` line on
-   stdout — pipe it directly into the next step rather than copying it through a terminal, so it
-   never sits in scrollback or shell history.
+**What happens with each secret unset, precisely** (an earlier version of this section claimed
+both fail closed "not silently" — that was wrong for one half, caught in review):
+with `ADMIN_PASSWORD_HASH` unset, every login attempt gets a clean `401` (`verifyPassword` has
+nothing to check the attempt against, and fails closed rather than throwing). With `TOKEN_SECRET`
+unset, every login attempt — **even with the correct password** — gets a clean `500`
+(`{"message":"Login is not configured."}`) rather than a raw Cloudflare error page. That second
+half was not always true: `worker/index.ts`'s `handleLogin` and `worker/auth.ts`'s `verifyToken`
+both now check the secret is present before doing anything that would otherwise throw on a
+zero-length HMAC key — see `worker/auth.ts` for why an unset secret used to be an unhandled throw,
+not a clean failure.
+
+1. **Generate the password — don't choose one.** The rate limit below is best-effort, not a hard
+   wall, which means password strength is the control that actually matters here. Prefer:
+   ```bash
+   openssl rand -base64 24 | tee /dev/tty | node scripts/hash-password.mjs
+   ```
+   `tee /dev/tty` shows you the generated password once (so you can save it in a password manager)
+   while still piping it into the hashing script — the alternative of typing a password yourself
+   tends to produce something far weaker than 24 random bytes.
 2. Set it as a Worker secret:
    ```bash
    node scripts/hash-password.mjs | npx wrangler secret put ADMIN_PASSWORD_HASH
    ```
+   (Confirmed safe against the CLI adding stray whitespace: `wrangler secret put` trims trailing
+   whitespace from piped stdin, so the trailing newline `console.log` puts after the hash does not
+   end up stored as part of the secret.)
 3. Set `TOKEN_SECRET` — the HMAC key session tokens are signed with, unrelated to the password
    itself — the same way, e.g.:
    ```bash
    openssl rand -base64 32 | npx wrangler secret put TOKEN_SECRET
    ```
+
+**The 5-attempts-per-15-minutes login rate limit is best-effort, not a hard guarantee.** It's a
+non-atomic KV `get`-then-`put` (see `worker/ratelimit.ts`), and Workers KV is eventually
+consistent with edge caching on reads — a fast concurrent burst of guesses can read a stale count
+before any of their writes land, so the real ceiling under a determined, distributed attacker is
+softer than "5". This is not a bug to fix here: the brief's KV design was chosen specifically
+because the alternative, the Workers Rate Limiting binding, can't express a 15-minute window
+(`period` must be 10 or 60 seconds), counts per Cloudflare location rather than globally, and has
+no API to reset the counter on a successful login. Given that, **the password's own entropy is the
+real control** — the prize for guessing it is a GitHub token with write access to this site's
+repository — which is why Step 1 above generates one rather than asking you to choose one. If a
+durable, atomic rate limit is ever wanted, the right place for it is a Cloudflare WAF rate-limiting
+rule on `/api/login` at the edge, in front of the Worker; that is not built as part of this task,
+only recorded here as where it goes.
 
 **Rotating the password does not, on its own, invalidate sessions already issued.** A session
 cookie's validity comes entirely from `verifyToken`'s HMAC check against `TOKEN_SECRET` (see
@@ -241,7 +272,7 @@ If the point of rotating the password is to lock out anyone who already holds a 
 password, a lost or stolen device), **rotate `TOKEN_SECRET` too, in the same sitting**:
 
 ```bash
-node scripts/hash-password.mjs | npx wrangler secret put ADMIN_PASSWORD_HASH
+openssl rand -base64 24 | tee /dev/tty | node scripts/hash-password.mjs | npx wrangler secret put ADMIN_PASSWORD_HASH
 openssl rand -base64 32 | npx wrangler secret put TOKEN_SECRET
 ```
 

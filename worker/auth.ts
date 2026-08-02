@@ -62,10 +62,9 @@ function timingSafeEqual(a: string, b: string): boolean {
 
 // Measured under real workerd, not guessed: `wrangler dev --local` runs
 // Miniflare on the actual Workers runtime, and Workers Free allows only
-// 10ms CPU per invocation. workerd also hard-caps PBKDF2 at 100,000
-// iterations, which made 100k look like a plausible default -- it isn't.
-// Timed crypto.subtle.deriveBits(..., 256) directly against a throwaway
-// route on this Worker, 10 runs each, three costs:
+// 10ms CPU per invocation. Timed crypto.subtle.deriveBits(..., 256)
+// directly against a throwaway route on this Worker, 10 runs each, three
+// costs:
 //   25,000 iterations:  avg 2.07ms, max 3ms  (10ms / 3ms  ~= 3.33x margin)
 //   50,000 iterations:  avg 3.97ms, max 5ms  (10ms / 5ms  =  2.0x  margin)
 //  100,000 iterations:  avg 7.4ms,  max 8ms  (10ms / 8ms  ~= 1.25x margin)
@@ -77,6 +76,14 @@ function timingSafeEqual(a: string, b: string): boolean {
 // realistic threat here is defacement with a `git revert` recovery, not a
 // nation-state cracking this hash offline -- a login that reliably
 // completes beats a slower one that sometimes 500s.
+//
+// Correction: an earlier version of this comment additionally claimed
+// "workerd hard-caps PBKDF2 at 100,000 iterations." That's false -- a
+// security review independently measured 1,000,000 iterations under this
+// same `wrangler dev --local` setup: 79ms, no error, no cap enforced.
+// 25,000 is still the right number; the 10ms-CPU-budget/3x-margin
+// reasoning above justifies it on its own and never depended on a cap
+// existing.
 const PBKDF2_ITERATIONS = 25_000;
 const SALT_BYTES = 16;
 
@@ -109,6 +116,12 @@ export async function verifyPassword(supplied: string, stored: string): Promise<
   try {
     const parts = stored.split('$');
     if (parts.length !== 4 || parts[0] !== 'pbkdf2') return false;
+    // `iterations` is parsed out of `stored` (env.ADMIN_PASSWORD_HASH), a
+    // server-set secret written by scripts/hash-password.mjs -- never out
+    // of anything the request supplies. An attacker controls only
+    // `supplied`, so there is no attacker-controlled-iteration-count DoS to
+    // defend against by bounding this number, the way there would be if
+    // this string arrived in a request body instead of a secret.
     const iterations = Number(parts[1]);
     if (!Number.isInteger(iterations) || iterations <= 0) return false;
     const salt = base64ToBytes(parts[2]);
@@ -146,8 +159,25 @@ export async function signToken(secret: string, expiresAt: number): Promise<stri
 }
 
 export async function verifyToken(secret: string, token: string, now: number): Promise<boolean> {
-  const [payloadB64, sigB64] = token.split('.');
-  if (!payloadB64 || !sigB64) return false;
+  // Exactly two segments, not "at least two": `token.split('.')` alone
+  // would destructure only the first two elements and silently ignore any
+  // more, so `<payload>.<sig>.` and `<payload>.<sig>.evil` would both
+  // verify identically to `<payload>.<sig>`. No privilege gain today (an
+  // attacker still needs a valid token to append to), but it means one
+  // session would have unbounded string representations -- a problem the
+  // moment anything downstream uses the raw cookie string as a lookup or
+  // revocation-list key, where string-keyed revocation becomes trivially
+  // evadable by appending garbage.
+  const parts = token.split('.');
+  if (parts.length !== 2) return false;
+  const [payloadB64, sigB64] = parts;
+  // `!secret` first: `crypto.subtle.importKey` rejects a zero-length raw
+  // HMAC key with an unhandled `DataError`, not a returned failure -- an
+  // unset or empty TOKEN_SECRET would otherwise make this function throw
+  // instead of failing closed, which is the wrong shape for an auth gate
+  // (the moment a caller wraps it in a try/catch expecting only `boolean`,
+  // a misconfigured secret becomes fail-open in whatever that catch does).
+  if (!secret || !payloadB64 || !sigB64) return false;
 
   // Signature FIRST. A scheme that parses the payload (or checks `exp`)
   // before verifying the signature trusts attacker-controlled bytes before
@@ -161,7 +191,17 @@ export async function verifyToken(secret: string, token: string, now: number): P
   try {
     const parsed: unknown = JSON.parse(atob(payloadB64));
     const exp = (parsed as { exp?: unknown }).exp;
-    return typeof exp === 'number' && exp > now;
+    // Number.isFinite, not just typeof: a raw payload of `{"exp":1e400}` is
+    // valid JSON syntax (a number literal with a huge exponent) that
+    // overflows to `Infinity` on parse -- `typeof Infinity === 'number'`
+    // and `Infinity > now` is always true, so without this check such a
+    // payload would never expire. Only server-mintable in practice --
+    // `signToken` builds its payload with `JSON.stringify`, which turns a
+    // non-finite `exp` into `null` long before signing, so this can't
+    // happen through the one public token-minting path today -- but
+    // `verifyToken` shouldn't depend on every future signer getting that
+    // right. Defence in depth, not a live exploit.
+    return typeof exp === 'number' && Number.isFinite(exp) && exp > now;
   } catch {
     return false;
   }

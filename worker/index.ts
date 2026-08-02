@@ -65,6 +65,19 @@ async function handleLogin(request: Request, env: Env): Promise<Response> {
   }
 
   await clearLoginFailures(env.KV, ip);
+
+  // Checked here, not left for signToken to discover: `crypto.subtle`
+  // rejects a zero-length HMAC key with an unhandled throw rather than a
+  // clean failure (see worker/auth.ts's verifyToken for the same issue on
+  // the read side). Without this, an operator who sets ADMIN_PASSWORD_HASH
+  // but not TOKEN_SECRET yet -- entirely possible mid-setup, see
+  // docs/cloudflare-cutover.md's Step 10 -- would type the correct
+  // password and get a Cloudflare error page instead of the clean failure
+  // the runbook promises.
+  if (!env.TOKEN_SECRET) {
+    return json(500, { message: 'Login is not configured.' });
+  }
+
   const expiresAt = Math.floor(Date.now() / 1000) + SESSION_SECONDS;
   const token = await signToken(env.TOKEN_SECRET, expiresAt);
   return new Response(null, {

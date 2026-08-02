@@ -105,8 +105,36 @@ describe('worker entry point', () => {
     });
 
     it('a missing password gets 400, not 401 -- and never touches the rate limiter as a guess', async () => {
-      const response = await worker.fetch(loginRequest({}), env);
-      expect(response.status).toBe(400);
+      for (let i = 0; i < 5; i++) {
+        const response = await worker.fetch(loginRequest({}), env);
+        expect(response.status).toBe(400);
+      }
+      // 5 malformed bodies did not spend the rate-limit budget: the correct
+      // password still succeeds immediately after, rather than 429ing.
+      const success = await worker.fetch(loginRequest({ password: PASSWORD }), env);
+      expect(success.status).toBe(204);
+    });
+
+    // Important fix from the security review: an unset TOKEN_SECRET used to
+    // make signToken (via crypto.subtle.importKey on a zero-length key)
+    // throw an unhandled DataError instead of failing closed -- so a
+    // correct password, mid-setup before TOKEN_SECRET was set, got the
+    // owner a raw Cloudflare error page instead of the clean failure the
+    // runbook promises. Covers both the empty-string and fully-absent
+    // shapes an unset Worker secret can take.
+    it('a correct password with TOKEN_SECRET unset fails closed with a clean 500, not a throw', async () => {
+      const emptySecretEnv = { ...env, TOKEN_SECRET: '' };
+      const emptyResponse = await worker.fetch(loginRequest({ password: PASSWORD }), emptySecretEnv);
+      expect(emptyResponse.status).toBe(500);
+      expect(emptyResponse.headers.get('Set-Cookie')).toBeNull();
+
+      const undefinedSecretEnv = { ...env, TOKEN_SECRET: undefined } as unknown as typeof env;
+      const undefinedResponse = await worker.fetch(
+        loginRequest({ password: PASSWORD }),
+        undefinedSecretEnv,
+      );
+      expect(undefinedResponse.status).toBe(500);
+      expect(undefinedResponse.headers.get('Set-Cookie')).toBeNull();
     });
 
     it('a non-JSON body gets 400 rather than a 500', async () => {

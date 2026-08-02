@@ -10,6 +10,28 @@ import { hashPassword, verifyPassword, signToken, verifyToken, parseCookie } fro
 
 const SECRET = 'test-secret-not-a-real-one';
 
+// Mirrors auth.ts's own private `hmac` helper exactly (not imported -- it
+// isn't exported, deliberately: nothing outside auth.ts should be signing
+// raw payloads). Needed only to construct a token whose payload
+// verifyToken could never receive through the real signToken (e.g. a
+// non-finite `exp`, which JSON.stringify sanitises to `null` before
+// signToken ever signs it) so the defence-in-depth check on the parsed
+// side can be tested at all.
+async function hmacForTest(secret: string, data: string): Promise<string> {
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  );
+  const signature = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(data));
+  const bytes = new Uint8Array(signature);
+  let binary = '';
+  for (const b of bytes) binary += String.fromCharCode(b);
+  return btoa(binary);
+}
+
 describe('signToken / verifyToken', () => {
   it('accepts a token it just signed', async () => {
     expect(await verifyToken(SECRET, await signToken(SECRET, 2_000_000), 1_000_000)).toBe(true);
@@ -53,6 +75,41 @@ describe('signToken / verifyToken', () => {
 
   it('rejects garbage that merely contains a dot', async () => {
     expect(await verifyToken(SECRET, 'not-base64.also-not-base64', 1)).toBe(false);
+  });
+
+  // Important fix from the security review: crypto.subtle.importKey throws
+  // an unhandled DataError on a zero-length raw HMAC key, so an unset or
+  // empty TOKEN_SECRET used to make verifyToken throw instead of returning
+  // false -- the wrong shape for an auth gate. Proven by both an empty
+  // secret and (via the cast) an entirely absent one.
+  it('returns false rather than throwing when the secret is empty or missing', async () => {
+    const token = await signToken(SECRET, 2_000_000);
+    await expect(verifyToken('', token, 1_000_000)).resolves.toBe(false);
+    await expect(
+      verifyToken(undefined as unknown as string, token, 1_000_000),
+    ).resolves.toBe(false);
+  });
+
+  // Minor 3: token.split('.') destructures only the first two elements and
+  // silently ignores the rest, so a trailing extra segment used to verify
+  // identically to the real token.
+  it('rejects a token with a trailing extra segment', async () => {
+    const token = await signToken(SECRET, 2_000_000);
+    expect(await verifyToken(SECRET, `${token}.`, 1_000_000)).toBe(false);
+    expect(await verifyToken(SECRET, `${token}.evil`, 1_000_000)).toBe(false);
+  });
+
+  // Minor 4: `{"exp":1e400}` is valid JSON syntax (a number literal with a
+  // huge exponent) that overflows to Infinity on parse. Not reachable
+  // through the real signToken (JSON.stringify turns a non-finite exp into
+  // null before signing), so this constructs a validly-signed token by
+  // hand to test verifyToken's defence in depth directly, independent of
+  // whether any current signer could produce it.
+  it('rejects a payload whose exp overflows to Infinity', async () => {
+    const payloadB64 = btoa('{"exp":1e400}');
+    const sigB64 = await hmacForTest(SECRET, payloadB64);
+    const forged = `${payloadB64}.${sigB64}`;
+    expect(await verifyToken(SECRET, forged, 1)).toBe(false);
   });
 });
 
