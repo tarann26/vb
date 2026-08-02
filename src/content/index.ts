@@ -80,19 +80,22 @@ export const drinks: Drink[] = drinksRaw.map((raw) => {
   return { ...raw, category };
 });
 
+// The single runtime source of truth for the SectionId union -- TS erases
+// the type at runtime, so isSectionId/assertSections/narrowSectionId below
+// all check membership and completeness against this array rather than each
+// re-deriving their own copy of the seven literals. When Plan 7 extends
+// SectionId, this is the one place (plus the type union itself) that needs
+// the new member added; assertSections's completeness check then enforces
+// it automatically instead of silently accepting an incomplete list.
+const SECTION_IDS: readonly SectionId[] = [
+  'hero', 'ourStory', 'atmosphere', 'food', 'drinks', 'press', 'visit',
+];
+
 // Shared by assertSections (validating sections.json's `id`) and assertCopy
 // (validating copy.json's `nav.links[].section`) -- both need to know
 // whether an arbitrary value is one of the seven real SectionIds.
 function isSectionId(value: unknown): value is SectionId {
-  return (
-    value === 'hero' ||
-    value === 'ourStory' ||
-    value === 'atmosphere' ||
-    value === 'food' ||
-    value === 'drinks' ||
-    value === 'press' ||
-    value === 'visit'
-  );
+  return typeof value === 'string' && (SECTION_IDS as readonly string[]).includes(value);
 }
 
 // sections.json's `id` field is a plain string in the JSON module's inferred
@@ -102,10 +105,14 @@ function isSectionId(value: unknown): value is SectionId {
 // dispatch map would never be reached for it) or, worse, colliding with a
 // real one. This guard narrows and validates via runtime checks instead.
 //
-// `hero` gets two extra rules on top of "is this array well-formed": it must
-// be present, and it must be enabled. A homepage with no hero is not a state
-// this plan supports, and the founder disabling it by a single accidental
-// toggle is worse than her being unable to.
+// Two rules apply on top of "is this array well-formed, with every id valid
+// and none repeated": every SectionId must appear exactly once (a dashboard
+// write that drops one silently deletes that section from the homepage --
+// this used to only be checked for `hero`, which meant a partial write
+// losing e.g. `visit` type-checked and passed the old guard), and `hero`
+// specifically must be enabled. A homepage with no hero is not a state this
+// plan supports, and the founder disabling it by a single accidental toggle
+// is worse than her being unable to.
 export function assertSections(raw: unknown): Section[] {
   if (!Array.isArray(raw)) {
     throw new Error('content/sections.json: expected an array of sections');
@@ -128,11 +135,12 @@ export function assertSections(raw: unknown): Section[] {
     }
     return { id, enabled };
   });
-  const hero = result.find((section) => section.id === 'hero');
-  if (!hero) {
-    throw new Error('content/sections.json: missing required section "hero"');
+  const missing = SECTION_IDS.filter((id) => !seen.has(id));
+  if (missing.length > 0) {
+    throw new Error(`content/sections.json: missing required section(s) "${missing.join('", "')}"`);
   }
-  if (!hero.enabled) {
+  const hero = result.find((section) => section.id === 'hero');
+  if (!hero?.enabled) {
     throw new Error('content/sections.json: "hero" cannot be disabled');
   }
   return result;
@@ -189,15 +197,31 @@ export function assertCopy(raw: unknown): Copy {
 
 // copyRaw's `nav.links[].section` is typed `string` by the JSON module (see
 // assertCopy's comment above), which does not structurally satisfy `Copy`'s
-// `SectionId`-typed field. This cast is what narrows it for that check; it
-// is not a blind `as` because `assertCopy`, called immediately below with
-// this exact value, validates every one of these via `isSectionId` and
-// throws before the cast value is ever used.
+// `SectionId`-typed field. A cast (`as SectionId`) would "fix" the type
+// error but accepts `string | undefined` and `string | number` just as
+// happily as a real SectionId -- a link that loses its `section` key
+// entirely, or has it typo'd to a number, would satisfy the cast and only
+// fail later at vitest time, with `tsc -b`/`vite build` both green and a bad
+// copy.json shipping as a silently broken nav. `narrowSectionId`'s parameter
+// is typed `string` (not `unknown`), so passing it a value that isn't
+// definitely a string -- e.g. `link.section` when one array element is
+// missing that key, which widens the field to `string | undefined` across
+// the whole array -- is itself a compile error, not just a runtime one.
+function narrowSectionId(section: string, path: string): SectionId {
+  if (!isSectionId(section)) {
+    throw new Error(`content/copy.json: invalid "section" "${section}" at ${path}`);
+  }
+  return section;
+}
+
 const copyWithNarrowedNavSections = {
   ...copyRaw,
   nav: {
     ...copyRaw.nav,
-    links: copyRaw.nav.links.map((link) => ({ ...link, section: link.section as SectionId })),
+    links: copyRaw.nav.links.map((link, i) => ({
+      ...link,
+      section: narrowSectionId(link.section, `nav.links[${i}]`),
+    })),
   },
 };
 
