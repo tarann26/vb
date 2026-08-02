@@ -77,26 +77,50 @@ independently — the owner would see roughly double the real traffic with no er
 obvious tell that anything was wrong.
 
 - **Dashboard toggle for this Pages project (use this one).** In the Cloudflare dashboard, go to
-  Workers & Pages → this project → **Analytics** → **Web Analytics** → **Enable**. That's the
-  whole step. Cloudflare then injects its own beacon into every response it serves for this
-  project — the `*.pages.dev` preview, the eventual custom domain, and every deploy after this
-  one — automatically, with no token to copy anywhere and no file in this repository to edit.
-  This repository deliberately ships with **no** beacon `<script>` in `index.html` (see the
-  comment there) and a test (`src/test/analytics.test.ts`) that fails if one is added back by
-  hand, specifically so nobody re-introduces the second-beacon failure mode by "helpfully"
-  wiring up analytics in code that Cloudflare is already handling.
+  Workers & Pages → this project → **Metrics** → **Enable** under Web Analytics. (Cloudflare's own
+  docs currently label this tab **Metrics**, not Analytics — see the note below the next bullet if
+  what you see doesn't match.) That's the whole dashboard step, but the dashboard step alone is
+  **not enough to finish this task** — keep reading past the next bullet before moving on.
+  Cloudflare adds its own beacon script to this project's pages **on the next deployment**, not
+  automatically to every response starting immediately — the `*.pages.dev` preview, the eventual
+  custom domain, and every deploy after that one, but only once a deployment has actually
+  happened after you flip the toggle. This repository deliberately ships with **no** beacon
+  `<script>` in `index.html` (see the comment there) and a test (`src/test/analytics.test.ts`)
+  that fails if one is added back by hand, specifically so nobody re-introduces the second-beacon
+  failure mode by "helpfully" wiring up analytics in code that Cloudflare is already handling.
 - **Manual snippet, for a site not on Cloudflare at all (do not use this one here).** Cloudflare
   also documents copying a token into a hand-placed `<script>` tag, for sites that aren't
   Cloudflare Pages or Workers projects. That path does not apply to this project — do not add
   that script to `index.html`. If the dashboard ever shows you a manual snippet instead of a
   one-click **Enable** for this Pages project, stop and double-check you're looking at the Pages
-  project's own Analytics tab rather than the generic "Add a site" flow.
+  project's own Metrics tab rather than the generic "Add a site" flow. One caveat on that tab name:
+  Cloudflare's dashboard has reportedly moved this control before (a "manage" one-click entry
+  people expected has been reported missing in Cloudflare's own docs-repo issue tracker), so treat
+  "Metrics" as what the docs say today, not as a guarantee of what you'll see — if neither
+  Metrics nor Analytics is there, look for whatever tab shows this project's traffic and Web
+  Analytics status.
 
-Once enabled, this commit-free dashboard change takes effect on the next request Cloudflare
-serves for the project — there is nothing to commit or redeploy for this step. Still, before
-moving on to Step 5 (DNS), **re-run both Step 3 checks against the preview URL** — a hard refresh
-on `/blogs` still returns the page, and the build log still reports 48 images. That costs nothing
-and Step 3 said to check for real rather than assume.
+Once enabled, that dashboard toggle is **not, on its own, enough**. Cloudflare's documentation is
+explicit that the beacon script is added on the *next deployment*, not the next request served —
+and nothing later in this checklist causes a deployment on its own: Step 5 is DNS, Step 6 is
+verification, Step 7 deletes the Vercel project. Stop here and this cutover finishes with Web
+Analytics "enabled" in the dashboard and **no beacon ever shipped**, with nothing anywhere telling
+you.
+
+- **Trigger a redeploy now, before doing anything else.** In the Cloudflare dashboard: this
+  project → **Deployments** → find the current production deployment → **Retry deployment**. (Any
+  push to the branch this project builds from also works, but Retry deployment is faster and needs
+  no code change.) This step is commit-free but it is not redeploy-free — do not skip it because
+  the toggle itself didn't ask you to commit anything.
+- **Verify the beacon actually shipped, on the preview URL, before moving on.** View source on the
+  preview URL (the rendered page isn't enough — the beacon is injected into the HTML Cloudflare
+  serves, not visible from a glance at the page) and confirm a `beacon.min.js` script tag is
+  present, loaded from `static.cloudflareinsights.com`. If it's missing, either the toggle didn't
+  take or the redeploy above didn't happen — do not proceed until it's there.
+
+Then, still before moving on to Step 5 (DNS), **re-run both Step 3 checks against the preview
+URL** — a hard refresh on `/blogs` still returns the page, and the build log still reports 48
+images. That costs nothing and Step 3 said to check for real rather than assume.
 
 **What this analytics setup gives you, and what it doesn't.** Free Cloudflare Web Analytics
 reports page views, referrers, device/browser split, and Web Vitals, broken down per page. **It
@@ -120,6 +144,11 @@ Once DNS has propagated, check the live domain itself (not just the preview URL)
 - `/blogs` deep-links correctly (hard refresh, not just in-app navigation).
 - Both menu PDFs download from the "Food Menu" and "Drinks Menu" buttons.
 - The WhatsApp reservation button opens WhatsApp with the pre-filled message.
+- Web Analytics (Cloudflare dashboard → this project → Metrics → Web Analytics) shows **at least
+  one page view** — the visit you just made checking the items above should be enough to register
+  one. If it's still zero, the beacon that Step 4 verified on the preview URL didn't make it onto
+  the live domain. Do not close out this checklist, and do not proceed to Step 7, until it does —
+  Step 7 deletes the rollback, and there will be no other signal that analytics is broken.
 
 ## 7. Remove the Vercel project
 
