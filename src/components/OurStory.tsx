@@ -1,15 +1,18 @@
 import React, { useEffect, useState } from 'react';
 import { story, galleries } from '../content';
+import { usePrefersReducedMotion } from '../hooks/usePrefersReducedMotion';
 
 const OurStory: React.FC = () => {
   const [currentIndex, setCurrentIndex] = useState(0);
+  const reduceMotion = usePrefersReducedMotion();
 
   useEffect(() => {
+    if (reduceMotion) return;
     const interval = setInterval(() => {
       setCurrentIndex((prev) => (prev + 1) % galleries.ourStory.length);
     }, 3200); // 3.2 seconds
     return () => clearInterval(interval);
-  }, []);
+  }, [reduceMotion]);
 
   return (
     <section id = "our-story" className="py-20 bg-[#F9F9F9]">

@@ -46,35 +46,40 @@ const Drinks: React.FC = () => {
 
               {/* Drinks with photography: horizontal scroll of cards */}
               {items.some(hasImage) && (
-                <div className="overflow-x-auto scrollbar-hide mb-8">
-                  <div className="flex space-x-8 pb-4" style={{ width: 'max-content' }}>
-                    {items
-                      .filter(hasImage)
-                      .map((drink) => (
-                        <div
-                          key={drink.id}
-                          className="flex-shrink-0 w-64 bg-white rounded-3xl shadow-xl hover:shadow-2xl transform hover:scale-105 transition-all duration-300 overflow-hidden group cursor-pointer"
-                        >
-                          <div className="h-80 relative">
-                            <img
-                              src={drink.image}
-                              alt={drink.name}
-                              className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                              loading="lazy"
-                            />
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent"></div>
+                <div className="relative mb-8">
+                  <div className="overflow-x-auto scrollbar-hide">
+                    <div className="flex space-x-8 pb-4 px-1 py-2" style={{ width: 'max-content' }}>
+                      {items
+                        .filter(hasImage)
+                        .map((drink) => (
+                          <div
+                            key={drink.id}
+                            className="flex-shrink-0 w-64 bg-white rounded-3xl shadow-xl hover:shadow-2xl transition-all duration-300 overflow-hidden group cursor-pointer"
+                          >
+                            <div className="transform hover:scale-105 transition-all duration-300">
+                              <div className="h-80 relative">
+                                <img
+                                  src={drink.image}
+                                  alt={drink.name}
+                                  className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                                  loading="lazy"
+                                />
+                                <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent"></div>
+                              </div>
+                              <div className="p-6 text-center">
+                                <h4 className="font-['Parisienne'] text-2xl text-[#6B8B59] mb-2">
+                                  {drink.name}
+                                </h4>
+                                <p className="font-['Montserrat'] text-sm uppercase tracking-wider text-gray-600">
+                                  {drink.description}
+                                </p>
+                              </div>
+                            </div>
                           </div>
-                          <div className="p-6 text-center">
-                            <h4 className="font-['Parisienne'] text-2xl text-[#6B8B59] mb-2">
-                              {drink.name}
-                            </h4>
-                            <p className="font-['Montserrat'] text-sm uppercase tracking-wider text-gray-600">
-                              {drink.description}
-                            </p>
-                          </div>
-                        </div>
-                      ))}
+                        ))}
+                    </div>
                   </div>
+                  <div className="pointer-events-none absolute inset-y-0 right-0 w-16 bg-gradient-to-l from-[#FFFDF8] to-transparent" />
                 </div>
               )}
 
@@ -111,25 +116,6 @@ const Drinks: React.FC = () => {
           ))}
         </div>
       </div>
-
-      <style>{`
-        .scrollbar-hide {
-          -ms-overflow-style: none;
-          scrollbar-width: none;
-        }
-        .scrollbar-hide::-webkit-scrollbar {
-          display: none;
-        }
-        .animation-delay-300 {
-          animation-delay: 300ms;
-        }
-        .animation-delay-700 {
-          animation-delay: 700ms;
-        }
-        .animation-delay-1000 {
-          animation-delay: 1000ms;
-        }
-      `}</style>
     </section>
   );
 };
