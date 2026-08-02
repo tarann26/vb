@@ -1,3 +1,8 @@
+// Parked: this component is not rendered anywhere in the app. The homepage
+// press section is BlogTeaser, and the full list is BlogsPage; both read
+// their headings from copy.press/copy.blogsPage. This file still hardcodes
+// its heading/intro and is kept on disk only per the owner's never-delete
+// constraint (see no-dead-backend.test.ts's protectedComponents list).
 
 import React from 'react';
 import { ExternalLink, Calendar } from 'lucide-react';
