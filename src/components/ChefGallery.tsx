@@ -10,7 +10,7 @@ const ChefGallery: React.FC = () => {
     { 
       name: "Chef Kamalika Anand", 
       role: "Executive Chef & Founder",
-      image: "/team/alice.jpg"
+      image: "/team/alice.webp"
     },
     
   ];

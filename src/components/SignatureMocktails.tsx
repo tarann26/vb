@@ -11,27 +11,27 @@ const SignatureMocktails: React.FC = () => {
     {
       name: "Bicerin",
       flavor: "Espresso, chocolate & cream",
-      image: "/mocktails/bicerin.jpg"
+      image: "/mocktails/bicerin.webp"
     },
     {
       name: "Espresso Tonic",
       flavor: "Espresso, blood orange & ginger ale",
-      image: "/mocktails/blood orange espresso tonic.JPG"
+      image: "/mocktails/blood orange espresso tonic.webp"
     },
     {
       name: "Piccante",
       flavor: "Pineapple, birds eye chili & salt",
-      image: "/mocktails/piccante.JPG"
+      image: "/mocktails/piccante.webp"
     },
     {
       name: "Signor Bianca",
       flavor: "Dragonfruit, coconut water & honey",
-      image: "/mocktails/signor bianca.png"
+      image: "/mocktails/signor bianca.webp"
     },
     {
       name: "Viola and Sambuco",
       flavor: "Blueberries, basil leaves, lavender & ginger ale and Elderflower, cucumber & black tea",
-      image: "/mocktails/viola and sambuco.png"
+      image: "/mocktails/viola and sambuco.webp"
     }
   ];
 
@@ -87,7 +87,7 @@ const SignatureMocktails: React.FC = () => {
 
         {/* Download Full Menu Button */}
         <div className="text-center">
-        <a href="/Menu%20-%20Expanded.pdf" download>
+        <a href="/menus/food-menu.pdf" download>
             <button className="inline-flex items-center space-x-2 bg-[#6B8B59] hover:bg-[#5a7349] text-white font-['Montserrat'] font-semibold px-8 py-4 rounded-lg transform hover:scale-105 hover:shadow-xl transition-all duration-300 uppercase tracking-wide">
               <Download className="w-5 h-5" />
               <span>Open Full Menu</span>
