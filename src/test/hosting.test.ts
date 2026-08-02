@@ -8,17 +8,35 @@ describe('cloudflare hosting config', () => {
     expect(redirects).toMatch(/^\/\*\s+\/index\.html\s+200$/m);
   });
 
+  // Scoped to the /assets/* block specifically, not matched against the
+  // whole file. A whole-file regex passes as long as `max-age=31536000` and
+  // `immutable` appear *somewhere*, even if a later edit attaches them to
+  // the wrong rule -- e.g. swapping this policy onto the unhashed-photo
+  // rules below and vice versa. That exact swap was built and run against
+  // the old whole-file version of these two tests, and both passed.
   it('caches hashed bundles immutably', () => {
     const headers = readFileSync('public/_headers', 'utf8');
-    expect(headers).toContain('/assets/*');
-    expect(headers).toMatch(/max-age=31536000/);
-    expect(headers).toMatch(/immutable/);
+    const blocks = headers.trim().split(/\n\s*\n/);
+    const assetsBlock = blocks.find((b) => b.startsWith('/assets/'));
+    expect(assetsBlock).toBeDefined();
+    expect(assetsBlock).toMatch(/max-age=31536000/);
+    expect(assetsBlock).toMatch(/immutable/);
   });
 
+  // Scoped to each unhashed-asset block, for the same reason: a whole-file
+  // match for `max-age=604800` and `must-revalidate` is satisfied by any
+  // block carrying those strings, including the /assets/* block if a future
+  // edit accidentally duplicates them there instead of removing them from
+  // it.
   it('caches unhashed public assets for a week, revalidating', () => {
     const headers = readFileSync('public/_headers', 'utf8');
-    expect(headers).toMatch(/max-age=604800/);
-    expect(headers).toMatch(/must-revalidate/);
+    const blocks = headers.trim().split(/\n\s*\n/);
+    const unhashed = blocks.filter((b) => !b.startsWith('/assets/'));
+    expect(unhashed.length).toBeGreaterThan(0);
+    unhashed.forEach((block) => {
+      expect(block).toMatch(/max-age=604800/);
+      expect(block).toMatch(/must-revalidate/);
+    });
   });
 
   it('never marks unhashed assets immutable', () => {
