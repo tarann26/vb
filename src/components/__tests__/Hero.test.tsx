@@ -22,6 +22,21 @@ describe('Hero', () => {
     expect(h1s[0].closest('.rounded-full')).toBeNull();
   });
 
+  // The strapline used to be hardcoded here while site.strapline was pinned
+  // to index.html, so an editor who changed site.json got a red test naming
+  // index.html, fixed that one file, went green -- and the sentence a
+  // visitor actually sees stayed the old one. This asserts the rendered
+  // sentence is the content-layer sentence, with the non-breaking spaces
+  // that keep it from wrapping mid-phrase.
+  it('renders site.strapline, non-breaking, rather than a hardcoded copy', () => {
+    const { container } = render(<MemoryRouter><Hero /></MemoryRouter>);
+    const text = Array.from(container.querySelectorAll('p')).map((p) => p.textContent);
+    expect(text).toContain(site.strapline.replace(/ /g, '\u00A0'));
+    // The plain-space form must not appear: that would mean the nbsp
+    // substitution was dropped and the phrase can now wrap.
+    expect(text).not.toContain(site.strapline);
+  });
+
   it('never renders an image with an empty src', () => {
     const { container } = render(<MemoryRouter><Hero /></MemoryRouter>);
     const images = Array.from(container.querySelectorAll('img'));

@@ -19,7 +19,16 @@ export interface SiteContent {
   whatsapp: { number: string; prefilledMessage: string };
   socials: { instagram: string; linkedin: string | null };
   hours: Hours[];
-  seo: { title: string; description: string; keywords: string; ogImage: string; url: string };
+  seo: {
+    title: string;
+    description: string;
+    keywords: string;
+    ogImage: string;
+    url: string;
+    // Open Graph locale, e.g. "en_IN" -- underscore-separated language and
+    // region, not the hyphenated BCP 47 form used by <html lang>.
+    locale: string;
+  };
   copyrightYear: number;
 }
 

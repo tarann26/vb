@@ -8,21 +8,30 @@
     <meta name="keywords" content="Italian restaurant Delhi, handmade pasta, Via Bianca, Greater Kailash dining, authentic Italian food, Chef Kamalika Anand" />
     <meta name="author" content="Via Bianca Pastificio & Ristorante" />
     <title>Via Bianca - Pastificio & Ristorante | Authentic Italian Dining in Delhi</title>
-    <link rel="canonical" href="https://viabiancadelhi.com" />
+
+    <!--
+      No <link rel="canonical"> here, on purpose. This one file is served for
+      every route by vercel.json's SPA rewrite, so a canonical here is a
+      canonical on /blogs too -- telling Google that /blogs is a duplicate of
+      the homepage and should not be indexed, while public/sitemap.xml asks
+      for exactly the opposite. The homepage's self-canonical is rendered by
+      src/components/SeoHead.tsx, which is mounted only on /. Every other
+      route is left with no canonical, which is the safe default.
+    -->
 
     <!-- Open Graph / Facebook -->
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Via Bianca - Pastificio & Ristorante" />
     <meta property="og:locale" content="en_IN" />
     <meta property="og:title" content="Via Bianca - Pastificio & Ristorante" />
-    <meta property="og:description" content="Sip Italiano, Taste the Soul of Puglia" />
+    <meta property="og:description" content="Via Bianca Pastificio & Ristorante - Authentic Italian dining in Greater Kailash, Delhi. Hand-crafted pastas, wood-fired classics, and a full bar by Chef Kamalika Anand." />
     <meta property="og:url" content="https://viabiancadelhi.com" />
     <meta property="og:image" content="https://viabiancadelhi.com/og-image.jpg" />
 
     <!-- Twitter -->
     <meta property="twitter:card" content="summary_large_image" />
     <meta property="twitter:title" content="Via Bianca - Pastificio & Ristorante" />
-    <meta property="twitter:description" content="Sip Italiano, Taste the Soul of Puglia" />
+    <meta property="twitter:description" content="Via Bianca Pastificio & Ristorante - Authentic Italian dining in Greater Kailash, Delhi. Hand-crafted pastas, wood-fired classics, and a full bar by Chef Kamalika Anand." />
     <meta property="twitter:image" content="https://viabiancadelhi.com/og-image.jpg" />
 
     <!-- Preload critical fonts -->

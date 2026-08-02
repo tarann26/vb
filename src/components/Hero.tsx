@@ -51,8 +51,12 @@ const Hero: React.FC = () => {
        <p className="font-['Montserrat'] text-lg md:text-xl uppercase tracking-wide text-[#6B8B59] mb-6">
          Pastificio & Ristorante
        </p>
+       {/* site.strapline, with every space swapped for a non-breaking one so
+           the phrase never wraps mid-sentence -- the only reason it isn't
+           rendered as-is. Editing the sentence in src/content/site.json is
+           now enough to change what a visitor actually reads here. */}
        <p className="font-['Parisienne'] text-2xl md:text-3xl text-[#222] mb-8">
-         Sip&nbsp;Italiano,&nbsp;Taste&nbsp;the&nbsp;Soul&nbsp;of&nbsp;Puglia
+         {site.strapline.replace(/ /g, '\u00A0')}
        </p>
 
 

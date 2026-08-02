@@ -26,7 +26,8 @@
     "description": "Via Bianca Pastificio & Ristorante - Authentic Italian dining in Greater Kailash, Delhi. Hand-crafted pastas, wood-fired classics, and a full bar by Chef Kamalika Anand.",
     "keywords": "Italian restaurant Delhi, handmade pasta, Via Bianca, Greater Kailash dining, authentic Italian food, Chef Kamalika Anand",
     "ogImage": "/og-image.jpg",
-    "url": "https://viabiancadelhi.com"
+    "url": "https://viabiancadelhi.com",
+    "locale": "en_IN"
   },
   "copyrightYear": 2026
 }

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, statSync } from 'node:fs';
 import { site } from '../content';
+import { publicFiles } from './publicFiles';
 
 // index.html is a static file with no server rendering, so site.seo.title and
 // site.seo.description are necessarily duplicated there. This test pins the
@@ -30,29 +31,81 @@ describe('index.html head matches site.seo', () => {
     expect(match).not.toBeNull();
     expect(match?.[1]).toBe(site.seo.keywords);
   });
+
+  it('meta author matches the restaurant name and tagline', () => {
+    const match = html.match(/<meta\s+name="author"\s+content="([^"]*)"/);
+    expect(match).not.toBeNull();
+    expect(match?.[1]).toBe(`${site.name} ${site.tagline}`);
+  });
 });
 
 const tag = (html: string, attr: string, value: string) =>
   html.match(new RegExp(`<meta\\s+${attr}="${value}"\\s+content="([^"]*)"`))?.[1];
 
+// Every og/twitter string that restates a content-layer value gets a pin --
+// including both image tags. Pinning og:image alone would let a change to
+// site.seo.ogImage fail on one line, get "fixed" on that one line, go green,
+// and ship a Twitter card pointing at a URL that 404s.
 it('pins open graph and twitter strings to the content layer', () => {
   const html = readFileSync('index.html', 'utf8');
+  expect(tag(html, 'property', 'og:site_name')).toBe(`${site.name} - ${site.tagline}`);
+  expect(tag(html, 'property', 'og:locale')).toBe(site.seo.locale);
   expect(tag(html, 'property', 'og:title')).toBe(`${site.name} - ${site.tagline}`);
-  expect(tag(html, 'property', 'og:description')).toBe(site.strapline);
+  expect(tag(html, 'property', 'og:description')).toBe(site.seo.description);
   expect(tag(html, 'property', 'og:url')).toBe(site.seo.url);
   expect(tag(html, 'property', 'og:image')).toBe(`${site.seo.url}${site.seo.ogImage}`);
   expect(tag(html, 'property', 'twitter:title')).toBe(`${site.name} - ${site.tagline}`);
-  expect(tag(html, 'property', 'twitter:description')).toBe(site.strapline);
+  expect(tag(html, 'property', 'twitter:description')).toBe(site.seo.description);
+  expect(tag(html, 'property', 'twitter:image')).toBe(`${site.seo.url}${site.seo.ogImage}`);
 });
 
-it('declares a canonical url', () => {
+// The share preview's whole job is to say where this restaurant is and what
+// it serves. site.strapline ("Sip Italiano, Taste the Soul of Puglia") is 38
+// characters with no locality and no cuisine in it; for a neighbourhood
+// restaurant shared mainly over WhatsApp, the locality is the single most
+// valuable string in the preview, so the description tags take
+// site.seo.description instead.
+it('gives the share preview a description that names the neighbourhood', () => {
   const html = readFileSync('index.html', 'utf8');
-  expect(html).toContain(`<link rel="canonical" href="${site.seo.url}" />`);
+  const description = tag(html, 'property', 'og:description');
+  // Spelled out rather than read from site.address, whose `locality` is the
+  // city ("New Delhi") and whose `street` embeds the neighbourhood in a
+  // postal address. It is the neighbourhood a Delhi diner searches and
+  // recognises, so this asserts on it directly.
+  expect(description).toContain('Greater Kailash');
+  expect(description).not.toBe(site.strapline);
 });
 
-it('points the favicon at a file that exists', () => {
+// vercel.json rewrites every route to this one file, so any canonical
+// declared here is also served on /blogs -- which public/sitemap.xml asks
+// Google to index. The homepage's self-canonical lives in SeoHead.tsx (see
+// SeoHead.test.tsx); this asserts the static copy has not come back.
+it('declares no canonical url, which every route would otherwise inherit', () => {
+  // Comments stripped first: index.html explains this absence in a comment
+  // that necessarily contains the very markup being searched for.
+  const markup = readFileSync('index.html', 'utf8').replace(/<!--[\s\S]*?-->/g, '');
+  expect(markup).not.toMatch(/rel=["']?canonical/);
+});
+
+// existsSync would answer this one on macOS's case-insensitive filesystem
+// and still 404 on Vercel's case-sensitive one, so the check is against a
+// readdir-built listing of public/ instead.
+it('points the favicon at a file that exists, with exact case', () => {
   const html = readFileSync('index.html', 'utf8');
   const href = html.match(/<link rel="icon"[^>]*href="([^"]*)"/)?.[1];
   expect(href).toBeTruthy();
-  expect(existsSync(`public${href}`)).toBe(true);
+  expect(publicFiles.has(href!)).toBe(true);
+});
+
+describe('share card', () => {
+  it('exists in public/ with exact case', () => {
+    expect(publicFiles.has(site.seo.ogImage)).toBe(true);
+  });
+
+  // Crawlers commonly ignore share images past this size, which would leave
+  // a shared link with no preview picture at all.
+  it('is small enough for crawlers to fetch', () => {
+    const { size } = statSync(`public${site.seo.ogImage}`);
+    expect(size).toBeLessThan(300 * 1024);
+  });
 });
