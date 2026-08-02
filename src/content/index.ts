@@ -116,6 +116,13 @@ export function assertCopy(raw: unknown): Copy {
   return raw as Copy;
 }
 
-export const copy: Copy = assertCopy(copyRaw);
+// `satisfies Copy` restores the compile-time structural check that
+// `assertCopy`'s `unknown` parameter (needed so the test fixtures in
+// copy.test.ts, which are deliberately not shaped like Copy, can still be
+// passed to it) otherwise erases. Without it, a copy.json missing an entire
+// section still type-checks -- `assertNonBlank` only walks keys that are
+// present, so a missing section is invisible to the runtime guard too, and
+// the failure mode becomes a browser-time crash instead of a build failure.
+export const copy: Copy = assertCopy(copyRaw satisfies Copy);
 
 export * from './types';
