@@ -6,6 +6,7 @@ import pressRaw from './press.json';
 import storyRaw from './story.json';
 import menusRaw from './menus.json';
 import copyRaw from './copy.json';
+import sectionsRaw from './sections.json';
 import type {
   SiteContent,
   Galleries,
@@ -16,6 +17,8 @@ import type {
   MenuFile,
   Hours,
   Copy,
+  Section,
+  SectionId,
 } from './types';
 
 const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/; // 24-hour "HH:MM"
@@ -77,6 +80,66 @@ export const drinks: Drink[] = drinksRaw.map((raw) => {
   return { ...raw, category };
 });
 
+// Shared by assertSections (validating sections.json's `id`) and assertCopy
+// (validating copy.json's `nav.links[].section`) -- both need to know
+// whether an arbitrary value is one of the seven real SectionIds.
+function isSectionId(value: unknown): value is SectionId {
+  return (
+    value === 'hero' ||
+    value === 'ourStory' ||
+    value === 'atmosphere' ||
+    value === 'food' ||
+    value === 'drinks' ||
+    value === 'press' ||
+    value === 'visit'
+  );
+}
+
+// sections.json's `id` field is a plain string in the JSON module's inferred
+// type, wider than Section['id'] (SectionId) -- same widening problem as
+// drinks.category above. A blind `as Section[]` would silently accept a
+// typo'd id, permanently orphaning that section's component (App.tsx's
+// dispatch map would never be reached for it) or, worse, colliding with a
+// real one. This guard narrows and validates via runtime checks instead.
+//
+// `hero` gets two extra rules on top of "is this array well-formed": it must
+// be present, and it must be enabled. A homepage with no hero is not a state
+// this plan supports, and the founder disabling it by a single accidental
+// toggle is worse than her being unable to.
+export function assertSections(raw: unknown): Section[] {
+  if (!Array.isArray(raw)) {
+    throw new Error('content/sections.json: expected an array of sections');
+  }
+  const seen = new Set<SectionId>();
+  const result = raw.map((entry, i) => {
+    if (!entry || typeof entry !== 'object') {
+      throw new Error(`content/sections.json: entry [${i}] is not an object`);
+    }
+    const { id, enabled } = entry as { id?: unknown; enabled?: unknown };
+    if (!isSectionId(id)) {
+      throw new Error(`content/sections.json: invalid section id "${String(id)}" at [${i}]`);
+    }
+    if (seen.has(id)) {
+      throw new Error(`content/sections.json: duplicate section id "${id}"`);
+    }
+    seen.add(id);
+    if (typeof enabled !== 'boolean') {
+      throw new Error(`content/sections.json: "enabled" must be a boolean for section "${id}"`);
+    }
+    return { id, enabled };
+  });
+  const hero = result.find((section) => section.id === 'hero');
+  if (!hero) {
+    throw new Error('content/sections.json: missing required section "hero"');
+  }
+  if (!hero.enabled) {
+    throw new Error('content/sections.json: "hero" cannot be disabled');
+  }
+  return result;
+}
+
+export const sections: Section[] = assertSections(sectionsRaw);
+
 // Recurses through the raw copy.json shape checking every string leaf for
 // blank content, building a dotted/bracketed path (e.g. "footer.followLabel"
 // or "nav.links[0].label") for the error message.
@@ -98,23 +161,45 @@ function assertNonBlank(value: unknown, path: string): void {
   }
 }
 
-// Every field in Copy is already `string` (or an array of a string-only
-// record), so a plain type annotation on copyRaw type-checks fine without
-// this guard -- unlike drinks.category or hours.days, nothing here needs
-// runtime narrowing. What a type annotation cannot catch is a field left
-// blank, or the nav link list emptied out entirely (still a valid
-// `NavLink[]`, just one with no links to render). This guard rejects both,
-// naming the offending path so a bad edit to copy.json fails loudly at
-// import time instead of rendering invisible text or a menu with nothing in
-// it.
+// Every field in Copy is `string` (or an array of a string-only record)
+// except `nav.links[].section`, which is a SectionId -- narrower than the
+// plain `string` JSON gives it, the same widening problem as drinks.category
+// above. A plain type annotation can't narrow that one field, so a typo'd
+// section id there is checked here instead. What a type annotation also
+// can't catch is a field left blank, or the nav link list emptied out
+// entirely (still a valid `NavLink[]`, just one with no links to render).
+// This guard rejects all three, naming the offending path so a bad edit to
+// copy.json fails loudly at import time instead of rendering invisible
+// text, a menu with nothing in it, or a nav link that never highlights as
+// enabled/disabled.
 export function assertCopy(raw: unknown): Copy {
   const navLinks = (raw as { nav?: { links?: unknown[] } }).nav?.links;
   if (!Array.isArray(navLinks) || navLinks.length === 0) {
     throw new Error('content/copy.json: "nav.links" must not be empty');
   }
+  navLinks.forEach((link, i) => {
+    const section = (link as { section?: unknown }).section;
+    if (!isSectionId(section)) {
+      throw new Error(`content/copy.json: invalid "section" "${String(section)}" at nav.links[${i}]`);
+    }
+  });
   assertNonBlank(raw, '');
   return raw as Copy;
 }
+
+// copyRaw's `nav.links[].section` is typed `string` by the JSON module (see
+// assertCopy's comment above), which does not structurally satisfy `Copy`'s
+// `SectionId`-typed field. This cast is what narrows it for that check; it
+// is not a blind `as` because `assertCopy`, called immediately below with
+// this exact value, validates every one of these via `isSectionId` and
+// throws before the cast value is ever used.
+const copyWithNarrowedNavSections = {
+  ...copyRaw,
+  nav: {
+    ...copyRaw.nav,
+    links: copyRaw.nav.links.map((link) => ({ ...link, section: link.section as SectionId })),
+  },
+};
 
 // `satisfies Copy` restores the compile-time structural check that
 // `assertCopy`'s `unknown` parameter (needed so the test fixtures in
@@ -123,6 +208,6 @@ export function assertCopy(raw: unknown): Copy {
 // section still type-checks -- `assertNonBlank` only walks keys that are
 // present, so a missing section is invisible to the runtime guard too, and
 // the failure mode becomes a browser-time crash instead of a build failure.
-export const copy: Copy = assertCopy(copyRaw satisfies Copy);
+export const copy: Copy = assertCopy(copyWithNarrowedNavSections satisfies Copy);
 
 export * from './types';

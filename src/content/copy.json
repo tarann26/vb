@@ -2,11 +2,11 @@
   "nav": {
     "wordmark": "Via Bianca",
     "links": [
-      { "href": "#our-story", "label": "Our Story" },
-      { "href": "#gallery", "label": "Gallery" },
-      { "href": "#menu", "label": "Menu" },
-      { "href": "#blogs", "label": "Stories" },
-      { "href": "#visit", "label": "Visit Us" }
+      { "href": "#our-story", "label": "Our Story", "section": "ourStory" },
+      { "href": "#gallery", "label": "Gallery", "section": "atmosphere" },
+      { "href": "#menu", "label": "Menu", "section": "food" },
+      { "href": "#blogs", "label": "Stories", "section": "press" },
+      { "href": "#visit", "label": "Visit Us", "section": "visit" }
     ],
     "instagramLabel": "Follow Via Bianca on Instagram",
     "menuLabel": "Menu"

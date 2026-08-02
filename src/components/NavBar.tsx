@@ -1,11 +1,19 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Instagram, Menu, X } from 'lucide-react';
-import { site, copy } from '../content';
+import { site, copy, sections } from '../content';
 
 const Navbar: React.FC = () => {
   const [showNavbar, setShowNavbar] = useState(true);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const lastScrollY = useRef(0);
+
+  // Sections she has switched off disappear from the nav too, so a link
+  // never scrolls to nothing. hero/drinks have no nav link at all, which
+  // this falls out of naturally: they just never match a link's `section`.
+  const enabledSectionIds = new Set(
+    sections.filter((section) => section.enabled).map((section) => section.id),
+  );
+  const visibleLinks = copy.nav.links.filter((link) => enabledSectionIds.has(link.section));
 
   useEffect(() => {
     const handleScroll = () => {
@@ -39,7 +47,7 @@ const Navbar: React.FC = () => {
             data-testid="desktop-nav-links"
             className="space-x-6 text-sm font-['Montserrat'] tracking-wider text-[#6B8B59] uppercase"
           >
-            {copy.nav.links.map((link) => (
+            {visibleLinks.map((link) => (
               <a key={link.href} href={link.href} className="hover:text-[#222] transition">
                 {link.label}
               </a>
@@ -73,7 +81,7 @@ const Navbar: React.FC = () => {
           data-testid="mobile-nav-panel"
           className="absolute top-full left-0 right-0 md:hidden bg-white shadow-md flex flex-col items-start px-6 py-4 space-y-4 text-sm font-['Montserrat'] tracking-wider text-[#6B8B59] uppercase"
         >
-          {copy.nav.links.map((link) => (
+          {visibleLinks.map((link) => (
             <a
               key={link.href}
               href={link.href}

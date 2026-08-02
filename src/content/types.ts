@@ -86,9 +86,26 @@ export interface MenuFile {
   file: string;
 }
 
+// Deliberately does not match the DOM anchor slugs used by `href` (e.g.
+// 'atmosphere' vs '#gallery', 'press' vs '#blogs') -- both the SectionId and
+// the anchor are independently load-bearing (the anchor is a live, possibly
+// bookmarked URL) and neither may be renamed to line up with the other.
+export type SectionId =
+  | 'hero' | 'ourStory' | 'atmosphere' | 'food' | 'drinks' | 'press' | 'visit';
+
+export interface Section {
+  id: SectionId;
+  enabled: boolean;
+}
+
 export interface NavLink {
   href: string;
   label: string;
+  // The SectionId this link scrolls to, so the nav can hide a link whose
+  // section has been switched off. Not every section has one (hero and
+  // drinks have no nav entry) -- this field is what a link points at, not
+  // what every section has.
+  section: SectionId;
 }
 
 export interface Copy {

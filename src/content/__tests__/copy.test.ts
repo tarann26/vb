@@ -39,4 +39,10 @@ describe('assertCopy', () => {
     bad.nav.links = [];
     expect(() => assertCopy(bad)).toThrow(/nav\.links/);
   });
+
+  it('rejects a nav link whose section is not a real SectionId, naming the path', () => {
+    const bad = structuredClone(copy) as unknown as { nav: { links: { section: string }[] } };
+    bad.nav.links[0].section = 'atmosfera';
+    expect(() => assertCopy(bad)).toThrow(/nav\.links\[0\]/);
+  });
 });
