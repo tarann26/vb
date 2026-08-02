@@ -7,12 +7,12 @@ import React from 'react';
 
 const ChefGallery: React.FC = () => {
   const chefs = [
-    { 
-      name: "Chef Kamalika Anand", 
+    {
+      name: "Chef Kamalika Anand",
       role: "Executive Chef & Founder",
-      image: "/team/alice.webp"
+      image: "/team/kamalika-anand.webp"
     },
-    
+
   ];
 
   return (
