@@ -28,6 +28,17 @@ this GitHub repository.
   dashboard from memory — Cloudflare Pages picks up `.nvmrc` automatically. If the dashboard asks
   you to enter one explicitly anyway, copy the value in `.nvmrc` verbatim.
 
+  What's actually known about that number, so a version-related build failure isn't a mystery:
+  this project was developed and fully tested on Node 25.4.0. `.nvmrc` is pinned to **22**
+  instead, not because 25 failed anything, but because 25 is an odd-numbered, non-LTS release
+  that Cloudflare's build image may not carry, and 22 is the current LTS and certain to be
+  available there. The project's verified real floor is **Node 20.11**, set by `import.meta.filename`
+  in `scripts/images.mjs`; every other tool in the chain (`sharp` 0.35, Vite 5, Vitest 2) supports
+  Node 18+. This has not been tested on Node 22 or any version other than 25.4.0 — there was no
+  version manager available to do so. If the build fails specifically on the Node version, try
+  anything from 20.11 up to 25; the code itself has no known upper- or lower-bound issue in that
+  range.
+
 ## 3. Verify the preview deployment — before touching DNS
 
 Cloudflare will build a preview URL on the first deploy. Before you go anywhere near DNS, check
@@ -63,6 +74,11 @@ Enable Cloudflare Web Analytics for the site, then:
    in `index.html`, that assertion will fail; update it to check for the real token instead (or
    just check that the placeholder string is no longer present).
 4. Run `npm test` to confirm the suite is still green, then commit and deploy the change.
+5. This commit triggers a new Cloudflare deploy. Before moving on to Step 5 (DNS), **re-run both
+   Step 3 checks against this new deployment's preview URL** — a hard refresh on `/blogs` still
+   returns the page, and the build log still reports 48 images. It's a one-line token swap and
+   low risk, but Step 3 said to check for real rather than assume, and that applies to every
+   deploy that happens before DNS points here, not just the first one.
 
 **What this analytics setup gives you, and what it doesn't.** Free Cloudflare Web Analytics
 reports page views, referrers, device/browser split, and Web Vitals, broken down per page. **It

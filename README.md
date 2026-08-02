@@ -1,6 +1,6 @@
 # Via Bianca — Website
 
-The website for Via Bianca, an Italian restaurant in Greater Kailash I, New Delhi. It deploys on Vercel, which builds and publishes automatically from this repository (see `vercel.json`).
+The website for Via Bianca, an Italian restaurant in Greater Kailash I, New Delhi. It currently deploys on Vercel, which builds and publishes automatically from this repository. The site is being migrated to Cloudflare Pages — see `docs/cloudflare-cutover.md` for the cutover checklist and current status.
 
 ## Setup
 
@@ -79,7 +79,7 @@ Each dish in `dishes.json` also carries a `tags` field (e.g. `"vegan"`, `"gluten
 ## Tests
 
 - `npm test` runs the full test suite — checks that every image path used in `src/content/`, in a component, in the stylesheet, or in `index.html` resolves to a real file, that required fields aren't left blank, and more (see "Where the content lives" above).
-- `npm run test:deploy` runs the same suite and is what Vercel runs before every deploy (see `vercel.json`).
+- `npm run test:deploy` runs the same suite and is what the hosting platform runs before every deploy, as part of the build command.
 
 ## Components kept but not shown on the site
 
