@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
-import sharp from 'sharp';
-import { listSources, outputPathFor, MAX_WIDTH, QUALITY } from '../images.mjs';
+import { listSources, encodeDerivative, encodeOgImage } from '../images.mjs';
+import { outputPathFor, OG_OUTPUT } from '../paths.mjs';
 
 function hash(buffer) {
   return createHash('sha256').update(buffer).digest('hex');
@@ -41,11 +41,7 @@ describe('derivative freshness', () => {
     const results = await Promise.all(
       sources.map(async (src) => {
         const [fresh, committed] = await Promise.all([
-          sharp(src)
-            .rotate()
-            .resize({ width: MAX_WIDTH, withoutEnlargement: true })
-            .webp({ quality: QUALITY })
-            .toBuffer(),
+          encodeDerivative(src).toBuffer(),
           readFile(outputPathFor(src)),
         ]);
         return hash(fresh) === hash(committed) ? null : src;
@@ -53,5 +49,19 @@ describe('derivative freshness', () => {
     );
 
     expect(results.filter(Boolean)).toEqual([]);
+  });
+
+  // public/og-image.jpg is the one derivative prune() cannot see (it is a
+  // JPEG at the top level of public/, not inside a category directory) and
+  // the one the rest of the suite would never notice going stale: nothing
+  // renders it, so replacing assets-source/atmosphere/dining.jpg would
+  // refresh dining.webp while every share preview kept the old dining room
+  // forever. This is its only freshness check.
+  it('the share card matches a fresh re-encode of its source', async () => {
+    const [fresh, committed] = await Promise.all([
+      encodeOgImage().toBuffer(),
+      readFile(OG_OUTPUT),
+    ]);
+    expect(hash(fresh), `${OG_OUTPUT} is stale -- re-run \`npm run images\``).toBe(hash(committed));
   });
 });

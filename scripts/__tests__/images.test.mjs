@@ -1,5 +1,15 @@
 import { describe, it, expect } from 'vitest';
-import { outputPathFor, findCollisions } from '../images.mjs';
+// Imported from paths.mjs, not images.mjs: this file runs inside
+// `npm run test:deploy`, which is `vercel.json`'s buildCommand, and
+// images.mjs loads sharp's native binding at module scope. Nothing below
+// encodes anything, so nothing below should be able to fail on a machine
+// where sharp will not install or load.
+import {
+  outputPathFor,
+  findCollisions,
+  maxWidthFor,
+  DEFAULT_MAX_WIDTH,
+} from '../paths.mjs';
 
 describe('outputPathFor', () => {
   it('maps a source image to a webp at the same relative path', () => {
@@ -14,6 +24,39 @@ describe('outputPathFor', () => {
 
   it('preserves the subdirectory', () => {
     expect(outputPathFor('assets-source/our_story/cut.JPG')).toBe('public/our_story/cut.webp');
+  });
+});
+
+describe('maxWidthFor', () => {
+  it('falls back to the default width for a directory with no override', () => {
+    expect(maxWidthFor('assets-source/food/pizza1.JPG')).toBe(DEFAULT_MAX_WIDTH);
+    expect(DEFAULT_MAX_WIDTH).toBe(1000);
+  });
+
+  // our_story's carousel paints at roughly 600 CSS px, so shrinking it the
+  // way hero/ was shrunk would visibly soften it. Pinned here so a later
+  // "let's cap everything" edit has to argue with a test first.
+  it('leaves our_story at the default width', () => {
+    expect(maxWidthFor('assets-source/our_story/cut.JPG')).toBe(DEFAULT_MAX_WIDTH);
+  });
+
+  it('caps hero collage tiles at their displayed width', () => {
+    expect(maxWidthFor('assets-source/hero/scene.png')).toBe(500);
+    expect(maxWidthFor('assets-source/hero/farfalle1.png')).toBe(500);
+  });
+
+  it('caps the brick backdrop below the rest of hero/', () => {
+    expect(maxWidthFor('assets-source/hero/brick.jpg')).toBe(400);
+  });
+
+  // The per-file override is keyed by output path, so it must hold whatever
+  // extension the source arrives with.
+  it('applies the per-file override regardless of source extension', () => {
+    expect(maxWidthFor('assets-source/hero/brick.PNG')).toBe(400);
+  });
+
+  it('does not apply a directory override to a same-named nested directory', () => {
+    expect(maxWidthFor('assets-source/food/hero/plate.jpg')).toBe(DEFAULT_MAX_WIDTH);
   });
 });
 

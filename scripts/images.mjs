@@ -1,11 +1,20 @@
 import { readdir, mkdir, stat, rm } from 'node:fs/promises';
-import { join, extname, basename, relative } from 'node:path';
+import { join, extname, basename } from 'node:path';
 import sharp from 'sharp';
+import {
+  SOURCE,
+  OUT,
+  QUALITY,
+  OG_SOURCE,
+  OG_OUTPUT,
+  OG_WIDTH,
+  OG_HEIGHT,
+  OG_QUALITY,
+  outputPathFor,
+  maxWidthFor,
+  findCollisions,
+} from './paths.mjs';
 
-export const SOURCE = 'assets-source';
-export const OUT = 'public';
-export const MAX_WIDTH = 1000;
-export const QUALITY = 78;
 export const IMAGE_EXT = new Set(['.jpg', '.jpeg', '.png']);
 
 export async function walk(dir) {
@@ -25,32 +34,23 @@ export async function listSources() {
   return all.filter((f) => IMAGE_EXT.has(extname(f).toLowerCase()));
 }
 
-export function outputPathFor(sourcePath) {
-  const rel = relative(SOURCE, sourcePath);
-  const dir = rel.slice(0, rel.length - basename(rel).length);
-  return join(OUT, dir, `${basename(rel, extname(rel))}.webp`);
+// The single definition of each encode pipeline, returned unterminated so
+// build() can .toFile() it and the freshness test can .toBuffer() it. If
+// these two ever described the pipeline separately, changing the generator
+// would leave the freshness check re-encoding by the old recipe and
+// reporting every derivative as stale.
+export function encodeDerivative(sourcePath) {
+  return sharp(sourcePath)
+    .rotate()
+    .resize({ width: maxWidthFor(sourcePath), withoutEnlargement: true })
+    .webp({ quality: QUALITY });
 }
 
-// Two sources whose basename differs only by extension (e.g. margarita.jpg
-// and margarita.png, or a leftover after someone "replaced" a photo by
-// adding a new file instead of overwriting the old one) map to the same
-// public/ derivative. Nothing about writing that derivative would fail --
-// whichever sharp() call finishes last silently wins, and which one that is
-// depends on filesystem read order, not on which file the editor intended.
-// Computing every collision up front, before build() writes anything, turns
-// that into a loud, deterministic failure instead of a derivative that
-// quietly depends on race order.
-export function findCollisions(sources) {
-  const byOutput = new Map();
-  for (const src of sources) {
-    const out = outputPathFor(src);
-    const list = byOutput.get(out);
-    if (list) list.push(src);
-    else byOutput.set(out, [src]);
-  }
-  return [...byOutput.entries()]
-    .filter(([, srcs]) => srcs.length > 1)
-    .map(([output, srcs]) => ({ output, sources: srcs.sort() }));
+export function encodeOgImage() {
+  return sharp(OG_SOURCE)
+    .rotate()
+    .resize(OG_WIDTH, OG_HEIGHT, { fit: 'cover' })
+    .jpeg({ quality: OG_QUALITY });
 }
 
 // Removes derivatives whose source no longer exists. `expectedOutputs` is
@@ -58,7 +58,8 @@ export function findCollisions(sources) {
 // whether sharp succeeded on it this run, so a transient encode failure
 // never causes its (still-valid) previous derivative to be deleted. Only
 // walks the top-level subdirectories that exist under SOURCE, so it never
-// touches public/menus or anything else outside the image tree.
+// touches public/menus, public/og-image.jpg or anything else outside the
+// image tree.
 async function prune(expectedOutputs) {
   const removed = [];
   const sourceDirs = (await readdir(SOURCE, { withFileTypes: true })).filter((e) =>
@@ -103,20 +104,32 @@ export async function build({ log = () => {} } = {}) {
     const out = outputPathFor(src);
     try {
       await mkdir(out.slice(0, out.length - basename(out).length), { recursive: true });
-      await sharp(src)
-        .rotate()
-        .resize({ width: MAX_WIDTH, withoutEnlargement: true })
-        .webp({ quality: QUALITY })
-        .toFile(out);
+      await encodeDerivative(src).toFile(out);
       const { size } = await stat(out);
       total += size;
-      log(`${src} -> ${out} (${(size / 1024).toFixed(0)}KB)`);
+      log(`${src} -> ${out} (${(size / 1024).toFixed(0)}KB @ ${maxWidthFor(src)}px)`);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       failures.push({ src, out, message });
       log(`FAILED ${src}: ${message}`);
     }
   }
+
+  // The share card is generated here rather than by a one-off command so
+  // that replacing its source photo refreshes it like every other
+  // derivative. Left out of `expectedOutputs` on purpose: it is a JPEG at
+  // the top level of public/, which prune() never walks.
+  try {
+    await encodeOgImage().toFile(OG_OUTPUT);
+    const { size } = await stat(OG_OUTPUT);
+    total += size;
+    log(`${OG_SOURCE} -> ${OG_OUTPUT} (${(size / 1024).toFixed(0)}KB share card)`);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    failures.push({ src: OG_SOURCE, out: OG_OUTPUT, message });
+    log(`FAILED ${OG_SOURCE}: ${message}`);
+  }
+
   const pruned = await prune(expectedOutputs);
   for (const path of pruned) log(`pruned stale derivative: ${path}`);
   return { count: sources.length, totalBytes: total, failures, pruned, collisions: [] };
@@ -141,7 +154,9 @@ if (import.meta.filename === process.argv[1]) {
     }
     process.exitCode = 1;
   } else {
-    console.log(`\n${count} images, ${(totalBytes / 1024 / 1024).toFixed(2)}MB total`);
+    console.log(
+      `\n${count} images plus the share card, ${(totalBytes / 1024 / 1024).toFixed(2)}MB total`,
+    );
     if (pruned.length > 0) {
       console.log(`${pruned.length} stale derivative(s) pruned`);
     }
