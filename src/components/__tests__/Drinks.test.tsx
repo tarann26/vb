@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import Drinks from '../Drinks';
-import { drinks } from '../../content';
+import { drinks, copy } from '../../content';
 
 describe('Drinks', () => {
   it('renders every drink name', () => {
@@ -13,7 +13,7 @@ describe('Drinks', () => {
 
   it('groups drinks into the three categories', () => {
     render(<Drinks />);
-    ['Mocktails', 'Cocktails', 'Wine'].forEach((heading) => {
+    [copy.drinks.mocktails, copy.drinks.cocktails, copy.drinks.wine].forEach((heading) => {
       expect(screen.getByRole('heading', { name: heading })).toBeInTheDocument();
     });
   });

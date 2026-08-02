@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import Footer from '../Footer';
-import { site } from '../../content';
+import { site, copy } from '../../content';
 import { formatTimeRange } from '../../content/hours';
 
 describe('Footer', () => {
@@ -50,7 +50,10 @@ describe('Footer LinkedIn link', () => {
 
     render(<FooterWithLink />);
 
-    expect(screen.getByLabelText(/LinkedIn/i)).toHaveAttribute(
+    // copy.footer.linkedinLabel (the link's aria-label) is not part of what
+    // this mock overrides, so it's still the real, owner-editable copy.json
+    // value here -- look it up rather than pinning today's wording.
+    expect(screen.getByLabelText(copy.footer.linkedinLabel)).toHaveAttribute(
       'href',
       'https://linkedin.com/company/test-fixture',
     );
