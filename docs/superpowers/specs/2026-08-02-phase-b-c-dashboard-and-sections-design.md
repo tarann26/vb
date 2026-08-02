@@ -40,7 +40,8 @@ Free, and the free tier permits commercial use. Vercel's Hobby plan does not, wh
 
 Cloudflare has points of presence in India, so the site is faster in Delhi than Vercel's free tier or a European VPS. Cron triggers are included and can run more often than daily.
 
-`vercel.json`'s SPA rewrite and cache headers move to `_redirects` and `_headers`. The build command is unchanged.
+`vercel.json`'s SPA rewrite and cache headers move to `_redirects` and `_headers`. The build command grows an
+image-generation step, per D4.
 
 Rejected: a Hetzner VPS (~₹4,200/year) buys capacity this site has no use for and hands back OS patching, SSL renewal, backups and monitoring, with no alert when it goes down. Splitting front end and back end across two providers is worse than either alone.
 

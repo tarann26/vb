@@ -36,9 +36,9 @@ Creating the Cloudflare account, connecting the repository and pointing DNS are 
 
 ## File Structure
 
-**Created:** `public/_headers`, `public/_redirects`, `src/test/hosting.test.ts`, `docs/cloudflare-cutover.md`
+**Created:** `public/_headers`, `public/_redirects`, `src/test/hosting.test.ts`, `docs/cloudflare-cutover.md`, `.nvmrc`
 
-**Modified:** `package.json`, `.gitignore`, `index.html`, `src/components/Hero.tsx`, `README.md`
+**Modified:** `package.json`, `.gitignore`, `index.html`, `src/components/Hero.tsx`, `README.md`, `src/test/smoke.test.ts`
 
 **Deleted:** `scripts/__tests__/freshness.test.mjs`, and eventually `vercel.json`
 
@@ -86,13 +86,24 @@ describe('cloudflare hosting config', () => {
 
   it('never marks unhashed assets immutable', () => {
     const headers = readFileSync('public/_headers', 'utf8');
-    const unhashed = headers.split('/assets/*')[0];
-    expect(unhashed).not.toContain('immutable');
+    const blocks = headers.trim().split(/\n\s*\n/);
+    const unhashed = blocks.filter((b) => !b.startsWith('/assets/'));
+    expect(unhashed.length).toBeGreaterThan(0);
+    unhashed.forEach((block) => expect(block).not.toContain('immutable'));
   });
 });
 ```
 
-The last assertion is the one that matters. Unhashed filenames are stable while their contents change, so an immutable year would leave a replaced photo stuck in visitors' caches with no way to bust it. That distinction is the whole reason there are two rules.
+The last assertion is the one that matters, and its shape is deliberate. It parses the file into blocks and checks
+only the blocks that are not `/assets/`, with a `length > 0` guard so it cannot pass by finding nothing to check.
+
+A review of this plan caught an earlier version that split the file on the literal `/assets/*` and checked the text
+*before* it. Because that rule is first in the file, the checked segment was always empty and the assertion passed
+whether or not the bug existed. Do not simplify it back.
+
+Why it matters: unhashed filenames are stable while their contents change, so an immutable year would leave a
+replaced photo stuck in visitors' caches with no way to bust it. That distinction is the whole reason there are two
+rules.
 
 Run: `npx vitest run src/test/hosting.test.ts`
 Expected: FAIL, files missing.
@@ -109,7 +120,16 @@ Status 200 rather than 301 or 302: this is a rewrite, not a redirect. The URL st
 
 - [ ] **Step 3: Write the headers**
 
-`public/_headers`. Cloudflare applies the **first** matching rule, so the more specific `/assets/*` must come first:
+`public/_headers`. **Cloudflare merges the headers of every matching rule** rather than taking the first match, and
+two rules setting the same header name produce a comma-joined value. So ordering is not what keeps these rules
+apart; the fact that they match disjoint sets of files is.
+
+That holds today because Vite emits only hashed `.js` and `.css` into `dist/assets/`, never an image. It would stop
+holding the day someone imports an image as an ES module, which is a normal Vite pattern and would place a hashed
+image under `/assets/`. That file would then match both rules and receive a nonsense merged header. The test in
+Step 1 does not catch it, because the collision is in the build output rather than in this file.
+
+Write the rules in this order anyway, for readability:
 
 ```
 /assets/*
@@ -199,6 +219,18 @@ In `package.json`, change the build script to run image generation first:
 ```
 
 Leave `test` and `test:deploy` alone. `test:deploy` currently excludes the freshness test by name; once that file is gone the exclusion is dead but harmless, and Task 4 tidies it.
+
+- [ ] **Step 2b: Fix the test that pins the old build command**
+
+`src/test/smoke.test.ts` asserts `pkg.scripts.build` equals the literal `'tsc -b && vite build'`. Step 2 just changed
+it, so that test now fails. The plan originally missed this entirely and a review caught it.
+
+Update the assertion to the new value. Keep it an exact-string check rather than loosening it to `toContain`: the
+point of that test is to pin the build command so a later edit cannot silently drop the type-check, and a substring
+match would let `vite build` alone pass.
+
+Run: `npx vitest run src/test/smoke.test.ts`
+Expected: PASS.
 
 - [ ] **Step 3: Stop committing derivatives**
 
@@ -307,7 +339,14 @@ describe('analytics', () => {
 
 The third assertion is deliberate. The real token only exists once the owner creates the Cloudflare project, so the repository carries an obvious placeholder and the cutover checklist names it. A test asserting the placeholder is present means nobody can forget it is there, and it will fail loudly the moment somebody replaces it, which is the reminder to update this test too.
 
-Add to `src/components/__tests__/Hero.test.tsx`:
+Add to `src/components/__tests__/Hero.test.tsx`. That file does not currently import `userEvent`, so add it
+alongside the existing imports, matching how `NavBar.test.tsx` already does it:
+
+```tsx
+import userEvent from '@testing-library/user-event';
+```
+
+`vi` needs no import; `vitest.config.ts` sets `globals: true`.
 
 ```tsx
 it('reports a conversion when the reservation button is used', async () => {
@@ -399,8 +438,15 @@ Everything the repository can do is done. What remains needs the owner's hands.
 `docs/cloudflare-cutover.md`, written for someone doing this once, under time pressure, who has not read this plan. Cover:
 
 1. Create a Cloudflare account and a Pages project connected to this GitHub repository.
-2. Build command `npm run test:deploy && npm run build`, output directory `dist`, Node version matching local (`node -v` to check).
-3. Confirm the preview deployment renders correctly **before** touching DNS, and specifically that a hard refresh on `/blogs` returns the page rather than a 404. That single check proves `_redirects` is working, and it is the most likely thing to be wrong.
+2. Build command `npm run test:deploy && npm run build`, output directory `dist`, Node version taken from the
+   `.nvmrc` this plan adds rather than guessed.
+3. Confirm the preview deployment renders correctly **before** touching DNS. Two specific checks, both of which
+   have failed for other people:
+   - A hard refresh on `/blogs` returns the page rather than a 404. That proves `_redirects` is working.
+   - The build log shows the image-generation step running and reporting 48 images. This build is the first time
+     `sharp` has ever run in this project's production pipeline; on Vercel it never did. The lockfile carries the
+     Linux binaries so it should resolve, and a failure here is a loud build failure rather than a silent broken
+     deploy, but check it on the first deploy rather than assuming.
 4. Enable Web Analytics, copy the token, replace `CLOUDFLARE_ANALYTICS_TOKEN` in `index.html`, and update the test in `src/test/analytics.test.ts` that asserts the placeholder.
 5. Point DNS at Cloudflare Pages.
 6. Verify the live site: images load, `/blogs` deep-links, the menu PDFs download, the WhatsApp button opens WhatsApp.
@@ -414,6 +460,15 @@ State plainly at the top that step 3 comes before step 5, and that the Vercel de
 git rm vercel.json
 ```
 
+**First, remove the test that reads it.** `src/test/smoke.test.ts` has a `describe('vercel deploy configuration', …)`
+block that calls `JSON.parse(readFileSync('vercel.json', 'utf8'))` at collection time. Deleting the file without
+touching that block throws ENOENT and fails the whole test file. The plan originally missed this and a review caught
+it.
+
+Delete that describe block. Everything it asserted about routing and caching is now covered by
+`src/test/hosting.test.ts` against `_headers` and `_redirects`, so nothing is lost. Leave the rest of
+`smoke.test.ts` alone.
+
 In `package.json`, simplify `test:deploy`. It was `vitest run --exclude "**/freshness.test.mjs"`, and that file no longer exists:
 
 ```json
@@ -425,10 +480,21 @@ Then `test` and `test:deploy` are identical. Keep both names: `test:deploy` is w
 - [ ] **Step 3: Verify nothing referenced what you deleted**
 
 ```bash
-grep -rn "vercel" --include="*.json" --include="*.ts" --include="*.tsx" --include="*.md" . | grep -v node_modules | grep -v "\.superpowers"
+grep -rn "vercel" --include="*.json" --include="*.ts" --include="*.tsx" --include="*.mjs" --include="*.md" . | grep -v node_modules | grep -v "\.superpowers"
 ```
 
-Expected: matches only in `docs/` and `README.md` describing history or the cutover. Any match in source or configuration is something that still expects Vercel, and it needs handling.
+Expected: matches in `docs/` and `README.md` describing history or the cutover, plus **comment-only** mentions in
+`scripts/paths.mjs`, `scripts/__tests__/images.test.mjs`, `src/test/head.test.ts`, `src/components/SeoHead.tsx` and
+`src/components/__tests__/SeoHead.test.tsx`. Those are prose explaining past decisions and are fine to leave.
+
+What is not fine is any match that is **executable**: a `readFileSync('vercel.json')`, an import, or a config value.
+Read each hit rather than counting them. Note that `--include="*.mjs"` was added after a review found the original
+grep could not see the `scripts/` directory at all.
+
+- [ ] **Step 3b: Pin the Node version**
+
+Create `.nvmrc` containing the major version from `node -v`. Cloudflare reads it, which makes the project's Node
+setting self-documenting instead of a number someone types into a dashboard and forgets.
 
 - [ ] **Step 4: Full verification**
 
@@ -437,6 +503,13 @@ npm run build && npx vitest run && npm run lint && git status --porcelain
 ```
 
 Expected: build exits 0, suite green, lint clean, working tree clean. Record the final test count and the build duration.
+
+Then check the site by eye, because this plan's whole claim is that nothing visible changed. Serve the build
+(`npx vite preview`) and compare against the previous commit at 375px, 768px and 1440px: images load, `/blogs`
+deep-links, the menu PDFs download, the WhatsApp button opens WhatsApp, and the console is clean on both routes.
+
+If you cannot drive a browser in this environment, say so plainly rather than claiming you checked. Close any
+browser you open.
 
 - [ ] **Step 5: Commit**
 
@@ -454,7 +527,8 @@ git commit -m "chore: remove vercel configuration and document the cutover"
 - [ ] `dist/_headers` and `dist/_redirects` both present after a build.
 - [ ] Deleting every generated image and rebuilding restores them, verified for real.
 - [ ] The site renders identically to before at 375px, 768px and 1440px, with no console errors.
-- [ ] No generated image is tracked in git; `public/menus/` and `Menu - Expanded.pdf` still are.
+- [ ] No generated image is tracked in git; the two PDFs under `public/menus/` still are. (There is no
+      `public/Menu - Expanded.pdf`; an unrelated file of that name lives under `assets-source/` and is also tracked.)
 - [ ] `docs/cloudflare-cutover.md` exists and names the analytics token placeholder.
 - [ ] `vercel.json` is gone and nothing in source or configuration references Vercel.
 
