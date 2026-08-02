@@ -209,3 +209,41 @@ before it ships — but it cannot observe whether Cloudflare is actually honouri
 configuration on the live zone. Only a real request against the live domain, after a real deploy,
 can. Re-run the same curl after any future change to `wrangler.toml`'s `routes`, not just the
 first time.
+
+## 10. Set the admin login password, and how to rotate it
+
+Unrelated to Steps 1–9 above (no ordering dependency on DNS, Pages, or the KV namespace) but
+required before `POST /api/login` (Task 4 of the worker plan) can ever succeed. `env.ADMIN_PASSWORD_HASH`
+and `env.TOKEN_SECRET` are Worker secrets, not `wrangler.toml` vars — `wrangler.toml` carries only
+non-secret bindings by design, and `src/test/secrets.test.ts` fails the build if a real password
+hash or token ever lands in a committed file. With neither secret set, every login attempt fails
+closed (`verifyPassword`/`verifyToken` have nothing to check the attempt against), not silently.
+
+1. Generate the stored-hash value with `node scripts/hash-password.mjs`. It prompts for the
+   password on stderr and prints only the `pbkdf2$<iterations>$<saltB64>$<hashB64>` line on
+   stdout — pipe it directly into the next step rather than copying it through a terminal, so it
+   never sits in scrollback or shell history.
+2. Set it as a Worker secret:
+   ```bash
+   node scripts/hash-password.mjs | npx wrangler secret put ADMIN_PASSWORD_HASH
+   ```
+3. Set `TOKEN_SECRET` — the HMAC key session tokens are signed with, unrelated to the password
+   itself — the same way, e.g.:
+   ```bash
+   openssl rand -base64 32 | npx wrangler secret put TOKEN_SECRET
+   ```
+
+**Rotating the password does not, on its own, invalidate sessions already issued.** A session
+cookie's validity comes entirely from `verifyToken`'s HMAC check against `TOKEN_SECRET` (see
+`worker/auth.ts`), not from whether the password that produced it is still current — so changing
+only `ADMIN_PASSWORD_HASH` leaves every outstanding 7-day cookie valid until it naturally expires.
+If the point of rotating the password is to lock out anyone who already holds a session (a leaked
+password, a lost or stolen device), **rotate `TOKEN_SECRET` too, in the same sitting**:
+
+```bash
+node scripts/hash-password.mjs | npx wrangler secret put ADMIN_PASSWORD_HASH
+openssl rand -base64 32 | npx wrangler secret put TOKEN_SECRET
+```
+
+Rotating `TOKEN_SECRET` signs out every existing session immediately, including whoever is doing
+the rotation — they will need to log in again with the new password right after.

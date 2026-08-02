@@ -17,6 +17,12 @@ dist-ssr
 # category as node_modules/dist above.
 .wrangler
 
+# Wrangler's local-secrets file (ADMIN_PASSWORD_HASH, TOKEN_SECRET, etc. for
+# `wrangler dev`). Real secrets are set with `wrangler secret put`, never
+# committed to this repo -- see src/test/secrets.test.ts.
+.dev.vars
+.dev.vars.*
+
 # Source design assets (Illustrator packages, print PDFs) — too large for git
 New Menu/
 
