@@ -9,7 +9,7 @@ const Hero: React.FC = () => {
   <section className="min-h-screen bg-white relative flex items-center justify-center overflow-hidden">
     {/* brick background */}
     <img
-      src="/hero/brick.jpg"
+      src="/hero/brick.webp"
       alt=""
       className="absolute inset-0 -z-20 w-full h-full object-cover opacity-20"
     />

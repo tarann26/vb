@@ -1,38 +1,38 @@
 {
   "atmosphere": [
-    { "src": "/atmosphere/dining.jpg", "alt": "The dining room laid for service" },
-    { "src": "/atmosphere/outsideLOGO.jpg", "alt": "Via Bianca's signage on N-Block Market" },
-    { "src": "/atmosphere/ambience.JPG", "alt": "Warm evening light across the restaurant" },
-    { "src": "/atmosphere/ceiling decor.png", "alt": "Hand-painted ceiling detail" },
-    { "src": "/atmosphere/front mirror.png", "alt": "The antique mirror by the entrance" },
-    { "src": "/atmosphere/painting board.JPG", "alt": "Painted board on the dining room wall" },
-    { "src": "/atmosphere/room.png", "alt": "The main room seen from the doorway" },
-    { "src": "/atmosphere/table.png", "alt": "A set table with linen and glassware" }
+    { "src": "/atmosphere/dining.webp", "alt": "The dining room laid for service" },
+    { "src": "/atmosphere/outsideLOGO.webp", "alt": "Via Bianca's signage on N-Block Market" },
+    { "src": "/atmosphere/ambience.webp", "alt": "Warm evening light across the restaurant" },
+    { "src": "/atmosphere/ceiling decor.webp", "alt": "Hand-painted ceiling detail" },
+    { "src": "/atmosphere/front mirror.webp", "alt": "The antique mirror by the entrance" },
+    { "src": "/atmosphere/painting board.webp", "alt": "Painted board on the dining room wall" },
+    { "src": "/atmosphere/room.webp", "alt": "The main room seen from the doorway" },
+    { "src": "/atmosphere/table.webp", "alt": "A set table with linen and glassware" }
   ],
   "ourStory": [
-    { "src": "/our_story/cut.JPG", "alt": "Cutting fresh pasta by hand" },
-    { "src": "/our_story/dinner.JPG", "alt": "A finished plate at the pass" },
-    { "src": "/our_story/handmaking.jpg", "alt": "Working dough by hand" },
-    { "src": "/our_story/oven.JPG", "alt": "The wood-fired oven at full heat" },
-    { "src": "/our_story/shape.JPG", "alt": "Shaping pasta in the pastificio" },
-    { "src": "/our_story/stuff.JPG", "alt": "Filling fresh pasta" }
+    { "src": "/our_story/cut.webp", "alt": "Cutting fresh pasta by hand" },
+    { "src": "/our_story/dinner.webp", "alt": "A finished plate at the pass" },
+    { "src": "/our_story/handmaking.webp", "alt": "Working dough by hand" },
+    { "src": "/our_story/oven.webp", "alt": "The wood-fired oven at full heat" },
+    { "src": "/our_story/shape.webp", "alt": "Shaping pasta in the pastificio" },
+    { "src": "/our_story/stuff.webp", "alt": "Filling fresh pasta" }
   ],
   "heroCollage": [
-    { "src": "/hero/scene.png", "className": "col-start-5 col-span-2 row-span-2" },
-    { "src": "/hero/farfalle1.png", "className": "col-start-5 col-span-2 row-start-5 row-span-2" },
-    { "src": "/hero/farfalle2.png", "className": "col-span-2 row-span-2" },
-    { "src": "/hero/farfalle3.png", "className": "col-span-2 row-start-5 row-span-2" },
-    { "src": "/hero/farfalle4.png", "className": "col-start-3 col-span-2 row-span-1" },
-    { "src": "/atmosphere/dining.jpg", "className": "col-start-3 col-span-2 row-start-6 row-span-1" },
-    { "src": "/atmosphere/ambience.JPG", "className": "col-span-1 row-start-3 row-span-2" },
-    { "src": "/hero/bus.jpeg", "className": "col-start-6 col-span-1 row-start-3 row-span-2" },
-    { "src": "/atmosphere/ceiling decor.png", "className": "col-start-3 col-span-1 row-start-2" },
-    { "src": "/our_story/oven.JPG", "className": "col-start-4 col-span-1 row-start-2" },
-    { "src": "/atmosphere/front mirror.png", "className": "col-start-2 col-span-1 row-start-3" },
-    { "src": "/hero/building.png", "className": "col-start-5 col-span-1 row-start-3" },
-    { "src": "/our_story/stuff.JPG", "className": "col-start-2 col-span-1 row-start-4" },
-    { "src": "/atmosphere/room.png", "className": "col-start-5 col-span-1 row-start-4" },
-    { "src": "/our_story/cut.JPG", "className": "col-start-3 col-span-1 row-start-5" },
-    { "src": "/hero/farfalle.png", "className": "col-start-4 col-span-1 row-start-5" }
+    { "src": "/hero/scene.webp", "className": "col-start-5 col-span-2 row-span-2" },
+    { "src": "/hero/farfalle1.webp", "className": "col-start-5 col-span-2 row-start-5 row-span-2" },
+    { "src": "/hero/farfalle2.webp", "className": "col-span-2 row-span-2" },
+    { "src": "/hero/farfalle3.webp", "className": "col-span-2 row-start-5 row-span-2" },
+    { "src": "/hero/farfalle4.webp", "className": "col-start-3 col-span-2 row-span-1" },
+    { "src": "/atmosphere/dining.webp", "className": "col-start-3 col-span-2 row-start-6 row-span-1" },
+    { "src": "/atmosphere/ambience.webp", "className": "col-span-1 row-start-3 row-span-2" },
+    { "src": "/hero/bus.webp", "className": "col-start-6 col-span-1 row-start-3 row-span-2" },
+    { "src": "/atmosphere/ceiling decor.webp", "className": "col-start-3 col-span-1 row-start-2" },
+    { "src": "/our_story/oven.webp", "className": "col-start-4 col-span-1 row-start-2" },
+    { "src": "/atmosphere/front mirror.webp", "className": "col-start-2 col-span-1 row-start-3" },
+    { "src": "/hero/building.webp", "className": "col-start-5 col-span-1 row-start-3" },
+    { "src": "/our_story/stuff.webp", "className": "col-start-2 col-span-1 row-start-4" },
+    { "src": "/atmosphere/room.webp", "className": "col-start-5 col-span-1 row-start-4" },
+    { "src": "/our_story/cut.webp", "className": "col-start-3 col-span-1 row-start-5" },
+    { "src": "/hero/farfalle.webp", "className": "col-start-4 col-span-1 row-start-5" }
   ]
 }
