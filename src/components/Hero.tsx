@@ -4,6 +4,19 @@ import { site, galleries } from '../content';
 
 
 const Hero: React.FC = () => {
+  const openWhatsApp = () => {
+    try {
+      (window as { __cfBeacon?: { trackEvent?: (name: string) => void } })
+        .__cfBeacon?.trackEvent?.('reservation_click');
+    } catch {
+      // Analytics must never block a reservation.
+    }
+    window.open(
+      `https://wa.me/${site.whatsapp.number}?text=${encodeURIComponent(site.whatsapp.prefilledMessage)}`,
+      '_blank',
+      'noopener',
+    );
+  };
 
  return (
   <section className="min-h-screen bg-white relative flex items-center justify-center overflow-hidden">
@@ -71,13 +84,7 @@ const Hero: React.FC = () => {
 
 
        <button
-  onClick={() =>
-    window.open(
-      `https://wa.me/${site.whatsapp.number}?text=${encodeURIComponent(site.whatsapp.prefilledMessage)}`,
-      '_blank',
-      'noopener',
-    )
-  }
+  onClick={openWhatsApp}
   className="bg-[#6B8B59] hover:bg-[#5a7349] text-white px-8 py-4 rounded-lg font-semibold uppercase tracking-wide shadow-lg hover:shadow-xl transition-all duration-300"
 >
   Reserve a Table
