@@ -1,6 +1,6 @@
 // Two-letter schema.org day codes, in week order. A plain `string` here would
 // let a typo (e.g. "Xx") through both the type checker and the JSON import
-// widening; see the runtime guard around `assertHours` in src/content/index.ts
+// widening; see the runtime guard around `assertHours` in src/content/guards.ts
 // for why a plain type annotation alone cannot catch that.
 export type DayCode = 'Mo' | 'Tu' | 'We' | 'Th' | 'Fr' | 'Sa' | 'Su';
 
@@ -34,7 +34,7 @@ export interface SiteContent {
 
 // Shared by Dish, Drink and Article -- an ISO `YYYY-MM-DD` date after which
 // the item is live. Absent means "always published". Deliberately not on
-// `Section`: see the comment on `assertSections` in src/content/index.ts for
+// `Section`: see the comment on `assertSections` in src/content/guards.ts for
 // why a future-dated section is rejected outright rather than supported.
 // Filtering on this field happens in the Vite build (plugins/filter-unpublished.ts),
 // never in the browser -- see that file for why.

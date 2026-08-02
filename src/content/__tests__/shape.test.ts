@@ -219,7 +219,7 @@ describe('publishAt (when present) is a value the production isPublished accepts
 // `dist/assets/`.
 //
 // `Record<keyof X, true>` gets this the same compile-time completeness
-// `SECTION_ID_SET` already relies on in index.ts: if `Dish`/`Drink`/
+// `SECTION_ID_SET` already relies on in guards.ts: if `Dish`/`Drink`/
 // `Article` gains a field, the corresponding record below fails to compile
 // until it's added here too, so this list can't silently drift out of sync
 // with the real type the way a hand-written `string[]` could.
