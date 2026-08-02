@@ -1,0 +1,24 @@
+name = "via-bianca-admin"
+main = "worker/index.ts"
+compatibility_date = "2026-01-01"
+
+# Same-origin: /api/* must be served by this Worker, not by the SPA catch-all in
+# public/_redirects. A cross-origin Worker would drop the SameSite=Strict session
+# cookie on every fetch and make sendBeacon('/api/wa') a silent no-op.
+routes = [{ pattern = "viabiancadelhi.com/api/*", zone_name = "viabiancadelhi.com" }]
+
+[vars]
+GITHUB_OWNER = "tarann26"
+GITHUB_REPO  = "vb"
+GITHUB_BRANCH = "main"   # the branch Cloudflare Pages builds from
+
+[[kv_namespaces]]
+binding = "KV"
+# PLACEHOLDER-NOT-A-REAL-NAMESPACE-ID: this cannot be created by an agent --
+# it requires Cloudflare account access. A human must run
+# `wrangler kv namespace create via-bianca-admin-kv` and paste the real id
+# here before this Worker is deployed (see docs/cloudflare-cutover.md).
+# src/test/wrangler-config.test.ts asserts this string is still exactly this
+# placeholder, so deploying before that step fails a test instead of the
+# Worker failing at runtime with an unbound KV.
+id = "PLACEHOLDER-NOT-A-REAL-NAMESPACE-ID"

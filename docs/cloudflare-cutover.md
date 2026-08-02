@@ -154,3 +154,26 @@ Once DNS has propagated, check the live domain itself (not just the preview URL)
 
 Only after Step 6 passes on the live domain. This is the point of no easy rollback, so don't
 rush it — but once you're here, decommission the Vercel project. The site is fully cut over.
+
+## 8. Create the admin Worker's KV namespace (separate from the cutover above)
+
+This step is unrelated to Steps 1–7 — it does not touch DNS, Pages, or the live site, and has no
+ordering dependency on them. It exists because `wrangler.toml` needs a KV namespace id, and
+creating one requires Cloudflare account access that whoever built the Worker scaffold did not
+have. `wrangler.toml` currently carries an obviously-fake placeholder
+(`PLACEHOLDER-NOT-A-REAL-NAMESPACE-ID`) instead of a real id — inventing a plausible-looking id in
+its place would have looked correct in review and failed only at deploy time, silently, with the
+Worker unable to bind `env.KV`.
+
+A human with Cloudflare account access must, before the admin Worker is ever deployed:
+
+1. Run `wrangler kv namespace create via-bianca-admin-kv` (or `npx wrangler kv namespace create
+   via-bianca-admin-kv` if `wrangler` isn't installed globally).
+2. Copy the `id` it prints.
+3. Paste it into `wrangler.toml`, replacing `PLACEHOLDER-NOT-A-REAL-NAMESPACE-ID` on the
+   `[[kv_namespaces]]` block's `id` line.
+
+`src/test/wrangler-config.test.ts` asserts that id is still exactly the placeholder string. Skip
+this step and `npm run test:deploy` fails there, with a message naming the reason, instead of the
+Worker failing at runtime with an unbound KV binding the first time a login or a publish tries to
+use it.

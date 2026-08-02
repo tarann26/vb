@@ -8,6 +8,31 @@ describe('cloudflare hosting config', () => {
     expect(redirects).toMatch(/^\/\*\s+\/index\.html\s+200$/m);
   });
 
+  // Cloudflare Routes (wrangler.toml) take precedence over Pages for the
+  // same hostname, so in normal operation /api/* is served by the Worker
+  // and never reaches this file at all -- this rule is belt-and-braces.
+  // But the SPA catch-all above answers literally anything unmatched with
+  // 200 and the app shell's HTML, and navigator.sendBeacon('/api/wa')
+  // treats any 2xx as success with no way for the caller to inspect the
+  // body. If the Cloudflare Route were ever removed and this exclusion
+  // quietly reordered below the catch-all (or deleted), every API call
+  // would start "succeeding" against HTML and nothing anywhere would fail.
+  // This pins the exclusion to a non-2xx status, so a regression here is
+  // itself loud, and pins its position strictly above the catch-all, so a
+  // future edit cannot silently move it past that line.
+  it('keeps /api/* out of the SPA catch-all: excluded above it, not rewritten to a 200', () => {
+    const redirects = readFileSync('public/_redirects', 'utf8');
+    const apiRule = redirects.match(/^\/api\/\*\s+\S+\s+(\d+)$/m);
+    expect(apiRule).not.toBeNull();
+    expect(Number(apiRule![1])).not.toBe(200);
+
+    const apiIndex = redirects.search(/^\/api\/\*\s/m);
+    const catchAllIndex = redirects.search(/^\/\*\s+\/index\.html\s+200$/m);
+    expect(apiIndex).toBeGreaterThanOrEqual(0);
+    expect(catchAllIndex).toBeGreaterThanOrEqual(0);
+    expect(apiIndex).toBeLessThan(catchAllIndex);
+  });
+
   // Scoped to the /assets/* block specifically, not matched against the
   // whole file. A whole-file regex passes as long as `max-age=31536000` and
   // `immutable` appear *somewhere*, even if a later edit attaches them to
