@@ -2,9 +2,17 @@ import { describe, it, expect } from 'vitest';
 import { render } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import Hero from '../Hero';
-import { galleries } from '../../content';
+import { galleries, site } from '../../content';
 
 describe('Hero', () => {
+  it('has exactly one h1, and it is the page heading rather than the logo', () => {
+    const { container } = render(<MemoryRouter><Hero /></MemoryRouter>);
+    const h1s = container.querySelectorAll('h1');
+    expect(h1s).toHaveLength(1);
+    expect(h1s[0].textContent).toBe(site.name);
+    expect(h1s[0].closest('[aria-hidden="true"]')).toBeNull();
+  });
+
   it('never renders an image with an empty src', () => {
     const { container } = render(<MemoryRouter><Hero /></MemoryRouter>);
     const images = Array.from(container.querySelectorAll('img'));

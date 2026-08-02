@@ -37,9 +37,9 @@ const Hero: React.FC = () => {
      {/* ===== Main content ===== */}
      <div className="relative z-10 text-center px-6">
        {/* circular logo */}
-       <div className="w-40 h-40 mx-auto mb-8 flex items-center justify-center rounded-full border-4 border-[#6B8B59] bg-white shadow-lg">
+       <div aria-hidden="true" className="w-40 h-40 mx-auto mb-8 flex items-center justify-center rounded-full border-4 border-[#6B8B59] bg-white shadow-lg">
          <div className="select-none">
-           <h1 className="font-['Parisienne'] text-3xl text-[#222]">Via Bianca</h1>
+           <p className="font-['Parisienne'] text-3xl text-[#222]">Via Bianca</p>
            <p className="font-['Montserrat'] text-xs uppercase tracking-wider text-[#6B8B59]">
              Pastificio & Ristorante
            </p>
@@ -47,7 +47,7 @@ const Hero: React.FC = () => {
        </div>
 
 
-       <h2 className="font-['Parisienne'] text-6xl md:text-7xl text-[#222] mb-4">Via Bianca</h2>
+       <h1 className="font-['Parisienne'] text-6xl md:text-7xl text-[#222] mb-4">Via Bianca</h1>
        <p className="font-['Montserrat'] text-lg md:text-xl uppercase tracking-wide text-[#6B8B59] mb-6">
          Pastificio & Ristorante
        </p>
