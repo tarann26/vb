@@ -64,10 +64,18 @@ describe('cloudflare hosting config', () => {
   // block carrying those strings, including the /assets/* block if a future
   // edit accidentally duplicates them there instead of removing them from
   // it.
+  //
+  // /build-info.json is deliberately excluded from "unhashed" here: it's
+  // served from an unhashed path like the rest of these blocks, but it is
+  // not a cacheable asset -- it exists so the admin dashboard can poll the
+  // live commit sha, which a week-long cache would silently defeat (see the
+  // no-store assertion below). Filtering it out of `unhashed` keeps this
+  // test about the general unhashed-asset policy rather than conflating it
+  // with build-info.json's deliberately different one.
   it('caches unhashed public assets for a week, revalidating', () => {
     const headers = readFileSync('public/_headers', 'utf8');
     const blocks = headers.trim().split(/\n\s*\n/);
-    const unhashed = blocks.filter((b) => !b.startsWith('/assets/'));
+    const unhashed = blocks.filter((b) => !b.startsWith('/assets/') && !/no-store/.test(b));
     expect(unhashed.length).toBeGreaterThan(0);
     unhashed.forEach((block) => {
       expect(block).toMatch(/max-age=604800/);
@@ -78,9 +86,22 @@ describe('cloudflare hosting config', () => {
   it('never marks unhashed assets immutable', () => {
     const headers = readFileSync('public/_headers', 'utf8');
     const blocks = headers.trim().split(/\n\s*\n/);
-    const unhashed = blocks.filter((b) => !b.startsWith('/assets/'));
+    const unhashed = blocks.filter((b) => !b.startsWith('/assets/') && !/no-store/.test(b));
     expect(unhashed.length).toBeGreaterThan(0);
     unhashed.forEach((block) => expect(block).not.toContain('immutable'));
+  });
+
+  // build-info.json is written fresh by every build (plugins/build-info.ts)
+  // and polled by the admin dashboard to confirm a change is live. A cached
+  // copy would tell the dashboard the previous build is the current one --
+  // worse than no stamp at all, since it reports success on a deploy that
+  // hasn't actually landed yet.
+  it('marks /build-info.json no-store, not cached like the other unhashed assets', () => {
+    const headers = readFileSync('public/_headers', 'utf8');
+    const blocks = headers.trim().split(/\n\s*\n/);
+    const buildInfoBlock = blocks.find((b) => b.startsWith('/build-info.json'));
+    expect(buildInfoBlock).toBeDefined();
+    expect(buildInfoBlock).toMatch(/no-store/);
   });
 });
 
