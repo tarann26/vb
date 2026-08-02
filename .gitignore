@@ -16,6 +16,16 @@ dist-ssr
 # Source design assets (Illustrator packages, print PDFs) — too large for git
 New Menu/
 
+# Generated from assets-source/ by `npm run images`
+/public/atmosphere/
+/public/food/
+/public/hero/
+/public/mocktails/
+/public/our_story/
+/public/press/
+/public/team/
+/public/og-image.jpg
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
