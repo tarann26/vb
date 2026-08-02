@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { ExternalLink, Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { press } from '../content';
+import { press, copy } from '../content';
 
 const BlogsPage: React.FC = () => {
   const navigate = useNavigate();
@@ -25,16 +25,16 @@ const BlogsPage: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4 py-6">
           <div className="flex items-center justify-between">
             <div className="text-center flex-1">
-              <h1 className="font-['Parisienne'] text-4xl text-[#222] mb-2">Via Bianca Stories</h1>
+              <h1 className="font-['Parisienne'] text-4xl text-[#222] mb-2">{copy.blogsPage.title}</h1>
               <p className="font-['Montserrat'] text-[#6B8B59] text-sm uppercase tracking-wider">
-                Press & Articles
+                {copy.blogsPage.subtitle}
               </p>
             </div>
-            <button 
+            <button
               onClick={() => navigate('/')}
               className="text-[#6B8B59] hover:text-[#222] font-['Montserrat'] text-sm uppercase tracking-wide transition-colors duration-300"
             >
-              ← Back to Home
+              {copy.blogsPage.back}
             </button>
           </div>
         </div>
@@ -45,11 +45,10 @@ const BlogsPage: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4">
           <div className="text-center mb-16">
             <h2 className="font-['Montserrat'] text-4xl md:text-5xl font-bold text-[#222] mb-6">
-              All Stories
+              {copy.blogsPage.heading}
             </h2>
             <p className="font-['Open_Sans'] text-gray-700 max-w-2xl mx-auto leading-relaxed">
-              Discover the complete collection of articles, reviews, and features about Via Bianca's 
-              culinary journey and authentic Italian dining experience.
+              {copy.blogsPage.intro}
             </p>
           </div>
 
@@ -107,7 +106,7 @@ const BlogsPage: React.FC = () => {
                       className="inline-flex items-center space-x-2 text-[#6B8B59] hover:text-[#5a7349] font-['Montserrat'] font-semibold text-sm uppercase tracking-wide transition-colors duration-300"
                       aria-label={`Read full article: ${article.title}`}
                     >
-                      <span>Read Article</span>
+                      <span>{copy.press.readArticle}</span>
                       <ExternalLink className="w-4 h-4" />
                     </a>
                   )}
@@ -125,7 +124,7 @@ const BlogsPage: React.FC = () => {
                 className="flex items-center space-x-2 px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-300"
               >
                 <ChevronLeft className="w-4 h-4" />
-                <span className="font-['Montserrat'] text-sm">Previous</span>
+                <span className="font-['Montserrat'] text-sm">{copy.blogsPage.previous}</span>
               </button>
 
               <div className="flex space-x-2">
@@ -149,7 +148,7 @@ const BlogsPage: React.FC = () => {
                 disabled={currentPage === totalPages}
                 className="flex items-center space-x-2 px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-300"
               >
-                <span className="font-['Montserrat'] text-sm">Next</span>
+                <span className="font-['Montserrat'] text-sm">{copy.blogsPage.next}</span>
                 <ChevronRight className="w-4 h-4" />
               </button>
             </div>

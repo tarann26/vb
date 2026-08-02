@@ -1,7 +1,7 @@
 import React from 'react';
 import { ExternalLink, Calendar, ArrowRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { press } from '../content';
+import { press, copy } from '../content';
 
 const BlogTeaser: React.FC = () => {
   const navigate = useNavigate();
@@ -13,11 +13,10 @@ const BlogTeaser: React.FC = () => {
       <div className="max-w-7xl mx-auto px-4">
         <div className="text-center mb-16">
           <h2 className="font-['Montserrat'] text-4xl md:text-5xl font-bold text-[#222] mb-6">
-            Latest Stories
+            {copy.press.heading}
           </h2>
           <p className="font-['Open_Sans'] text-gray-700 max-w-2xl mx-auto leading-relaxed">
-            Discover what food critics and culinary experts are saying about Via Bianca's 
-            authentic Italian experience and Chef Kamalika's innovative approach to traditional cuisine.
+            {copy.press.intro}
           </p>
         </div>
 
@@ -75,7 +74,7 @@ const BlogTeaser: React.FC = () => {
                     className="inline-flex items-center space-x-2 text-[#6B8B59] hover:text-[#5a7349] font-['Montserrat'] font-semibold text-sm uppercase tracking-wide transition-colors duration-300"
                     aria-label={`Read full article: ${article.title}`}
                   >
-                    <span>Read Article</span>
+                    <span>{copy.press.readArticle}</span>
                     <ExternalLink className="w-4 h-4" />
                   </a>
                 )}
@@ -90,7 +89,7 @@ const BlogTeaser: React.FC = () => {
             onClick={() => navigate('/blogs')}
             className="inline-flex items-center space-x-2 bg-[#6B8B59] hover:bg-[#5a7349] text-white font-['Montserrat'] font-semibold px-8 py-4 rounded-lg transform hover:scale-105 hover:shadow-xl transition-all duration-300 uppercase tracking-wide"
           >
-            <span>View All Stories</span>
+            <span>{copy.press.viewAll}</span>
             <ArrowRight className="w-5 h-5" />
           </button>
         </div>

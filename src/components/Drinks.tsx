@@ -1,14 +1,14 @@
 import React from 'react';
 import { Download } from 'lucide-react';
-import { drinks, menus } from '../content';
+import { drinks, menus, copy } from '../content';
 import type { Drink } from '../content';
 
 const hasImage = (drink: Drink): drink is Drink & { image: string } => drink.image !== null;
 
 const CATEGORY_ORDER: { key: Drink['category']; heading: string }[] = [
-  { key: 'mocktail', heading: 'Mocktails' },
-  { key: 'cocktail', heading: 'Cocktails' },
-  { key: 'wine', heading: 'Wine' },
+  { key: 'mocktail', heading: copy.drinks.mocktails },
+  { key: 'cocktail', heading: copy.drinks.cocktails },
+  { key: 'wine', heading: copy.drinks.wine },
 ];
 
 const Drinks: React.FC = () => {
@@ -25,12 +25,10 @@ const Drinks: React.FC = () => {
       <div className="max-w-7xl mx-auto px-4 relative">
         <div className="text-center mb-16">
           <h2 className="font-['Montserrat'] text-4xl md:text-5xl font-bold text-[#222] mb-6">
-            Drinks
+            {copy.drinks.heading}
           </h2>
           <p className="font-['Open_Sans'] text-gray-700 max-w-2xl mx-auto leading-relaxed">
-            Our bar pours a full Italian programme alongside our zero-proof mocktails: prosecco
-            spritzes, rosé and classic cocktails from the bar team, and a wine list running from
-            everyday Chianti to a Barolo DOCG and a Brunello di Montalcino.
+            {copy.drinks.intro}
           </p>
         </div>
 
