@@ -11,10 +11,9 @@ describe('press content', () => {
     });
   });
 
-  it('is sorted newest first at source', () => {
-    const dates = press.map((a) => new Date(a.date).getTime());
-    expect(dates).toEqual([...dates].sort((a, b) => b - a));
-  });
+  // "Sorted newest first" moved to src/content/validate.ts: it rejects a
+  // bad press.json before the commit exists, rather than after the build
+  // has already run against it.
 
   it('has unique ids', () => {
     expect(new Set(press.map((a) => a.id)).size).toBe(press.length);

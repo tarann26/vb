@@ -4,12 +4,9 @@ import OurStory from '../OurStory';
 import { story, galleries } from '../../content';
 
 describe('OurStory', () => {
-  it('has no truncated placeholder paragraphs', () => {
-    story.paragraphs.forEach((p) => {
-      expect(p.trim().endsWith('...')).toBe(false);
-      expect(p.trim().endsWith('…')).toBe(false);
-    });
-  });
+  // "No trailing ellipsis" moved to src/content/validate.ts: it rejects a
+  // bad story.json before the commit exists, rather than after the build
+  // has already run against it.
 
   it('renders every paragraph', () => {
     render(<OurStory />);

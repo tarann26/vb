@@ -32,20 +32,8 @@ describe('Drinks', () => {
     });
   });
 
-  it('describes only drinks that exist', () => {
-    render(<Drinks />);
-    [
-      // Ghosts from the original intro copy: described drinks that were never on the menu.
-      'basil-lime spritz',
-      'rosemary-grapefruit fizz',
-      'espresso-orange tonic',
-      // Retired from the current printed menu: must not silently reappear.
-      'Bicerin',
-      'Espresso Tonic',
-      'Signor Bianca',
-      'Sambuco',
-    ].forEach((ghost) => {
-      expect(screen.queryByText(new RegExp(ghost, 'i'))).toBeNull();
-    });
-  });
+  // "Describes only drinks that exist" (retired drinks and prose ghosts)
+  // moved to src/content/validate.ts: it rejects a bad drinks.json or
+  // copy.json before the commit exists, rather than after the build has
+  // already run against it.
 });
