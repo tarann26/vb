@@ -1,14 +1,82 @@
-// The admin Worker's entry point. Scaffold only (Task 3 of the worker plan):
-// no real route does anything yet, and there is nothing here for a visitor
-// to reach -- `/api/*` on the site's own zone is the only thing routed to
-// this Worker (see wrangler.toml), and every path other than /api/health
-// replies 404 until a later task adds a real route.
+// The admin Worker's entry point. `/api/*` on the site's own zone is the
+// only thing routed to this Worker (see wrangler.toml); every path other
+// than /api/health and POST /api/login still replies 404 until a later
+// task adds a real route.
 //
 // Deliberately typed against `@cloudflare/workers-types` (tsconfig.worker.json)
 // rather than tsconfig.node.json: this file needs `Response`/`Request`/`fetch`/
 // `crypto`, none of which tsconfig.node.json's ES2023-only `lib` declares.
+import { verifyPassword, signToken } from './auth';
+import { checkLoginRate, recordLoginFailure, clearLoginFailures } from './ratelimit';
+
+// Grows as later tasks need more bindings (GITHUB_TOKEN in Task 5, etc.) --
+// only what this file actually reads belongs here.
+export interface Env {
+  KV: KVNamespace;
+  ADMIN_PASSWORD_HASH: string;
+  TOKEN_SECRET: string;
+}
+
+// 7 days. Rotating ADMIN_PASSWORD_HASH alone does not invalidate a session
+// token already issued under the old password -- a token's validity comes
+// entirely from TOKEN_SECRET (see worker/auth.ts's verifyToken), not from
+// whether the password that produced it is still current. Revoking an
+// outstanding session requires rotating TOKEN_SECRET too; see
+// docs/cloudflare-cutover.md.
+const SESSION_SECONDS = 604_800;
+
+function json(status: number, body: unknown): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
+async function handleLogin(request: Request, env: Env): Promise<Response> {
+  // IP-only limiting, checked before the request body is even read -- see
+  // worker/ratelimit.ts for why this is KV rather than the Workers Rate
+  // Limiting binding. `CF-Connecting-IP` is set by Cloudflare itself on
+  // every request that reaches a Worker; unlike an arbitrary header, a
+  // client cannot forge it to pin someone else's IP or dodge the limiter
+  // for its own.
+  const ip = request.headers.get('CF-Connecting-IP') ?? 'unknown';
+  if (!(await checkLoginRate(env.KV, ip))) {
+    return json(429, { message: 'Too many attempts. Try again in 15 minutes.' });
+  }
+
+  let password: unknown;
+  try {
+    const body: unknown = await request.json();
+    password = (body as { password?: unknown } | null)?.password;
+  } catch {
+    return json(400, { message: 'Invalid request body.' });
+  }
+
+  if (typeof password !== 'string' || password.length === 0) {
+    return json(400, { message: 'Password required.' });
+  }
+
+  // The supplied password is never logged, in any form, on any path below
+  // -- not the plaintext, not a hash of it, whether the login succeeds or
+  // fails.
+  if (!(await verifyPassword(password, env.ADMIN_PASSWORD_HASH))) {
+    await recordLoginFailure(env.KV, ip);
+    return json(401, { message: 'Incorrect password.' });
+  }
+
+  await clearLoginFailures(env.KV, ip);
+  const expiresAt = Math.floor(Date.now() / 1000) + SESSION_SECONDS;
+  const token = await signToken(env.TOKEN_SECRET, expiresAt);
+  return new Response(null, {
+    status: 204,
+    headers: {
+      'Set-Cookie': `vb_session=${token}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=${SESSION_SECONDS}`,
+    },
+  });
+}
+
 export default {
-  async fetch(request: Request): Promise<Response> {
+  async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
 
     // Unauthenticated by design and reveals nothing (no version, no commit
@@ -26,6 +94,10 @@ export default {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       });
+    }
+
+    if (url.pathname === '/api/login' && request.method === 'POST') {
+      return handleLogin(request, env);
     }
 
     return new Response('Not found', { status: 404 });
