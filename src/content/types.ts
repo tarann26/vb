@@ -38,6 +38,14 @@ export interface SiteContent {
 // why a future-dated section is rejected outright rather than supported.
 // Filtering on this field happens in the Vite build (plugins/filter-unpublished.ts),
 // never in the browser -- see that file for why.
+//
+// If a fourth type ever needs `publishAt` (`extends Schedulable`), it is
+// NOT automatically filtered: `plugins/filter-unpublished.ts`'s
+// `TARGET_SUFFIXES` is a separate, hand-maintained list of the three
+// content files (dishes/drinks/press) this applies to today, with no
+// compiler link back to this type. Adding `Schedulable` to a new type
+// compiles clean and `tsc -b` stays silent while that type's build-time
+// filtering silently never happens -- update `TARGET_SUFFIXES` too.
 type Schedulable = {
   publishAt?: string;
 };

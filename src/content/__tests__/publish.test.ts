@@ -25,4 +25,16 @@ describe('isPublished', () => {
   it('rejects a date that looks valid but is not', () => {
     expect(() => isPublished({ publishAt: '2026-02-30' }, '2026-08-02')).toThrow();
   });
+
+  // A day/month swap (the exact typo Indian DD-MM date-format habit
+  // produces) yields an out-of-range month or day -- "2026-25-12" reads as
+  // month 25. `new Date(...)` for that produces an Invalid Date, and
+  // `.toISOString()` on an Invalid Date throws `RangeError: Invalid time
+  // value` *before* the round-trip `===` comparison ever runs, bypassing
+  // this function's own readable message. Pinned to the readable message,
+  // not just "throws something", so a regression back to the unguarded
+  // `.toISOString()` call is caught even though it still throws either way.
+  it('rejects an out-of-range month/day with a readable message, not a raw RangeError', () => {
+    expect(() => isPublished({ publishAt: '2026-25-12' }, '2026-08-02')).toThrow(/publishAt/);
+  });
 });

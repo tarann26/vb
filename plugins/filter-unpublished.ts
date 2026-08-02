@@ -39,7 +39,16 @@ function asPublishable(item: unknown, file: string): { publishAt?: string } {
 // cron job from Plan 3), not midnight: an item dated "today" goes live at
 // the next build that happens to run on or after that date, not the
 // instant the clock ticks over.
-function todayInKolkata(): string {
+//
+// Exported (not module-private) purely so
+// plugins/__tests__/filter-unpublished.test.ts can verify the IST
+// resolution itself under fake timers -- `filterUnpublishedJson`'s own
+// tests all take `today` as a parameter and so cannot exercise this
+// function's body at all; nothing else in the suite would have caught a
+// regression here (confirmed: swapping the body to plain
+// `new Date().toISOString().slice(0, 10)` -- i.e. UTC, the exact bug this
+// function exists to avoid -- left every other gate green).
+export function todayInKolkata(): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
 }
 
@@ -80,6 +89,17 @@ export function filterUnpublishedJson(id: string, code: string, today: string): 
 // `enforce: 'pre'`, `code` arrives as `export default {...}` JS source, and
 // filtering that would be string surgery instead of a JSON.parse/stringify
 // round trip.
+//
+// Residual channel this plugin does NOT close: a withheld item's `image`
+// path (e.g. "/food/idk1.webp") still ships. `public/` is copied into
+// `dist/` verbatim by Vite -- this plugin only ever touches the three JSON
+// files, never the filesystem copy -- so the photo for an unannounced dish
+// is still fetchable at a guessable URL even though its name and
+// description are genuinely absent from the JS. Harmless today because
+// today's filenames are generic (`idk1.webp`, `pizza1.webp`, ...), but it
+// becomes a real leak the moment a file is named after the dish itself
+// (e.g. `truffle-special.webp`). Whoever wires Plan 3's upload UI should
+// see this before assuming "scheduled" means "invisible everywhere".
 export default function filterUnpublished(): Plugin {
   return {
     name: 'filter-unpublished',
