@@ -1,2 +1,16 @@
-/api/*    /api/:splat   404
+# Deliberately no /api/* rule here. Cloudflare Pages' _redirects only accepts
+# status codes 200, 301, 302, 303, 307, or 308 -- an invalid status is silently
+# ignored at build time, not rejected, so there is no way to make this file
+# answer /api/* with a 404 or any other "this path does not belong to the SPA"
+# response. A 200-rewrite would be worse than nothing: it would make an
+# unrouted /api/* request look identical to a successful API response.
+# The Worker route in wrangler.toml (`viabiancadelhi.com/api/*`) is therefore
+# the *only* mechanism keeping /api/* out of the catch-all below -- Cloudflare
+# Routes take precedence over Pages for a matching hostname, so as long as
+# that route exists and is active, this catch-all never sees an /api/*
+# request at all. src/test/hosting.test.ts pins the route's existence,
+# pattern and zone instead of anything in this file. If you're adding a rule
+# here for some other path, know that this file cannot express "fail loudly"
+# for it -- see docs/cloudflare-cutover.md's deploy-time curl smoke check for
+# the only reliable way to confirm the route is actually live.
 /*    /index.html   200

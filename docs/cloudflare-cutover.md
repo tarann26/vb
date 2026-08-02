@@ -177,3 +177,35 @@ A human with Cloudflare account access must, before the admin Worker is ever dep
 this step and `npm run test:deploy` fails there, with a message naming the reason, instead of the
 Worker failing at runtime with an unbound KV binding the first time a login or a publish tries to
 use it.
+
+## 9. Deploy the admin Worker, then confirm its route is actually live
+
+Do this after Step 8 (the KV namespace exists) and after DNS (Step 5) has the zone on Cloudflare —
+the Worker's route (`viabiancadelhi.com/api/*` in `wrangler.toml`) is meaningless on a zone
+Cloudflare doesn't control yet.
+
+1. `wrangler deploy` (from the repo root; needs a Cloudflare API token with Workers-deploy
+   permission, either via `wrangler login` or a `CLOUDFLARE_API_TOKEN` env var).
+2. **Immediately after, run this — do not skip it and do not assume the deploy log is enough:**
+
+   ```bash
+   curl -s -o /dev/null -w '%{http_code} %{content_type}\n' https://viabiancadelhi.com/api/health
+   ```
+
+   Expected: `200 application/json`. If it instead prints `text/html`, the Worker route is not
+   active — the request fell through to the Pages SPA catch-all instead of reaching the Worker —
+   and **every** `/api/*` call (login, publish, upload, the WhatsApp tap counter) is silently
+   hitting the same catch-all right now. Stop here and fix the route before doing anything else;
+   do not treat a successful `wrangler deploy` as proof the route works.
+
+**This curl check is the only reliable way to confirm the route is live — nothing committed to
+this repository can do it.** `public/_redirects` cannot express "fail loudly" for an unrouted
+path (Cloudflare Pages' `_redirects` only accepts status 200, 301, 302, 303, 307 or 308, so there
+is no way to make it answer `/api/*` with a 404 the way a real misconfiguration should look); its
+SPA catch-all will happily return 200 with the homepage's HTML for `/api/health` too, if the Route
+isn't actually intercepting the request first. `src/test/hosting.test.ts` pins that the *route
+configuration* in `wrangler.toml` names the right pattern and zone, which catches a config typo
+before it ships — but it cannot observe whether Cloudflare is actually honouring that
+configuration on the live zone. Only a real request against the live domain, after a real deploy,
+can. Re-run the same curl after any future change to `wrangler.toml`'s `routes`, not just the
+first time.

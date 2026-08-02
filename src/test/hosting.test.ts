@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync, existsSync } from 'node:fs';
+import { site } from '../content';
 
 describe('cloudflare hosting config', () => {
   it('rewrites every unmatched route to the SPA entry point', () => {
@@ -8,29 +9,39 @@ describe('cloudflare hosting config', () => {
     expect(redirects).toMatch(/^\/\*\s+\/index\.html\s+200$/m);
   });
 
-  // Cloudflare Routes (wrangler.toml) take precedence over Pages for the
-  // same hostname, so in normal operation /api/* is served by the Worker
-  // and never reaches this file at all -- this rule is belt-and-braces.
-  // But the SPA catch-all above answers literally anything unmatched with
-  // 200 and the app shell's HTML, and navigator.sendBeacon('/api/wa')
-  // treats any 2xx as success with no way for the caller to inspect the
-  // body. If the Cloudflare Route were ever removed and this exclusion
-  // quietly reordered below the catch-all (or deleted), every API call
-  // would start "succeeding" against HTML and nothing anywhere would fail.
-  // This pins the exclusion to a non-2xx status, so a regression here is
-  // itself loud, and pins its position strictly above the catch-all, so a
-  // future edit cannot silently move it past that line.
-  it('keeps /api/* out of the SPA catch-all: excluded above it, not rewritten to a 200', () => {
-    const redirects = readFileSync('public/_redirects', 'utf8');
-    const apiRule = redirects.match(/^\/api\/\*\s+\S+\s+(\d+)$/m);
-    expect(apiRule).not.toBeNull();
-    expect(Number(apiRule![1])).not.toBe(200);
+  // public/_redirects cannot keep /api/* out of this catch-all: Cloudflare
+  // Pages' _redirects only accepts status 200, 301, 302, 303, 307 or 308 --
+  // an earlier version of this test pinned a 404 rule there, which Cloudflare
+  // silently ignores at build time rather than erroring on, so that rule did
+  // nothing and the catch-all was the only thing that ever matched /api/*.
+  // (See public/_redirects' own comment for the fuller account, and
+  // docs/cloudflare-cutover.md's deploy-time curl check, the only thing that
+  // can actually observe this on the real platform.)
+  //
+  // The thing that genuinely keeps /api/* off the SPA catch-all is the
+  // Worker route in wrangler.toml: Cloudflare Routes take precedence over
+  // Pages for a matching hostname, so as long as that route exists, covers
+  // /api/*, and is scoped to the site's real zone, this catch-all never sees
+  // an /api/* request. This test pins *that* -- the route's existence,
+  // pattern and zone -- since that's the thing whose absence (or whose zone
+  // silently drifting to the wrong domain) is what would actually let
+  // navigator.sendBeacon('/api/wa') succeed against HTML.
+  it('routes /api/* to the Worker on the site\'s real zone, not just the Pages catch-all', () => {
+    const wrangler = readFileSync('wrangler.toml', 'utf8');
+    const routesBlock = wrangler.match(/routes\s*=\s*\[\s*\{([^}]*)\}\s*\]/);
+    expect(routesBlock).not.toBeNull();
 
-    const apiIndex = redirects.search(/^\/api\/\*\s/m);
-    const catchAllIndex = redirects.search(/^\/\*\s+\/index\.html\s+200$/m);
-    expect(apiIndex).toBeGreaterThanOrEqual(0);
-    expect(catchAllIndex).toBeGreaterThanOrEqual(0);
-    expect(apiIndex).toBeLessThan(catchAllIndex);
+    const pattern = routesBlock![1].match(/pattern\s*=\s*"([^"]+)"/);
+    const zoneName = routesBlock![1].match(/zone_name\s*=\s*"([^"]+)"/);
+    expect(pattern).not.toBeNull();
+    expect(zoneName).not.toBeNull();
+
+    // Derived from site.json's own seo.url, not a second hardcoded literal
+    // of the domain -- so this test fails if the two ever drift apart,
+    // rather than each independently agreeing with a typo.
+    const domain = new URL(site.seo.url).host;
+    expect(pattern![1]).toBe(`${domain}/api/*`);
+    expect(zoneName![1]).toBe(domain);
   });
 
   // Scoped to the /assets/* block specifically, not matched against the
