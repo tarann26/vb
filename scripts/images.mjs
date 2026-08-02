@@ -10,12 +10,17 @@ import {
   OG_WIDTH,
   OG_HEIGHT,
   OG_QUALITY,
+  IMAGE_EXT,
   outputPathFor,
   maxWidthFor,
   findCollisions,
 } from './paths.mjs';
 
-export const IMAGE_EXT = new Set(['.jpg', '.jpeg', '.png']);
+// Re-exported, not re-declared: IMAGE_EXT itself now lives in paths.mjs so
+// scripts/__tests__/images.test.mjs can check it without importing sharp
+// (see that constant's own comment there). Kept as a named export here too
+// so nothing that already imports IMAGE_EXT from this file breaks.
+export { IMAGE_EXT };
 
 export async function walk(dir) {
   const entries = await readdir(dir, { withFileTypes: true });

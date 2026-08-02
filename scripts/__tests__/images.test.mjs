@@ -10,7 +10,32 @@ import {
   findCollisions,
   maxWidthFor,
   DEFAULT_MAX_WIDTH,
+  IMAGE_EXT,
 } from '../paths.mjs';
+
+describe('IMAGE_EXT', () => {
+  it('still recognizes the three original extensions', () => {
+    expect(IMAGE_EXT.has('.jpg')).toBe(true);
+    expect(IMAGE_EXT.has('.jpeg')).toBe(true);
+    expect(IMAGE_EXT.has('.png')).toBe(true);
+  });
+
+  // D5's widened list. Membership alone doesn't prove sharp can actually
+  // encode a derivative from a file with each extension -- that's
+  // scripts/__tests__/images.derivatives.test.mjs's job, which is why this
+  // lives in a separate file from the sharp-dependent proof rather than
+  // being asserted here as if it were the whole story.
+  it('recognizes the newly-widened extensions per D5', () => {
+    expect(IMAGE_EXT.has('.webp')).toBe(true);
+    expect(IMAGE_EXT.has('.avif')).toBe(true);
+    expect(IMAGE_EXT.has('.tiff')).toBe(true);
+    expect(IMAGE_EXT.has('.gif')).toBe(true);
+  });
+
+  it('does not recognize an unrelated extension', () => {
+    expect(IMAGE_EXT.has('.pdf')).toBe(false);
+  });
+});
 
 describe('outputPathFor', () => {
   it('maps a source image to a webp at the same relative path', () => {

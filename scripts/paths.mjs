@@ -16,6 +16,26 @@ import { join, extname, basename, relative, sep } from 'node:path';
 export const SOURCE = 'assets-source';
 export const OUT = 'public';
 
+// Which source files `listSources()` (images.mjs) treats as photos to
+// encode. Lives here rather than in images.mjs itself -- despite belonging
+// conceptually to the encode pipeline -- for the same reason this whole
+// module stays free of sharp: scripts/__tests__/images.test.mjs imports
+// only from paths.mjs so it can run inside `npm run test:deploy` without
+// ever loading sharp's native binding, and IMAGE_EXT is plain data a test
+// can check membership against without encoding anything. images.mjs still
+// imports it from here rather than re-declaring it, so there is exactly one
+// definition, not two that could drift.
+//
+// Widened per D5 from the original {jpg, jpeg, png} to also cover webp,
+// avif, tiff and gif -- an iPhone or a scanner can hand the owner any of
+// these, and a file sharp can decode but this Set doesn't list is silently
+// invisible to listSources(): never encoded, its derivative never created,
+// and the build fails later on the missing public/ asset with no mention of
+// why. See scripts/__tests__/images.derivatives.test.mjs for proof each of
+// the newly-added extensions actually round-trips through sharp, not just
+// that this Set contains its string.
+export const IMAGE_EXT = new Set(['.jpg', '.jpeg', '.png', '.webp', '.avif', '.tiff', '.gif']);
+
 // Derivatives are capped at the width they are actually displayed at, not at
 // one global number. Overriding per directory is what keeps the homepage's
 // eager above-the-fold images honest: Hero.tsx renders sixteen collage tiles

@@ -26,14 +26,16 @@ dist-ssr
 # Source design assets (Illustrator packages, print PDFs) — too large for git
 New Menu/
 
-# Generated from assets-source/ by `npm run images`
-/public/atmosphere/
-/public/food/
-/public/hero/
-/public/mocktails/
-/public/our_story/
-/public/press/
-/public/team/
+# Generated from assets-source/ by `npm run images`. `/public/*/` ignores
+# every directory directly under public/ -- not just today's seven category
+# names -- so a new assets-source/<category>/ that Task 6's upload route
+# adds never needs a matching .gitignore edit. `!/public/menus/` carves the
+# one loose, hand-committed exception back out (menus/ isn't generated from
+# assets-source/ at all). `/public/**/*.webp` looks tempting but does NOT
+# work here: it leaves the directories themselves unignored, so an empty
+# `public/hero/` would still show up as untracked in a fresh clone.
+/public/*/
+!/public/menus/
 /public/og-image.jpg
 
 # Editor directories and files

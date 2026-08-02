@@ -10,6 +10,7 @@ import { verifyPassword, signToken, verifyToken, parseCookie } from './auth';
 import { checkLoginRate, recordLoginFailure, clearLoginFailures } from './ratelimit';
 import { commitFiles, DisallowedPathError, type CommitFile, type GitHubEnv } from './github';
 import { validateContent, type ValidationProblem } from '../src/content/validate';
+import { handleUpload } from './upload';
 
 // Grows as later tasks need more bindings -- only what this file actually
 // reads belongs here. GITHUB_OWNER/REPO/BRANCH/TOKEN come in via GitHubEnv
@@ -222,6 +223,10 @@ export default {
 
     if (url.pathname === '/api/publish' && request.method === 'POST') {
       return handlePublish(request, env);
+    }
+
+    if (url.pathname === '/api/upload' && request.method === 'POST') {
+      return handleUpload(request, env);
     }
 
     return new Response('Not found', { status: 404 });
