@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Instagram, Menu, X } from 'lucide-react';
+import { site } from '../content';
 
 const NAV_LINKS = [
   { href: '#our-story', label: 'Our Story' },
@@ -39,29 +40,31 @@ const Navbar: React.FC = () => {
         Via Bianca
       </div>
 
-      {/* Links */}
-     {/* Links and social */}
+      {/* Links and social */}
      <div className="flex items-center space-x-6">
-        <div className="hidden md:flex space-x-6 text-sm font-['Montserrat'] tracking-wider text-[#6B8B59] uppercase">
-          {/* Below md this list is already display:none via `hidden`; skipping
-              the render while the mobile panel is open just keeps a single
-              live set of nav links in the DOM instead of two. */}
-          {!isMenuOpen &&
-            NAV_LINKS.map((link) => (
+        <div className="hidden md:flex">
+          <div
+            data-testid="desktop-nav-links"
+            className="space-x-6 text-sm font-['Montserrat'] tracking-wider text-[#6B8B59] uppercase"
+          >
+            {NAV_LINKS.map((link) => (
               <a key={link.href} href={link.href} className="hover:text-[#222] transition">
                 {link.label}
               </a>
             ))}
+          </div>
         </div>
-        <a
-          href="https://instagram.com/viabiancadelhi"
-          target="_blank"
-          rel="noopener noreferrer"
-          aria-label="Follow Via Bianca on Instagram"
-          className="text-[#6B8B59] hover:text-[#222] transition"
-        >
-          <Instagram className="h-5 w-5" />
-        </a>
+        {site.socials.instagram && (
+          <a
+            href={site.socials.instagram}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Follow Via Bianca on Instagram"
+            className="text-[#6B8B59] hover:text-[#222] transition"
+          >
+            <Instagram className="h-5 w-5" />
+          </a>
+        )}
         <button
           type="button"
           aria-label="Menu"
@@ -74,7 +77,10 @@ const Navbar: React.FC = () => {
       </div>
 
       {isMenuOpen && (
-        <div className="absolute top-full left-0 right-0 md:hidden bg-white shadow-md flex flex-col items-start px-6 py-4 space-y-4 text-sm font-['Montserrat'] tracking-wider text-[#6B8B59] uppercase">
+        <div
+          data-testid="mobile-nav-panel"
+          className="absolute top-full left-0 right-0 md:hidden bg-white shadow-md flex flex-col items-start px-6 py-4 space-y-4 text-sm font-['Montserrat'] tracking-wider text-[#6B8B59] uppercase"
+        >
           {NAV_LINKS.map((link) => (
             <a
               key={link.href}
