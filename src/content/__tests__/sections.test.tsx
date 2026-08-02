@@ -23,28 +23,37 @@ const MARKER: Record<SectionId, string> = {
 
 // Structural roots -- the DOM element each section renders, per the plan's
 // own SectionId/anchor mapping table (deliberately not the same strings as
-// the SectionId itself). `hero` has no id of its own in the live markup, so
-// Hero.tsx now carries a `data-testid="hero"` purely for this purpose --
-// invisible, zero visual effect, the same pattern NavBar.tsx already uses
-// for `desktop-nav-links`/`mobile-nav-panel`.
+// the SectionId itself). `hero` has no id, class, or test attribute of its
+// own in the live markup; giving it one was considered (a `data-testid`,
+// the same pattern NavBar.tsx already uses for `desktop-nav-links`/
+// `mobile-nav-panel`) and rejected -- it would touch Hero.tsx, and this
+// plan's zero-visual-change bar has been verified across review rounds by
+// comparing the built homepage's `container.innerHTML` byte-for-byte
+// (53473 bytes); a `data-testid` attribute is invisible to a viewer but is
+// still real markup, and adding one measurably changed that count (checked
+// directly: 53492 bytes, +19, exactly `data-testid="hero"`'s length).
+// `SECTION_SELECTOR.hero` therefore stays `'h1'` -- real production markup,
+// used only for the document-order check below -- and hero's marker check
+// is handled separately (see sectionMarkerPresent) without production
+// changes.
 //
-// Used two ways below: to check *document order*, and to *scope* every
-// MARKER lookup to that section's own subtree instead of the whole
-// document. Scoping is what makes a marker assertion trustworthy on its
-// own: `story.heading` ("Our Story") and `copy.visit.heading` ("Visit Us")
-// are each, coincidentally, identical to their own nav link's label, which
-// renders in <nav> whenever the *section* is enabled regardless of whether
-// the section's own component rendered anything at all. An unscoped
-// `screen.queryByText` lookup for either marker is satisfied by the nav
-// link alone, so it stays "found" even when the section's own component is
-// stubbed to render nothing -- verified directly (see sectionMarkerPresent
-// below): stubbing OurStory or VisitUs to `() => null` left an unscoped
-// lookup passing, and only a separate structural check (document order)
-// caught it. Scoping to the section's own root -- which the nav link is
-// never inside -- closes that gap for every marker, present and future,
-// without relying on any of today's copy happening to be unique.
+// Used two ways below: to check *document order*, and (for six of the
+// seven ids) to *scope* the MARKER lookup to that section's own subtree
+// instead of the whole document. Scoping is what makes a marker assertion
+// trustworthy on its own: `story.heading` ("Our Story") and
+// `copy.visit.heading` ("Visit Us") are each, coincidentally, identical to
+// their own nav link's label, which renders in <nav> whenever the
+// *section* is enabled regardless of whether the section's own component
+// rendered anything at all. An unscoped `screen.queryByText` lookup for
+// either marker is satisfied by the nav link alone, so it stays "found"
+// even when the section's own component is stubbed to render nothing --
+// verified directly: stubbing OurStory or VisitUs to `() => null` left an
+// unscoped lookup passing, and only a separate structural check (document
+// order) caught it. Scoping to the section's own root -- which the nav
+// link is never inside -- closes that gap for those markers, present and
+// future, without relying on any of today's copy happening to be unique.
 const SECTION_SELECTOR: Record<SectionId, string> = {
-  hero: '[data-testid="hero"]',
+  hero: 'h1',
   ourStory: '#our-story',
   atmosphere: '#gallery',
   food: '#menu',
@@ -59,13 +68,25 @@ function sectionRoot(id: SectionId): HTMLElement | null {
   return document.querySelector<HTMLElement>(SECTION_SELECTOR[id]);
 }
 
-// Whether `id`'s marker text is present *inside that section's own root*.
-// False both when the root itself never rendered (the section's dispatch
-// entry returned nothing, or rendered the wrong component under a
-// different root) and when the root rendered but doesn't contain its own
-// marker text. Either way this is a direct, scoped check -- not an
-// inference from some other assertion (e.g. document order) going red.
+// Whether `id`'s marker text is present. Six of the seven ids scope the
+// lookup to that section's own root (see the SECTION_SELECTOR comment
+// above for why); `hero`'s root selector (`h1`) is a *descendant* of
+// Hero's content, not a container of it -- `copy.hero.reserveButton`
+// ("Reserve a Table") isn't inside the <h1> -- so scoping within it would
+// wrongly report "absent" even when Hero renders normally. hero instead
+// gets an unscoped, whole-document lookup, which is safe because
+// `reserveButton` is verified to render nowhere else on the page (`grep
+// -rn "reserveButton" src/components/*.tsx` -- one hit, Hero.tsx) -- so
+// stubbing Hero to render nothing genuinely removes every instance of that
+// text, not just the one inside some root this check isn't scoped to. This
+// is the one marker not future-proofed against a later collision the way
+// the other six are (a deliberate trade against touching Hero.tsx's
+// production markup); if `copy.hero.reserveButton` is ever changed to
+// match text elsewhere on the page, this check would need re-auditing.
 function sectionMarkerPresent(id: SectionId): boolean {
+  if (id === 'hero') {
+    return screen.queryAllByText(MARKER.hero).length > 0;
+  }
   const root = sectionRoot(id);
   if (!root) return false;
   return within(root).queryAllByText(MARKER[id]).length > 0;

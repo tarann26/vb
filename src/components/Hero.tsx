@@ -6,7 +6,7 @@ import { site, galleries, copy } from '../content';
 const Hero: React.FC = () => {
 
  return (
-  <section data-testid="hero" className="min-h-screen bg-white relative flex items-center justify-center overflow-hidden">
+  <section className="min-h-screen bg-white relative flex items-center justify-center overflow-hidden">
     {/* brick background */}
     <img
       src="/hero/brick.webp"
