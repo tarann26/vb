@@ -131,6 +131,28 @@ describe('homepage sections', () => {
     assertDocumentOrder(enabledIds);
   });
 
+  // assertCopy only checks `href` is shaped like a "#"-prefixed fragment
+  // (see content/index.ts) -- it has no way to know, at import time, whether
+  // that fragment names a real, currently-enabled anchor in the rendered
+  // page. A typo like "#galery" (missing an 'l') passes that shape check
+  // and every other gate, but produces a nav link that does nothing when
+  // clicked. This closes that gap against the real DOM: every nav link
+  // whose section is currently enabled must resolve to an actual element.
+  it('every visible nav link points at a real anchor in the rendered homepage', () => {
+    render(
+      <MemoryRouter>
+        <HomePage />
+      </MemoryRouter>,
+    );
+
+    const enabledIds = new Set(sections.filter((s) => s.enabled).map((s) => s.id));
+    copy.nav.links
+      .filter((link) => enabledIds.has(link.section))
+      .forEach((link) => {
+        expect(document.querySelector(link.href)).not.toBeNull();
+      });
+  });
+
   // The test above alone would pass even if HomePage ignored `enabled`
   // entirely, or if a section's dispatch entry silently rendered nothing (or
   // the *wrong* component) for every section except whichever one this
@@ -231,6 +253,16 @@ describe('assertSections', () => {
 
   it('rejects a duplicate id', () => {
     expect(() => assertSections([...sections, { id: 'food', enabled: true }])).toThrow(/food/);
+  });
+
+  // A dashboard-authored HTML form is the classic source of this bug: a
+  // checkbox serialized as the string "false" instead of the boolean
+  // `false` is truthy in JS, so a section the owner switched off would keep
+  // rendering with the guard weakened to accept it (Plan 4 writes this file
+  // from exactly such a form).
+  it('rejects a non-boolean "enabled" value, such as the string "false"', () => {
+    const bad = sections.map((s) => (s.id === 'food' ? { ...s, enabled: 'false' } : s));
+    expect(() => assertSections(bad)).toThrow(/"enabled" must be a boolean.*food/);
   });
 
   // Section has no `publishAt` field (see the comment on assertSections

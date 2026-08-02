@@ -220,9 +220,24 @@ export function assertCopy(raw: unknown): Copy {
     throw new Error('content/copy.json: "nav.links" must not be empty');
   }
   navLinks.forEach((link, i) => {
-    const section = (link as { section?: unknown }).section;
+    const { section, label, href } = link as { section?: unknown; label?: unknown; href?: unknown };
     if (!isSectionId(section)) {
       throw new Error(`content/copy.json: invalid "section" "${String(section)}" at nav.links[${i}]`);
+    }
+    // `label` and `href` decide whether the link is legible and whether it
+    // actually goes anywhere. Neither is caught by assertNonBlank: a number
+    // (e.g. `"label": 42`, a JSON authoring mistake) falls through every
+    // branch of assertNonBlank (it only recurses into strings, arrays and
+    // objects), so it renders as literal "42" text with the empty-string
+    // guard never tripping. `href` is checked for the "#"-fragment shape
+    // only here -- whether it names a real, currently-rendered anchor is a
+    // DOM-level question the "every visible nav link points at a real
+    // anchor" test in sections.test.tsx covers instead.
+    if (typeof label !== 'string') {
+      throw new Error(`content/copy.json: "label" must be a string at nav.links[${i}]`);
+    }
+    if (typeof href !== 'string' || !href.startsWith('#')) {
+      throw new Error(`content/copy.json: "href" must be a "#"-prefixed fragment at nav.links[${i}]`);
     }
   });
   assertNonBlank(raw, '');
@@ -233,14 +248,21 @@ export function assertCopy(raw: unknown): Copy {
 // assertCopy's comment above), which does not structurally satisfy `Copy`'s
 // `SectionId`-typed field. A cast (`as SectionId`) would "fix" the type
 // error but accepts `string | undefined` and `string | number` just as
-// happily as a real SectionId -- a link that loses its `section` key
-// entirely, or has it typo'd to a number, would satisfy the cast and only
-// fail later at vitest time, with `tsc -b`/`vite build` both green and a bad
-// copy.json shipping as a silently broken nav. `narrowSectionId`'s parameter
-// is typed `string` (not `unknown`), so passing it a value that isn't
-// definitely a string -- e.g. `link.section` when one array element is
-// missing that key, which widens the field to `string | undefined` across
-// the whole array -- is itself a compile error, not just a runtime one.
+// happily as a real SectionId, silently defeating the `satisfies Copy`
+// check below. `narrowSectionId`'s parameter is typed `string` (not
+// `unknown`), so passing it a value that isn't definitely a string -- e.g.
+// `link.section` when one array element is missing that key, which widens
+// the field to `string | undefined` across the whole array -- is itself a
+// compile error, not just a runtime one.
+//
+// Its own runtime throw is belt and braces, not the sole guard against a
+// bad value: this function runs first, while building `assertCopy`'s input
+// below, but `assertCopy`'s own `navLinks.forEach` independently re-checks
+// `isSectionId` on this exact same `section` field immediately afterwards
+// (see above). So an invalid section still throws even with this check
+// disabled -- confirmed directly: mutating this function's throw to a
+// no-op leaves the suite green, because assertCopy's check is what's
+// actually catching it, not this one.
 function narrowSectionId(section: string, path: string): SectionId {
   if (!isSectionId(section)) {
     throw new Error(`content/copy.json: invalid "section" "${section}" at ${path}`);

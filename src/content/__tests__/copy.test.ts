@@ -50,4 +50,19 @@ describe('assertCopy', () => {
     bad.nav.links[0].section = 'atmosfera';
     expect(() => assertCopy(bad)).toThrow(/nav\.links\[0\]/);
   });
+
+  it('rejects a non-string nav label, naming the path', () => {
+    // A number falls through every branch of assertNonBlank (it only
+    // recurses into strings, arrays and objects), so `"label": 42` renders
+    // as literal "42" text with nothing else in this suite catching it.
+    const bad = structuredClone(copy) as unknown as { nav: { links: { label: unknown }[] } };
+    bad.nav.links[0].label = 42;
+    expect(() => assertCopy(bad)).toThrow(/nav\.links\[0\]/);
+  });
+
+  it('rejects a nav href that is not a "#"-prefixed fragment, naming the path', () => {
+    const bad = structuredClone(copy) as unknown as { nav: { links: { href: unknown }[] } };
+    bad.nav.links[0].href = 'galery';
+    expect(() => assertCopy(bad)).toThrow(/nav\.links\[0\]/);
+  });
 });

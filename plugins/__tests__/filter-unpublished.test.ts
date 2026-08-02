@@ -42,6 +42,16 @@ describe('filterUnpublishedJson', () => {
     const bad = JSON.stringify([{ id: 'x', publishAt: 'next tuesday' }]);
     expect(() => filterUnpublishedJson('/repo/src/content/dishes.json', bad, TODAY)).toThrow();
   });
+
+  // asPublishable's own throw path, untested until now: mutating its guard
+  // to `if (false)` left every other test in this describe block green,
+  // because none of them pass a non-object array item.
+  it('rejects a non-object item in the array, rather than treating it as unpublished', () => {
+    const bad = JSON.stringify([42]);
+    expect(() => filterUnpublishedJson('/repo/src/content/dishes.json', bad, TODAY)).toThrow(
+      /expected an array of objects/,
+    );
+  });
 });
 
 describe('filterUnpublished (the Vite plugin)', () => {
@@ -51,6 +61,25 @@ describe('filterUnpublished (the Vite plugin)', () => {
 
   it('runs pre, before Vite\'s own JSON plugin converts the file to JS', () => {
     expect(filterUnpublished().enforce).toBe('pre');
+  });
+
+  // Nothing else in this file ever calls `.transform` itself -- the tests
+  // above exercise `filterUnpublishedJson` directly, and the two above this
+  // one only read `.apply`/`.enforce`. Proven load-bearing: replacing the
+  // transform hook's body with `return null`, and separately swapping its
+  // call to `filterUnpublishedJson(code, id, ...)` (the hook receives
+  // `(code, id)`, but the underlying function takes `(id, code, today)`),
+  // each left every other gate green. This test routes a real module id and
+  // real code string through the actual hook, the way Vite's build pipeline
+  // does, and would fail under either mutation: the argument swap makes
+  // `isTargetContentFile` check the JSON *string* instead of the module id
+  // (never matching, so the hook returns null and future-item survives);
+  // `return null` skips filtering outright for the same reason.
+  it('the transform hook routes a real module id through the filter', () => {
+    const t = filterUnpublished().transform as (c: string, id: string) => { code: string } | null;
+    const out = t.call({}, fixture, '/repo/src/content/dishes.json');
+    expect(out).not.toBeNull();
+    expect(JSON.parse(out!.code).map((i: { id: string }) => i.id)).not.toContain('future-item');
   });
 });
 

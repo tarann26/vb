@@ -16,6 +16,12 @@ class ErrorBoundary extends Component<Props, State> {
 
   render() {
     if (!this.state.hasError) return this.props.children;
+    // The strings below are hardcoded, not read from copy.errorBoundary, on
+    // purpose: main.tsx evaluates the whole static import graph (App and
+    // everything it imports, including content/index.ts's guards) before
+    // createRoot() ever runs, so a throw there happens before any render --
+    // an ErrorBoundary that itself imported content would fail to load
+    // right along with it, losing the one fallback meant to survive that.
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-[#F9F9F9] px-6 text-center">
         <h1 className="font-['Parisienne'] text-5xl text-[#222] mb-2">Via Bianca</h1>
