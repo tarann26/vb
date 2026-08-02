@@ -100,9 +100,9 @@ Not doing: shrinking in the browser before upload. Tempting for a repository alr
 
 A page has a name, a URL slug, a nav visibility flag, and an ordered list of sections. She creates pages and adds sections to them.
 
-**The homepage is an ordered list too.** She can reorder its eight existing sections, toggle any of them off, and insert new template sections anywhere among them.
+**The homepage is an ordered list too.** She can reorder its seven existing sections, toggle any of them off, and insert new template sections anywhere among them.
 
-The eight existing sections stay hand-built. They are not the same shape as each other — the Hero is a 6×6 collage with a logo circle and two phone numbers over a brick texture; Our Story is two columns with an auto-advancing carousel; Drinks has three sub-groups mixing photo cards and text lists. Templating them would mean either eight templates each used once, which is the components renamed, or flattening them into five generic ones, which visibly degrades the front page.
+The seven existing sections stay hand-built. They are not the same shape as each other — the Hero is a 6×6 collage with a logo circle and two phone numbers over a brick texture; Our Story is two columns with an auto-advancing carousel; Drinks has three sub-groups mixing photo cards and text lists. Templating them would mean either eight templates each used once, which is the components renamed, or flattening them into five generic ones, which visibly degrades the front page.
 
 So: bespoke sections are rendered by name, template sections by type, and both sit in the same ordered list obeying the same toggles.
 
