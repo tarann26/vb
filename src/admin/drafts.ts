@@ -25,7 +25,43 @@
 // second, quieter version of the exact failure this file exists to prevent.
 import type { ContentFileName } from './content';
 
+// Plan 5 Task 5, Step 2: which of the two surfaces that can each hold their
+// own unpublished edits -- the dashboard (AdminApp, /edit/manage) or the
+// real-page editor (EditMode, /edit) -- a draft belongs to. Both read
+// content through the identical nine `ContentFileName`s and both persist
+// through this same module, but they are NOT the same session: she can
+// have both open at once (a laptop tab on /edit/manage, a phone on /edit),
+// each with its own in-memory ContentRegistry, each independently deciding
+// what its own `registry.version` changing means. Before this type existed,
+// both surfaces wrote the identical key with no coordination and nothing
+// listening for a `storage` event, so the SECOND surface's next keystroke
+// silently overwrote the FIRST's entire draft -- not just the one file it
+// touched, because saveDraft's own contract (below) always writes the
+// WHOLE current DraftMap, replacing whatever was there. `surface` is
+// REQUIRED on every function below, not defaulted to one value -- the
+// point of this change is that nothing may call these functions without
+// deciding which draft it means.
+export type DraftSurface = 'dashboard' | 'edit';
+
 export const DRAFT_STORAGE_KEY = 'vb:draft:v1';
+export const DRAFT_STAGED_COUNT_KEY = 'vb:draft:v1:staged-count';
+// A second, independent key pair for /edit -- not a variant of the same
+// key, and not a sub-field inside it: `loadDraft`'s own per-entry filter
+// (below) has no notion of "which surface" a `DraftEntry` came from, so
+// keeping the two surfaces' maps in physically separate localStorage
+// entries is what makes "tab A edits dishes, tab B edits copy, both drafts
+// survive" true without either surface's own save ever needing to know the
+// other's current content.
+export const EDIT_DRAFT_STORAGE_KEY = 'vb:draft:v1:edit';
+export const EDIT_DRAFT_STAGED_COUNT_KEY = 'vb:draft:v1:edit:staged-count';
+
+function draftStorageKey(surface: DraftSurface): string {
+  return surface === 'dashboard' ? DRAFT_STORAGE_KEY : EDIT_DRAFT_STORAGE_KEY;
+}
+
+function draftStagedCountKey(surface: DraftSurface): string {
+  return surface === 'dashboard' ? DRAFT_STAGED_COUNT_KEY : EDIT_DRAFT_STAGED_COUNT_KEY;
+}
 
 // A SEPARATE key, not a field inside DRAFT_STORAGE_KEY's own JSON -- see
 // saveDraft/loadDraftStagedCount below for why. Review finding: a restored
@@ -46,7 +82,8 @@ export const DRAFT_STORAGE_KEY = 'vb:draft:v1';
 // from a path that published successfully in an earlier session); it
 // records only a COUNT, so the restore banner can at least say honestly
 // that some number of picked files were lost and need re-picking.
-export const DRAFT_STAGED_COUNT_KEY = 'vb:draft:v1:staged-count';
+// (DRAFT_STAGED_COUNT_KEY itself is declared above, alongside
+// DRAFT_STORAGE_KEY, now that both surfaces each need their own pair.)
 
 export interface DraftEntry {
   data: unknown;
@@ -83,11 +120,13 @@ function isDraftEntry(value: unknown): value is DraftEntry {
 // `storage` is a parameter, not a bare `window.localStorage` reference in
 // the body, so a test can inject a `Storage` that throws (a real, reachable
 // state -- Safari private browsing rejects every localStorage write) without
-// needing to delete or monkey-patch the real global.
-export function loadDraft(storage: Storage = window.localStorage): DraftMap | null {
+// needing to delete or monkey-patch the real global. `surface` is REQUIRED,
+// not defaulted -- see this module's own header comment on DraftSurface for
+// why every call site must say which draft it means.
+export function loadDraft(surface: DraftSurface, storage: Storage = window.localStorage): DraftMap | null {
   let raw: string | null;
   try {
-    raw = storage.getItem(DRAFT_STORAGE_KEY);
+    raw = storage.getItem(draftStorageKey(surface));
   } catch {
     return null;
   }
@@ -131,21 +170,21 @@ export function loadDraft(storage: Storage = window.localStorage): DraftMap | nu
 // enough like a DraftEntry to survive the filter, neither of which is
 // worth the coupling for one integer that has nothing to do with per-file
 // parsing at all.
-export function saveDraft(map: DraftMap, stagedCount: number = 0, storage: Storage = window.localStorage): void {
+export function saveDraft(surface: DraftSurface, map: DraftMap, stagedCount: number = 0, storage: Storage = window.localStorage): void {
   try {
     if (Object.keys(map).length === 0) {
-      storage.removeItem(DRAFT_STORAGE_KEY);
+      storage.removeItem(draftStorageKey(surface));
     } else {
-      storage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(map));
+      storage.setItem(draftStorageKey(surface), JSON.stringify(map));
     }
   } catch {
     // Best effort -- see this function's own comment above.
   }
   try {
     if (stagedCount > 0) {
-      storage.setItem(DRAFT_STAGED_COUNT_KEY, String(Math.floor(stagedCount)));
+      storage.setItem(draftStagedCountKey(surface), String(Math.floor(stagedCount)));
     } else {
-      storage.removeItem(DRAFT_STAGED_COUNT_KEY);
+      storage.removeItem(draftStagedCountKey(surface));
     }
   } catch {
     // Best effort, same as above -- worst case the banner's own "N files
@@ -157,9 +196,9 @@ export function saveDraft(map: DraftMap, stagedCount: number = 0, storage: Stora
 // (never written, corrupted by hand, a negative or non-numeric string) all
 // read as 0 -- "nothing to warn about" is the safe default for a value that
 // only ever adds one extra sentence to a banner, never gates anything.
-export function loadDraftStagedCount(storage: Storage = window.localStorage): number {
+export function loadDraftStagedCount(surface: DraftSurface, storage: Storage = window.localStorage): number {
   try {
-    const raw = storage.getItem(DRAFT_STAGED_COUNT_KEY);
+    const raw = storage.getItem(draftStagedCountKey(surface));
     if (raw === null) return 0;
     const parsed = Number(raw);
     return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 0;
@@ -169,21 +208,23 @@ export function loadDraftStagedCount(storage: Storage = window.localStorage): nu
 }
 
 // Called on a 200 from POST /api/publish (Step 4's own instruction) and
-// when she chooses Discard on the restore banner. Clears BOTH keys -- a
-// successful publish or an explicit Discard means there is nothing left to
-// warn about either. Same best-effort posture as saveDraft: a failed
-// removeItem leaves a stale draft (or a stale staged-count note) sitting in
-// localStorage, which is merely a spurious banner on her NEXT visit --
-// annoying, not destructive -- rather than something worth crashing this
-// call site over.
-export function clearDraft(storage: Storage = window.localStorage): void {
+// when she chooses Discard on the restore banner. Clears BOTH keys for the
+// GIVEN surface only -- never the other surface's draft, which is exactly
+// the point of Step 2's separation: a successful publish (or an explicit
+// Discard) from ONE surface says nothing about whether the OTHER surface
+// still has real, unpublished work of its own. Same best-effort posture as
+// saveDraft: a failed removeItem leaves a stale draft (or a stale
+// staged-count note) sitting in localStorage, which is merely a spurious
+// banner on her NEXT visit -- annoying, not destructive -- rather than
+// something worth crashing this call site over.
+export function clearDraft(surface: DraftSurface, storage: Storage = window.localStorage): void {
   try {
-    storage.removeItem(DRAFT_STORAGE_KEY);
+    storage.removeItem(draftStorageKey(surface));
   } catch {
     // Best effort, same as saveDraft.
   }
   try {
-    storage.removeItem(DRAFT_STAGED_COUNT_KEY);
+    storage.removeItem(draftStagedCountKey(surface));
   } catch {
     // Best effort, same as saveDraft.
   }

@@ -19,7 +19,7 @@ import {
   type PublishProgress,
   type PublishRequestResult,
 } from './publish';
-import { clearDraft, formatRelativeTime, mostRecentSavedAt, saveDraft, type DraftMap } from './drafts';
+import { clearDraft, formatRelativeTime, mostRecentSavedAt, saveDraft, type DraftMap, type DraftSurface } from './drafts';
 import type { StagedFiles } from './staged';
 import type { ContentFileName } from './content';
 import type { ValidationProblem } from '../content/validate';
@@ -195,6 +195,14 @@ const PUBLISH_BUTTON_CLASSNAME =
 export interface PublishBarProps {
   registry: ContentRegistry;
   stagedFiles: StagedFiles;
+  // Plan 5 Task 5, Step 2: which surface's OWN draft key (drafts.ts's own
+  // DraftSurface) this bar's persistence effect and success-path clearDraft
+  // call should read and write. AdminApp passes 'dashboard'; EditMode
+  // passes 'edit' -- REQUIRED, not defaulted, so this component can never
+  // be wired up without someone deciding which draft it means (see
+  // drafts.ts's own header comment on why that decision has to be
+  // explicit).
+  draftSurface: DraftSurface;
   // Called the moment either the publish request itself, or a build-status
   // poll made after it succeeded, comes back 401 -- the session's own 7-day
   // token can expire mid-edit. Handed the exact sentence she should read for
@@ -242,7 +250,14 @@ export interface PublishBarProps {
 
 const REAL_CLOCK = { now: () => Date.now(), sleep: (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)) };
 
-const PublishBar: React.FC<PublishBarProps> = ({ registry, stagedFiles, onUnauthenticated, children, pollClock = REAL_CLOCK }) => {
+const PublishBar: React.FC<PublishBarProps> = ({
+  registry,
+  stagedFiles,
+  draftSurface,
+  onUnauthenticated,
+  children,
+  pollClock = REAL_CLOCK,
+}) => {
   const [state, setState] = useState<BarState>({ phase: 'idle' });
   const mountedRef = useRef(true);
   const abortRef = useRef<AbortController | null>(null);
@@ -293,8 +308,8 @@ const PublishBar: React.FC<PublishBarProps> = ({ registry, stagedFiles, onUnauth
     // staged (but not yet published) is scrubbed out of what gets written
     // below; see dirtyDraftMap's own comment for the Critical this closes.
     const map = dirtyDraftMap(entries, stagedFiles.files);
-    if (Object.keys(map).length > 0) saveDraft(map, stagedCount);
-    else clearDraft();
+    if (Object.keys(map).length > 0) saveDraft(draftSurface, map, stagedCount);
+    else clearDraft(draftSurface);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [registry.version, stagedCount]);
 
@@ -360,7 +375,7 @@ const PublishBar: React.FC<PublishBarProps> = ({ registry, stagedFiles, onUnauth
     // conflict against her own prior write (see publish.ts's
     // refreshBaseShas comment).
     plan.stagedKeys.forEach((key) => stagedFiles.stage(key, null));
-    clearDraft();
+    clearDraft(draftSurface);
 
     const publishedFiles = Object.keys(plan.contentSnapshots) as ContentFileName[];
     const freshShas = await refreshBaseShas(publishedFiles);
@@ -493,9 +508,22 @@ function PublishStatus({ state }: { state: BarState }) {
         </p>
       );
     case 'conflict':
+      // Plan 5 Task 5, Step 3 review finding: the 409 this maps to fires
+      // whenever the file's baseSha no longer matches what's committed --
+      // and now that /edit and /edit/manage can both be open at once, each
+      // holding its OWN baseSha (never shared between them), publishing
+      // from one makes the OTHER stale. The old wording ("someone else
+      // published") told her to reload and discard work that might be, and
+      // very often IS, her own -- her own second tab, her own phone open to
+      // the same page. This can't tell "a genuinely different person" apart
+      // from "you, elsewhere" (the server has no notion of "session" beyond
+      // the request that just landed), so the fix is not asserting either:
+      // naming the real possibility without accusing her of losing her own
+      // work to a stranger.
       return (
         <p role="alert" className="mt-3 font-['Montserrat'] text-sm text-red-600">
-          Someone else published while you were editing. Reload to get their changes, then try again.
+          This may already be published — from another tab or device, including one of your own. Reload to see the
+          latest, then make your change again.
         </p>
       );
     case 'server-error':

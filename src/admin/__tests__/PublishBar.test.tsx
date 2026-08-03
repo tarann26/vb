@@ -51,7 +51,13 @@ function Harness({
   const [tagsText, setTagsText] = useState('a, b');
 
   return (
-    <PublishBar registry={registry} stagedFiles={stagedFiles} onUnauthenticated={onUnauthenticated} pollClock={pollClock}>
+    <PublishBar
+      registry={registry}
+      stagedFiles={stagedFiles}
+      draftSurface="dashboard"
+      onUnauthenticated={onUnauthenticated}
+      pollClock={pollClock}
+    >
       {withTagsField && (
         <input
           aria-label="tags"
@@ -227,12 +233,16 @@ describe('PublishBar: Step 5 translation table', () => {
 
   it('409 (baseSha conflict body) -> the plain-language conflict sentence', async () => {
     const alert = await publishAndGetAlert(409, { problems: [{ field: 'src/content/dishes.json', message: 'Someone else changed this.' }] });
-    expect(alert).toHaveTextContent('Someone else published while you were editing. Reload to get their changes, then try again.');
+    expect(alert).toHaveTextContent(
+      'This may already be published — from another tab or device, including one of your own. Reload to see the latest, then make your change again.',
+    );
   });
 
   it('409 (PublishConflictError message body) -> the SAME sentence -- branch on status, not message text', async () => {
     const alert = await publishAndGetAlert(409, { message: 'someone else published while you were editing -- reload and try again' });
-    expect(alert).toHaveTextContent('Someone else published while you were editing. Reload to get their changes, then try again.');
+    expect(alert).toHaveTextContent(
+      'This may already be published — from another tab or device, including one of your own. Reload to see the latest, then make your change again.',
+    );
   });
 
   it('502 (GitHub 5xx) -> the "nothing was lost" sentence', async () => {

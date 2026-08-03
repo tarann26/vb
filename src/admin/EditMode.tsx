@@ -40,6 +40,9 @@ import { setCopyText } from './editable-paths';
 import { useStagedFiles, fromStagedPhoto } from './staged';
 import type { StagedFile } from './staged';
 import type { UploadCategory } from '../shared/upload-categories';
+import PublishBar, { DraftBanner } from './PublishBar';
+import { loadDraft, loadDraftStagedCount, clearDraft } from './drafts';
+import type { DraftMap } from './drafts';
 // '../content/context', never '../content/ContentContext' or '../content' --
 // src/admin/__tests__/content.test.ts only whitelists types/validate/guards/
 // publish/context as safe src/content/ imports for src/admin/ (none of the
@@ -431,6 +434,16 @@ const EditMode: React.FC = () => {
   const staged = useStagedFiles();
   const [fileErrors, setFileErrors] = useState<Partial<Record<ContentFileName, string>>>({});
   const [signOutNotice, setSignOutNotice] = useState<string | null>(null);
+  // Task 5, Step 1/2: /edit's own unpublished-work recovery, reading the
+  // 'edit' surface's own draft key (drafts.ts's own DraftSurface) -- never
+  // the dashboard's. "Never auto-apply": nothing below writes `pendingDraft`
+  // into the registry until she clicks Restore (handleRestoreDraft below) --
+  // unlike AdminApp, which gates its WHOLE screen behind this decision,
+  // /edit never hides the real page to ask it: Task 2's own invariant is
+  // that the page is always there, so the offer to restore is a banner
+  // ABOVE it, not a replacement for it.
+  const [pendingDraft, setPendingDraft] = useState<DraftMap | null>(null);
+  const [pendingStagedCount, setPendingStagedCount] = useState(0);
 
   // Post-review Fix 1 (Critical): on every transition into 'in' -- the
   // first load AND any later out->in cycle caused by a 401 below -- refetch
@@ -456,6 +469,17 @@ const EditMode: React.FC = () => {
   useEffect(() => {
     if (status !== 'in') return;
     setSignOutNotice(null);
+    // Same per-transition timing this effect already has for the content
+    // fetches themselves (Fix 7's own comment: `[status]` alone already
+    // means this only runs on a genuine transition, first load or a 401's
+    // own re-login included) -- offering the restore banner again on every
+    // fresh 'in' is correct, not just harmless: a 401 mid-session that hits
+    // AFTER she saved further edits (the persistence effect below runs on
+    // every registry change, independent of session status) means a NEWER
+    // draft can exist by the time she logs back in than the one this ran
+    // for last.
+    setPendingDraft(loadDraft('edit'));
+    setPendingStagedCount(loadDraftStagedCount('edit'));
     const entries = registry.getEntries();
     CONTENT_FILES.forEach((file) => {
       // Already loaded (or holds her edits, once Task 3 adds editing) --
@@ -577,47 +601,98 @@ const EditMode: React.FC = () => {
     event.stopPropagation();
   }
 
+  // Applies exactly the files `pendingDraft` names, each through
+  // registry.updateData -- never register (Finding C4's own reasoning
+  // applies identically here: this file is already registered by the time
+  // she can click this, so a stale sha would never even be at risk, but
+  // updateData is still the only write path that never touches sha at
+  // all). A file the draft names but that has not finished loading yet
+  // (entries[file] undefined) is silently skipped, the same "unreachable
+  // state, not a reason to invent one" posture updateData's own contract
+  // already takes -- in practice this content loads in milliseconds, well
+  // before a human can click Restore.
+  function handleRestoreDraft() {
+    if (pendingDraft) {
+      (Object.keys(pendingDraft) as ContentFileName[]).forEach((file) => {
+        const draftEntry = pendingDraft[file];
+        if (draftEntry && entries[file] !== undefined) {
+          registry.updateData(file, draftEntry.data);
+        }
+      });
+    }
+    setPendingDraft(null);
+  }
+
+  function handleDiscardDraft() {
+    clearDraft('edit');
+    setPendingDraft(null);
+  }
+
   return (
     <ContentProvider value={bundle}>
-      <div onClickCapture={handleCaptureClick}>
-        {stillLoading && (
-          <p
-            role="status"
-            className="mb-4 rounded border border-amber-300 bg-amber-50 p-3 font-['Montserrat'] text-sm text-[#222]"
-          >
-            Loading live content…
-          </p>
-        )}
-        {erroredFiles.length > 0 && (
-          <p
-            role="alert"
-            className="mb-4 rounded border border-red-300 bg-red-50 p-3 font-['Montserrat'] text-sm text-red-700"
-          >
-            {`Could not load ${erroredFiles.join(', ')} — ask your developer to check ${
-              erroredFiles.length === 1 ? 'this file' : 'these files'
-            }.`}
-          </p>
-        )}
-        <div className="min-h-screen">
-          <SectionErrorBoundary name="SEO">
-            {/* Post-review Fix 6: /edit never emits structured data or a
-                canonical link, logged in or out -- see SeoHead.tsx's own
-                comment on why. The boundary stays: `site.seo.url` is still
-                read unconditionally before that decision, so a malformed
-                site.json still throws here exactly as before. */}
-            <SeoHead emitMetadata={false} />
-          </SectionErrorBoundary>
-          <SectionErrorBoundary name="Navigation">
-            <Navbar />
-          </SectionErrorBoundary>
-          <SectionErrorBoundary name="Sections">
-            <DynamicSections sections={bundle.sections} />
-          </SectionErrorBoundary>
-          <SectionErrorBoundary name="Footer">
-            <Footer />
-          </SectionErrorBoundary>
+      <PublishBar
+        registry={registry}
+        stagedFiles={staged}
+        draftSurface="edit"
+        onUnauthenticated={(notice) => {
+          setSignOutNotice(notice);
+          logOut();
+        }}
+      >
+        <div onClickCapture={handleCaptureClick}>
+          {stillLoading && (
+            <p
+              role="status"
+              className="mb-4 rounded border border-amber-300 bg-amber-50 p-3 font-['Montserrat'] text-sm text-[#222]"
+            >
+              Loading live content…
+            </p>
+          )}
+          {erroredFiles.length > 0 && (
+            <p
+              role="alert"
+              className="mb-4 rounded border border-red-300 bg-red-50 p-3 font-['Montserrat'] text-sm text-red-700"
+            >
+              {`Could not load ${erroredFiles.join(', ')} — ask your developer to check ${
+                erroredFiles.length === 1 ? 'this file' : 'these files'
+              }.`}
+            </p>
+          )}
+          <div className="min-h-screen">
+            <SectionErrorBoundary name="SEO">
+              {/* Post-review Fix 6: /edit never emits structured data or a
+                  canonical link, logged in or out -- see SeoHead.tsx's own
+                  comment on why. The boundary stays: `site.seo.url` is still
+                  read unconditionally before that decision, so a malformed
+                  site.json still throws here exactly as before. */}
+              <SeoHead emitMetadata={false} />
+            </SectionErrorBoundary>
+            <SectionErrorBoundary name="Navigation">
+              <Navbar />
+            </SectionErrorBoundary>
+            <SectionErrorBoundary name="Sections">
+              <DynamicSections sections={bundle.sections} />
+            </SectionErrorBoundary>
+            <SectionErrorBoundary name="Footer">
+              <Footer />
+            </SectionErrorBoundary>
+          </div>
         </div>
-      </div>
+      </PublishBar>
+      {/* Task 5: /edit's own draft-restore offer -- a banner ABOVE the
+          still-fully-rendered page (never a replacement for it, unlike
+          AdminApp's identical banner, which gates its whole screen because
+          it has no live page underneath worth protecting). */}
+      {pendingDraft && (
+        <div className="mx-auto mb-4 max-w-3xl px-4">
+          <DraftBanner
+            draft={pendingDraft}
+            staleStagedCount={Math.max(0, pendingStagedCount - Object.keys(staged.files).length)}
+            onRestore={handleRestoreDraft}
+            onDiscard={handleDiscardDraft}
+          />
+        </div>
+      )}
       {/* Overlay, not a replacement: EditMode must never unmount the page
           above on status === 'out' (Step 3's whole point). A 401 mid-load
           (or mid-edit, once Task 3 adds editing) shows this on top of a

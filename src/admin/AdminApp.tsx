@@ -126,7 +126,7 @@ const AdminApp: React.FC = () => {
   // Written as a conditional `setState` call DURING RENDER (comparing
   // against a ref of the last-seen status), not inside a `useEffect` --
   // deliberately. An effect-based version (`useEffect(() => { if (status
-  // === 'in') setPendingDraft(loadDraft()); }, [status])`) loses a real
+  // === 'in') setPendingDraft(loadDraft('dashboard')); }, [status])`) loses a real
   // race: on the render where `status` flips to 'in', React commits the
   // FULL dashboard first (pendingDraft is still stale-null at render time),
   // and only after that commit does it run effects -- by which point every
@@ -141,8 +141,8 @@ const AdminApp: React.FC = () => {
   // start at all when a draft needs offering again.
   const previousStatusRef = useRef(status);
   if (previousStatusRef.current !== 'in' && status === 'in') {
-    setPendingDraft(loadDraft());
-    setPendingStagedCount(loadDraftStagedCount());
+    setPendingDraft(loadDraft('dashboard'));
+    setPendingStagedCount(loadDraftStagedCount('dashboard'));
     setSignOutNotice(null);
   }
   previousStatusRef.current = status;
@@ -186,7 +186,7 @@ const AdminApp: React.FC = () => {
               setPendingDraft(null);
             }}
             onDiscard={() => {
-              clearDraft();
+              clearDraft('dashboard');
               setPendingDraft(null);
             }}
           />
@@ -194,6 +194,7 @@ const AdminApp: React.FC = () => {
           <PublishBar
             registry={registry}
             stagedFiles={stagedFilesApi}
+            draftSurface="dashboard"
             onUnauthenticated={(notice) => {
               // Set BEFORE logOut -- both are plain setState calls in the
               // same synchronous handler, batched into the one re-render

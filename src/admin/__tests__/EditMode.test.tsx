@@ -7,13 +7,14 @@
 // "#" nav jump and the hamburger, neither external nor destructive, still
 // work (post-review, Task 2 Step 4 finding).
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { readFileSync } from 'node:fs';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import EditMode, { buildBundle } from '../EditMode';
 import { AppRoutes } from '../../App';
 import type { ContentEntries, ContentRegistry } from '../publish';
+import { loadDraft, saveDraft } from '../drafts';
 import type { Article, Copy, Dish, Drink, Galleries, MenuFile, Section, SiteContent, StoryContent } from '../../content/types';
 // Real, committed files for galleries/story/menus/copy -- the same choice
 // AdminApp.test.tsx already makes (see that file's own comment): each has
@@ -94,13 +95,42 @@ function stubFetch(overrides: {
   pressResponse?: Promise<Response> | Response;
   copyResponse?: Promise<Response> | Response;
   sectionsResponse?: Promise<Response> | Response;
+  // Task 5: publishing from /edit reuses publish.ts's own requestPublish/
+  // trackPublish unchanged (already exhaustively covered against a fake
+  // clock in publish.test.ts) -- these three overrides let a Task 5 test
+  // drive a SPECIFIC publish outcome (a 409 conflict, say) without
+  // reproducing that whole state machine's own test suite a second time
+  // here. Defaults answer the fastest possible "published and live" path:
+  // one 200 from POST /api/publish, one build-status poll already 'live',
+  // one build-info read that already matches.
+  publishResponse?: Promise<Response> | Response;
+  buildStatusResponse?: Promise<Response> | Response;
+  buildInfoResponse?: Promise<Response> | Response;
 } = {}) {
   vi.stubGlobal(
     'fetch',
-    vi.fn(async (input: RequestInfo | URL) => {
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url === '/api/wa') return WA_RESPONSE();
       if (url === '/api/login') return new Response(null, { status: 204 });
+      if (url === '/api/publish') {
+        return overrides.publishResponse ?? new Response(JSON.stringify({ sha: 'new-commit-sha' }), { status: 200 });
+      }
+      if (url.startsWith('/api/build-status')) {
+        return (
+          overrides.buildStatusResponse ??
+          new Response(
+            JSON.stringify({ state: 'live', deploymentUrl: null, commitUrl: 'https://example.com/commit/new-commit-sha' }),
+            { status: 200 },
+          )
+        );
+      }
+      if (url === '/build-info.json') {
+        return (
+          overrides.buildInfoResponse ??
+          new Response(JSON.stringify({ sha: 'new-commit-sha', builtAt: '2026-08-03T00:00:00Z' }), { status: 200 })
+        );
+      }
       if (url.includes('dishes.json')) return overrides.dishesResponse ?? contentResponse(DISHES, 'sha-dishes');
       if (url.includes('drinks.json')) return contentResponse(DRINKS, 'sha-drinks');
       if (url.includes('press.json')) return overrides.pressResponse ?? contentResponse(PRESS, 'sha-press');
@@ -110,13 +140,17 @@ function stubFetch(overrides: {
       if (url.includes('menus.json')) return contentResponse(MENUS, 'sha-menus');
       if (url.includes('story.json')) return contentResponse(STORY, 'sha-story');
       if (url.includes('copy.json')) return overrides.copyResponse ?? contentResponse(COPY, 'sha-copy');
-      throw new Error(`EditMode.test.tsx: unexpected fetch to ${url}`);
+      throw new Error(`EditMode.test.tsx: unexpected fetch to ${url}${init ? ` (${init.method ?? 'GET'})` : ''}`);
     }),
   );
 }
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  // Task 5's own tests are the first in this file to touch localStorage
+  // (the draft-persistence PublishBar now brings into EditMode) -- cleared
+  // after every test so one test's saved draft never leaks into the next.
+  window.localStorage.clear();
 });
 
 describe('the /edit route', () => {
@@ -1091,5 +1125,121 @@ describe('Plan 5 Task 4: committing a replacement writes back into the right con
     const { container } = render(<>{bundle.renderImage('dishes.margherita.image', { src: '/food/margherita.webp', alt: 'Margherita' })}</>);
     expect(container.querySelector('[data-editable-image-path]')).toBeNull();
     expect(container.querySelector('img')).toHaveAttribute('src', '/food/margherita.webp');
+  });
+});
+
+// Plan 5 Task 5: publish from edit mode. Step 1 reuses PublishBar and
+// publish.ts wholesale (already exhaustively covered by PublishBar.test.tsx
+// and publish.test.ts) -- these tests exercise the WIRING specifically:
+// that /edit's own Publish button really reaches a real edit, that it saves
+// and clears under the 'edit' draft key and never the dashboard's, and that
+// the self-conflict wording (Step 3) actually reaches the screen from here.
+describe('Plan 5 Task 5: publishing from /edit', () => {
+  async function editReserveButton() {
+    const button = await screen.findByRole('button', { name: COPY.hero.reserveButton });
+    const field = button.querySelector('[data-editable-path="hero.reserveButton"]')!;
+    fireEvent.focus(field);
+    field.textContent = 'Reserve Your Table';
+    fireEvent.blur(field);
+    return field;
+  }
+
+  // Mutation this guards: the "no draft survives a successful publish"
+  // OUTCOME, not one single line -- PublishBar.tsx clears it two ways (an
+  // explicit clearDraft(draftSurface) right after a 200, and its own
+  // persistence effect separately clearing on the NEXT registry.version
+  // bump once markPublished has left nothing dirty), and removing only the
+  // first is masked by the second in this exact scenario. Confirmed red
+  // only when BOTH are removed at once -- reported honestly rather than
+  // claiming the single line alone is what this pins.
+  it('editing and publishing from /edit succeeds through the real publish.ts pipeline, and clears the edit draft on success', async () => {
+    stubFetch();
+    render(
+      <MemoryRouter>
+        <EditMode />
+      </MemoryRouter>,
+    );
+
+    await editReserveButton();
+    await waitFor(() => expect(loadDraft('edit')).not.toBeNull());
+
+    const publishButton = await screen.findByRole('button', { name: 'Publish' });
+    expect(publishButton).not.toBeDisabled();
+    fireEvent.click(publishButton);
+
+    expect(await screen.findByText('Your changes are live.')).toBeInTheDocument();
+    expect(loadDraft('edit')).toBeNull();
+  });
+
+  // Plan 5 Task 5, Step 2, proven end-to-end (not just at drafts.ts's own
+  // unit level): a pre-existing DASHBOARD draft must survive /edit loading,
+  // editing, and saving its own draft.
+  it("editing from /edit saves under the 'edit' key only -- a pre-existing dashboard draft is untouched", async () => {
+    const dashboardDraft = { 'dishes.json': { data: DISHES, savedAt: 1_000 } };
+    saveDraft('dashboard', dashboardDraft);
+
+    stubFetch();
+    render(
+      <MemoryRouter>
+        <EditMode />
+      </MemoryRouter>,
+    );
+
+    await editReserveButton();
+    await waitFor(() => expect(loadDraft('edit')).not.toBeNull());
+
+    expect(loadDraft('edit')).toEqual({ 'copy.json': expect.objectContaining({ data: expect.anything() }) });
+    expect(loadDraft('dashboard')).toEqual(dashboardDraft);
+  });
+
+  // Plan 5 Task 5, Step 3 review finding: each tab holds its own baseSha, so
+  // publishing from one tab makes another stale -- reads as a 409 here.
+  // Verifies the actual on-screen wording no longer says "someone else",
+  // reached through /edit's own real publish button, not just asserted
+  // against PublishBar in isolation.
+  it('a 409 (the self-conflict shape -- her own second tab publishing first) shows same-session wording, not "someone else"', async () => {
+    stubFetch({ publishResponse: new Response(JSON.stringify({ message: 'stale baseSha' }), { status: 409 }) });
+    render(
+      <MemoryRouter>
+        <EditMode />
+      </MemoryRouter>,
+    );
+
+    await editReserveButton();
+    const publishButton = await screen.findByRole('button', { name: 'Publish' });
+    fireEvent.click(publishButton);
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(/This may already be published.*another tab or device, including one of your own/);
+    expect(alert).not.toHaveTextContent(/someone else/i);
+  });
+
+  // Task 5's own draft-restore offer for /edit (not required verbatim by
+  // the plan's own text, but the natural completion of Step 1's "reuse
+  // publish.ts, do not fork" applied to the SAME draft mechanism Plan 4
+  // built this recovery flow for in the first place -- a draft saved but
+  // never offered back would be strictly worse than not saving one at all).
+  it('a pre-existing edit-mode draft is offered on load, never auto-applied, and Restore puts it on screen', async () => {
+    const draftCopy: Copy = { ...COPY, hero: { ...COPY.hero, reserveButton: 'Restored From Draft' } };
+    saveDraft('edit', { 'copy.json': { data: draftCopy, savedAt: 5_000 } });
+
+    stubFetch();
+    render(
+      <MemoryRouter>
+        <EditMode />
+      </MemoryRouter>,
+    );
+
+    // Never auto-applied: the server's own value is what's on screen first.
+    expect(await screen.findByRole('button', { name: COPY.hero.reserveButton })).toBeInTheDocument();
+    expect(screen.queryByText('Restored From Draft')).not.toBeInTheDocument();
+
+    const banner = await screen.findByRole('alert', { name: '' });
+    expect(within(banner).getByText(/unsaved changes/i)).toBeInTheDocument();
+
+    fireEvent.click(within(banner).getByRole('button', { name: 'Restore' }));
+
+    expect(await screen.findByRole('button', { name: 'Restored From Draft' })).toBeInTheDocument();
+    expect(screen.queryByText(/unsaved changes/i)).not.toBeInTheDocument();
   });
 });
