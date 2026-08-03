@@ -1,11 +1,19 @@
 import { describe, it, expect, beforeAll } from 'vitest';
-import { render } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import type { ImgHTMLAttributes } from 'react';
 import { defaultBundle, ContentProvider, type ContentBundle } from '../../content/ContentContext';
-import type { Galleries } from '../../content/types';
+import type { Copy, Galleries } from '../../content/types';
 import { AppRoutes } from '../../App';
 import { COPY_FIELDS } from '../fields';
+import { EDITABLE_TEXT_PATHS, setCopyText } from '../editable-paths';
+import EditableText from '../EditableText';
+// Real, committed copy.json -- the same "real content, not a hand-typed
+// fixture" choice EditMode.test.tsx's own galleries/story/menus/copy
+// imports already make (see that file's own comment).
+import copyJson from '../../content/copy.json';
+
+const REAL_COPY = copyJson as Copy;
 
 // Fix 2 (independent review of commit cf953d9, Plan 5 Task 1): renderText's
 // and renderImage's first argument is a free-floating string at every real
@@ -50,19 +58,6 @@ interface ImageCall {
   path: string;
   props: ImgHTMLAttributes<HTMLImageElement>;
 }
-
-// The five COPY_FIELDS leaves that never reach renderText: each is wired
-// straight to an HTML attribute (an aria-label, or VisitUs.tsx's <iframe
-// title>) rather than painted as visible text, so no component has a
-// renderText call to make for it. fields.ts's own CopyLeafShape comment
-// documents the same five as attribute-bound.
-const ATTRIBUTE_ONLY_COPY_FIELDS = new Set([
-  'nav.instagramLabel',
-  'nav.menuLabel',
-  'visit.mapTitle',
-  'footer.instagramLabel',
-  'footer.linkedinLabel',
-]);
 
 function makeRecordingBundle(): { bundle: ContentBundle; textCalls: TextCall[]; imageCalls: ImageCall[] } {
   const textCalls: TextCall[] = [];
@@ -143,11 +138,10 @@ describe('every renderText/renderImage call site passes a path that really point
     expect(imageCalls.length).toBeGreaterThan(0);
   });
 
-  it('the recorded renderText paths are exactly the 31 non-attribute COPY_FIELDS keys -- no missing, no extra', () => {
-    const expected = Object.keys(COPY_FIELDS).filter((key) => !ATTRIBUTE_ONLY_COPY_FIELDS.has(key));
-    expect(expected).toHaveLength(31);
+  it('the recorded renderText paths are exactly EDITABLE_TEXT_PATHS (src/admin/editable-paths.ts) -- no missing, no extra', () => {
+    expect(EDITABLE_TEXT_PATHS).toHaveLength(31);
     const recorded = new Set(textCalls.map((call) => call.path));
-    expect([...recorded].sort()).toEqual([...expected].sort());
+    expect([...recorded].sort()).toEqual([...EDITABLE_TEXT_PATHS].sort());
   });
 
   // Kills both the typo ('visit.heading' -> 'visit.headingTYPO') and the
@@ -170,5 +164,183 @@ describe('every renderText/renderImage call site passes a path that really point
     for (const call of imageCalls) {
       expect(resolveImageSrc(bundle, call.path)).toBe(call.props.src);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Plan 5 Task 3, Step 1: EDITABLE_TEXT_PATHS itself (src/admin/editable-paths.ts),
+// checked independently of the full-app mount above -- a cheap, direct unit
+// test of the exported module's own membership, not a re-derivation of it
+// (which would only ever prove the module equals itself).
+describe('EDITABLE_TEXT_PATHS (src/admin/editable-paths.ts)', () => {
+  it('has exactly 31 entries, every one a real COPY_FIELDS key', () => {
+    expect(EDITABLE_TEXT_PATHS).toHaveLength(31);
+    const copyFieldKeys = new Set(Object.keys(COPY_FIELDS));
+    EDITABLE_TEXT_PATHS.forEach((path) => expect(copyFieldKeys.has(path)).toBe(true));
+  });
+
+  // The five names this list must NOT contain, spelled out independently of
+  // editable-paths.ts's own internal set (fields.ts's CopyLeafShape comment
+  // is the authority both lists trace back to) -- if editable-paths.ts ever
+  // dropped its own exclusion, this still catches it without depending on
+  // the same constant that would already be wrong.
+  it('excludes exactly the five attribute-bound COPY_FIELDS leaves, and nothing else', () => {
+    const attributeOnly = [
+      'nav.instagramLabel',
+      'nav.menuLabel',
+      'visit.mapTitle',
+      'footer.instagramLabel',
+      'footer.linkedinLabel',
+    ];
+    attributeOnly.forEach((path) => expect(EDITABLE_TEXT_PATHS).not.toContain(path));
+    expect(Object.keys(COPY_FIELDS)).toHaveLength(EDITABLE_TEXT_PATHS.length + attributeOnly.length);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// setCopyText (src/admin/editable-paths.ts): the write-back half of Step 4,
+// tested directly against the real, committed copy.json rather than a
+// hand-typed fixture -- the same "real content, not a stand-in" choice
+// EditMode.test.tsx's own fixtures already make.
+describe('setCopyText (src/admin/editable-paths.ts)', () => {
+  it('updates only the targeted leaf, to exactly the new value', () => {
+    const next = setCopyText(REAL_COPY, 'hero.reserveButton', 'Book a Table');
+    expect(next.hero.reserveButton).toBe('Book a Table');
+  });
+
+  // Mutation this guards: dropping the `...section` spread (writing
+  // `{ [leaf]: next }` alone instead) -- confirmed red, which loses every
+  // OTHER leaf in the same namespace (e.g. hero.logoName/logoTagline/
+  // reservationsLabel would all become undefined the moment
+  // hero.reserveButton was edited).
+  it('leaves every sibling leaf in the same namespace untouched', () => {
+    const next = setCopyText(REAL_COPY, 'hero.reserveButton', 'Book a Table');
+    expect(next.hero.logoName).toBe(REAL_COPY.hero.logoName);
+    expect(next.hero.logoTagline).toBe(REAL_COPY.hero.logoTagline);
+    expect(next.hero.reservationsLabel).toBe(REAL_COPY.hero.reservationsLabel);
+  });
+
+  // Mutation this guards: spreading `copy` shallowly but reconstructing
+  // EVERY namespace object (not just the touched one) -- confirmed red by
+  // rebuilding the return value as `{ ...copy, footer: { ...copy.footer } }`
+  // alongside the real edit, which breaks this `toBe` (object identity)
+  // check even though `footer`'s CONTENTS are unchanged.
+  it('leaves every OTHER namespace object at its prior identity, not merely equal-looking data', () => {
+    const next = setCopyText(REAL_COPY, 'hero.reserveButton', 'Book a Table');
+    expect(next.footer).toBe(REAL_COPY.footer);
+    expect(next.press).toBe(REAL_COPY.press);
+    expect(next.nav).toBe(REAL_COPY.nav);
+  });
+
+  it('does not mutate the input object', () => {
+    const before = JSON.stringify(REAL_COPY);
+    setCopyText(REAL_COPY, 'footer.followLabel', 'Something Else');
+    expect(JSON.stringify(REAL_COPY)).toBe(before);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Plan 5 Task 3, Step 2, second half: "use an element sentinel, not a
+// string." The describe block above proves every renderText call site
+// passes the RIGHT path -- this one proves that once renderText actually
+// returns a real element (the true /edit behaviour, not the identity
+// default), nothing on the page string-interpolates that element into an
+// attribute or template, which would silently produce the literal text
+// "[object Object]" -- invisible to a check built on string substitution,
+// since a real ReactNode has no string content to search for. Combined with
+// the "was it reached" half via EditableText's own `data-editable-path`
+// marker, so a path that is listed but never actually rendered by any
+// component fails here too, not just in the describe block above.
+describe('the real element-substitution boundary: renderText returning actual elements leaks nowhere', () => {
+  it('every EDITABLE_TEXT_PATHS entry is reached, across /, /blogs and an unmatched route, with no "[object Object]" and nothing throwing', () => {
+    const bundle: ContentBundle = {
+      ...defaultBundle,
+      renderText: (path, value) => <EditableText path={path} value={value} onCommit={() => {}} />,
+    };
+
+    const reachedPaths = new Set<string>();
+    ['/', '/blogs', '/this-route-matches-nothing'].forEach((route) => {
+      const { container } = render(
+        <ContentProvider value={bundle}>
+          <MemoryRouter initialEntries={[route]}>
+            <AppRoutes />
+          </MemoryRouter>
+        </ContentProvider>,
+      );
+      expect(container.innerHTML).not.toMatch(/\[object Object\]/);
+      container.querySelectorAll('[data-editable-path]').forEach((el) => {
+        reachedPaths.add(el.getAttribute('data-editable-path')!);
+      });
+    });
+
+    expect([...reachedPaths].sort()).toEqual([...EDITABLE_TEXT_PATHS].sort());
+  });
+});
+
+// ---------------------------------------------------------------------------
+// site.name and site.tagline: permanently excluded, per the edit mode
+// plan's own coverage table -- SITE_FIELDS marks both `readonly`,
+// head.test.ts pins nine index.html strings to them, and the server refuses
+// them. Task 1 already keeps them structurally un-wrapped (Hero.tsx renders
+// bare `{site.name}` / `{site.tagline}`, never through content.renderText),
+// so no affordance is possible even under the REAL editing bundle -- proven
+// here directly against real rendered DOM, not merely inferred from reading
+// the component source.
+describe('site.name and site.tagline render with no edit affordance, even under a real editing bundle', () => {
+  it('the homepage <h1> (site.name) carries no contentEditable, on itself or any ancestor/descendant', () => {
+    const bundle: ContentBundle = {
+      ...defaultBundle,
+      renderText: (path, value) => <EditableText path={path} value={value} onCommit={() => {}} />,
+    };
+    render(
+      <ContentProvider value={bundle}>
+        <MemoryRouter>
+          <AppRoutes />
+        </MemoryRouter>
+      </ContentProvider>,
+    );
+    const h1 = screen.getByRole('heading', { level: 1 });
+    expect(h1).toHaveTextContent(defaultBundle.site.name);
+    expect(h1).not.toHaveAttribute('contenteditable');
+    expect(h1.closest('[contenteditable="true"]')).toBeNull();
+    expect(h1.querySelector('[contenteditable="true"]')).toBeNull();
+  });
+
+  // NOT screen.getAllByText(defaultBundle.site.tagline) -- confirmed directly
+  // while writing this test: the real, committed content has
+  // copy.hero.logoTagline === site.tagline (both "Pastificio & Ristorante"),
+  // and logoTagline genuinely IS wrapped in content.renderText (Hero.tsx:84),
+  // so a text-content lookup for the tagline string also matches that
+  // unrelated, legitimately-editable element and fails for the wrong
+  // reason. Located structurally instead: Hero.tsx and Footer.tsx each
+  // render site.tagline as the element immediately following site.name's own
+  // heading, with nothing in between (Hero.tsx:90-93, Footer.tsx:17-20) --
+  // an identity this content coincidence cannot disturb.
+  it('site.tagline carries no contentEditable either, in either of its two homepage instances', () => {
+    const bundle: ContentBundle = {
+      ...defaultBundle,
+      renderText: (path, value) => <EditableText path={path} value={value} onCommit={() => {}} />,
+    };
+    const { container } = render(
+      <ContentProvider value={bundle}>
+        <MemoryRouter>
+          <AppRoutes />
+        </MemoryRouter>
+      </ContentProvider>,
+    );
+    const h1 = screen.getByRole('heading', { level: 1 }); // Hero's site.name
+    // Not getByRole('heading', { level: 3 }) -- FoodGallery.tsx also renders
+    // an <h3> per dish (real dishes.json has more than one), so a bare
+    // heading-level query matches several. Footer's own site.name <h3> is
+    // scoped by the <footer> landmark instead.
+    const h3 = container.querySelector('footer h3');
+    const taglines = [h1.nextElementSibling, h3?.nextElementSibling ?? null];
+    expect(taglines).toHaveLength(2);
+    taglines.forEach((tagline) => {
+      expect(tagline).not.toBeNull();
+      expect(tagline).toHaveTextContent(defaultBundle.site.tagline);
+      expect(tagline).not.toHaveAttribute('contenteditable');
+      expect(tagline!.closest('[contenteditable="true"]')).toBeNull();
+    });
   });
 });

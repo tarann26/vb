@@ -226,20 +226,40 @@ describe('dist/assets/ keeps admin code out of the entry chunk', () => {
 // project's own standing WATCH, recorded since Task 1) -- every admin-only
 // utility class ArraySection/RecordForm/PhotoField/GalleryList/etc. use
 // ships to every visitor, whether or not they ever open /edit/manage.
-// Measured across this plan's ten tasks: 27660 -> 30784 bytes (+3124,
-// +11.3%), and a rule-level diff (this project's own only reliable method --
-// see this file's own comment on why a text-marker check like the two above
-// can't be reused for CSS) traced every one of the 45 rules added since
-// Task 1 to a file under src/admin/. The ledger promised a ceiling at Task
-// 9 and never added one; this is that ceiling. Plans 5 and 6 add more admin
-// screens on top of this, so 31000 is a real budget, not a rounded-up
-// snapshot of today's number (30784) -- close enough that the very next
-// admin-only class landing without a matching removal will trip it.
+// Measured across Plan 4's ten tasks: 27660 -> 30784 bytes (+3124, +11.3%),
+// and a rule-level diff (this project's own only reliable method -- see this
+// file's own comment on why a text-marker check like the two above can't be
+// reused for CSS) traced every one of the 45 rules added since Task 1 to a
+// file under src/admin/. That was this ceiling's first number.
+//
+// Plan 5 Task 3 (editable text) raises it again: 30784 -> 31156 (+372), a
+// rule-level diff against a worktree checkout of the parent commit (never a
+// stash -- this project's own standing instruction, given the stash
+// baselines already on record here as having produced wrong results)
+// tracing all nine added rules to EditableText.tsx's own persistent,
+// non-hover edit affordance (`cursor-text`, `rounded-sm`, `outline-dashed`,
+// `outline-1`, `outline-offset-2`, `outline-[#6B8B59]/50`,
+// `focus:bg-[#6B8B59]/10`, `focus:outline-2`, `focus:outline-[#6B8B59]`) --
+// nothing removed, nothing from any other file. (Confirmed the hard way: an
+// early draft of that component's own source, plus an early draft of THIS
+// very paragraph, each spelled a few ordinary English words in bare prose
+// that also happen to be real Tailwind utility names or DOM event names --
+// exactly the class of accident tailwind.config.js's own `blocklist`
+// comment already documents for a different word. Tailwind's content
+// scanner has no JS parser behind it, so each one was picked up as a
+// candidate class and got an unused rule emitted for it; the rule-level
+// diff is what caught it, and rewording the offending prose -- here and in
+// EditableText.tsx -- is what took the added-rule count from twelve back
+// down to the nine actually used above.) 31400 keeps roughly the same
+// ~200-byte margin
+// over today's real number that 31000 kept over 30784 -- a real budget, not
+// a rounded-up snapshot, so the very next admin-only class landing without a
+// matching removal still trips it.
 describe('dist/assets/ keeps the shared stylesheet under a byte ceiling', () => {
-  it.skipIf(!REQUIRED && !existsSync(DIST_ASSETS))('the entry CSS file stays under 31000 bytes', () => {
+  it.skipIf(!REQUIRED && !existsSync(DIST_ASSETS))('the entry CSS file stays under 31400 bytes', () => {
     const cssFiles = readdirSync(DIST_ASSETS).filter((n) => /^index-.*\.css$/.test(n));
     expect(cssFiles.length).toBeGreaterThan(0);
     const size = statSync(join(DIST_ASSETS, cssFiles[0])).size;
-    expect(size).toBeLessThan(31000);
+    expect(size).toBeLessThan(31400);
   });
 });

@@ -637,3 +637,166 @@ describe('EditMode: post-review Fix 7 -- /edit and /edit/manage never resolve to
     expect(container.querySelector('nav')).toBeNull();
   });
 });
+
+// Plan 5 Task 3, Step 4: text becomes writable, through
+// registry.updateData -- never registry.register, whose own comment
+// documents the false-conflict-on-second-publish it would reintroduce here.
+// There is no PublishBar mounted inside EditMode yet (Task 5), so "wrote
+// back through the registry" is proven the same way every other fact about
+// what's currently on screen in this file is proven: by what's rendered,
+// not by reaching into React internals.
+describe('EditMode: committing a text edit writes it back and it appears on screen', () => {
+  it('editing the reserve button and blurring replaces the displayed text with what she typed', async () => {
+    stubFetch();
+    render(
+      <MemoryRouter>
+        <EditMode />
+      </MemoryRouter>,
+    );
+
+    const button = await screen.findByRole('button', { name: COPY.hero.reserveButton });
+    const field = button.querySelector('[data-editable-path="hero.reserveButton"]');
+    expect(field).not.toBeNull();
+
+    fireEvent.focus(field!);
+    field!.textContent = 'Book Your Table Now';
+    fireEvent.blur(field!);
+
+    expect(await screen.findByRole('button', { name: 'Book Your Table Now' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: COPY.hero.reserveButton })).not.toBeInTheDocument();
+  });
+
+  // EditMode.tsx's own `copyLoaded` guard (buildBundle): committing an edit
+  // before copy.json has a registry entry would call registry.updateData
+  // against a file with no entry yet -- a documented no-op (publish.ts's own
+  // comment on `updateData`) that would silently discard whatever she typed
+  // into a still-blank heading. Proven by holding copy.json's own fetch open
+  // and checking no `[data-editable-path]` marker exists yet -- not by
+  // reaching into buildBundle directly -- so this is a black-box proof of
+  // what she'd actually see: nothing clickable-to-edit until there is
+  // something real to edit.
+  //
+  // Mutation this guards: dropping the `copyLoaded ? <EditableText .../> :
+  // value` branch in buildBundle's renderText (always rendering
+  // EditableText) -- confirmed red by that exact change, which makes a
+  // `[data-editable-path]` marker appear immediately, before copy.json ever
+  // resolves.
+  it('before copy.json has loaded, its text is plain and un-editable -- no contentEditable marker exists until it has', async () => {
+    let resolveCopy: (value: Response) => void = () => {};
+    const copyPromise = new Promise<Response>((resolve) => {
+      resolveCopy = resolve;
+    });
+    stubFetch({ copyResponse: copyPromise });
+
+    const { container } = render(
+      <MemoryRouter>
+        <EditMode />
+      </MemoryRouter>,
+    );
+
+    // Something that does NOT depend on copy.json has already loaded,
+    // proving the page is genuinely up (not just mid-initial-render) while
+    // copy.json's own fetch is still held open.
+    await screen.findByRole('navigation');
+    expect(container.querySelectorAll('[data-editable-path]')).toHaveLength(0);
+
+    resolveCopy(contentResponse(COPY, 'sha-copy'));
+    await screen.findByRole('button', { name: COPY.hero.reserveButton });
+    expect(container.querySelectorAll('[data-editable-path]').length).toBeGreaterThan(0);
+  });
+});
+
+// Task 2's own re-login proof obligation landed here, undischarged (that
+// task could only prove the PAGE survived a 401 -- there was no edit yet to
+// survive). Driven the same way that task's own "a loaded file is never
+// re-fetched after a re-login" test is: two counters, and a SECOND, visibly
+// different fixture value behind the file that 401s, so "was copy.json
+// clobbered" is directly observable on screen rather than inferred from a
+// comment.
+describe('EditMode: an edit survives a 401 mid-session -- Task 2\'s per-file fetch guard is what makes it hold', () => {
+  it('committing an edit to copy.json, then a 401 on a DIFFERENT file, then logging back in -- the edit is still on screen, and copy.json was fetched exactly once, ever', async () => {
+    let copyCalls = 0;
+    let pressCalls = 0;
+    // What would land on screen instead if copy.json were wrongly
+    // re-fetched after the re-login and clobbered her edit.
+    const CLOBBERED_COPY: Copy = { ...COPY, hero: { ...COPY.hero, reserveButton: 'CLOBBERED-IF-REFETCHED' } };
+    const REAL_PRESS: Article[] = [
+      {
+        id: 'after-relogin',
+        title: 'Loaded After Re-Login',
+        publication: 'Test Press',
+        date: '2026-01-01',
+        excerpt: 'x',
+        url: null,
+        image: '/x.jpg',
+      },
+    ];
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url === '/api/wa') return WA_RESPONSE();
+        if (url === '/api/login') return new Response(null, { status: 204 });
+        if (url.includes('dishes.json')) return contentResponse(DISHES, 'sha-dishes');
+        if (url.includes('drinks.json')) return contentResponse(DRINKS, 'sha-drinks');
+        if (url.includes('sections.json')) return contentResponse(SECTIONS, 'sha-sections');
+        if (url.includes('site.json')) return contentResponse(SITE, 'sha-site');
+        if (url.includes('galleries.json')) return contentResponse(GALLERIES, 'sha-galleries');
+        if (url.includes('menus.json')) return contentResponse(MENUS, 'sha-menus');
+        if (url.includes('story.json')) return contentResponse(STORY, 'sha-story');
+        if (url.includes('copy.json')) {
+          copyCalls += 1;
+          return contentResponse(copyCalls === 1 ? COPY : CLOBBERED_COPY, 'sha-copy');
+        }
+        if (url.includes('press.json')) {
+          pressCalls += 1;
+          return pressCalls === 1 ? unauthorizedResponse() : contentResponse(REAL_PRESS, 'sha-press-2');
+        }
+        throw new Error(`EditMode.test.tsx (edit-survives-401 test): unexpected fetch to ${url}`);
+      }),
+    );
+
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <EditMode />
+      </MemoryRouter>,
+    );
+
+    // copy.json loaded on the first pass -- commit a real edit to it before
+    // anything else happens.
+    const button = await screen.findByRole('button', { name: COPY.hero.reserveButton });
+    expect(copyCalls).toBe(1);
+    const field = button.querySelector('[data-editable-path="hero.reserveButton"]');
+    expect(field).not.toBeNull();
+    fireEvent.focus(field!);
+    field!.textContent = 'MY EDIT SURVIVES';
+    fireEvent.blur(field!);
+    expect(await screen.findByRole('button', { name: 'MY EDIT SURVIVES' })).toBeInTheDocument();
+
+    // press.json 401'd -- the login overlay appears over the still-mounted
+    // page, exactly as Task 2 proved; her edit is still right there beneath
+    // it.
+    expect(await screen.findByLabelText(/password/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'MY EDIT SURVIVES' })).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText(/password/i), 'whatever-the-real-password-is');
+    await user.click(screen.getByRole('button', { name: /log in/i }));
+    await waitFor(() => expect(screen.queryByLabelText(/password/i)).not.toBeInTheDocument());
+
+    // Not clobbered: copy.json was fetched exactly once, ever -- the
+    // per-file guard (`if (entries[file] !== undefined) return;`,
+    // EditMode.tsx) skipped it on the re-login pass because it already had
+    // an entry (her edit). Her edit is still on screen; the clobbered
+    // fixture's text never appears.
+    expect(copyCalls).toBe(1);
+    expect(screen.getByRole('button', { name: 'MY EDIT SURVIVES' })).toBeInTheDocument();
+    expect(screen.queryByText('CLOBBERED-IF-REFETCHED')).not.toBeInTheDocument();
+
+    // And the file that genuinely 401'd was retried and filled in, matching
+    // Task 2's own guarantee alongside this one.
+    expect(pressCalls).toBe(2);
+    expect(await screen.findByText('Loaded After Re-Login')).toBeInTheDocument();
+  });
+});

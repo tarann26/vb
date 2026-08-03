@@ -32,8 +32,10 @@ import Login from './Login';
 import { CONTENT_FILES, fetchContent } from './content';
 import type { ContentFileName, ContentTypeMap } from './content';
 import { useContentRegistry } from './publish';
-import type { ContentEntries } from './publish';
+import type { ContentEntries, ContentRegistry } from './publish';
 import SectionErrorBoundary from './SectionErrorBoundary';
+import EditableText from './EditableText';
+import { setCopyText } from './editable-paths';
 // '../content/context', never '../content/ContentContext' or '../content' --
 // src/admin/__tests__/content.test.ts only whitelists types/validate/guards/
 // publish/context as safe src/content/ imports for src/admin/ (none of the
@@ -169,7 +171,31 @@ function pick<K extends ContentFileName>(
   return entry ? (entry.data as ContentTypeMap[K]) : fallback;
 }
 
-function buildBundle(entries: ContentEntries): ContentBundle {
+// Task 3: text becomes editable in place. `registry` is passed in (not
+// closed over at module scope) because `commitText` below needs the exact
+// `copy` this render is showing -- every one of the 31 EditableText
+// instances on the page shares this one closure, and each must write its
+// own leaf back against the SAME snapshot of `copy` every sibling saw,
+// never a stale one captured on an earlier render.
+function buildBundle(entries: ContentEntries, registry: ContentRegistry): ContentBundle {
+  const copy = pick(entries, 'copy.json', EMPTY_COPY);
+
+  // Undefined until copy.json has actually loaded (registered at least
+  // once) -- committing an edit before then would call registry.updateData
+  // against a file with no entry yet, which is a documented no-op (see that
+  // function's own comment), silently discarding whatever she just typed
+  // into a still-blank heading. Rather than risk that narrow, real window
+  // (the "Loading live content…" banner is up for exactly this long), a
+  // leaf only becomes contentEditable once its own file has a registry
+  // entry to write back into; until then it renders as plain, un-editable
+  // text -- identical to what she would see if no provider were mounted at
+  // all.
+  const copyLoaded = entries['copy.json'] !== undefined;
+
+  function commitText(path: string, next: string) {
+    registry.updateData('copy.json', setCopyText(copy, path, next));
+  }
+
   return {
     site: pick(entries, 'site.json', EMPTY_SITE),
     galleries: pick(entries, 'galleries.json', EMPTY_GALLERIES),
@@ -178,12 +204,12 @@ function buildBundle(entries: ContentEntries): ContentBundle {
     press: pick(entries, 'press.json', []),
     story: pick(entries, 'story.json', EMPTY_STORY),
     menus: pick(entries, 'menus.json', []),
-    copy: pick(entries, 'copy.json', EMPTY_COPY),
+    copy,
     sections: pick(entries, 'sections.json', []),
-    // No editing affordance yet (Tasks 3/4) -- identity, matching
-    // ContentContext.ts's own defaultBundle, so /edit renders exactly what
-    // the live content says with nothing yet clickable-to-edit.
-    renderText: (_path, value) => value,
+    renderText: (path, value) =>
+      copyLoaded ? <EditableText path={path} value={value} onCommit={commitText} /> : value,
+    // No editing affordance yet (Task 4) -- identity, matching
+    // ContentContext.ts's own defaultBundle.
     renderImage: (_path, props) => <img {...props} />,
   };
 }
@@ -291,7 +317,7 @@ const EditMode: React.FC = () => {
   }
 
   const entries = registry.getEntries();
-  const bundle = buildBundle(entries);
+  const bundle = buildBundle(entries, registry);
   const erroredFiles = Object.keys(fileErrors) as ContentFileName[];
   const loadedOrErroredCount = CONTENT_FILES.filter(
     (file) => entries[file] !== undefined || fileErrors[file] !== undefined,
