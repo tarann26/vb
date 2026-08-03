@@ -27,6 +27,21 @@ class FakeKV {
   }
 }
 
+// Whole-branch review, Important 2: a real Workers KV binding can genuinely
+// reject a write (KV Free's 1,000-writes/day cap, shared across everything
+// this Worker writes to the same namespace) -- this stands in for that,
+// rejecting both the write recordLoginFailure makes and the delete
+// clearLoginFailures makes, so both of handleLogin's KV calls around the
+// password check can be proven to degrade cleanly instead of throwing.
+class KvThatRejectsWrites extends FakeKV {
+  override async put(): Promise<void> {
+    throw new Error('KV temporarily unavailable');
+  }
+  override async delete(): Promise<void> {
+    throw new Error('KV temporarily unavailable');
+  }
+}
+
 const TOKEN_SECRET = 'index-test-token-secret';
 const PASSWORD = 'the real restaurant password';
 
@@ -221,6 +236,29 @@ describe('worker entry point', () => {
       const otherIp = await worker.fetch(loginRequest({ password: PASSWORD }, '9.9.9.9'), env);
       expect(otherIp.status).toBe(204);
     });
+
+    // Whole-branch review, Important 2: recordLoginFailure (worker/index.ts)
+    // used to sit outside any try/catch. Reproduced directly: a KV whose
+    // `put` throws made a wrong password crash the whole request instead of
+    // returning the clean 401 every other wrong-password test above expects
+    // -- a raw Cloudflare exception page for the single most ordinary
+    // mistake an owner makes, mistyping her own password.
+    it('a wrong password still gets a clean 401 even when the KV write behind the rate limiter fails', async () => {
+      const throwingEnv = { ...env, KV: new KvThatRejectsWrites() as unknown as KVNamespace };
+      const response = await worker.fetch(loginRequest({ password: 'wrong' }), throwingEnv);
+      expect(response.status).toBe(401);
+    });
+
+    // The other half of the same finding: clearLoginFailures (worker/index.ts)
+    // was equally unguarded on the success path -- a KV whose `delete` throws
+    // used to crash a CORRECT password into the same raw exception instead of
+    // the 204 + session cookie it earned.
+    it('a correct password still gets 204 even when the KV delete behind clearing failures fails', async () => {
+      const throwingEnv = { ...env, KV: new KvThatRejectsWrites() as unknown as KVNamespace };
+      const response = await worker.fetch(loginRequest({ password: PASSWORD }), throwingEnv);
+      expect(response.status).toBe(204);
+      expect(response.headers.get('Set-Cookie')).toBeTruthy();
+    });
   });
 
   describe('POST /api/publish', () => {
@@ -315,6 +353,26 @@ describe('worker entry point', () => {
       expect(response.status).toBe(422);
       const body = (await response.json()) as { problems: { field: string; message: string }[] };
       expect(body.problems).toEqual([{ field: 'src/content/site.json', message: 'This file is not valid JSON.' }]);
+      expect(stub.calls).toHaveLength(0);
+    });
+
+    // Whole-branch review, Important 3: verified directly against this exact
+    // route -- POST /api/publish with a DD-MM-swapped publishAt used to
+    // return 200 and commit, because validateContent had no rule for the
+    // field at all. It does now (src/content/validate.ts's
+    // validatePublishAt); this is that fix proven end-to-end through the
+    // real route, not just at the validator's own unit level -- nothing
+    // reaches GitHub for a request that never should have.
+    it('a malformed publishAt is 422 and makes no GitHub call, not a landed commit the build later fails', async () => {
+      const cookie = await sessionCookie();
+      const badDish = { id: 'x', name: 'X', description: 'd', image: '/food/x.webp', tags: [], publishAt: '01-09-2026' };
+      const response = await worker.fetch(
+        publishRequest({ files: [utf8('src/content/dishes.json', JSON.stringify([badDish]))] }, cookie),
+        env,
+      );
+      expect(response.status).toBe(422);
+      const body = (await response.json()) as { problems: { field: string; message: string }[] };
+      expect(body.problems.some((p) => p.field.includes('publishAt'))).toBe(true);
       expect(stub.calls).toHaveLength(0);
     });
 

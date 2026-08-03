@@ -241,7 +241,25 @@ describe('scheduled (the cron handler)', () => {
   // Catch-up: a date that fell in the past without ever successfully firing
   // (e.g. several missed ticks) must still be treated as due, not silently
   // dropped just because "today" has moved past it.
-  it('treats a stale past date as still due (catch-up), not silently expired', async () => {
+  //
+  // Whole-branch review, Important 1: a single tick here is not enough.
+  // `clearDueDates` (worker/index.ts) filters each file's dates with
+  // `(d) => d > today` -- mutating that to `d !== today` still clears
+  // exactly the seeded date on THIS tick (2026-07-15 !== 2026-08-02 is also
+  // true), so a single-tick version of this test cannot tell the two apart:
+  // both leave the schedule looking "handled" after one call. The mutant
+  // only shows up one tick later, because it never actually drops the stale
+  // date from the array -- it keeps it forever, since a past date is always
+  // "!== today" on every subsequent day too. Left uncaught, that mutant is
+  // exactly the failure mode this whole feature exists to prevent: the cron
+  // would re-fire the deploy hook on every remaining hourly tick, forever,
+  // for a date that already published once -- 720+ builds/month against
+  // Pages Free's 500 cap, not the single missed-then-caught-up build this
+  // test's name promises. Ticking twice and asserting the hook fired
+  // exactly once (not twice) is what actually distinguishes "cleared" from
+  // "still sitting in the schedule" -- backed up by inspecting the KV record
+  // directly, not just inferring it from the hook's call count.
+  it('treats a stale past date as still due (catch-up), clears it so it does not refire forever', async () => {
     const kv = new FakeKV();
     seedSchedule(kv, { 'press.json': ['2026-07-15'] });
     const env = await buildEnv(kv);
@@ -249,8 +267,11 @@ describe('scheduled (the cron handler)', () => {
     vi.stubGlobal('fetch', fetchStub);
 
     await worker.scheduled!(FAKE_CONTROLLER, env);
+    await worker.scheduled!(FAKE_CONTROLLER, env);
 
     expect(fetchStub).toHaveBeenCalledTimes(1);
+    const stored = JSON.parse(kv.store.get(SCHEDULE_KV_KEY)!) as { files: Record<string, string[]> };
+    expect(stored.files['press.json']).toEqual([]);
   });
 
   // Important 3 (review round 2): the daily reconciliation. Gap 1 named by
@@ -451,24 +472,28 @@ describe('handlePublish records scheduled dates for the cron', () => {
     expect(await anythingPublishesToday(env, '2098-12-31')).toBe(false);
   });
 
-  // validateContent (src/content/validate.ts) does not check `publishAt`'s
-  // format at all -- confirmed directly: it has no rule for that field. A
-  // publish carrying a malformed one reaches recordScheduledDates for real,
-  // not hypothetically. `isStillPending` (worker/index.ts) catches the
-  // resulting `isPublished` throw per-item now, so this specific scenario no
-  // longer exercises handlePublish's own outer try/catch (confirmed: removing
-  // that catch does not fail this test) -- see the KV-failure test below for
-  // what that outer catch actually guards. Kept anyway, since the property
-  // itself ("a malformed date never turns a landed commit into a 500") is
-  // still real and still worth its own name.
-  it('a malformed publishAt does not turn an otherwise-successful publish into a failure', async () => {
+  // Whole-branch review, Important 3: this test used to assert 200 here,
+  // with a comment explaining that validateContent had no rule for
+  // `publishAt`'s format at all, so a malformed one reached
+  // recordScheduledDates for real. That was the exact gap the review found
+  // reachable through this route -- `POST /api/publish` with a malformed
+  // `publishAt` (e.g. the DD-MM date-format habit) returned 200 and the
+  // commit landed on `main`, where the build's own guard then failed, and
+  // stayed failed for every subsequent publish of any file until she
+  // happened to re-edit that one field. `validateContent` now has a rule for
+  // it (src/content/validate.ts's `validatePublishAt`), so this is the
+  // opposite assertion of what this test used to make: a malformed
+  // `publishAt` must now be refused at validation, with nothing committed to
+  // GitHub at all -- see index.test.ts's `POST /api/publish` describe block
+  // for the same property proven against `stub.calls` staying empty.
+  it('a malformed publishAt is refused at validation, not committed then left to fail the build', async () => {
     const cookie = await sessionCookie();
     const malformed = { ...futureDish, publishAt: 'next tuesday' };
     const response = await worker.fetch(
       publishRequest({ files: [utf8('src/content/dishes.json', JSON.stringify([malformed]))] }, cookie),
       env,
     );
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(422);
   });
 
   // The test that actually exercises handlePublish's outer try/catch around

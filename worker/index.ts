@@ -77,11 +77,38 @@ async function handleLogin(request: Request, env: Env): Promise<Response> {
   // -- not the plaintext, not a hash of it, whether the login succeeds or
   // fails.
   if (!(await verifyPassword(password, env.ADMIN_PASSWORD_HASH))) {
-    await recordLoginFailure(env.KV, ip);
+    // Whole-branch review, Important 2: recordLoginFailure is a KV `put`
+    // (worker/ratelimit.ts's recordHit), and KV Free's 1,000-writes/day cap
+    // is shared across everything this Worker writes -- including this same
+    // counter. A KV that rejects the write used to make this line throw,
+    // which propagated straight out of this handler (nothing in `fetch`
+    // wraps route handlers in a try/catch) into a raw Cloudflare exception
+    // page -- so the one moment a KV write actually fails, a wrong password
+    // stops reading "Incorrect password." and starts reading like the site
+    // is broken. Bookkeeping that fails is not a reason to fail the
+    // response too: catching it here means the rate limiter degrades to
+    // "cannot count this one failure" instead of crashing the request, and
+    // the durable backstop for that degraded window is the WAF rate-limiting
+    // rule on /api/login (see docs/cloudflare-cutover.md), not this line.
+    try {
+      await recordLoginFailure(env.KV, ip);
+    } catch {
+      // Deliberately swallowed -- see the comment above.
+    }
     return json(401, { message: 'Incorrect password.' });
   }
 
-  await clearLoginFailures(env.KV, ip);
+  // Same posture as recordLoginFailure above: a KV `delete` failure here
+  // (clearLoginFailures -> ratelimit.ts's clearHits) must not turn a
+  // CORRECT password into a thrown exception either. Worst case on a
+  // failure here is a stale failure count surviving until it naturally
+  // expires (LOGIN_WINDOW_SECONDS, ratelimit.ts) -- not a login that stops
+  // working.
+  try {
+    await clearLoginFailures(env.KV, ip);
+  } catch {
+    // Deliberately swallowed -- see the comment above.
+  }
 
   // Checked here, not left for signToken to discover: `crypto.subtle`
   // rejects a zero-length HMAC key with an unhandled throw rather than a

@@ -12,6 +12,20 @@
 // the other way around (this file inventing a second, competing definition
 // of "valid" that quietly drifts from what the build actually enforces).
 import { assertCopy, assertDrinkCategory, assertHours, assertSections } from './guards';
+// Whole-branch review, Important 3: validateContent had no rule for
+// `publishAt` at all, so a malformed one (the DD-MM date-format habit,
+// "01-09-2026" instead of "2026-09-01") reached POST /api/publish, sailed
+// through 200, and committed straight to `main` -- where the build's own
+// guard (plugins/filter-unpublished.ts, via isPublished) then fails it, and
+// every SUBSEQUENT publish of any file fails too, because the bad date is
+// already on `main`. Reusing isPublished's own format check here, rather
+// than duplicating it, is what keeps this rule from ever silently drifting
+// from what the build actually enforces (the same reasoning this file's own
+// header comment gives for building on guards.ts instead of a second
+// definition). src/content/publish.ts imports no JSON content of its own, so
+// pulling it in here does not attach this validator to any particular
+// content file's shape.
+import { isPublished } from './publish';
 
 export type ValidationProblem = { field: string; message: string };
 
@@ -40,6 +54,27 @@ const RETIRED_DRINK_NAMES = ['Bicerin', 'Espresso Tonic', 'Signor Bianca', 'Samb
 // in copy.json's prose, so that is where this checks.
 const RETIRED_DRINK_PHRASES = ['basil-lime spritz', 'rosemary-grapefruit fizz', 'espresso-orange tonic'];
 
+// `publishAt` is optional and, when present, must be a real `YYYY-MM-DD`
+// calendar date -- the same shape `isPublished` (src/content/publish.ts) and
+// the build's own `plugins/filter-unpublished.ts` already require. `today`
+// is irrelevant to what this checks: `isPublished` only ever THROWS on a
+// malformed `publishAt`, and it does that before it ever compares to
+// `today`, so any well-formed placeholder date reaches the same verdict. A
+// fixed placeholder (rather than the real clock) keeps this validator's
+// result independent of when it happens to run, like every other rule in
+// this file.
+const INERT_TODAY = '1970-01-01';
+
+function validatePublishAt(publishAt: unknown, index: number): ValidationProblem[] {
+  if (publishAt === undefined) return [];
+  try {
+    isPublished({ publishAt: publishAt as string }, INERT_TODAY);
+    return [];
+  } catch (error) {
+    return [problem(`[${index}].publishAt`, error instanceof Error ? error.message : String(error))];
+  }
+}
+
 // ---------------------------------------------------------------------------
 // dishes.json
 
@@ -57,6 +92,7 @@ function validateDish(raw: unknown, index: number): ValidationProblem[] {
   if (!Array.isArray(dish.tags)) {
     problems.push(problem(`[${index}].tags`, `"${String(dish.name ?? 'this dish')}" needs a tags list`));
   }
+  problems.push(...validatePublishAt(dish.publishAt, index));
   return problems;
 }
 
@@ -89,6 +125,7 @@ function validateDrink(raw: unknown, index: number): ValidationProblem[] {
   } catch (error) {
     problems.push(problem(`[${index}].category`, error instanceof Error ? error.message : String(error)));
   }
+  problems.push(...validatePublishAt(drink.publishAt, index));
   return problems;
 }
 
@@ -121,6 +158,7 @@ function validateArticle(raw: unknown, index: number): ValidationProblem[] {
   if (article.url !== null && (typeof article.url !== 'string' || !/^https?:\/\//.test(article.url))) {
     problems.push(problem(`[${index}].url`, `"${String(article.title ?? 'this article')}" needs a real destination, or null`));
   }
+  problems.push(...validatePublishAt(article.publishAt, index));
   return problems;
 }
 
