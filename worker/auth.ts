@@ -179,12 +179,24 @@ export async function verifyToken(secret: string, token: string, now: number): P
   // a misconfigured secret becomes fail-open in whatever that catch does).
   if (!secret || !payloadB64 || !sigB64) return false;
 
-  // Signature FIRST. A scheme that parses the payload (or checks `exp`)
-  // before verifying the signature trusts attacker-controlled bytes before
-  // establishing they came from this server at all -- an attacker who has
-  // seen even one signed token (expired or not) can then hand-edit its
-  // payload to `{ exp: 9999999999 }`, keep the original signature, and get
-  // a token that passes an expiry-then-signature check but fails this one.
+  // Signature FIRST, on principle: a scheme that parses the payload (or
+  // checks `exp`) before verifying the signature trusts attacker-controlled
+  // bytes before establishing they came from this server at all. Whole-branch
+  // review, M6: an earlier version of this comment went further and claimed
+  // auth.test.ts's tampered-payload test ("rejects a token whose payload was
+  // edited to extend it") proves THIS ORDERING specifically. It doesn't --
+  // checked directly. That test's tampered token carries the ORIGINAL
+  // signature (computed over the original payload) attached to an EDITED
+  // payload, so the HMAC comparison fails no matter when it runs: a
+  // hypothetical expiry-then-signature reordering would check `exp` first
+  // (attacker set it to something huge, so that check alone would pass), but
+  // then still runs the same signature check afterward and gets the same
+  // mismatch, landing on the same `false`. What that test actually proves is
+  // that a signature check exists and is correct, not that it runs before
+  // the expiry check -- reordering the two is observationally equivalent as
+  // far as this suite can tell. The ordering here is real defense-in-depth
+  // (don't act on unverified bytes at all, not even to read `exp` off them),
+  // it just isn't what this specific test demonstrates.
   const expectedSig = await hmac(secret, payloadB64);
   if (!timingSafeEqual(expectedSig, sigB64)) return false;
 

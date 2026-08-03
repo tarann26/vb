@@ -210,6 +210,29 @@ describe('Hero', () => {
     // in this file green. This test catches reordering specifically, by
     // recording the actual sequence both mocks ran in rather than only
     // whether each ran at all.
+    // Whole-branch review, M5: none of the tests above inspect what URL the
+    // beacon actually fires at, only whether `sendBeacon` was called at all.
+    // Confirmed directly: changing the literal in Hero.tsx from '/api/wa' to
+    // '/api/whatsapp' -- worker/index.ts's route stays at '/api/wa' -- left
+    // every test above green, since sendBeacon is fire-and-forget and none
+    // of them read its argument. That mismatch is silent in production too:
+    // the beacon still "succeeds" (fire-and-forget, no response ever read),
+    // and the one revenue metric this route exists to produce reads zero
+    // forever, with no other signal anything is wrong.
+    it('fires the beacon at /api/wa, matching worker/index.ts\'s POST route', () => {
+      const beaconSpy = vi.fn(() => true);
+      Object.defineProperty(window.navigator, 'sendBeacon', {
+        value: beaconSpy,
+        configurable: true,
+      });
+      vi.spyOn(window, 'open').mockReturnValue(null);
+
+      const { getByRole } = renderHero();
+      fireEvent.click(getByRole('button', { name: copy.hero.reserveButton }));
+
+      expect(beaconSpy).toHaveBeenCalledWith('/api/wa');
+    });
+
     it('calls window.open before firing the beacon -- not merely both, but in that order', () => {
       const order: string[] = [];
       const openSpy = vi.spyOn(window, 'open').mockImplementation(() => {

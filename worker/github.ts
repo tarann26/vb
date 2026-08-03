@@ -33,10 +33,18 @@ const API = 'https://api.github.com';
 // repository -- this check is the only thing standing between a malformed
 // or hostile publish request and a rewritten `.github/workflows/`,
 // `package.json`, or `wrangler.toml`. Two independent conditions, both
-// required, and both load-bearing on their own (confirmed by a security
-// review: removing only the `..` check lets `assets-source/../wrangler.toml`
-// through, because `..` and `wrangler.toml` parse as two ordinary-looking
-// segments the anchored regexes below don't otherwise object to):
+// required, and both load-bearing on their own -- but not for the pairing an
+// earlier version of this comment claimed. That version said removing only
+// the `..` check lets `assets-source/../wrangler.toml` through. Whole-branch
+// review, M6: false, checked directly against ASSET_PATH below -- `..` can
+// never be a legal *category* segment (`[a-z0-9_-]+` has no `.` in it at
+// all), so that path is rejected by condition 2 alone, with or without the
+// `..` check. The real case the `..` check is load-bearing for is
+// `assets-source/food/..`: a well-formed category, and, per condition 2's
+// *filename* character class (`[A-Za-z0-9 ._-]+`, which does allow `.`), a
+// filename segment `..` matches too -- so without the substring check that
+// whole path sails straight through ASSET_PATH's regex (see
+// github.test.ts's own reproduction of this exact path).
 //
 //  1. No path may contain `..`, checked as a plain substring before
 //     anything else. This does NOT reject `.github/workflows/evil.yml` or

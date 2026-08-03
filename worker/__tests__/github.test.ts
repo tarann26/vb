@@ -187,6 +187,15 @@ describe('commitFiles', () => {
       'package.json',
       'assets-source/../wrangler.toml',
       'assets-source/food/../../package.json',
+      // Whole-branch review, M6: unlike the two cases above (already
+      // rejected by ASSET_PATH's regex alone -- `..` can never be a legal
+      // *category* segment), this is the case where the `..` substring
+      // check is the ONLY thing standing between this path and a match:
+      // "food" is a legal category, and ASSET_PATH's filename character
+      // class (`[A-Za-z0-9 ._-]+`) allows `.`, so a bare ".." also matches
+      // it as a filename. Confirmed directly: removing only the `..` check
+      // lets this one through.
+      'assets-source/food/..',
       // Security review Minor 4: junk filenames the looser `[^/]+` character
       // class used to admit even though they name no real repository path
       // and several would only surface as an opaque GitHub 422 later.
