@@ -3,12 +3,14 @@
 // Worker, a login overlay that survives a mid-session 401 without
 // unmounting anything, and a capture-phase click guard so the page's own
 // links (WhatsApp + the beacon, "View all", a menu download, the Maps
-// link) cannot fire while she is just reading the page.
+// link) cannot fire while she is just reading the page -- while an in-page
+// "#" nav jump and the hamburger, neither external nor destructive, still
+// work (post-review, Task 2 Step 4 finding).
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { readFileSync } from 'node:fs';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import EditMode from '../EditMode';
 import { AppRoutes } from '../../App';
 import type { Article, Copy, Dish, Drink, Galleries, MenuFile, Section, SiteContent, StoryContent } from '../../content/types';
@@ -354,6 +356,84 @@ describe('EditMode: the page\'s own links do not fire', () => {
     // `false` here is direct proof the click handler called preventDefault
     // on this exact anchor, not merely that nothing threw.
     expect(fireEvent.click(link)).toBe(false);
+  });
+
+  // Named in this task's own review finding as one of the two cases with no
+  // coverage at all. BlogTeaser's "View all" is a <button onClick={() =>
+  // navigate('/blogs')}>, not an anchor -- there is no `href` for
+  // preventDefault to cancel, so the ONLY thing that stops it is
+  // stopPropagation keeping this onClick from ever being dispatched. A real
+  // <Routes> table (not just a bare <EditMode/>) is what makes "did it
+  // navigate" observable: if the click had gone through, `/blogs` would
+  // have replaced this tree with the sentinel below.
+  it('clicking BlogTeaser\'s "View all" does not navigate to /blogs', async () => {
+    stubFetch();
+    render(
+      <MemoryRouter initialEntries={['/edit']}>
+        <Routes>
+          <Route path="/edit" element={<EditMode />} />
+          <Route path="/blogs" element={<div>BLOGS PAGE SENTINEL</div>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    const viewAll = await screen.findByRole('button', { name: COPY.press.viewAll });
+    fireEvent.click(viewAll);
+
+    expect(screen.queryByText('BLOGS PAGE SENTINEL')).not.toBeInTheDocument();
+    // Still on /edit: a section untouched by the click (Hero, which reads
+    // none of press.json) is still right there.
+    expect(screen.getByRole('button', { name: COPY.hero.reserveButton })).toBeInTheDocument();
+  });
+
+  // The other case the same review finding names as uncovered: Drinks'
+  // menu download is a genuine <a href={menu.file} download>, so the same
+  // preventDefault proof the Maps-link test above uses applies here too --
+  // a real 9-12MB PDF must never start downloading just because she tapped
+  // near it while reading.
+  it('clicking a menu download link does not download -- preventDefault fires on the anchor itself', async () => {
+    stubFetch();
+    render(
+      <MemoryRouter>
+        <EditMode />
+      </MemoryRouter>,
+    );
+
+    const link = await screen.findByRole('link', { name: MENUS[0].label });
+    expect(fireEvent.click(link)).toBe(false);
+  });
+});
+
+describe('EditMode: in-page navigation and page chrome are not blocked (post-review, Task 2 Step 4 finding)', () => {
+  it('clicking an in-page "#" nav link is NOT prevented -- the section jump stays alive', async () => {
+    stubFetch();
+    render(
+      <MemoryRouter>
+        <EditMode />
+      </MemoryRouter>,
+    );
+
+    const [firstLink] = COPY.nav.links;
+    const link = await screen.findByRole('link', { name: firstLink.label });
+    expect(link).toHaveAttribute('href', firstLink.href);
+    // fireEvent.click's own return value is `!event.defaultPrevented` --
+    // `true` here is direct proof this anchor's native "#" jump was left
+    // alone, the mirror image of the Maps-link test above.
+    expect(fireEvent.click(link)).toBe(true);
+  });
+
+  it('clicking the hamburger toggles aria-expanded -- the mobile nav panel is not dead', async () => {
+    stubFetch();
+    render(
+      <MemoryRouter>
+        <EditMode />
+      </MemoryRouter>,
+    );
+
+    const hamburger = await screen.findByRole('button', { name: COPY.nav.menuLabel });
+    expect(hamburger).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(hamburger);
+    expect(hamburger).toHaveAttribute('aria-expanded', 'true');
   });
 });
 

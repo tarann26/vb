@@ -311,7 +311,55 @@ const EditMode: React.FC = () => {
   // of onClickCapture here) would run after the target's own onClick has
   // already fired -- too late; see this file's own test for the mutation
   // that proves it.
+  //
+  // Post-review (Task 2 Step 4 finding): the first version of this handler
+  // cancelled EVERY click in the subtree, unconditionally -- which also
+  // killed the in-page "#" nav links and the hamburger, the only way to
+  // move around a full restaurant homepage on a phone, and Tasks 3/4 only
+  // make that navigation more necessary. The two checks below carve out
+  // exactly the clicks that stay on this page and touch nothing external,
+  // decided by what the click DOES, not by tag name alone:
+  //
+  //   1. An anchor that stays on THIS document -- same origin, same path,
+  //      same query string, no `download`, no `target="_blank"` -- is a
+  //      plain same-page "#" jump (NavBar's desktop links and its mobile
+  //      panel, both literal `<a href="#...">`, never a router `Link`).
+  //      `anchor.origin`/`.pathname`/`.search` are read off the RESOLVED
+  //      URL (`HTMLAnchorElement`'s own parsing), not the raw `href`
+  //      string, so a relative path that merely *looks* like a fragment
+  //      can't slip through. Every other anchor on this page fails this on
+  //      a different clause -- Drinks' PDF (`download`), VisitUs' Maps link
+  //      and the Instagram/LinkedIn links (`target="_blank"`, another
+  //      origin) -- and stays blocked.
+  //   2. A <button> carrying `aria-expanded` is a disclosure control by
+  //      ARIA's own definition of that attribute -- it toggles this page's
+  //      own UI state and nothing else. It is used nowhere in this tree but
+  //      the hamburger (NavBar.tsx), so this carve-out is exactly that one
+  //      button, not a general "buttons are fine" rule.
+  //
+  // Everything else stays blocked, including Hero's reserve button
+  // (fires the WhatsApp beacon) and BlogTeaser's "View all"
+  // (`navigate('/blogs')`) -- neither is an anchor and neither carries
+  // `aria-expanded`, so both fall straight through to the same
+  // preventDefault/stopPropagation as before. Fails closed: a future
+  // button added anywhere in this tree is blocked by default unless it
+  // explicitly earns one of the two carve-outs above.
   function handleCaptureClick(event: React.MouseEvent) {
+    const target = event.target;
+    if (target instanceof Element) {
+      const anchor = target.closest('a');
+      if (anchor) {
+        const staysOnThisPage =
+          anchor.target !== '_blank' &&
+          !anchor.hasAttribute('download') &&
+          anchor.origin === window.location.origin &&
+          anchor.pathname === window.location.pathname &&
+          anchor.search === window.location.search;
+        if (staysOnThisPage) return;
+      } else if (target.closest('button')?.hasAttribute('aria-expanded')) {
+        return;
+      }
+    }
     event.preventDefault();
     event.stopPropagation();
   }
