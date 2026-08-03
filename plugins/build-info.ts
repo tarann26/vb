@@ -15,7 +15,7 @@ import path from 'node:path';
 //
 // `gitRevParse` is a parameter (not a bare call in the body) for the same
 // reason todayInKolkata's callers pass `today` in rather than reading the
-// clock directly (see filter-unpublished.ts): it lets the git-throws branch
+// clock directly (see src/content/publish.ts): it lets the git-throws branch
 // be exercised deterministically in a test, without uninstalling git or
 // mutating PATH.
 //

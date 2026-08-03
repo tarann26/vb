@@ -12,6 +12,30 @@ GITHUB_OWNER = "tarann26"
 GITHUB_REPO  = "vb"
 GITHUB_BRANCH = "main"   # the branch Cloudflare Pages builds from
 
+# Identifiers, not secrets -- same non-sensitive-var treatment as
+# GITHUB_OWNER/REPO above (worker/status.ts's PagesEnv owns this shape).
+# Read by GET /api/build-status to ask Cloudflare's Pages deployments API
+# about a specific commit. PLACEHOLDER-* strings: an agent cannot look these
+# up without Cloudflare account access. A human must read the real account
+# id and Pages project name from the dashboard and paste them in here before
+# this Worker is deployed (see docs/cloudflare-cutover.md). src/test/wrangler-config.test.ts
+# asserts both are still exactly these placeholders, so deploying before
+# that step fails a test instead of build-status silently querying a
+# nonexistent account/project.
+CLOUDFLARE_ACCOUNT_ID = "PLACEHOLDER-NOT-A-REAL-ACCOUNT-ID"
+CLOUDFLARE_PAGES_PROJECT = "PLACEHOLDER-NOT-A-REAL-PAGES-PROJECT-NAME"
+
+# Hourly, but the `scheduled` handler (worker/index.ts) only actually calls
+# the Cloudflare Pages deploy hook when `anythingPublishesToday` finds a
+# scheduled content date due -- an UNCONDITIONAL hourly hook is 720-744
+# builds/month against Pages Free's 500-build cap, exhausting it around day
+# 21 with nothing deployed and nobody told for the rest of the month.
+# Hourly (not daily) because checking is cheap -- one KV read on the common
+# "nothing due" tick -- and gives finer publish granularity than a single
+# daily check would.
+[triggers]
+crons = ["0 * * * *"]
+
 [[kv_namespaces]]
 binding = "KV"
 # PLACEHOLDER-NOT-A-REAL-NAMESPACE-ID: this cannot be created by an agent --

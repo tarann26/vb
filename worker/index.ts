@@ -1,7 +1,10 @@
 // The admin Worker's entry point. `/api/*` on the site's own zone is the
 // only thing routed to this Worker (see wrangler.toml); every path other
-// than /api/health, POST /api/login and POST /api/publish still replies 404
-// until a later task adds a real route.
+// than /api/health, POST /api/login, POST /api/publish, POST /api/upload and
+// GET /api/build-status still replies 404 until a later task adds a real
+// route. Also exports `scheduled`, the cron handler that rebuilds the site
+// only when scheduled content is actually due -- see `anythingPublishesToday`
+// below.
 //
 // Deliberately typed against `@cloudflare/workers-types` (tsconfig.worker.json)
 // rather than tsconfig.node.json: this file needs `Response`/`Request`/`fetch`/
@@ -11,15 +14,24 @@ import { checkLoginRate, recordLoginFailure, clearLoginFailures } from './rateli
 import { commitFiles, DisallowedPathError, type CommitFile, type GitHubEnv } from './github';
 import { validateContent, type ValidationProblem } from '../src/content/validate';
 import { handleUpload } from './upload';
+import { handleBuildStatus, type PagesEnv } from './status';
+import { isPublished, todayInKolkata } from '../src/content/publish';
 
 // Grows as later tasks need more bindings -- only what this file actually
 // reads belongs here. GITHUB_OWNER/REPO/BRANCH/TOKEN come in via GitHubEnv
-// (worker/github.ts), which also owns the vars' shape so there's one
-// definition, not two that could drift.
-export interface Env extends GitHubEnv {
+// (worker/github.ts); CLOUDFLARE_ACCOUNT_ID/PAGES_PROJECT/API_TOKEN come in
+// via PagesEnv (worker/status.ts) -- each module owns the shape of the vars
+// it actually reads, so there's one definition, not two that could drift.
+export interface Env extends GitHubEnv, PagesEnv {
   KV: KVNamespace;
   ADMIN_PASSWORD_HASH: string;
   TOKEN_SECRET: string;
+  // The Cloudflare Pages deploy hook URL the `scheduled` handler below
+  // POSTs to. A Worker secret, not a wrangler.toml var, for the same reason
+  // GITHUB_TOKEN is: anyone holding this URL can trigger a build (a minor
+  // quota-exhaustion risk, not a data leak, but capability-bearing values
+  // belong in secrets by this codebase's own convention regardless).
+  DEPLOY_HOOK_URL: string;
 }
 
 // 7 days. Rotating ADMIN_PASSWORD_HASH alone does not invalidate a session
@@ -103,6 +115,133 @@ function basename(path: string): string {
   return slash === -1 ? path : path.slice(slash + 1);
 }
 
+// ---------------------------------------------------------------------------
+// The scheduled-rebuild cron (Task 8 of the worker plan).
+//
+// Cloudflare Pages Free allows 500 builds/month. Every publish and every
+// photo upload is its own git commit, and Cloudflare's own GitHub
+// integration already builds on every push to GITHUB_BRANCH -- that part
+// needs no code here at all. What that integration *cannot* do is build on
+// a day nothing was pushed: a dish scheduled with a future `publishAt` is
+// committed once, today, and then nothing commits again on the day it
+// actually becomes due. That is the one gap this cron closes, and it is
+// the *only* gap it closes -- an unconditional hourly hook would also
+// rebuild on every one of the other 743 hours a month where nothing changed
+// at all, which is what exhausts the 500-build quota around day 21 (see
+// wrangler.toml's `[triggers]` comment).
+//
+// The three content files `isPublished`/`publishAt` apply to -- kept as a
+// literal list, the same hand-maintained shape plugins/filter-unpublished.ts's
+// own TARGET_SUFFIXES uses, and for the same reason: there is no compiler
+// link from src/content/types.ts's `Schedulable` back to "these three
+// files", so a fourth schedulable type would need this list updated too.
+const SCHEDULABLE_CONTENT_FILES = new Set(['dishes.json', 'drinks.json', 'press.json']);
+
+// One KV key, one JSON object: `{ "dishes.json": ["2026-09-01"], ... }`,
+// each file's own most-recently-known list of still-future `publishAt`
+// dates. Not one key per file -- `anythingPublishesToday` (below) needs to
+// ask "is anything at all due today" on every hourly cron tick, and a
+// single combined key answers that with exactly one KV read regardless of
+// how many of the three files currently carry a future date, rather than
+// up to three.
+const SCHEDULE_KV_KEY = 'schedule:pending-dates';
+
+type ScheduleRecord = Record<string, string[]>;
+
+async function readSchedule(kv: KVNamespace): Promise<ScheduleRecord> {
+  const raw = await kv.get(SCHEDULE_KV_KEY);
+  if (!raw) return {};
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? (parsed as ScheduleRecord) : {};
+  } catch {
+    // A corrupted or hand-edited KV value must not crash the cron or a
+    // publish -- fail closed to "nothing known to be pending", the same
+    // posture as an empty/missing key.
+    return {};
+  }
+}
+
+async function writeSchedule(kv: KVNamespace, schedule: ScheduleRecord): Promise<void> {
+  await kv.put(SCHEDULE_KV_KEY, JSON.stringify(schedule));
+}
+
+// Called from handlePublish, after a successful commit, once per published
+// file. Replaces -- does not merge with -- that one file's own slice of the
+// schedule record, so an edit that removes or reschedules an item is
+// reflected immediately rather than leaving a stale date behind forever.
+// The other files' slices are left exactly as they were last recorded,
+// which is the best information available without an extra GitHub read for
+// files this publish didn't touch.
+//
+// `!isPublished({ publishAt }, today)` -- not a bare `publishAt > today` --
+// is what makes this the one place besides the Vite plugin that consumes
+// `isPublished` itself, and is deliberate rather than equivalent-by-luck: it
+// reuses the exact same "is this item live yet" definition the Vite plugin
+// filters the production bundle with (including the malformed-date throw,
+// which is what the outer try/catch in handlePublish below exists to
+// contain), so this record can never disagree with what actually ships.
+// Only dates that are NOT YET published are worth tracking here -- an item
+// whose publishAt is today or already past is already covered by the commit
+// that just landed (Cloudflare's own build-on-push already handles it), so
+// tracking it too would just be a second, redundant source of "is it due".
+function futurePublishAtDates(items: unknown[], today: string): string[] {
+  const dates = items
+    .filter((item): item is { publishAt?: unknown } => typeof item === 'object' && item !== null)
+    .map((item) => item.publishAt)
+    .filter((d): d is string => typeof d === 'string' && !isPublished({ publishAt: d }, today));
+  return Array.from(new Set(dates)).sort();
+}
+
+async function recordScheduledDates(env: Env, path: string, parsed: unknown, today: string): Promise<void> {
+  const file = basename(path);
+  if (!SCHEDULABLE_CONTENT_FILES.has(file) || !Array.isArray(parsed)) return;
+  const schedule = await readSchedule(env.KV);
+  schedule[file] = futurePublishAtDates(parsed, today);
+  await writeSchedule(env.KV, schedule);
+}
+
+// The cron's own predicate: is anything due to be live by today, as far as
+// the last publish of each schedulable file recorded? One KV read,
+// regardless of how many files or dates are tracked -- deliberately cheap
+// enough to run every hour without it mattering, unlike the thing it's
+// guarding: a Pages build.
+//
+// `d <= today`, not `d === today`: catch-up matters here as much as it does
+// for `isPublished` itself. If a cron tick is ever missed on a date's exact
+// day -- Cloudflare Cron Trigger downtime, or DEPLOY_HOOK_URL rotated to a
+// bad value for a stretch -- the next tick that actually runs must still
+// treat that now-past date as due, not silently skip it forever because
+// "today" has since moved on. `clearDueDates` below already drops every
+// date `<= today` once the hook fires, which is exactly the set this check
+// needs to agree with -- using `===` here while that uses `<=` would leave
+// a permanently-missed date sitting inert in the schedule with nothing ever
+// asking about it again.
+export async function anythingPublishesToday(env: Env, today: string): Promise<boolean> {
+  const schedule = await readSchedule(env.KV);
+  return Object.values(schedule).some((dates) => dates.some((d) => d <= today));
+}
+
+// After the deploy hook has actually fired successfully for `today`, drop
+// every date `<= today` from every file's slice -- otherwise the next
+// hourly tick, still the same day, would see the same date still sitting in
+// the schedule and fire the hook again, and again, once per remaining hour
+// in the day. Only called from the "something is due" branch of `scheduled`
+// below, never from `anythingPublishesToday` itself: if the fetch to
+// DEPLOY_HOOK_URL fails, the date must NOT be cleared, or a genuinely failed
+// attempt would never be retried on the next tick.
+async function clearDueDates(env: Env, today: string): Promise<void> {
+  const schedule = await readSchedule(env.KV);
+  let changed = false;
+  for (const file of Object.keys(schedule)) {
+    const remaining = schedule[file].filter((d) => d > today);
+    if (remaining.length !== schedule[file].length) changed = true;
+    schedule[file] = remaining;
+  }
+  if (changed) await writeSchedule(env.KV, schedule);
+}
+// ---------------------------------------------------------------------------
+
 function isPublishFile(value: unknown): value is CommitFile {
   if (!value || typeof value !== 'object') return false;
   const { path, content, encoding } = value as Record<string, unknown>;
@@ -184,6 +323,33 @@ async function handlePublish(request: Request, env: Env): Promise<Response> {
   // assets-source/ still can't make it to GitHub.
   try {
     const { sha } = await commitFiles(env, files, message);
+
+    // 5. Best-effort schedule bookkeeping for the cron (Task 8). The commit
+    // has already landed -- nothing below this line may turn this response
+    // into anything other than the 200 the publish itself earned, so every
+    // step is wrapped to swallow its own failure rather than throw into the
+    // response. Re-parses `f.content` rather than threading step 3's
+    // already-parsed value down here: that value lives inside the `flatMap`
+    // callback above and validateContent's own default-deny already proved
+    // it round-trips JSON.parse cleanly for every `.json` file that reached
+    // this point without a problem.
+    const today = todayInKolkata();
+    await Promise.all(
+      files
+        .filter((f) => f.encoding === 'utf-8' && f.path.endsWith('.json'))
+        .map(async (f) => {
+          try {
+            const parsed: unknown = JSON.parse(f.content);
+            await recordScheduledDates(env, f.path, parsed, today);
+          } catch {
+            // Never lets schedule bookkeeping fail a publish that already
+            // succeeded on GitHub -- worst case, the cron's own record of
+            // upcoming dates for this one file goes stale until the next
+            // successful publish of it.
+          }
+        }),
+    );
+
     return json(200, { sha });
   } catch (error) {
     // A disallowed path is a client mistake, not a GitHub failure -- give it
@@ -229,6 +395,41 @@ export default {
       return handleUpload(request, env);
     }
 
+    if (url.pathname === '/api/build-status' && request.method === 'GET') {
+      return handleBuildStatus(request, env);
+    }
+
     return new Response('Not found', { status: 404 });
+  },
+
+  // Cloudflare Cron Trigger, `[triggers].crons` in wrangler.toml -- runs
+  // hourly, but only actually rebuilds the site when today is a date some
+  // already-published content is waiting on (see `anythingPublishesToday`
+  // above). No `ctx` parameter: unlike a `fetch` handler racing the
+  // response against the runtime tearing the isolate down, this handler
+  // `await`s everything it does before returning, so there is nothing left
+  // to keep alive with `ctx.waitUntil` -- the same reason `fetch` above
+  // never takes one either.
+  async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
+    const today = todayInKolkata();
+    if (!(await anythingPublishesToday(env, today))) return;
+
+    const res = await fetch(env.DEPLOY_HOOK_URL, { method: 'POST' });
+    if (!res.ok) {
+      // Surfaced, not swallowed: a scheduled handler that throws is recorded
+      // as a failed cron invocation in the Cloudflare dashboard (and retried
+      // per Cloudflare's own cron-retry policy), which is the only signal
+      // anyone gets that an automated rebuild didn't happen -- there is no
+      // dashboard polling this specific failure the way build-status polls
+      // a publish. Swallowing it here would silently recreate exactly the
+      // "her work evaporates" failure mode this whole task exists to close,
+      // just for scheduled content instead of a manual publish.
+      throw new Error(`deploy hook failed: Cloudflare returned ${res.status}`);
+    }
+
+    // Only reached once the hook has actually been accepted -- see
+    // clearDueDates's own comment for why a failed fetch above must leave
+    // today's date(s) in place for the next hourly retry instead.
+    await clearDueDates(env, today);
   },
 };

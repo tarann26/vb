@@ -192,7 +192,7 @@ describe('buildInfo (the Vite plugin)', () => {
 // (the path every real Cloudflare deploy takes), so none of them exercise the
 // git-fallback or unknown-fallback branches at all. `gitRevParse` is a
 // parameter precisely so those branches can be driven directly, the same way
-// filter-unpublished.ts's todayInKolkata takes `today` as a parameter instead
+// src/content/publish.ts's todayInKolkata takes `today` as a parameter instead
 // of stubbing the clock.
 describe('resolveCommitSha', () => {
   it('prefers CF_PAGES_COMMIT_SHA when set', () => {

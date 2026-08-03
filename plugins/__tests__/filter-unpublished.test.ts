@@ -1,5 +1,9 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import filterUnpublished, { filterUnpublishedJson, todayInKolkata } from '../filter-unpublished';
+import filterUnpublished, { filterUnpublishedJson } from '../filter-unpublished';
+// Moved to src/content/publish.ts (Task 8 of the worker plan) -- see that
+// file's own comment. Imported from its new home here; every assertion
+// below is unchanged.
+import { todayInKolkata } from '../../src/content/publish';
 
 // This is the coverage that matters: the plugin is `apply: 'build'` only
 // (see filter-unpublished.ts), so it never runs during `vitest run` --

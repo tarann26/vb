@@ -42,6 +42,14 @@ async function buildEnv() {
     GITHUB_REPO: 'vb',
     GITHUB_BRANCH: 'main',
     GITHUB_TOKEN: 'index-test-github-token-not-real',
+    // Task 8: build-status and the scheduled-rebuild cron. Unused by any
+    // test in this file (none of them call /api/build-status or
+    // worker.scheduled -- see status.test.ts and scheduled.test.ts), but
+    // required for `env` to satisfy `Env`.
+    CLOUDFLARE_ACCOUNT_ID: 'index-test-account-id',
+    CLOUDFLARE_PAGES_PROJECT: 'index-test-project',
+    CLOUDFLARE_API_TOKEN: 'index-test-fixture-cf-token-not-real',
+    DEPLOY_HOOK_URL: 'https://api.cloudflare.com/client/v4/pages/webhooks/deploy_hooks/index-test-not-real',
   };
 }
 

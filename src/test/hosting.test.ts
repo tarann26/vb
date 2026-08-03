@@ -128,4 +128,34 @@ describe('documented cloudflare build command', () => {
     expect(testDeployIndex).toBeGreaterThanOrEqual(0);
     expect(imagesIndex).toBeLessThan(testDeployIndex);
   });
+
+  // The other half of the ordering, and the one Task 8 exists to guard:
+  // four of the five content guards (Plan 2) produce a *successful*
+  // `npm run build` and a deployable `dist/` that white-pages -- `vite
+  // build` bundles src/content/index.ts without executing it, so
+  // assertCopy/assertSections/narrowSectionId/assertHours never run at
+  // build time. `npm run test:deploy` is what actually executes them.
+  // If the documented command ever put `npm run build` first, a bad commit
+  // would build and deploy successfully, guards and all, and the cron
+  // (worker/index.ts's `scheduled` handler) would trigger exactly that
+  // command, unattended, on whichever hourly tick a scheduled item next
+  // comes due -- as early as 04:00 with nobody watching. This cannot verify
+  // the Cloudflare dashboard itself holds this order (see
+  // docs/cloudflare-cutover.md's own new step on that, and that step's own
+  // comment on why nothing in this repository can check it) -- only that
+  // the documented command this repository asks a human to copy in cannot
+  // silently drift into describing the unsafe order.
+  it('runs `npm run test:deploy` before `npm run build`', () => {
+    const doc = readFileSync('docs/cloudflare-cutover.md', 'utf8');
+    const match = doc.match(/\*\*Build command:\*\*\s*`([^`]+)`/);
+    expect(match).not.toBeNull();
+    const command = match![1];
+
+    const testDeployIndex = command.indexOf('npm run test:deploy');
+    const buildIndex = command.indexOf('npm run build');
+
+    expect(testDeployIndex).toBeGreaterThanOrEqual(0);
+    expect(buildIndex).toBeGreaterThanOrEqual(0);
+    expect(testDeployIndex).toBeLessThan(buildIndex);
+  });
 });

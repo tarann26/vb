@@ -1,5 +1,5 @@
 import type { Plugin } from 'vite';
-import { isPublished } from '../src/content/publish';
+import { isPublished, todayInKolkata } from '../src/content/publish';
 
 // The three content files that carry a `publishAt` field (see
 // src/content/types.ts: Dish, Drink, Article). Matched by suffix on Vite's
@@ -29,28 +29,14 @@ function asPublishable(item: unknown, file: string): { publishAt?: string } {
   return item as { publishAt?: string };
 }
 
-// Resolves "today" in the restaurant's own timezone, Asia/Kolkata (IST),
-// not the build machine's. Cloudflare builds in UTC; at 23:00 UTC on the
-// 1st -- 04:30 IST on the 2nd -- a UTC comparison would still withhold
-// content dated the 2nd. IST has no DST, so this needs no seasonal
-// correction.
-//
-// Publish granularity is the cadence of the next scheduled rebuild (the
-// cron job from Plan 3), not midnight: an item dated "today" goes live at
-// the next build that happens to run on or after that date, not the
-// instant the clock ticks over.
-//
-// Exported (not module-private) purely so
-// plugins/__tests__/filter-unpublished.test.ts can verify the IST
-// resolution itself under fake timers -- `filterUnpublishedJson`'s own
-// tests all take `today` as a parameter and so cannot exercise this
-// function's body at all; nothing else in the suite would have caught a
-// regression here (confirmed: swapping the body to plain
-// `new Date().toISOString().slice(0, 10)` -- i.e. UTC, the exact bug this
-// function exists to avoid -- left every other gate green).
-export function todayInKolkata(): string {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
-}
+// `todayInKolkata` used to live here -- moved to src/content/publish.ts
+// (Task 8 of the worker plan), next to `isPublished`, so the admin Worker
+// can import it too without dragging this file's `import type { Plugin }
+// from 'vite'` across the Worker's own tsconfig project boundary. See that
+// function's own comment in publish.ts for the IST-boundary reasoning and
+// both real callers; plugins/__tests__/filter-unpublished.test.ts's
+// `todayInKolkata` describe block still exercises it directly, now imported
+// from there instead of defined here -- its assertions are unchanged.
 
 // Pure: takes `today` as a parameter instead of reading the clock, so it
 // can be unit-tested at the one interesting boundary without stubbing

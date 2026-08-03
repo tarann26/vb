@@ -278,3 +278,101 @@ openssl rand -base64 32 | npx wrangler secret put TOKEN_SECRET
 
 Rotating `TOKEN_SECRET` signs out every existing session immediately, including whoever is doing
 the rotation — they will need to log in again with the new password right after.
+
+## 11. Set up the scheduled-rebuild cron and build-status reporting (Task 8, separate from Steps 1–10)
+
+Two independent pieces, both required before Task 8's `scheduled` handler and `GET /api/build-status`
+work in production. Neither has an ordering dependency on Steps 1–10, but both need the Pages
+project from Step 1 to already exist.
+
+### 11a. Create a Deploy Hook and set `DEPLOY_HOOK_URL`
+
+In the Cloudflare dashboard: this Pages project → **Settings** → **Builds & deployments** →
+**Deploy hooks** → **Add deploy hook**. Name it something identifiable (e.g.
+`scheduled-rebuild-cron`), point it at the branch this project builds from (`main`), and save.
+Cloudflare shows the hook's URL once — a `https://api.cloudflare.com/client/v4/pages/webhooks/deploy_hooks/<id>`
+address. Set it as a Worker secret immediately:
+
+```bash
+printf '%s' 'https://api.cloudflare.com/client/v4/pages/webhooks/deploy_hooks/<id>' | npx wrangler secret put DEPLOY_HOOK_URL
+```
+
+(`printf '%s'`, not `echo`, so no trailing newline is even offered to the pipe — belt-and-braces on
+top of `wrangler secret put` already trimming trailing whitespace from piped stdin, the same fact
+Step 10 above relies on.)
+
+Anyone holding this URL can trigger a Pages build for this project — a minor quota-exhaustion
+nuisance, not a data leak, but it is still a Worker secret, never a `wrangler.toml` var, matching
+`GITHUB_TOKEN`'s treatment for the same reason.
+
+### 11b. Create a Pages-scoped API token, and fill in the account/project identifiers
+
+`GET /api/build-status` reads Cloudflare's own Pages deployments API, which needs its own
+credential — **do not reuse** any token created for other purposes.
+
+1. Cloudflare dashboard → profile icon (top right) → **My Profile** → **API Tokens** → **Create
+   Token** → **Custom token**. Permissions: **Account** / **Cloudflare Pages** / **Read**. Account
+   Resources: **Include** / this account. Create it, and copy the token immediately — Cloudflare
+   shows it exactly once.
+2. Set it as a Worker secret:
+   ```bash
+   npx wrangler secret put CLOUDFLARE_API_TOKEN
+   ```
+3. Find the account id (dashboard: Workers & Pages overview page, right-hand sidebar — or
+   `npx wrangler whoami`) and paste it into `wrangler.toml`, replacing
+   `PLACEHOLDER-NOT-A-REAL-ACCOUNT-ID` on the `CLOUDFLARE_ACCOUNT_ID` line.
+4. Find this Pages project's own name (the slug in its dashboard URL, or `npx wrangler pages
+   project list`) and paste it into `wrangler.toml`, replacing
+   `PLACEHOLDER-NOT-A-REAL-PAGES-PROJECT-NAME` on the `CLOUDFLARE_PAGES_PROJECT` line.
+
+`src/test/wrangler-config.test.ts` asserts both are still exactly those placeholder strings. Skip
+this step and `npm run test:deploy` fails there, with a message naming the reason, instead of
+`GET /api/build-status` silently querying an account or project that doesn't exist once deployed.
+
+### 11c. Decision recorded: an upload-only commit still triggers its own Pages build
+
+`POST /api/upload` (Task 6) commits one photo to `assets-source/` in its own commit, separate from
+any content publish. Cloudflare's default GitHub integration (**Automatic deployments**, enabled
+the moment Step 1 connects this repository) builds on *every* push to `GITHUB_BRANCH` — so a photo
+upload immediately followed by a content publish costs two separate builds, not one. Each commit is
+its own build; there is no batching or debouncing anywhere in this stack, and that is deliberate:
+
+- Task 8's cron exists only to catch a *future-dated* `publishAt` becoming due on a day nothing else
+  commits — it has no mechanism to notice, batch, or build a same-day edit at all. Every ordinary
+  same-day publish or upload going live at all depends on Cloudflare's own build-on-push staying
+  enabled exactly as it is; turning it off to save builds would break that, not just slow it down.
+- The realistic volume this decision costs is nowhere near the 500-build/month cap. The quota risk
+  this task exists to close was the *unconditional hourly cron* (720–744/month on its own, all by
+  itself); routine editing traffic for a small restaurant site is not in the same order of magnitude.
+- Batching would mean either delaying a real publish's own build (contradicting "publish and it's
+  live") or routing every commit through this same deploy-hook-and-cron machinery instead of
+  Cloudflare's native integration — a materially larger change than this task's scope.
+
+If usage ever changes enough that this becomes a real quota concern, the fix belongs on the deploy
+hook's own debounce, not a change to the conditional check above.
+
+## 12. Confirm the dashboard's build command still matches what Step 2 documented
+
+Do this now, right after Step 2, and again any time anyone edits this Pages project's build
+settings by hand afterward. Open this project's **Settings** → **Builds & deployments** and read
+the actual configured **Build command** field. Compare it, word for word, against the command in
+Step 2 above (`npm run images && npm run test:deploy && npm run build`) — in particular, confirm
+`npm run test:deploy` still runs **before** `npm run build`, not after and not omitted.
+
+**Why this matters more than it looks like it should.** `npm run test:deploy` is the only thing
+standing between a bad commit and a deployed white page. Four of the five content guards from Plan 2
+(a disabled hero, a blank copy heading, a typo'd nav section id, an invalid day code) produce a
+*successful* `npm run build` and a deployable `dist/` that white-pages anyway — `vite build` bundles
+`src/content/index.ts` without executing it, so none of those guards run at build time; only
+`npm run test:deploy` actually runs them. If the dashboard's build command is missing
+`npm run test:deploy`, or runs it after `npm run build` instead of before, **nothing in this
+repository can detect that.** `src/test/hosting.test.ts` only pins the command documented on *this
+page* — it has no way to read what the Cloudflare dashboard actually holds, and the two can drift
+apart the moment anyone edits the dashboard by hand without also editing this file. Once Task 8's
+cron is live, this stops being only a risk for the next manual publish: the cron's `scheduled`
+handler calls the deploy hook, which runs exactly whatever command the dashboard holds, unattended,
+on whichever hourly tick a scheduled item next comes due — as early as 04:00, with nobody watching
+either way.
+
+This check cannot be automated — `src/test/hosting.test.ts` proves only that *this document*
+describes the safe order, never that the dashboard agrees with it. Do it manually.
