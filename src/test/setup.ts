@@ -61,6 +61,21 @@ if (typeof Blob !== 'undefined' && !Blob.prototype.text) {
   };
 }
 
+// jsdom does not implement URL.createObjectURL/revokeObjectURL at all --
+// `typeof URL.createObjectURL` reads "undefined" under this exact jsdom
+// version, confirmed directly the same way as the Blob gaps above.
+// src/admin/PhotoField.tsx (Task 5) is the first real caller: it previews a
+// picked photo locally, before the upload it started even resolves, via an
+// object URL. A fake-but-internally-consistent stand-in (each call returns
+// a distinct `blob:` string; revoking is a no-op) is enough for a test to
+// assert an <img src> actually got wired up to something derived from the
+// picked file, without this repo needing a real blob store behind it.
+if (typeof URL !== 'undefined' && !URL.createObjectURL) {
+  let objectUrlCounter = 0;
+  URL.createObjectURL = () => `blob:mock-${++objectUrlCounter}`;
+  URL.revokeObjectURL = () => {};
+}
+
 if (typeof Blob !== 'undefined' && !Blob.prototype.stream) {
   // No FileReader.readAsStream equivalent to delegate to -- built from the
   // .arrayBuffer() polyfill above instead, which is defined by the time

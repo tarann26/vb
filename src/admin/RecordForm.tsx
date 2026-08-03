@@ -1,6 +1,6 @@
 import React from 'react';
 import Field from './Field';
-import { problemsFor } from './problems';
+import { problemsFor, arrayIndexOf } from './problems';
 import type { FieldsOf } from './fields';
 import type { ValidationProblem } from '../content/validate';
 
@@ -26,18 +26,15 @@ export interface RecordFormProps<T> {
 
 // `[N].key` for an N other than the index this instance renders -- a
 // DIFFERENT array item's problem, not an unmatched one. Callers naturally
-// pass the whole file's problem list to every item's RecordForm (Task 5's
-// RecordList hasn't been built yet to slice it first, and even once it
-// exists there is no reason to require that), so without this exclusion a
-// dish at index 0 would show every OTHER dish's validation message in its
-// own banner too -- the exact cross-item misattribution this task's brief
-// warns index-matching itself must avoid, just moved into the banner
-// instead of the field.
-const ARRAY_ITEM = /^\[(\d+)\]\./;
-
+// pass the whole file's problem list to every item's RecordForm (RecordList,
+// Task 5, slices nothing before handing problems down -- see its own
+// comment on why), so without this exclusion a dish at index 0 would show
+// every OTHER dish's validation message in its own banner too -- the exact
+// cross-item misattribution this task's brief warns index-matching itself
+// must avoid, just moved into the banner instead of the field.
 function belongsToAnotherIndex(field: string, index: number): boolean {
-  const found = field.match(ARRAY_ITEM);
-  return found !== null && Number(found[1]) !== index;
+  const found = arrayIndexOf(field);
+  return found !== undefined && found !== index;
 }
 
 function RecordForm<T extends object>({ fields, index, value, onChange, problems }: RecordFormProps<T>) {

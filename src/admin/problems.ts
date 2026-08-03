@@ -13,6 +13,25 @@
 // for a non-array file's own fields.
 import type { ValidationProblem } from '../content/validate';
 
+// `[N].anything` -> N. The one place that regex is defined -- RecordForm
+// (whether a problem belongs to a DIFFERENT index than the one it's
+// rendering) and RecordList (whether a problem's index has no mounted
+// RecordForm at all, Task 5) both need the same extraction, and a second,
+// independently-written copy of this pattern is exactly the kind of thing
+// that can drift out of sync with problemsFor's own matching above with no
+// compiler link to catch it.
+const ARRAY_ITEM = /^\[(\d+)\]\./;
+
+// undefined for a bare/non-array-item field (`''`, `heading`, `hours[0]`
+// from a non-array file) -- RecordForm.tsx already had a boolean-only
+// version of this (`belongsToAnotherIndex`); this returns the index itself
+// so a caller (RecordList) can compare it against something other than one
+// fixed index.
+export function arrayIndexOf(field: string): number | undefined {
+  const found = field.match(ARRAY_ITEM);
+  return found === null ? undefined : Number(found[1]);
+}
+
 export function problemsFor(problems: ValidationProblem[], index: number | undefined, key: string): ValidationProblem[] {
   if (index !== undefined) {
     // Exact match on THIS index, never a suffix. `field.endsWith('.' +

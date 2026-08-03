@@ -5,6 +5,9 @@
 // deploy. This route's only job is getting the right bytes to the right
 // path in one commit.
 import { detectFormat, type Format } from '../src/shared/image-format';
+import { derivativePath } from '../src/shared/derivative-path';
+import { bytesToBase64 } from '../src/shared/base64';
+import { UPLOAD_CATEGORIES } from '../src/shared/upload-categories';
 import { parseCookie, verifyToken } from './auth';
 import { commitFiles, DisallowedPathError, type CommitFile, type GitHubEnv } from './github';
 
@@ -17,15 +20,11 @@ export type UploadEnv = GitHubEnv & { TOKEN_SECRET: string };
 
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 
-// The seven directories that exist under assets-source/ today (see that
-// directory itself). Hardcoded, not read off disk: this Worker has no
-// filesystem to read from at request time, and an allowlist that can only
-// ever shrink or grow by a code change -- never by whatever a request
-// happens to name -- is the same posture github.ts's own path allowlist
-// takes for the same reason (commitFiles' ASSET_PATH regex would accept any
-// lowercase/underscore/hyphen segment here as a "category", so this is the
-// thing that actually keeps a request from inventing an eighth one).
-const CATEGORIES = new Set(['atmosphere', 'food', 'hero', 'mocktails', 'our_story', 'press', 'team']);
+// The one place that actually ENFORCES src/shared/upload-categories.ts's
+// list -- commitFiles' ASSET_PATH regex (worker/github.ts) would accept any
+// lowercase/underscore/hyphen segment here as a "category", so this Set is
+// the thing that actually keeps a request from inventing an eighth one.
+const CATEGORIES: Set<string> = new Set(UPLOAD_CATEGORIES);
 
 // The canonical extension `uploadPath` writes for each detected format --
 // never the extension the uploaded filename happened to have (see that
@@ -158,25 +157,18 @@ function containsAscii(bytes: Uint8Array, needle: string): boolean {
 }
 
 // ---------------------------------------------------------------------------
-// Binary -> base64, for the `content` field commitFiles sends GitHub's blob
-// API. Deliberately NOT worker/auth.ts's byte-by-byte `bytesToBase64`
-// (`binary += String.fromCharCode(byte)` in a loop): that function only
-// ever encodes small, fixed-size values (a 16-byte salt, a 32-byte HMAC
-// digest), where a per-byte loop is fine. A photo can be up to 25MB, and a
-// per-byte loop over 25 million bytes is the wrong shape for that --
-// `String.fromCharCode(...chunk)` in bounded chunks converts many bytes per
-// call instead of one, which is both far fewer calls and avoids the
-// call-stack-argument limit a single `String.fromCharCode(...allBytes)`
-// would risk on a large file.
-const BASE64_CHUNK = 0x8000;
-
-function bytesToBase64(bytes: Uint8Array): string {
-  let binary = '';
-  for (let i = 0; i < bytes.length; i += BASE64_CHUNK) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + BASE64_CHUNK));
-  }
-  return btoa(binary);
-}
+// `bytesToBase64` (the `content` field commitFiles sends GitHub's blob API,
+// and Task 5's staged-upload response body below) now lives in
+// src/shared/base64.ts -- PhotoField.tsx (the browser side of Task 5) needs
+// the exact same chunked encoding to keep a staged photo's bytes around for
+// its eventual `POST /api/publish`, and a second, independently-written copy
+// of the chunking logic is exactly the kind of thing that could silently
+// drift out of sync with this one. Deliberately NOT worker/auth.ts's
+// byte-by-byte `bytesToBase64` (`binary += String.fromCharCode(byte)` in a
+// loop) either way: that function only ever encodes small, fixed-size values
+// (a 16-byte salt, a 32-byte HMAC digest), where a per-byte loop is fine. A
+// photo can be up to 25MB, and a per-byte loop over 25 million bytes is the
+// wrong shape for that.
 
 function json(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), {
@@ -286,9 +278,39 @@ export async function handleUpload(request: Request, env: UploadEnv): Promise<Re
     return json(400, { message: 'This photo looks incomplete or corrupted. Try uploading it again.' });
   }
 
-  // 6. Commit. uploadPath's stem is content-addressed (see that function's
-  // own comment), never derived from `fileField.name`.
+  // 6. uploadPath's stem is content-addressed (see that function's own
+  // comment), never derived from `fileField.name`.
   const path = await uploadPath(category, bytes, format);
+
+  // 7. Task 5: `?stage=1` stops HERE, before any commit -- every check
+  // above (size, format, HEIC, completeness) has already run, so a staged
+  // upload is exactly as validated as a committing one always was. Without
+  // this, every photo she adds is its own commit: twelve photos means
+  // twelve commits, Cloudflare Pages builds on each one, and cancels every
+  // build a later push supersedes before it finishes -- GET
+  // /api/build-status (worker/status.ts's mapDeploymentState) correctly
+  // reports a cancelled build as `failed`, so she would see eleven failures
+  // for eleven photos that all landed fine. The natural response to a
+  // reported failure is to retry, which burns a second build per retry
+  // against Cloudflare Pages Free's 500-build/month cap for photos that
+  // never actually failed.
+  //
+  // Returns the same content-addressed `path` a commit would have used (so
+  // retrying a dropped connection re-derives the identical path and costs
+  // nothing extra at publish time) plus `contentPath` -- derivativePath's
+  // `/food/<hash>.webp`, the exact string dishes.json/drinks.json/press.json
+  // store -- computed once, here, so the browser never carries its own copy
+  // of the source-to-derivative naming rule. The bytes themselves are not
+  // echoed back: the browser already has them (it just sent them) and is
+  // what keeps them until `POST /api/publish` -- see PhotoField.tsx.
+  const url = new URL(request.url);
+  if (url.searchParams.get('stage') === '1') {
+    return json(200, { path, contentPath: derivativePath(path) });
+  }
+
+  // 8. Every OTHER request (no `?stage=1`) still commits on its own, exactly
+  // as before Task 5 -- kept for this route's own direct-commit tests and
+  // any future caller that isn't staging into a publish at all.
   const file: CommitFile = { path, content: bytesToBase64(bytes), encoding: 'base64' };
 
   try {

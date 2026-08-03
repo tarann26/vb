@@ -405,6 +405,41 @@ describe('worker entry point', () => {
       expect(stub.calls).toHaveLength(0);
     });
 
+    // Task 5: `/api/upload` no longer commits a photo on its own -- the
+    // browser now stages it (`?stage=1`) and sends its base64 bytes in this
+    // SAME `files` array as the JSON content files it publishes alongside,
+    // so a real request legitimately mixes a non-JSON base64 file with
+    // utf-8 JSON files for the first time. That mix is exactly the shape a
+    // regression could hide in: a check that skips content validation
+    // merely because SOME file in the request is a genuine non-JSON base64
+    // asset would still let a JSON file mislabelled base64 slip through
+    // right next to it, and the single-file test above can't tell that
+    // apart from the fix actually working -- it never has a second file in
+    // the request to be distracted by.
+    it('a JSON file mislabelled base64 is still refused even alongside a legitimate staged photo', async () => {
+      const cookie = await sessionCookie();
+      const response = await worker.fetch(
+        publishRequest(
+          {
+            files: [
+              // The legitimate half: a staged photo, base64, at a real
+              // assets-source/ path -- exactly what PhotoField.tsx sends.
+              { path: 'assets-source/food/abc123abc123.jpg', content: btoa('not really a jpeg'), encoding: 'base64' },
+              // The attack half: identical shape to the single-file test
+              // above, just no longer alone in the request.
+              { path: 'src/content/site.json', content: btoa('not json at all'), encoding: 'base64' },
+            ],
+          },
+          cookie,
+        ),
+        env,
+      );
+      expect(response.status).toBe(422);
+      const body = (await response.json()) as { problems: { field: string; message: string }[] };
+      expect(body.problems.some((p) => p.field === 'src/content/site.json')).toBe(true);
+      expect(stub.calls).toHaveLength(0);
+    });
+
     // Security review Minor 1: two entries for the same path produce two
     // blobs and two tree entries; GitHub's tree API keeps the *last* one
     // for a repeated path, so she could publish what she believes are two

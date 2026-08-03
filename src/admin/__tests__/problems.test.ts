@@ -1,10 +1,38 @@
 import { describe, expect, it } from 'vitest';
-import { problemsFor } from '../problems';
+import { problemsFor, arrayIndexOf } from '../problems';
 import type { ValidationProblem } from '../../content/validate';
 
 function problem(field: string, message = field || 'file-level'): ValidationProblem {
   return { field, message };
 }
+
+describe('arrayIndexOf', () => {
+  it('extracts the index from an array-item field', () => {
+    expect(arrayIndexOf('[0].name')).toBe(0);
+    expect(arrayIndexOf('[40].name')).toBe(40);
+  });
+
+  // 0 is falsy in JS -- a caller comparing `if (arrayIndexOf(field))` rather
+  // than `!== undefined` would silently treat index 0 the same as "no
+  // index", exactly the bug problemsFor's own "index 0 is a real index"
+  // tests above guard against for its `index` parameter.
+  it('returns a real 0, not something that reads as absent', () => {
+    expect(arrayIndexOf('[0].name')).toBe(0);
+    expect(arrayIndexOf('[0].name')).not.toBeUndefined();
+  });
+
+  it('returns undefined for a bare, non-array-item field', () => {
+    expect(arrayIndexOf('heading')).toBeUndefined();
+    expect(arrayIndexOf('')).toBeUndefined();
+  });
+
+  it('returns undefined for a key[i]-shaped field belonging to a non-array file, not the digits inside it', () => {
+    // hours[0] is an array VALUE within one non-array file (site.json), not
+    // "array item 0 of the whole file" -- arrayIndexOf must not treat the
+    // leading key as if it were the `[N].` array-item prefix.
+    expect(arrayIndexOf('hours[0]')).toBeUndefined();
+  });
+});
 
 describe('problemsFor: array-shaped files ([i].key)', () => {
   it('matches the exact index requested', () => {

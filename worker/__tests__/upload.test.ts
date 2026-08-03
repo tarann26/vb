@@ -22,6 +22,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { handleUpload, uploadPath, type UploadEnv } from '../upload';
 import { signToken } from '../auth';
+import { derivativePath } from '../../src/shared/derivative-path';
 import { envWith, makeGitHubStub, type GitHubStub } from './githubStub';
 
 const TOKEN_SECRET = 'upload-test-token-secret';
@@ -79,6 +80,12 @@ function uploadRequest(opts: {
   cookie?: string;
   omitFile?: boolean;
   omitCategory?: boolean;
+  // Appended to the URL as `?stage=<value>` when present -- Task 5's
+  // staged-upload branch. A caller passes the literal string it wants on
+  // the query string (not a boolean) so a test can also exercise a
+  // near-miss value like `'2'` or `'true'`, proving the check is `=== '1'`
+  // exactly, not merely truthy.
+  stage?: string;
 }): Request {
   const form = new FormData();
   if (!opts.omitCategory && opts.category !== undefined) form.append('category', opts.category);
@@ -88,7 +95,11 @@ function uploadRequest(opts: {
   }
   const headers: Record<string, string> = {};
   if (opts.cookie) headers['Cookie'] = opts.cookie;
-  return new Request('https://viabiancadelhi.com/api/upload', { method: 'POST', headers, body: form });
+  const url =
+    opts.stage === undefined
+      ? 'https://viabiancadelhi.com/api/upload'
+      : `https://viabiancadelhi.com/api/upload?stage=${opts.stage}`;
+  return new Request(url, { method: 'POST', headers, body: form });
 }
 
 // A ReadableStream that throws the moment anything tries to actually read
@@ -407,5 +418,122 @@ describe('POST /api/upload', () => {
     const firstBody = (await first.json()) as { path: string };
     const secondBody = (await second.json()) as { path: string };
     expect(firstBody.path).toBe(secondBody.path);
+  });
+
+  // Task 5: stops photos from being committed one at a time. Before this,
+  // every one of these tests' own `it('commits a valid photo...')` above
+  // was the ONLY shape a real upload could take -- twelve photos meant
+  // twelve commits, and Cloudflare Pages cancelling eleven superseded
+  // builds reported as eleven failures for photos that all actually landed.
+  describe('?stage=1: stages the photo without committing it', () => {
+    it('runs every existing check, then returns path and contentPath WITHOUT calling commitFiles', async () => {
+      env = freshEnv();
+      const cookie = await sessionCookie();
+      const response = await handleUpload(
+        uploadRequest({ category: 'food', file: { bytes: JPEG_BYTES }, cookie, stage: '1' }),
+        env,
+      );
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as { path: string; contentPath: string; sha?: string };
+      expect(body.path).toMatch(/^assets-source\/food\/[0-9a-f]{12}\.jpg$/);
+      expect(body.contentPath).toMatch(/^\/food\/[0-9a-f]{12}\.webp$/);
+      expect(body.sha).toBeUndefined();
+      // The one assertion this whole step exists for: no request reached
+      // GitHub at all, not even one that happened to succeed.
+      expect(stub.calls).toHaveLength(0);
+    });
+
+    // Proves the route actually calls the real derivativePath, not a
+    // route-local re-derivation that happens to agree with it on this
+    // file's own fixtures -- derivativePath's OWN correctness (that it
+    // agrees with scripts/paths.mjs's outputPathFor) is
+    // src/shared/__tests__/derivative-path.test.ts's job, checked against
+    // every real file under assets-source/, not a hand-picked list here.
+    it('derives contentPath the same way src/shared/derivative-path.ts does', async () => {
+      env = freshEnv();
+      const cookie = await sessionCookie();
+      const response = await handleUpload(
+        uploadRequest({ category: 'hero', file: { bytes: PNG_BYTES }, cookie, stage: '1' }),
+        env,
+      );
+      const body = (await response.json()) as { path: string; contentPath: string };
+      expect(body.contentPath).toBe(derivativePath(body.path));
+    });
+
+    // Staging must not become a second, weaker validation path -- every
+    // check that would reject a committing upload rejects a staged one the
+    // same way, before it ever reaches the "return without committing"
+    // branch.
+    it('still rejects a HEIC photo under ?stage=1, and makes no GitHub call', async () => {
+      env = freshEnv();
+      const cookie = await sessionCookie();
+      const response = await handleUpload(
+        uploadRequest({ category: 'food', file: { bytes: HEIC_BYTES, filename: 'IMG_0001.HEIC' }, cookie, stage: '1' }),
+        env,
+      );
+      expect(response.status).toBe(400);
+      expect(stub.calls).toHaveLength(0);
+    });
+
+    it('still rejects an over-25MB photo under ?stage=1', async () => {
+      env = freshEnv();
+      const cookie = await sessionCookie();
+      const oversized = new Uint8Array(26 * 1024 * 1024);
+      oversized.set(JPEG_BYTES);
+      const response = await handleUpload(
+        uploadRequest({ category: 'food', file: { bytes: oversized }, cookie, stage: '1' }),
+        env,
+      );
+      expect(response.status).toBe(413);
+      expect(stub.calls).toHaveLength(0);
+    });
+
+    // Idempotent staging: the path is content-addressed regardless of
+    // whether it's ever committed, so staging the identical bytes twice
+    // (e.g. a phone retrying a request it isn't sure landed) answers with
+    // the identical path and contentPath both times, and neither call
+    // touches GitHub.
+    it('staging the same photo twice yields the same path and contentPath, with no GitHub call either time', async () => {
+      env = freshEnv();
+      const cookie = await sessionCookie();
+      const first = await handleUpload(
+        uploadRequest({ category: 'food', file: { bytes: JPEG_BYTES }, cookie, stage: '1' }),
+        env,
+      );
+      const second = await handleUpload(
+        uploadRequest({ category: 'food', file: { bytes: JPEG_BYTES }, cookie, stage: '1' }),
+        env,
+      );
+      const firstBody = (await first.json()) as { path: string; contentPath: string };
+      const secondBody = (await second.json()) as { path: string; contentPath: string };
+      expect(firstBody).toEqual(secondBody);
+      expect(stub.calls).toHaveLength(0);
+    });
+
+    // The equality check is `=== '1'` exactly -- `?stage=2` (or any other
+    // value) must fall through to the ordinary, committing behavior, not be
+    // treated as "any stage param at all means don't commit."
+    it('a stage value other than "1" still commits, exactly like no stage param at all', async () => {
+      env = freshEnv();
+      const cookie = await sessionCookie();
+      const response = await handleUpload(
+        uploadRequest({ category: 'food', file: { bytes: JPEG_BYTES }, cookie, stage: '2' }),
+        env,
+      );
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as { sha?: string };
+      expect(typeof body.sha).toBe('string');
+      expect(stub.calls.length).toBeGreaterThan(0);
+    });
+
+    it('an unauthenticated staged upload is still 401 and makes no GitHub call', async () => {
+      env = freshEnv();
+      const response = await handleUpload(
+        uploadRequest({ category: 'food', file: { bytes: JPEG_BYTES }, stage: '1' }),
+        env,
+      );
+      expect(response.status).toBe(401);
+      expect(stub.calls).toHaveLength(0);
+    });
   });
 });
