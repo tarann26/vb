@@ -46,15 +46,45 @@ export function resolveCommitSha(
 // a real `vite dev`-equivalent (createServer + close) against a minimal
 // fixture root and asserts the file appears after one and not the other.
 //
-// The write happens in `closeBundle`, not `buildStart`: `closeBundle` fires
-// after prepareOutDir has already emptied `outDir` and Rollup has written
-// the real bundle output, so this file survives instead of being deleted by
-// that emptying step. It's also the one non-buildStart hook Vite fires on
-// dev-server shutdown (`server.close()` calls the plugin container's
-// `close()`, which runs `closeBundle` on whatever plugins are still
-// registered) -- which is what makes the "does not run in dev" test
-// actually falsifiable: drop `apply: 'build'` and closeBundle fires when the
-// dev server closes too, writing the file for real, and that test fails.
+// The write happens in `writeBundle`, not `buildStart`: `writeBundle` fires
+// only after Rollup has actually written the real bundle output to disk, so
+// (a) this file survives instead of being deleted by outDir's earlier
+// emptying step, and (b) -- the reason it isn't `closeBundle`, which was
+// this plugin's first implementation -- it does not fire on a build that
+// fails. `closeBundle` is called from Rollup's own `bundle.close()`, which
+// Vite's build() runs in a `finally` block keyed only on whether `bundle`
+// was assigned, not on whether the build succeeded: a build whose module
+// graph resolves but whose output generation then fails (e.g. an entry
+// script's import that Rollup only discovers is unresolvable while
+// rendering) still assigns `bundle`, so `closeBundle` still fires -- and
+// under the old implementation, still wrote a fresh, plausible-looking
+// `{ sha: <real current HEAD>, builtAt: <now> }`, indistinguishable from a
+// successful build's stamp. Confirmed directly against that exact fixture
+// (plugins/__tests__/build-info.test.ts's "fails after the module graph
+// resolves" test): with `closeBundle`, the build rejects and the file still
+// gets written; with `writeBundle`, it doesn't. Cloudflare Pages fails the
+// deploy on a non-zero build exit and never publishes that `dist/` today --
+// but Task 8's dashboard polls this file directly, so a stray misleading
+// stamp on a failed build is a real hazard the moment anything reads this
+// file without independently checking the build's own exit code.
+//
+// Unlike `closeBundle`, `writeBundle` does NOT fire on dev-server shutdown
+// (`server.close()` calls Vite's own dev plugin container's `close()`,
+// which runs `buildEnd` and `closeBundle` only -- confirmed directly, not
+// assumed, after this plugin's comment briefly claimed otherwise). So the
+// "no file after a dev server closes" test in
+// plugins/__tests__/build-info.test.ts is a structural guarantee of Vite's
+// dev server (it never calls Rollup's `bundle.write()` at all), true
+// regardless of `apply`, not evidence for `apply: 'build'` specifically.
+// What actually is falsifiable through `apply` is a separate test in that
+// file, asking Vite's own `resolveConfig` (via `server.config.plugins`)
+// whether it kept this plugin for the 'serve' command at all -- drop
+// `apply: 'build'` and the plugin shows up there too.
+//
+// Informational, not a bug: `writeBundle` (like `closeBundle`) also fires on
+// every successful rebuild under `vite build --watch`, restamping the file
+// each time -- correct if this repo ever ran watch-mode builds. It doesn't:
+// `npm run build` never passes `--watch`.
 export default function buildInfo(): Plugin {
   let outDir = 'dist';
   return {
@@ -65,7 +95,7 @@ export default function buildInfo(): Plugin {
         ? config.build.outDir
         : path.join(config.root, config.build.outDir);
     },
-    closeBundle() {
+    writeBundle() {
       const payload = JSON.stringify({
         sha: resolveCommitSha(),
         builtAt: new Date().toISOString(),

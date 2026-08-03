@@ -89,16 +89,23 @@ describe('buildInfo (the Vite plugin)', () => {
     expect(builtAt).toBeGreaterThanOrEqual(before);
   });
 
-  // The other half of the behavioural proof, and the one that actually
-  // exercises `apply: 'build'` rather than merely asserting it: `createServer`
-  // simulates `vite dev` (command: 'serve'), and closing the server triggers
-  // `closeBundle` on any plugin still registered for that command -- the
-  // same hook the build test above relies on to write the file. If
-  // `apply: 'build'` were dropped from the plugin, this test would fail: the
-  // plugin would stay in the resolved dev-server plugin list, closeBundle
-  // would fire on server.close(), and build-info.json would be written for
-  // real (confirmed by removing `apply: 'build'` locally and re-running --
-  // this test then fails with the file present).
+  // The other half of the file-existence proof: `createServer` simulates
+  // `vite dev` (command: 'serve'), and this confirms the file really is
+  // absent after a full dev-server lifecycle, not merely that the code
+  // wasn't asked to write it.
+  //
+  // Not, on its own, evidence for `apply: 'build'` specifically: Vite's dev
+  // server never calls Rollup's `bundle.write()` at all (it serves modules
+  // on demand rather than bundling), so `writeBundle` -- the hook this
+  // plugin uses -- structurally cannot fire in dev regardless of `apply`.
+  // (This differs from this plugin's first implementation, which used
+  // `closeBundle`: Vite's dev-server `close()` calls its own plugin
+  // container's `close()`, which *does* run `closeBundle` on whatever
+  // plugins are still registered -- so with that hook, dropping
+  // `apply: 'build'` did make this exact test fail. Switching to
+  // `writeBundle`, below, to fix the failed-build bug quietly cost that
+  // property; confirmed directly, not assumed.) The next test is what
+  // actually exercises `apply: 'build'` now.
   it('does not write build-info.json during vite dev, even after the dev server closes', async () => {
     const root = makeFixtureRoot();
     cleanupRoots.push(root);
@@ -113,6 +120,69 @@ describe('buildInfo (the Vite plugin)', () => {
       server: { middlewareMode: true },
     });
     await server.close();
+
+    expect(existsSync(path.join(outDir, 'build-info.json'))).toBe(false);
+  });
+
+  // The test that actually exercises `apply: 'build'`: not our own plugin
+  // object's `.apply` property, but Vite's real `resolveConfig` output for
+  // the 'serve' command (surfaced on `server.config.plugins`) -- the same
+  // filtering step that decides whether any of this plugin's hooks are
+  // registered at all. Confirmed falsifiable by removing `apply: 'build'`
+  // locally and re-running: the plugin then appears in
+  // `server.config.plugins` under 'serve', and this assertion fails.
+  it('is excluded from the dev server\'s resolved plugin list', async () => {
+    const root = makeFixtureRoot();
+    cleanupRoots.push(root);
+
+    const server = await createServer({
+      configFile: false,
+      root,
+      logLevel: 'silent',
+      plugins: [buildInfo()],
+      server: { middlewareMode: true },
+    });
+    try {
+      expect(server.config.plugins.some((p) => p.name === 'build-info')).toBe(false);
+    } finally {
+      await server.close();
+    }
+  });
+
+  // The case that motivated moving the write from `closeBundle` to
+  // `writeBundle` (see the comment on the plugin itself): a build that
+  // fails *after* the module graph resolves but *before* output is written
+  // still runs Rollup's own `bundle.close()` in its `finally` block, which
+  // fires `closeBundle` on every plugin -- including one still holding a
+  // stale/plausible-looking sha and a fresh timestamp. Confirmed against
+  // this exact fixture with `closeBundle` before switching hooks: the build
+  // rejected, `dist/build-info.json` still existed with a real, current sha
+  // -- indistinguishable from a successful build's stamp. `writeBundle` only
+  // fires once Rollup has actually written output, so a build that never
+  // gets that far leaves no file.
+  //
+  // The failure is deliberately downstream of a successful "N modules
+  // transformed" (module resolution succeeds; only the entry script's own
+  // static import is unresolvable, and Rollup only discovers that once it
+  // tries to render/write the chunk) -- an import unresolvable at
+  // buildStart/resolveId time never gets far enough to assign Rollup's
+  // `bundle` at all, and would leave no file regardless of which hook is
+  // used, which would make this case indistinguishable from a passing test.
+  it('does not write build-info.json when the build fails after the module graph resolves', async () => {
+    const root = makeFixtureRoot();
+    cleanupRoots.push(root);
+    writeFileSync(path.join(root, 'main.js'), "import './does-not-exist.js';\nexport default 1;\n");
+    const outDir = path.join(root, 'dist');
+
+    await expect(
+      build({
+        configFile: false,
+        root,
+        logLevel: 'silent',
+        plugins: [buildInfo()],
+        build: { outDir, write: true },
+      }),
+    ).rejects.toThrow(/does-not-exist/);
 
     expect(existsSync(path.join(outDir, 'build-info.json'))).toBe(false);
   });
