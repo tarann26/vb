@@ -1,8 +1,8 @@
-import { describe, it, expect } from 'vitest';
-import { render } from '@testing-library/react';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { render, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import Hero from '../Hero';
-import { galleries, site } from '../../content';
+import { copy, galleries, site } from '../../content';
 
 describe('Hero', () => {
   it('has exactly one h1, and it is the page heading rather than the logo', () => {
@@ -109,5 +109,93 @@ describe('Hero', () => {
 
     // Should fail: both entries map to the same cell
     expect(new Set(cells).size).not.toBe(cells.length);
+  });
+
+  // The Reserve a Table button is the single action on this site that turns
+  // into revenue -- worker/index.ts's POST /api/wa exists to count taps on
+  // it server-side. These three tests each guard one property the
+  // implementation (Hero.tsx's openReservationWhatsApp) promises: the
+  // WhatsApp link opening must never depend on, be delayed by, or be broken
+  // by the beacon that counts the tap.
+  describe('the Reserve a Table button', () => {
+    afterEach(() => {
+      // Restores navigator.sendBeacon to jsdom's own natural state --
+      // absent -- so a stub or spy installed by one test here can never
+      // leak into a later one, in this file or (since jsdom's window is
+      // fresh per test file, not per test) any other.
+      vi.restoreAllMocks();
+      delete (window.navigator as { sendBeacon?: unknown }).sendBeacon;
+    });
+
+    function renderHero() {
+      return render(
+        <MemoryRouter>
+          <Hero />
+        </MemoryRouter>,
+      );
+    }
+
+    it('still opens WhatsApp when navigator.sendBeacon throws', () => {
+      const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);
+      Object.defineProperty(window.navigator, 'sendBeacon', {
+        value: vi.fn(() => {
+          throw new Error('beacon failed');
+        }),
+        configurable: true,
+      });
+
+      const { getByRole } = renderHero();
+      fireEvent.click(getByRole('button', { name: copy.hero.reserveButton }));
+
+      expect(openSpy).toHaveBeenCalledWith(
+        `https://wa.me/${site.whatsapp.number}?text=${encodeURIComponent(site.whatsapp.prefilledMessage)}`,
+        '_blank',
+        'noopener',
+      );
+    });
+
+    // jsdom has no navigator.sendBeacon at all by default -- a test that
+    // merely clicks the button under jsdom's own untouched navigator would
+    // pass whether or not Hero.tsx guards this case, proving nothing about
+    // the implementation. Deleting the property explicitly, immediately
+    // before clicking, makes the precondition part of the test itself
+    // rather than an accident of the environment.
+    it('still opens WhatsApp when navigator.sendBeacon is undefined', () => {
+      delete (window.navigator as { sendBeacon?: unknown }).sendBeacon;
+      expect(window.navigator.sendBeacon).toBeUndefined();
+      const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);
+
+      const { getByRole } = renderHero();
+      fireEvent.click(getByRole('button', { name: copy.hero.reserveButton }));
+
+      expect(openSpy).toHaveBeenCalledWith(
+        `https://wa.me/${site.whatsapp.number}?text=${encodeURIComponent(site.whatsapp.prefilledMessage)}`,
+        '_blank',
+        'noopener',
+      );
+    });
+
+    // fireEvent.click, not userEvent.click: user-event deliberately spreads
+    // a click across several awaited steps even for one click, so checking
+    // an assertion right after it without awaiting would prove nothing
+    // about synchronicity either way. fireEvent.click dispatches the DOM
+    // event (and therefore React's handler) synchronously, so this
+    // assertion -- made with no `await` between the click and the check --
+    // genuinely fails if the handler ever put so much as one `await` ahead
+    // of window.open, which would delay the WhatsApp link behind the beacon.
+    it('calls window.open synchronously in the same tick as the click, never delayed by the beacon', () => {
+      const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);
+      Object.defineProperty(window.navigator, 'sendBeacon', {
+        value: vi.fn(() => true),
+        configurable: true,
+      });
+
+      const { getByRole } = renderHero();
+      fireEvent.click(getByRole('button', { name: copy.hero.reserveButton }));
+
+      // No `await`, no `waitFor` above this line -- if window.open had not
+      // already run by here, this fails.
+      expect(openSpy).toHaveBeenCalledTimes(1);
+    });
   });
 });

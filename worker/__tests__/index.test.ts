@@ -87,7 +87,11 @@ describe('worker entry point', () => {
   });
 
   it('returns 404 for every other unhandled path', async () => {
-    const paths = ['/', '/api/publish', '/api/wa', '/anything'];
+    // /api/wa is deliberately not in this list -- Task 10 made it a real
+    // route (POST and GET both handled; see count.test.ts), so it no longer
+    // belongs in a "everything else 404s" check. /api/wa/anything still
+    // does, proving the route match is exact rather than a prefix match.
+    const paths = ['/', '/api/publish', '/api/wa/anything', '/anything'];
     for (const path of paths) {
       const response = await worker.fetch(new Request(`https://viabiancadelhi.com${path}`), env);
       expect(response.status).toBe(404);

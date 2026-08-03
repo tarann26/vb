@@ -2,6 +2,32 @@ import React from 'react';
 import { ChefHat } from 'lucide-react';
 import { site, galleries, copy } from '../content';
 
+// `window.open` runs first, synchronously, as the very first statement --
+// nothing above it may ever throw or await, so the WhatsApp link opening
+// can never be delayed by (or made to depend on) the beacon below that
+// counts the tap for worker/index.ts's POST /api/wa. A counter that costs
+// her a customer is worse than no counter.
+//
+// The beacon itself is best-effort in two distinct ways, both guarded here:
+// `navigator.sendBeacon` is undefined in some environments (optional
+// chaining no-ops rather than throwing "not a function"), and even where
+// present, a call to it can itself throw -- neither may ever propagate out
+// of this handler. Fire-and-forget, not awaited: this is not `fetch`, so
+// there is nothing to wait on regardless, and awaiting it would reintroduce
+// exactly the delay this function exists to avoid.
+function openReservationWhatsApp(): void {
+  window.open(
+    `https://wa.me/${site.whatsapp.number}?text=${encodeURIComponent(site.whatsapp.prefilledMessage)}`,
+    '_blank',
+    'noopener',
+  );
+  try {
+    navigator.sendBeacon?.('/api/wa');
+  } catch {
+    // Never lets a broken beacon affect the click above -- see this
+    // function's own comment.
+  }
+}
 
 const Hero: React.FC = () => {
 
@@ -71,13 +97,7 @@ const Hero: React.FC = () => {
 
 
        <button
-  onClick={() =>
-    window.open(
-      `https://wa.me/${site.whatsapp.number}?text=${encodeURIComponent(site.whatsapp.prefilledMessage)}`,
-      '_blank',
-      'noopener',
-    )
-  }
+  onClick={openReservationWhatsApp}
   className="bg-[#6B8B59] hover:bg-[#5a7349] text-white px-8 py-4 rounded-lg font-semibold uppercase tracking-wide shadow-lg hover:shadow-xl transition-all duration-300"
 >
   {copy.hero.reserveButton}

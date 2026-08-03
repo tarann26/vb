@@ -10,7 +10,7 @@
 // rather than tsconfig.node.json: this file needs `Response`/`Request`/`fetch`/
 // `crypto`, none of which tsconfig.node.json's ES2023-only `lib` declares.
 import { verifyPassword, signToken, verifyToken, parseCookie } from './auth';
-import { checkLoginRate, recordLoginFailure, clearLoginFailures } from './ratelimit';
+import { checkLoginRate, recordLoginFailure, clearLoginFailures, checkRate, recordHit } from './ratelimit';
 import { commitFiles, getFileContent, DisallowedPathError, type CommitFile, type GitHubEnv } from './github';
 import { validateContent, type ValidationProblem } from '../src/content/validate';
 import { handleUpload } from './upload';
@@ -521,6 +521,153 @@ async function handlePublish(request: Request, env: Env): Promise<Response> {
   }
 }
 
+// ---------------------------------------------------------------------------
+// POST/GET /api/wa -- server-side tap counter for the "Reserve a Table"
+// button (Task 10 of the worker plan). Cloudflare's free Web Analytics has
+// no custom-event API -- verified by downloading the real beacon and
+// finding zero occurrences of `trackEvent`, after a client-side attempt to
+// wire one up had already been built -- so this Worker is the only place
+// that can count the one action on this site that turns into revenue.
+//
+// Unauthenticated by design: src/components/Hero.tsx fires
+// `navigator.sendBeacon('/api/wa')` on every click, same-origin, with no
+// session cookie involved (a visitor reserving a table has never logged
+// in). That makes POST the one route on this Worker anyone on the internet
+// can call directly, with no proof they ever saw the button -- so unlike
+// every other route here, its whole job is surviving abuse rather than
+// trusting a session:
+//   1. Origin must match the site's own origin exactly. A same-origin
+//      sendBeacon call always carries this header (the Fetch spec sets
+//      `Origin` on every non-GET/HEAD request, same-origin or not, which is
+//      also why this check works at all without CORS being involved); a
+//      missing or mismatched Origin cannot be this page.
+//   2. Rate-limited by IP, the way login is -- reusing worker/ratelimit.ts's
+//      generic checkRate/recordHit rather than a second hand-rolled
+//      limiter, with this route's own, more generous policy: an
+//      unauthenticated public button a real visitor might legitimately tap
+//      more than once is a different threat model than a password guess.
+//   3. A daily write cap, because KV Free allows only 1,000 writes/day
+//      *shared across this entire namespace* -- including login's own
+//      rate-limit bookkeeping (worker/ratelimit.ts). `while true; do curl -X
+//      POST .../api/wa; done` from a single IP is already stopped almost
+//      immediately by (2); this cap is the backstop against inflating the
+//      number she makes decisions on and exhausting the day's KV write
+//      quota -- which would silently disable login rate limiting too --
+//      from any angle (2) doesn't cover, at the cost of the count itself
+//      simply stopping for the rest of the day rather than the route
+//      failing.
+//
+// Storage is deliberately minimal: ONE KV key (WA_COUNTS_KV_KEY) holding
+// `{ "<IST date>": <count> }` and nothing else -- no IP, no user agent, no
+// timestamp beyond the date. There is no consent banner on this site and
+// none should be needed for that shape of data.
+//
+// The rate limiter's own per-IP keys (`wa:<ip>`, worker/ratelimit.ts) are a
+// separate thing from that count and not an exception to it: they hold a
+// short-lived hit counter with a 60-second TTL for abuse prevention, the
+// same mechanism -- and the same non-permanence -- login's own `login:<ip>`
+// keys already use, not a record kept about who tapped the button.
+//
+// The number this produces is a LOWER BOUND, not a count: capped,
+// origin-checked, best-effort -- a request that fails validation, gets
+// rate-limited, or lands after the daily cap is never counted, and
+// sendBeacon itself is fire-and-forget, so a dropped request is invisible
+// to both the client and this route. GET's response says so explicitly, in
+// `lowerBound`, rather than implying a precision this number does not have.
+// Plan 4's dashboard must carry that same caveat into its copy, not just
+// this response shape -- and must show this number as an estimate, not a
+// count.
+// ---------------------------------------------------------------------------
+
+const WA_ORIGIN = 'https://viabiancadelhi.com';
+const WA_RATE_MAX = 20;
+const WA_RATE_WINDOW_SECONDS = 60;
+// Comfortably under KV Free's 1,000 writes/day cap for the WHOLE
+// namespace, not just this key -- leaving headroom for every other write
+// this Worker makes against the same KV binding (login's own rate-limit
+// bookkeeping chief among them; see the file comment above). Exported so
+// count.test.ts can seed a fake KV at exactly this value rather than
+// looping a few hundred real requests to reach it.
+export const WA_DAILY_CAP = 500;
+const WA_COUNTS_KV_KEY = 'wa:counts';
+
+function waRateKeyFor(ip: string): string {
+  return `wa:${ip}`;
+}
+
+// Never throws: a corrupted or hand-edited KV value must not crash this
+// route -- fail closed to "nothing recorded yet", the same posture
+// readSchedule (above) takes on its own malformed KV value. Silently drops
+// any entry whose value isn't a finite number rather than propagating a
+// bad one forward -- the only way a non-numeric value could exist here is
+// hand-editing this key directly, since every write below only ever stores
+// `previous + 1`.
+async function readWaCounts(kv: KVNamespace): Promise<Record<string, number>> {
+  const raw = await kv.get(WA_COUNTS_KV_KEY);
+  if (!raw) return {};
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    const counts: Record<string, number> = {};
+    for (const [date, value] of Object.entries(parsed as Record<string, unknown>)) {
+      if (typeof value === 'number' && Number.isFinite(value)) counts[date] = value;
+    }
+    return counts;
+  } catch {
+    return {};
+  }
+}
+
+async function handleRecordWaTap(request: Request, env: Env): Promise<Response> {
+  // Origin first, before any KV is even read -- see the file comment above
+  // for why this is the one route on this Worker that needs it at all.
+  if (request.headers.get('Origin') !== WA_ORIGIN) {
+    return json(403, { message: 'Not allowed.' });
+  }
+
+  // Same CF-Connecting-IP-based limiter login uses (worker/ratelimit.ts),
+  // with this route's own key prefix and its own, more generous policy --
+  // see the file comment above for why the two routes' thresholds differ.
+  const ip = request.headers.get('CF-Connecting-IP') ?? 'unknown';
+  if (!(await checkRate(env.KV, waRateKeyFor(ip), WA_RATE_MAX))) {
+    return json(429, { message: 'Too many requests.' });
+  }
+  await recordHit(env.KV, waRateKeyFor(ip), WA_RATE_WINDOW_SECONDS);
+
+  const today = todayInKolkata();
+  const counts = await readWaCounts(env.KV);
+  const todayCount = counts[today] ?? 0;
+  // Stops writing once the daily cap is reached -- see the file comment
+  // above for the KV Free quota this protects. The response is 204 either
+  // way: sendBeacon never reads it, and a uniform response gives a caller
+  // probing this endpoint no signal about whether the cap has been hit.
+  if (todayCount < WA_DAILY_CAP) {
+    counts[today] = todayCount + 1;
+    await env.KV.put(WA_COUNTS_KV_KEY, JSON.stringify(counts));
+  }
+
+  return new Response(null, { status: 204 });
+}
+
+async function handleReadWaCounts(request: Request, env: Env): Promise<Response> {
+  // Same auth gate as every other admin route (handlePublish,
+  // handleBuildStatus) -- a session cookie, verified, before the counts are
+  // ever read. Unlike POST above, this side is not meant for the general
+  // public: it is the number Plan 4's dashboard shows her, not a beacon
+  // target a browser fires blind.
+  const token = parseCookie(request.headers.get('Cookie'), 'vb_session');
+  const now = Math.floor(Date.now() / 1000);
+  if (!token || !(await verifyToken(env.TOKEN_SECRET, token, now))) {
+    return json(401, { message: 'Not authenticated.' });
+  }
+
+  const counts = await readWaCounts(env.KV);
+  // `lowerBound: true`, always -- see the file comment above for why this
+  // number can never be presented as an exact count.
+  return json(200, { counts, lowerBound: true });
+}
+// ---------------------------------------------------------------------------
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -556,6 +703,14 @@ export default {
 
     if (url.pathname === '/api/build-status' && request.method === 'GET') {
       return handleBuildStatus(request, env);
+    }
+
+    if (url.pathname === '/api/wa' && request.method === 'POST') {
+      return handleRecordWaTap(request, env);
+    }
+
+    if (url.pathname === '/api/wa' && request.method === 'GET') {
+      return handleReadWaCounts(request, env);
     }
 
     return new Response('Not found', { status: 404 });
