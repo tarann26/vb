@@ -21,6 +21,17 @@ describe('copy', () => {
     expect(value.trim().length).toBeGreaterThan(0);
   });
 
+  // copy.footer.followLabel ('Follow Us:') must keep a non-breaking
+  // space between its two words, not an ordinary one -- validateContent
+  // (src/content/validate.ts) enforces this on every dashboard write, and
+  // this pins the same invariant against the real, committed copy.json so a
+  // hand-edit that reaches `main` outside the dashboard is caught too.
+  // Invariant under any legitimate rewording of the label itself: it
+  // constrains the separator, not the words.
+  it('footer.followLabel uses a non-breaking space, not an ordinary one', () => {
+    expect(copy.footer.followLabel).not.toMatch(/ /); // U+0020, not U+00A0
+  });
+
   it('has at least one nav link, all fragments', () => {
     // Not pinned to today's count (5): adding or removing a nav link is a
     // legitimate content edit, and assertCopy already rejects an empty list

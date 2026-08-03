@@ -91,7 +91,7 @@ const validCopy: Copy = {
   visit: { heading: 'Visit Us', navigateButton: 'Navigate', mapTitle: 'Via Bianca Location' },
   footer: {
     hoursHeading: 'Opening Hours',
-    followLabel: 'Follow Us:',
+    followLabel: 'Follow\u00a0Us:',
     reservationsLabel: 'For Reservations:',
     rightsSuffix: '. All rights reserved.',
     instagramLabel: 'Follow on Instagram',
@@ -420,5 +420,75 @@ describe('validateContent: structural rules on the remaining files', () => {
     const bad = { ...validCopy, atmosphere: { heading: '   ' } };
     const problems = validateContent('copy.json', bad);
     expect(messages(problems)).toMatch(/atmosphere/i);
+  });
+});
+
+// Step 6: copy.footer.followLabel must keep a non-breaking space (U+00A0)
+// between its two words. validCopy above already carries the real one
+// ('Follow Us:'), so "accepts valid copy" earlier in this file is
+// itself proof the rule doesn't fire on legitimate content -- these two
+// tests are the ones that would actually go red if the rule were removed
+// or miswired.
+describe('validateContent: footer.followLabel needs a non-breaking space (Step 6)', () => {
+  it('refuses a followLabel with an ordinary space in place of the non-breaking one', () => {
+    const bad = { ...validCopy, footer: { ...validCopy.footer, followLabel: 'Follow Us:' } };
+    const problems = validateContent('copy.json', bad);
+    expect(messages(problems)).toMatch(/non-breaking space/i);
+  });
+
+  it('refuses a followLabel with no space of any kind', () => {
+    const bad = { ...validCopy, footer: { ...validCopy.footer, followLabel: 'FollowUs:' } };
+    const problems = validateContent('copy.json', bad);
+    expect(messages(problems)).toMatch(/non-breaking space/i);
+  });
+});
+
+// Step 5: site.json's name, tagline, and every seo.* field are written into
+// index.html by hand (src/test/head.test.ts pins them there) -- a dashboard
+// write that changes one fails the deploy, and keeps failing every
+// subsequent publish until a developer edits index.html too. validateContent
+// only ever sees the *proposed* content, so this rule needs the committed
+// value passed in separately -- the optional third parameter.
+describe('validateContent: site.json refuses a change to a developer-owned field, given the committed value (Step 5)', () => {
+  it('is a no-op with no third argument -- every existing 2-arg caller keeps working unchanged', () => {
+    const changed = { ...validSite, name: 'Something Else Entirely' };
+    expect(validateContent('site.json', changed)).toEqual([]);
+  });
+
+  it('accepts a site.json identical to the one passed as `current`', () => {
+    expect(validateContent('site.json', validSite, validSite)).toEqual([]);
+  });
+
+  it('refuses a changed name', () => {
+    const changed = { ...validSite, name: 'Something Else Entirely' };
+    const problems = validateContent('site.json', changed, validSite);
+    expect(messages(problems)).toMatch(/developer/i);
+  });
+
+  it('refuses a changed tagline', () => {
+    const changed = { ...validSite, tagline: 'Something Else Entirely' };
+    const problems = validateContent('site.json', changed, validSite);
+    expect(messages(problems)).toMatch(/developer/i);
+  });
+
+  it('refuses a changed seo.description -- the share-preview text', () => {
+    const changed = { ...validSite, seo: { ...validSite.seo, description: 'A different description' } };
+    const problems = validateContent('site.json', changed, validSite);
+    expect(messages(problems)).toMatch(/developer/i);
+  });
+
+  // Proof the rule covers every seo.* key generically, not a hand-picked
+  // subset (e.g. only title/description): seo.locale is the one head.test.ts
+  // pins into og:locale, and it's easy for a rule copied field-by-field to
+  // miss.
+  it('refuses a changed seo.locale', () => {
+    const changed = { ...validSite, seo: { ...validSite.seo, locale: 'en_US' } };
+    const problems = validateContent('site.json', changed, validSite);
+    expect(messages(problems)).toMatch(/developer/i);
+  });
+
+  it('does not refuse strapline, which head.test.ts does not pin into index.html', () => {
+    const changed = { ...validSite, strapline: 'A brand new strapline' };
+    expect(validateContent('site.json', changed, validSite)).toEqual([]);
   });
 });

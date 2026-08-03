@@ -321,6 +321,34 @@ function validateSections(data: unknown): ValidationProblem[] {
   }
 }
 
+// copy.footer.followLabel must keep a non-breaking space (U+00A0), not an
+// ordinary one, between its two words -- confirmed against the committed
+// copy.json directly (see src/content/__tests__/copy.test.ts). Wording is
+// the owner's to change; this constrains only the separator, so the message
+// below is written to still be true after any legitimate reword of the
+// label's text, not tied to "Follow"/"Us" specifically. Deliberately NOT
+// added to assertCopy (src/content/guards.ts): a throwing guard runs at
+// every `npm run build`, live site included, so a bad edit that reached
+// `main` would white-page the whole homepage instead of failing only the
+// dashboard write that introduced it (Plan 2's I4).
+function validateFollowLabelSpacing(data: unknown): ValidationProblem[] {
+  const followLabel = asRecord(asRecord(data).footer).followLabel;
+  // Written as the explicit \u00a0 escape, not a literal non-breaking-space
+  // character sitting invisibly in this source file, so the character this
+  // check depends on stays legible in a diff instead of looking like an
+  // ordinary space.
+  const NBSP = '\u00a0';
+  if (typeof followLabel === 'string' && !followLabel.includes(NBSP)) {
+    return [
+      problem(
+        'footer.followLabel',
+        'footer.followLabel needs a non-breaking space, not a regular space, between its two words',
+      ),
+    ];
+  }
+  return [];
+}
+
 function validateCopy(data: unknown): ValidationProblem[] {
   const problems: ValidationProblem[] = [];
   try {
@@ -340,6 +368,56 @@ function validateCopy(data: unknown): ValidationProblem[] {
       }
     });
   }
+  problems.push(...validateFollowLabelSpacing(data));
+  return problems;
+}
+
+// ---------------------------------------------------------------------------
+// site.json's developer-owned fields: name, tagline, and every seo.* key.
+//
+// src/test/head.test.ts pins nine strings in index.html against these exact
+// fields, because index.html has no server rendering of its own to read
+// site.json at request time. If any of them changes here, the deploy fails
+// -- and because the bad value is already on `main` by the time that gate
+// runs, every SUBSEQUENT publish of anything else fails too, until a
+// developer hand-edits index.html to match. Same poisoned-`main` shape as
+// the `publishAt` finding this file's header comment describes. Refusing
+// the write here, before it commits, is cheaper than recovering from that.
+//
+// validateContent only ever receives the *proposed* content, not what's
+// currently committed, so this rule is a no-op unless a caller supplies
+// `current` (the third, optional parameter below) -- Task 3 wires the
+// Worker's GET /api/content into that parameter. Comparing against the
+// caller-supplied committed value, rather than a hardcoded expected string,
+// is deliberate: hardcoding "Via Bianca" (or any real value) here would
+// duplicate site.json's content into the validator, and a developer
+// legitimately renaming the restaurant would then have to edit this file
+// too, not just site.json and index.html.
+const SITE_DEVELOPER_OWNED_MESSAGE =
+  "Changing this needs your developer — it's written into a file the site is built from.";
+
+function validateSiteDeveloperOwnedFields(data: unknown, current: unknown): ValidationProblem[] {
+  const proposed = asRecord(data);
+  const committed = asRecord(current);
+  const problems: ValidationProblem[] = [];
+  if (proposed.name !== committed.name) problems.push(problem('name', SITE_DEVELOPER_OWNED_MESSAGE));
+  if (proposed.tagline !== committed.tagline) problems.push(problem('tagline', SITE_DEVELOPER_OWNED_MESSAGE));
+
+  const proposedSeo = asRecord(proposed.seo);
+  const committedSeo = asRecord(committed.seo);
+  // The union of both key sets, not just the proposed side's: a write that
+  // DROPS a seo.* key entirely (e.g. `seo.locale` simply absent from the
+  // payload) must be refused exactly like one that changes its value --
+  // dropping it silently reads as the key becoming `undefined`, which the
+  // strict !== comparison below already catches, but only because the key
+  // is still enumerated here.
+  const seoKeys = new Set([...Object.keys(proposedSeo), ...Object.keys(committedSeo)]);
+  seoKeys.forEach((key) => {
+    if (proposedSeo[key] !== committedSeo[key]) {
+      problems.push(problem(`seo.${key}`, SITE_DEVELOPER_OWNED_MESSAGE));
+    }
+  });
+
   return problems;
 }
 
@@ -369,11 +447,22 @@ const RULES: Record<string, (data: unknown) => ValidationProblem[]> = {
 // build that still succeeds but ships a deployable white page -- a
 // validator that accepts what it doesn't recognise defeats the reason it
 // exists.
-export function validateContent(file: string, data: unknown): ValidationProblem[] {
+//
+// `current`, the committed content this write would replace, is optional
+// and used by exactly one rule today: site.json's developer-owned-fields
+// check above. Every existing caller passes only `file` and `data` and must
+// keep working unchanged -- this file deliberately imports no JSON of its
+// own (see the header comment), so it has no other way to know what's
+// currently committed, and Task 3 is what gives the Worker a value to pass.
+export function validateContent(file: string, data: unknown, current?: unknown): ValidationProblem[] {
   const rule = RULES[file];
   if (!rule) return [problem('', `This file cannot be edited here (${file}).`)];
   try {
-    return rule(data);
+    const problems = rule(data);
+    if (file === 'site.json' && current !== undefined) {
+      problems.push(...validateSiteDeveloperOwnedFields(data, current));
+    }
+    return problems;
   } catch (error) {
     return [problem('', error instanceof Error ? error.message : String(error))];
   }
