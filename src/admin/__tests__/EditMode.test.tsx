@@ -6,7 +6,7 @@
 // link) cannot fire while she is just reading the page -- while an in-page
 // "#" nav jump and the hamburger, neither external nor destructive, still
 // work (post-review, Task 2 Step 4 finding).
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { readFileSync } from 'node:fs';
@@ -831,7 +831,7 @@ describe('Task 3 review Finding C4: committing a text edit calls registry.update
       markPublished: vi.fn(),
     };
 
-    const bundle = buildBundle(entries, registry);
+    const bundle = buildBundle(entries, registry, vi.fn());
     render(<>{bundle.renderText('hero.reserveButton', COPY.hero.reserveButton)}</>);
 
     const field = screen.getByRole('textbox');
@@ -847,5 +847,249 @@ describe('Task 3 review Finding C4: committing a text edit calls registry.update
     // `registry.register('copy.json', setCopyText(copy, path, next), entry.sha)`
     // instead of `registry.updateData(...)` -- confirmed red.
     expect(register).not.toHaveBeenCalled();
+  });
+});
+
+// Plan 5 Task 4, Step 2: the staged-file key must be an identity the stage
+// does not mutate. Tested directly against `buildBundle`'s own `renderImage`
+// (the same white-box seam Finding C4's own describe block above uses),
+// with a real FakeXHR double driving the real upload pipeline through a
+// real EditableImage -- only the STAGE ACCUMULATOR itself is a stand-in,
+// mirroring staged.ts's own already-independently-tested `useStagedFiles`
+// reducer contract (set on a non-null file, delete on null) rather than
+// re-deriving a hook inside a non-component test body.
+describe('Plan 5 Task 4, Step 2: staged photos are keyed on an identity the stage does not mutate', () => {
+  class FakeXHR {
+    static instances: FakeXHR[] = [];
+    method = '';
+    url = '';
+    status = 0;
+    responseText = '';
+    upload: { onprogress: ((event: { lengthComputable: boolean; loaded: number; total: number }) => void) | null } = {
+      onprogress: null,
+    };
+    onload: (() => void) | null = null;
+    onerror: (() => void) | null = null;
+    sentForm: FormData | null = null;
+    constructor() {
+      FakeXHR.instances.push(this);
+    }
+    open() {}
+    send(body: FormData) {
+      this.sentForm = body;
+    }
+    respond(status: number, body: unknown) {
+      this.status = status;
+      this.responseText = JSON.stringify(body);
+      this.onload?.();
+    }
+  }
+
+  function jpegFile(name: string): File {
+    const bytes = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 0, 0, 0]);
+    return new File([bytes], name, { type: 'image/jpeg' });
+  }
+
+  function makeStageAccumulator() {
+    const files: Record<string, object> = {};
+    const stage = (key: string, file: object | null) => {
+      if (file === null) delete files[key];
+      else files[key] = file;
+    };
+    return { files, stage };
+  }
+
+  function makeRegistry(): ContentRegistry {
+    const entries: ContentEntries = {
+      'galleries.json': { data: GALLERIES, initial: GALLERIES, sha: 'sha-galleries' },
+    };
+    return {
+      register: vi.fn(),
+      updateData: vi.fn((file, data) => {
+        entries[file as keyof ContentEntries] = { data, initial: (entries[file as keyof ContentEntries] as { initial: unknown }).initial, sha: 'sha-galleries' } as never;
+      }),
+      getEntries: () => entries,
+      version: 0,
+      markPublished: vi.fn(),
+    };
+  }
+
+  beforeEach(() => {
+    FakeXHR.instances = [];
+    vi.stubGlobal('XMLHttpRequest', FakeXHR as unknown as typeof XMLHttpRequest);
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  // Waits for a NEW instance specifically (length > the count BEFORE this
+  // call), not merely "any instance exists" -- `FakeXHR.instances` is a
+  // class-static array that keeps growing across MULTIPLE picks within one
+  // test (the two-tile test below calls this twice), so "length > 0" is
+  // already true starting with the SECOND call regardless of whether ITS
+  // OWN xhr has been constructed yet. Confirmed directly: the naive
+  // "length > 0" version raced under real load (the full suite, not this
+  // file in isolation) and occasionally answered the second `respond()`
+  // against the FIRST tile's already-settled xhr, silently starving the
+  // second tile's own upload and losing one of the two staged entries the
+  // test after it exists to prove.
+  async function pickAndRespond(input: HTMLInputElement, name: string, contentPath: string) {
+    const before = FakeXHR.instances.length;
+    const file = jpegFile(name);
+    Object.defineProperty(input, 'files', { value: [file], configurable: true });
+    fireEvent.change(input);
+    await waitFor(() => expect(FakeXHR.instances.length).toBeGreaterThan(before));
+    const xhr = FakeXHR.instances[FakeXHR.instances.length - 1];
+    xhr.respond(200, { path: `assets-source/x/${name}`, contentPath });
+  }
+
+  // Verified directly against the real, committed galleries.json (Task 4's
+  // own brief: "verify this yourself before relying on it") -- five paths
+  // shared between atmosphere and heroCollage, three between ourStory and
+  // heroCollage, none shared between atmosphere and ourStory.
+  it('the real galleries.json really does share five atmosphere/heroCollage photos and three ourStory/heroCollage ones', () => {
+    const srcs = (list: { src: string }[]) => new Set(list.map((e) => e.src));
+    const atmosphere = srcs(GALLERIES.atmosphere);
+    const ourStory = srcs(GALLERIES.ourStory);
+    const heroCollage = srcs(GALLERIES.heroCollage);
+    expect([...atmosphere].filter((s) => heroCollage.has(s))).toHaveLength(5);
+    expect([...ourStory].filter((s) => heroCollage.has(s))).toHaveLength(3);
+    expect([...atmosphere].filter((s) => ourStory.has(s))).toHaveLength(0);
+    // 'galleries.atmosphere.0' and 'galleries.heroCollage.5' are the exact
+    // indices the two tests below drive -- pinned here so a future edit to
+    // galleries.json that reorders these rows fails THIS assertion first,
+    // loudly, rather than silently making the tests below pass for the
+    // wrong reason.
+    expect(GALLERIES.atmosphere[0].src).toBe('/atmosphere/dining.webp');
+    expect(GALLERIES.heroCollage[5].src).toBe('/atmosphere/dining.webp');
+  });
+
+  it('restaging the SAME row three times leaves exactly one staged file', async () => {
+    const { files, stage } = makeStageAccumulator();
+    const registry = makeRegistry();
+    const bundle = buildBundle(registry.getEntries(), registry, stage);
+    const { container } = render(<>{bundle.renderImage('galleries.heroCollage.5', { src: '/atmosphere/dining.webp', alt: 'Dining room' })}</>);
+    const input = () => container.querySelector('input[type="file"]') as HTMLInputElement;
+
+    await pickAndRespond(input(), 'first.jpg', '/x/first.webp');
+    await waitFor(() => expect(Object.keys(files)).toHaveLength(1));
+    await pickAndRespond(input(), 'second.jpg', '/x/second.webp');
+    await pickAndRespond(input(), 'third.jpg', '/x/third.webp');
+
+    await waitFor(() => expect(Object.keys(files)).toHaveLength(1));
+  });
+
+  // The plan's own named repro: replacing the Atmosfera copy of
+  // /atmosphere/dining.webp must not evict the staged bytes for the
+  // hero-collage tile showing the same photo (a KEY collision would show
+  // up here as one entry overwriting the other, or as one entry mutating
+  // out from under the other's own key).
+  it('the Atmosfera row and the hero-collage tile that share /atmosphere/dining.webp leave TWO staged files, under distinct keys', async () => {
+    const { files, stage } = makeStageAccumulator();
+    const registry = makeRegistry();
+    const bundle = buildBundle(registry.getEntries(), registry, stage);
+    const atmosphere = render(
+      <>{bundle.renderImage('galleries.atmosphere.0', { src: '/atmosphere/dining.webp', alt: 'Atmosfera dining' })}</>,
+    );
+    const heroCollage = render(
+      <>{bundle.renderImage('galleries.heroCollage.5', { src: '/atmosphere/dining.webp', alt: 'Collage dining' })}</>,
+    );
+    const atmosphereInput = () => atmosphere.container.querySelector('input[type="file"]') as HTMLInputElement;
+    const heroCollageInput = () => heroCollage.container.querySelector('input[type="file"]') as HTMLInputElement;
+
+    await pickAndRespond(atmosphereInput(), 'atmosphere-new.jpg', '/x/atmosphere-new.webp');
+    await waitFor(() => expect(Object.keys(files)).toHaveLength(1));
+
+    // Merely staging the SECOND tile -- the plan's own "opening the second
+    // picker destroys the first" repro -- must not evict the first entry.
+    await pickAndRespond(heroCollageInput(), 'hero-new.jpg', '/x/hero-new.webp');
+
+    await waitFor(() => expect(Object.keys(files)).toHaveLength(2));
+    const keys = Object.keys(files);
+    expect(new Set(keys).size).toBe(2);
+    expect(keys.some((k) => k.includes('galleries.atmosphere.0'))).toBe(true);
+    expect(keys.some((k) => k.includes('galleries.heroCollage.5'))).toBe(true);
+  });
+});
+
+// Plan 5 Task 4: renderImage's write-back path (EditMode's own commitImage,
+// mirroring commitText/setCopyText) for the SECOND path shape -- an
+// id-keyed item (dishes/drinks/press), not a positional gallery index --
+// and the two states that must NOT produce a real editing affordance at
+// all: a path renderImage does not recognise, and a recognised path whose
+// own content file has not loaded yet.
+describe('Plan 5 Task 4: committing a replacement writes back into the right content file, by the right key', () => {
+  const DISH_A: Dish = { id: 'margherita', name: 'Margherita', description: 'Tomato, basil.', image: '/food/margherita.webp', tags: [] };
+  const DISH_B: Dish = { id: 'diavola', name: 'Diavola', description: 'Spicy salami.', image: '/food/diavola.webp', tags: [] };
+
+  function makeRegistryWithDishes(): { registry: ContentRegistry; entries: ContentEntries } {
+    const entries: ContentEntries = {
+      'dishes.json': { data: [DISH_A, DISH_B], initial: [DISH_A, DISH_B], sha: 'sha-dishes' },
+    };
+    const registry: ContentRegistry = {
+      register: vi.fn(),
+      updateData: vi.fn((file, data) => {
+        entries[file as 'dishes.json'] = { data, initial: entries[file as 'dishes.json']!.initial, sha: 'sha-dishes' };
+      }),
+      getEntries: () => entries,
+      version: 0,
+      markPublished: vi.fn(),
+    };
+    return { registry, entries };
+  }
+
+  it('an item-shaped path (dishes.<id>.image) writes the new contentPath into exactly that dish, siblings untouched', () => {
+    const { registry, entries } = makeRegistryWithDishes();
+    const bundle = buildBundle(entries, registry, vi.fn());
+    const element = bundle.renderImage('dishes.margherita.image', { src: DISH_A.image!, alt: DISH_A.name }) as React.ReactElement<{
+      onReplace: (contentPath: string) => void;
+    }>;
+    // Reaching the prop directly (not simulating a real pick through the
+    // DOM) is deliberate here -- this test's own job is the PATH RESOLUTION
+    // and WRITE-BACK logic (which content file, which record), already
+    // exercised end-to-end through a real upload by the gallery tests
+    // above; re-driving a full XHR pick just to reach the identical
+    // onReplace call would test the same upload pipeline twice for no
+    // extra coverage of what THIS test actually checks.
+    element.props.onReplace('/food/margherita-new.webp');
+
+    expect(registry.updateData).toHaveBeenCalledWith('dishes.json', [
+      { ...DISH_A, image: '/food/margherita-new.webp' },
+      DISH_B,
+    ]);
+  });
+
+  // `galleries.json` is deliberately ALSO marked loaded here (not just
+  // dishes.json) -- otherwise this test would pass even if
+  // resolveImageTarget wrongly matched 'hero.brick.webp' as some gallery
+  // path, since an unloaded galleries.json would ALSO fall back to the
+  // identity <img>, for the wrong reason (the loaded-gate, not the path
+  // resolution this test actually names). Confirmed directly while writing
+  // this file.
+  it('an unrecognised path falls back to the identity <img>, exactly like the default bundle', () => {
+    const { registry, entries } = makeRegistryWithDishes();
+    entries['galleries.json'] = { data: GALLERIES, initial: GALLERIES, sha: 'sha-galleries' };
+    const bundle = buildBundle(entries, registry, vi.fn());
+    const { container } = render(<>{bundle.renderImage('hero.brick.webp', { src: '/hero/brick.webp', alt: '' })}</>);
+    expect(container.querySelector('[data-editable-image-path]')).toBeNull();
+    expect(container.querySelector('img')).toHaveAttribute('src', '/hero/brick.webp');
+  });
+
+  // Mirrors EditableText's own `copyLoaded` gate (buildBundle): committing a
+  // replacement before ITS OWN content file has a registry entry would call
+  // registry.updateData against nothing -- a documented no-op that would
+  // silently discard an upload she just made.
+  it('a recognised path whose own content file has not loaded yet also falls back to the identity <img>', () => {
+    const registry: ContentRegistry = {
+      register: vi.fn(),
+      updateData: vi.fn(),
+      getEntries: () => ({}),
+      version: 0,
+      markPublished: vi.fn(),
+    };
+    const bundle = buildBundle({}, registry, vi.fn());
+    const { container } = render(<>{bundle.renderImage('dishes.margherita.image', { src: '/food/margherita.webp', alt: 'Margherita' })}</>);
+    expect(container.querySelector('[data-editable-image-path]')).toBeNull();
+    expect(container.querySelector('img')).toHaveAttribute('src', '/food/margherita.webp');
   });
 });

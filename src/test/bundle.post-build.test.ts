@@ -250,16 +250,31 @@ describe('dist/assets/ keeps admin code out of the entry chunk', () => {
 // candidate class and got an unused rule emitted for it; the rule-level
 // diff is what caught it, and rewording the offending prose -- here and in
 // EditableText.tsx -- is what took the added-rule count from twelve back
-// down to the nine actually used above.) 31400 keeps roughly the same
-// ~200-byte margin
-// over today's real number that 31000 kept over 30784 -- a real budget, not
-// a rounded-up snapshot, so the very next admin-only class landing without a
-// matching removal still trips it.
+// down to the nine actually used above.)
+//
+// The Task 3 review's own fix for Finding C2 (an emptied field measuring a
+// real, tappable zero-size box in a browser) raises the MEASURED number
+// again without moving the ceiling: 31156 -> 31250 (+94), traced the same
+// way to exactly three added rules (`inline-block`, `min-h-[1em]`,
+// `min-w-[1ch]`) on EditableText.tsx's own className -- still comfortably
+// under 31400, so that ceiling itself stayed put.
+//
+// Plan 5 Task 4 (editable images) is what actually moves the ceiling next:
+// 31250 -> 32084 (+834), a rule-level diff against a worktree checkout of
+// the parent commit tracing all eleven added rules to EditableImage.tsx's
+// own two control-label classNames and its screen-reader-only status/error
+// text (`bottom-1`, `right-1`, `h-8`, `w-8`, `bg-black/60`, `bg-red-600/90`,
+// `border-white/70`, `focus-within:ring-2`, `focus-within:ring-[#6B8B59]`,
+// `leading-none`, `sr-only`) -- nothing removed, nothing from any other
+// file. 32300 keeps roughly the same ~200-250-byte margin over today's real
+// number that every earlier ceiling in this lineage kept over ITS own real
+// number -- a real budget, not a rounded-up snapshot, so the very next
+// admin-only class landing without a matching removal still trips it.
 describe('dist/assets/ keeps the shared stylesheet under a byte ceiling', () => {
-  it.skipIf(!REQUIRED && !existsSync(DIST_ASSETS))('the entry CSS file stays under 31400 bytes', () => {
+  it.skipIf(!REQUIRED && !existsSync(DIST_ASSETS))('the entry CSS file stays under 32300 bytes', () => {
     const cssFiles = readdirSync(DIST_ASSETS).filter((n) => /^index-.*\.css$/.test(n));
     expect(cssFiles.length).toBeGreaterThan(0);
     const size = statSync(join(DIST_ASSETS, cssFiles[0])).size;
-    expect(size).toBeLessThan(31400);
+    expect(size).toBeLessThan(32300);
   });
 });

@@ -1,34 +1,37 @@
 import { useEffect, useRef, useState } from 'react';
-import { convertHeic } from './heic';
-import { bytesToBase64 } from '../shared/base64';
+import {
+  checkPhotoSize,
+  convertHeic,
+  uploadAndEncode,
+  MAX_STAGED_PHOTOS_PER_PUBLISH,
+  MAX_STAGED_PHOTO_BYTES,
+  type StagedPhoto,
+} from './upload-photo';
 import type { UploadCategory } from '../shared/upload-categories';
 import type { ValidationProblem } from '../content/validate';
 
-// Everything a caller (eventually Task 10's publish assembly) needs to send
-// this one staged photo back as part of `POST /api/publish`'s `files`
-// array, alongside every changed JSON content file, in the SAME request --
-// the whole point of Task 5's `?stage=1` change to worker/upload.ts.
-export interface StagedPhoto {
-  // The asset path the Worker will commit these bytes to, e.g.
-  // "assets-source/food/<hash>.jpg" -- what this staged file's own `path`
-  // becomes on publish.
-  path: string;
-  // What the RECORD's own field should store: a leading slash, then
-  // food/<hash>.webp -- computed server-side by worker/upload.ts's own
-  // derivativePath call, so this component never carries a second copy of
-  // that naming rule. Deliberately not spelled out above as a single quoted
-  // literal (a quote, then a leading slash, then an image extension, then
-  // the closing quote) -- see src/shared/derivative-path.ts's own top
-  // comment for why that exact shape fails src/content/__tests__/assets.test.ts,
-  // and why this sentence is phrased around it instead.
-  contentPath: string;
-  // Base64, ready to become this staged file's `content` on publish.
-  // Computed once here, from the exact bytes that were staged (after HEIC
-  // conversion, if any happened), so a later publish never needs to re-read
-  // the picked file.
-  content: string;
-  encoding: 'base64';
-}
+// StagedPhoto, MAX_STAGED_PHOTOS_PER_PUBLISH and MAX_STAGED_PHOTO_BYTES all
+// moved to src/admin/upload-photo.ts (Plan 5 Task 4, Step 1) -- re-exported
+// here, unchanged, so every existing caller of THIS module (staged.ts's own
+// `import type { StagedPhoto } from './PhotoField'`, this component's own
+// tests) keeps working without a single import path changing. See
+// upload-photo.ts's own header comment for why the pipeline moved at all:
+// EditableImage.tsx (this same task) needs the identical HEIC/size/upload
+// steps and must not re-derive a second copy of them.
+//
+// `react-refresh/only-export-components`'s own `allowConstantExport` option
+// (already relied on before this move) only recognises a literal `export
+// const NAME = <value>` declaration -- not a re-export statement forwarding
+// an imported binding, even one that is itself a constant. Re-declaring
+// with a second, independently-chosen literal here would silently
+// reintroduce the exact "two numbers that could drift apart" risk this
+// move exists to close (see upload-photo.ts's own comment on
+// MAX_STAGED_PHOTOS_PER_PUBLISH), so this is disabled deliberately rather
+// than silenced blind: both names are still one runtime binding, imported
+// from the one place they're actually declared.
+export type { StagedPhoto };
+// eslint-disable-next-line react-refresh/only-export-components
+export { MAX_STAGED_PHOTOS_PER_PUBLISH, MAX_STAGED_PHOTO_BYTES };
 
 export interface PhotoFieldProps {
   id: string;
@@ -48,114 +51,6 @@ export interface PhotoFieldProps {
   // uploads fighting over the same field).
   onStaged?: (staged: StagedPhoto | null) => void;
   problems: ValidationProblem[];
-}
-
-// Review finding: an earlier version of this comment justified 8 staged
-// photos with "8 * 5MB" -- but the only thing that actually enforced 5MB
-// per photo was worker/upload.ts's MAX_UPLOAD_BYTES, which is 25MB, not
-// 5MB. Nothing stopped 8 real, legitimately-sized phone photos from being
-// 8 * 25MB, and 8 * 25MB * 4/3 (base64's own inflation, RFC 4648) is
-// ~267MB -- over both Cloudflare's own request-body ceiling and the
-// 128MB memory budget worker/upload.ts's own uploadPath comment already
-// reasons about for a SINGLE photo (that comment's own wording for the same
-// Workers runtime constraint is deliberately phrased to avoid the identical
-// Tailwind-scan hazard this comment just tripped once already -- see this
-// file's own git history). An arithmetic comment that assumes a
-// number nothing enforces is worse than no comment: it reads as a safety
-// margin that was never real, and Task 10 (which imports this constant to
-// build the actual cap) would have inherited that gap silently.
-//
-// MAX_STAGED_PHOTO_BYTES below is what makes "8 * 5MB" true rather than
-// aspirational: THIS component refuses to stage a photo over 5MB at all
-// (see the check in `upload()`), so every one of up to
-// MAX_STAGED_PHOTOS_PER_PUBLISH staged photos really is <= 5MB by
-// construction, and a publish assembling all of them (Task 10, not built
-// yet) genuinely cannot exceed 8 * 5MB * 4/3 ~= 53MB of request body. The
-// other constraint is commitFiles' own subrequest budget (see
-// worker/github.ts's comment on `commitFiles`): `baseSha`'s conditional
-// read adds up to one more GitHub read per file on top of that function's
-// own N + 5, for up to 2N + 6 subrequests against the
-// Workers-per-invocation limit of 50 -- roughly 22 files before a publish
-// silently starts failing. 8 photos plus a handful of JSON content files
-// stays comfortably inside both ceilings; a publish anywhere near 22 files
-// would not, independent of the 53MB math.
-//
-// A single PhotoField only ever holds one photo, so it cannot enforce the
-// CROSS-field count limit on its own -- MAX_STAGED_PHOTOS_PER_PUBLISH is
-// exported so whatever DOES assemble a publish across every PhotoField on
-// the page (Task 10's publish.ts, not built yet) has one number to import
-// rather than a second, independently-chosen one. MAX_STAGED_PHOTO_BYTES
-// is exported for the same reason a caller might want to surface it (e.g.
-// in help text), even though this component already enforces it locally.
-export const MAX_STAGED_PHOTOS_PER_PUBLISH = 8;
-export const MAX_STAGED_PHOTO_BYTES = 5 * 1024 * 1024;
-
-// `fetch` cannot report upload progress at all -- there is no equivalent of
-// `XMLHttpRequest.upload.onprogress` anywhere in the Fetch API, and a phone
-// on a weak connection uploading a multi-megabyte photo is exactly the case
-// where "is this still working?" matters most. XMLHttpRequest is the only
-// browser API that can answer it.
-const UPLOAD_TIMEOUT_MS = 120_000;
-
-// Two decimals, matching worker/upload.ts's own `megabytes` -- at one
-// decimal, a photo sized right at the 5MB boundary can render identically
-// to the limit it just tripped, which reads as self-contradicting.
-function megabytes(bytes: number): string {
-  return `${(bytes / (1024 * 1024)).toFixed(2)}MB`;
-}
-
-function parseErrorMessage(xhr: XMLHttpRequest, fallback: string): string {
-  try {
-    const body = JSON.parse(xhr.responseText) as { message?: unknown };
-    return typeof body.message === 'string' && body.message ? body.message : fallback;
-  } catch {
-    return fallback;
-  }
-}
-
-// The one function in this file that actually talks to the network, kept
-// separate from the component so the component's own state machine (below)
-// reads as "what happens for each event this can raise", not interleaved
-// with XHR's callback-based API.
-function uploadStaged(
-  category: UploadCategory,
-  file: File,
-  onProgress: (percent: number) => void,
-): Promise<{ path: string; contentPath: string }> {
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open('POST', '/api/upload?stage=1');
-    xhr.timeout = UPLOAD_TIMEOUT_MS;
-    xhr.withCredentials = true; // same-origin already sends the session cookie, but explicit costs nothing
-
-    xhr.upload.onprogress = (event) => {
-      if (event.lengthComputable) onProgress(Math.round((event.loaded / event.total) * 100));
-    };
-
-    xhr.onload = () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        try {
-          resolve(JSON.parse(xhr.responseText) as { path: string; contentPath: string });
-        } catch {
-          reject(new Error('The server sent back something this page could not read.'));
-        }
-        return;
-      }
-      reject(new Error(parseErrorMessage(xhr, `Upload failed (status ${xhr.status}).`)));
-    };
-
-    xhr.onerror = () => reject(new Error('Could not reach the server. Check your connection and try again.'));
-    // 120s (UPLOAD_TIMEOUT_MS) -- long enough that a slow-but-working
-    // upload from a weak phone connection finishes, short enough that a
-    // genuinely stuck request doesn't leave her staring at a spinner
-    // forever with no way out except the Retry button below.
-    xhr.ontimeout = () => reject(new Error('This is taking too long. Check your connection and try again.'));
-
-    const form = new FormData();
-    form.append('category', category);
-    form.append('file', file);
-    xhr.send(form);
-  });
 }
 
 type Status =
@@ -208,30 +103,25 @@ function PhotoField({ id, label, help, category, value, onChange, onStaged, prob
   async function upload(file: File) {
     // Enforced HERE, client-side, before any network call -- this is what
     // makes MAX_STAGED_PHOTOS_PER_PUBLISH's own "8 * 5MB" arithmetic true
-    // rather than aspirational (see that constant's comment). Checked on
-    // every call to `upload`, including Retry's, so retrying a
-    // still-too-large file re-reports the same rejection rather than
-    // silently skipping the check the second time. worker/upload.ts's own
-    // MAX_UPLOAD_BYTES (25MB) is a separate, looser ceiling for a single
-    // upload regardless of staging -- this one is tighter, specific to
-    // keeping a full multi-photo publish's request body bounded.
-    if (file.size > MAX_STAGED_PHOTO_BYTES) {
-      setStatus({
-        kind: 'error',
-        message: `This photo is ${megabytes(file.size)}; photos included in one publish must be under ${megabytes(MAX_STAGED_PHOTO_BYTES)}. Try a smaller photo.`,
-        file,
-      });
+    // rather than aspirational (see that constant's own comment,
+    // upload-photo.ts). Checked on every call to `upload`, including
+    // Retry's, so retrying a still-too-large file re-reports the same
+    // rejection rather than silently skipping the check the second time.
+    // worker/upload.ts's own MAX_UPLOAD_BYTES (25MB) is a separate, looser
+    // ceiling for a single upload regardless of staging -- this one is
+    // tighter, specific to keeping a full multi-photo publish's request
+    // body bounded.
+    const sizeError = checkPhotoSize(file);
+    if (sizeError) {
+      setStatus({ kind: 'error', message: sizeError, file });
       return;
     }
 
     setStatus({ kind: 'uploading', percent: 0 });
     try {
-      const { path, contentPath } = await uploadStaged(category, file, (percent) =>
-        setStatus({ kind: 'uploading', percent }),
-      );
-      const bytes = new Uint8Array(await file.arrayBuffer());
-      onStaged?.({ path, contentPath, content: bytesToBase64(bytes), encoding: 'base64' });
-      onChange(contentPath);
+      const staged = await uploadAndEncode(category, file, (percent) => setStatus({ kind: 'uploading', percent }));
+      onStaged?.(staged);
+      onChange(staged.contentPath);
       setStatus({ kind: 'staged' });
     } catch (error) {
       setStatus({ kind: 'error', message: error instanceof Error ? error.message : 'Upload failed.', file });

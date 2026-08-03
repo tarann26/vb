@@ -35,7 +35,11 @@ import { useContentRegistry } from './publish';
 import type { ContentEntries, ContentRegistry } from './publish';
 import SectionErrorBoundary from './SectionErrorBoundary';
 import EditableText from './EditableText';
+import EditableImage from './EditableImage';
 import { setCopyText } from './editable-paths';
+import { useStagedFiles, fromStagedPhoto } from './staged';
+import type { StagedFile } from './staged';
+import type { UploadCategory } from '../shared/upload-categories';
 // '../content/context', never '../content/ContentContext' or '../content' --
 // src/admin/__tests__/content.test.ts only whitelists types/validate/guards/
 // publish/context as safe src/content/ imports for src/admin/ (none of the
@@ -171,6 +175,93 @@ function pick<K extends ContentFileName>(
   return entry ? (entry.data as ContentTypeMap[K]) : fallback;
 }
 
+// Task 4: images become editable in place. Every one of the seven real
+// `content.renderImage` call sites Task 1 wired (Hero.tsx's heroCollage,
+// OurStory.tsx, PlaceGallery.tsx, FoodGallery.tsx, Drinks.tsx,
+// BlogTeaser.tsx and BlogsPage.tsx -- the last two sharing one path shape)
+// resolves to exactly one of these two regexes. A path matching neither is
+// not an image edit mode knows how to commit -- renderImage below falls
+// back to the identity default for it, the same posture EditableText takes
+// toward a path with no COPY_FIELDS entry.
+//
+// Deliberately keyed on the renderImage PATH, not on `useRowIds`'s
+// object-identity WeakMap the way GalleryList.tsx (the DASHBOARD's own
+// gallery editor) keys its staged uploads. That reuse was the plan's own
+// suggestion, and it solves a real bug -- but a DIFFERENT one than exists
+// here. GalleryList.tsx needs object identity because ITS screen supports
+// add/remove/reorder: an array INDEX can name a different row after she
+// moves one, and `item.src` (the obvious alternative) is rewritten by
+// PhotoField's own onChange the instant a stage succeeds, orphaning a
+// second pick on the SAME row (that component's own comment documents
+// both failures in detail). Edit mode offers neither add/remove/reorder
+// for a gallery -- EditableImage only ever replaces a photo IN PLACE, so
+// the array never changes length or order during a session, and this
+// path string (e.g. 'galleries.heroCollage.7') stays a stable name for the
+// same slot for as long as the page is open. And the SPECIFIC collision
+// the plan's own brief names -- eight real photos shared between two
+// lists at once, verified directly against the committed galleries.json:
+// five between atmosphere and heroCollage (/atmosphere/dining.webp,
+// ambience.webp, "ceiling decor.webp", "front mirror.webp", room.webp) and
+// three between ourStory and heroCollage (/our_story/cut.webp, oven.webp,
+// stuff.webp; atmosphere and ourStory share nothing) -- is exactly what a
+// PATH key already can't collide on: 'galleries.atmosphere.3' and
+// 'galleries.heroCollage.7' are different strings even on the render where
+// both resolve to the identical `src`, so staging one can never evict the
+// other's own entry in `staged.files` below. Proven directly, not just
+// reasoned about -- see this file's own tests for both halves (restaging
+// one row leaves one staged file; the two paths sharing dining.webp leave
+// two).
+const GALLERY_LIST_CATEGORY: Record<'atmosphere' | 'ourStory' | 'heroCollage', UploadCategory> = {
+  atmosphere: 'atmosphere',
+  ourStory: 'our_story',
+  heroCollage: 'hero',
+};
+
+const ITEM_CATEGORY: Record<'dishes' | 'drinks' | 'press', UploadCategory> = {
+  dishes: 'food',
+  drinks: 'mocktails',
+  press: 'press',
+};
+
+type ImageTarget =
+  | { kind: 'gallery'; list: 'atmosphere' | 'ourStory' | 'heroCollage'; index: number; category: UploadCategory }
+  | { kind: 'item'; collection: 'dishes' | 'drinks' | 'press'; id: string; category: UploadCategory };
+
+function resolveImageTarget(path: string): ImageTarget | null {
+  const gallery = path.match(/^galleries\.(atmosphere|ourStory|heroCollage)\.(\d+)$/);
+  if (gallery) {
+    const list = gallery[1] as 'atmosphere' | 'ourStory' | 'heroCollage';
+    return { kind: 'gallery', list, index: Number(gallery[2]), category: GALLERY_LIST_CATEGORY[list] };
+  }
+  const item = path.match(/^(dishes|drinks|press)\.([^.]+)\.image$/);
+  if (item) {
+    const collection = item[1] as 'dishes' | 'drinks' | 'press';
+    return { kind: 'item', collection, id: item[2], category: ITEM_CATEGORY[collection] };
+  }
+  return null;
+}
+
+// Rewrites exactly the one array entry `target` names, leaving every
+// sibling entry -- and the other two galleries.json lists -- at its prior
+// object identity. Mirrors setCopyText's own "spread the touched level
+// only" contract (editable-paths.ts).
+function setGallerySrc(galleries: Galleries, list: 'atmosphere' | 'ourStory' | 'heroCollage', index: number, src: string): Galleries {
+  return {
+    ...galleries,
+    [list]: galleries[list].map((entry, i) => (i === index ? { ...entry, src } : entry)),
+  };
+}
+
+// dishes/drinks/press key on `.id`, never on array position -- Task 1's own
+// note that these three are UNAFFECTED by the positional-path caveat
+// gallery entries carry. A `find`-by-id that matches nothing (the record
+// was removed in a different tab, say) is a safe no-op, the same
+// "unreachable state, not a reason to invent one" posture ContentRegistry's
+// own `updateData` already takes.
+function setItemImage<T extends { id: string; image: string | null }>(items: T[], id: string, contentPath: string): T[] {
+  return items.map((entry) => (entry.id === id ? { ...entry, image: contentPath } : entry));
+}
+
 // Task 3: text becomes editable in place. `registry` is passed in (not
 // closed over at module scope) because `commitText` below needs the exact
 // `copy` this render is showing -- every one of the 31 EditableText
@@ -201,8 +292,16 @@ function pick<K extends ContentFileName>(
 // silenced blind: `buildBundle` is a pure function with no React state or
 // hooks of its own, so it has nothing for Fast Refresh to lose track of.
 // eslint-disable-next-line react-refresh/only-export-components
-export function buildBundle(entries: ContentEntries, registry: ContentRegistry): ContentBundle {
+export function buildBundle(
+  entries: ContentEntries,
+  registry: ContentRegistry,
+  stage: (key: string, file: StagedFile | null) => void,
+): ContentBundle {
   const copy = pick(entries, 'copy.json', EMPTY_COPY);
+  const galleries = pick(entries, 'galleries.json', EMPTY_GALLERIES);
+  const dishes = pick(entries, 'dishes.json', []);
+  const drinks = pick(entries, 'drinks.json', []);
+  const press = pick(entries, 'press.json', []);
 
   // Undefined until copy.json has actually loaded (registered at least
   // once) -- committing an edit before then would call registry.updateData
@@ -215,26 +314,85 @@ export function buildBundle(entries: ContentEntries, registry: ContentRegistry):
   // text -- identical to what she would see if no provider were mounted at
   // all.
   const copyLoaded = entries['copy.json'] !== undefined;
+  // Same reasoning as `copyLoaded`, one per file an image edit can land
+  // in -- committing a replacement before ITS OWN file has a registry
+  // entry would call registry.updateData against nothing, a documented
+  // no-op that would silently discard the upload she just made.
+  const galleriesLoaded = entries['galleries.json'] !== undefined;
+  const dishesLoaded = entries['dishes.json'] !== undefined;
+  const drinksLoaded = entries['drinks.json'] !== undefined;
+  const pressLoaded = entries['press.json'] !== undefined;
 
   function commitText(path: string, next: string) {
     registry.updateData('copy.json', setCopyText(copy, path, next));
   }
 
+  // Task 4, Step 4: the upload path is unchanged (POST /api/upload?stage=1
+  // returns `{path, contentPath}` without committing; the bytes travel with
+  // the eventual publish, same as PhotoField's own dashboard fields) -- this
+  // is only ever called with a `contentPath` `stagePhoto` has already
+  // returned, so no target here ever needs to invent or validate one.
+  function commitImage(path: string, contentPath: string) {
+    const target = resolveImageTarget(path);
+    if (!target) return;
+    if (target.kind === 'gallery') {
+      registry.updateData('galleries.json', setGallerySrc(galleries, target.list, target.index, contentPath));
+      return;
+    }
+    if (target.collection === 'dishes') registry.updateData('dishes.json', setItemImage(dishes, target.id, contentPath));
+    else if (target.collection === 'drinks') registry.updateData('drinks.json', setItemImage(drinks, target.id, contentPath));
+    else registry.updateData('press.json', setItemImage(press, target.id, contentPath));
+  }
+
+  // Which registry file `target` names, and whether that file has loaded
+  // yet -- the same "no affordance before there's somewhere real to write
+  // it" gate `copyLoaded` applies to text.
+  function targetLoaded(target: ImageTarget): boolean {
+    if (target.kind === 'gallery') return galleriesLoaded;
+    if (target.collection === 'dishes') return dishesLoaded;
+    if (target.collection === 'drinks') return drinksLoaded;
+    return pressLoaded;
+  }
+
   return {
     site: pick(entries, 'site.json', EMPTY_SITE),
-    galleries: pick(entries, 'galleries.json', EMPTY_GALLERIES),
-    dishes: pick(entries, 'dishes.json', []),
-    drinks: pick(entries, 'drinks.json', []),
-    press: pick(entries, 'press.json', []),
+    galleries,
+    dishes,
+    drinks,
+    press,
     story: pick(entries, 'story.json', EMPTY_STORY),
     menus: pick(entries, 'menus.json', []),
     copy,
     sections: pick(entries, 'sections.json', []),
     renderText: (path, value) =>
       copyLoaded ? <EditableText path={path} value={value} onCommit={commitText} /> : value,
-    // No editing affordance yet (Task 4) -- identity, matching
-    // ContentContext.ts's own defaultBundle.
-    renderImage: (_path, props) => <img {...props} />,
+    // Task 4: images become editable in place, exactly like renderText
+    // above -- a path this file knows how to resolve, whose own content
+    // file has already loaded, gets the real editing affordance; anything
+    // else (a path with no real target, or one whose file hasn't loaded
+    // yet) falls back to the identity default, matching what she would see
+    // with no provider mounted at all.
+    renderImage: (path, props) => {
+      const target = resolveImageTarget(path);
+      if (!target || !targetLoaded(target)) return <img {...props} />;
+      // The stage key's own file prefix names WHICH content file this
+      // upload's `contentPath` will be written into (galleries.json for a
+      // gallery target, dishes/drinks/press.json for an item one) -- purely
+      // documentary (the PATH suffix alone is already globally unique
+      // across all seven renderImage call sites), matching the shape
+      // GalleryList.tsx's own stage keys already use
+      // (`${file}:${listName}:${index}:src`).
+      const stageFile = target.kind === 'gallery' ? 'galleries.json' : `${target.collection}.json`;
+      return (
+        <EditableImage
+          path={path}
+          category={target.category}
+          onStaged={(staged) => stage(`${stageFile}:${path}`, fromStagedPhoto(staged))}
+          onReplace={(contentPath) => commitImage(path, contentPath)}
+          {...props}
+        />
+      );
+    },
   };
 }
 
@@ -266,6 +424,11 @@ const SIGN_OUT_NOTICE =
 const EditMode: React.FC = () => {
   const { status, logIn, logOut } = useSession();
   const registry = useContentRegistry();
+  // Task 4: the same shared collector staged.ts's own header comment
+  // describes for the dashboard (AdminApp's one `useStagedFiles()` call) --
+  // one instance for the whole page, so a photo staged on a gallery tile
+  // and a different one staged on a dish reach the same eventual publish.
+  const staged = useStagedFiles();
   const [fileErrors, setFileErrors] = useState<Partial<Record<ContentFileName, string>>>({});
   const [signOutNotice, setSignOutNotice] = useState<string | null>(null);
 
@@ -341,7 +504,7 @@ const EditMode: React.FC = () => {
   }
 
   const entries = registry.getEntries();
-  const bundle = buildBundle(entries, registry);
+  const bundle = buildBundle(entries, registry, staged.stage);
   const erroredFiles = Object.keys(fileErrors) as ContentFileName[];
   const loadedOrErroredCount = CONTENT_FILES.filter(
     (file) => entries[file] !== undefined || fileErrors[file] !== undefined,
