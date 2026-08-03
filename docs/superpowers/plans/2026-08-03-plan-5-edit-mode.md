@@ -240,6 +240,8 @@ Specify `contentEditable`, uncontrolled, buffered on focus, committed on blur. A
 
 `registry.updateData(file, next)` — **never `register`**, which overwrites the refreshed sha and produces a false conflict on the second publish.
 
+**Task 2's re-login proof obligation lands here, undischarged.** Task 2 could only prove the page did not unmount across a 401 — there was no edit to survive. Now there is. Drive a real 401 mid-edit through `/edit`, log back in, and assert the edited text is **still on screen and still dirty**. Task 2's per-file fetch guard is what should make this hold: a file already in the registry is never refetched, so her edit is never overwritten by a clean server value. Prove that guard is what does it — remove it and the test must go red.
+
 - [ ] **Step 5: Commit**
 
 ```bash
