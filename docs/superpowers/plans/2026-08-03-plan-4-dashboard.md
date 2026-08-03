@@ -593,7 +593,7 @@ git commit -m "feat(admin): publish in one commit and report what happened"
 - [ ] The dashboard reads content from `GET /api/content`, and no file under `src/admin/` imports `src/content/index.ts`.
 - [ ] A problem whose field matches no rendered input still appears on screen.
 - [ ] Editing one dish preserves `tags` on all fifteen and an unknown extra key.
-- [ ] Twelve photos publish as **one** commit.
+- [ ] Several photos publish as **one** commit, and the staged-photo cap is enforced rather than merely declared. (The "twelve photos" figure earlier in this plan describes the *problem* — twelve uploads becoming twelve commits — not a target. Task 5 set the cap at `MAX_STAGED_PHOTOS_PER_PUBLISH = 8` with a 5MB per-photo ceiling, derived from base64's 4/3 inflation against the Workers request-body limit and the ~22-file subrequest ceiling. The cap is the researched number and wins.)
 - [ ] A menu PDF can be replaced; `commitFiles` still rejects every traversal case with the third shape in place; a truncated PDF is refused.
 - [ ] A past-midnight closing time is accepted; a cleared date removes the `publishAt` key.
 - [ ] The section list has no Remove, and cannot build a state `assertSections` refuses.
