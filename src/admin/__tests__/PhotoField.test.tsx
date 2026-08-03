@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import PhotoField, { MAX_STAGED_PHOTOS_PER_PUBLISH, type StagedPhoto } from '../PhotoField';
+import PhotoField, { MAX_STAGED_PHOTOS_PER_PUBLISH, MAX_STAGED_PHOTO_BYTES, type StagedPhoto } from '../PhotoField';
 import type { ValidationProblem } from '../../content/validate';
 
 // Mocked for the identical reason src/admin/__tests__/heic.test.ts mocks it:
@@ -376,6 +376,61 @@ describe('PhotoField', () => {
   // changing.
   it('MAX_STAGED_PHOTOS_PER_PUBLISH is 8, per the base64/subrequest arithmetic in its own comment', () => {
     expect(MAX_STAGED_PHOTOS_PER_PUBLISH).toBe(8);
+  });
+
+  // Review finding: MAX_STAGED_PHOTOS_PER_PUBLISH's own "8 * 5MB" arithmetic
+  // was aspirational until something actually enforced 5MB per photo --
+  // worker/upload.ts's real ceiling is 25MB, so 8 legitimately-sized photos
+  // could have been 8 * 25MB * 4/3 ~= 267MB, over Cloudflare's own
+  // request-body limit. This describe block proves PhotoField itself is
+  // that enforcement.
+  describe('a per-photo size cap makes the 8-photo arithmetic real (review fix)', () => {
+    it('pins the cap at 5MB', () => {
+      expect(MAX_STAGED_PHOTO_BYTES).toBe(5 * 1024 * 1024);
+    });
+
+    it('rejects a photo over the cap before ever making a network request', async () => {
+      const user = userEvent.setup();
+      const { onChange, onStaged } = renderField();
+      const oversized = new File([new Uint8Array(MAX_STAGED_PHOTO_BYTES + 1)], 'huge.jpg', { type: 'image/jpeg' });
+
+      await user.upload(screen.getByLabelText('Photo'), oversized);
+
+      const alert = await screen.findByRole('alert');
+      expect(alert).toHaveTextContent('5.00MB'); // the limit, stated in the message
+      expect(alert).toHaveTextContent(/too large|must be under|smaller/i);
+      expect(FakeXHR.instances).toHaveLength(0);
+      expect(onChange).not.toHaveBeenCalled();
+      expect(onStaged).not.toHaveBeenCalledWith(expect.objectContaining({ path: expect.any(String) }));
+      expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
+    });
+
+    it('a photo AT the cap is not rejected (the boundary is inclusive)', async () => {
+      const user = userEvent.setup();
+      renderField();
+      const atLimit = new File([new Uint8Array(MAX_STAGED_PHOTO_BYTES)], 'at-limit.jpg', { type: 'image/jpeg' });
+
+      await user.upload(screen.getByLabelText('Photo'), atLimit);
+
+      await waitFor(() => expect(FakeXHR.instances).toHaveLength(1));
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+
+    // The check re-runs on Retry, not just on the initial pick -- a naive
+    // implementation checked size only in handlePick and let Retry (which
+    // calls `upload` directly with the already-held File) bypass it.
+    it('Retry on an oversized photo reports the same rejection again, not a network attempt', async () => {
+      const user = userEvent.setup();
+      renderField();
+      const oversized = new File([new Uint8Array(MAX_STAGED_PHOTO_BYTES + 1)], 'huge.jpg', { type: 'image/jpeg' });
+      await user.upload(screen.getByLabelText('Photo'), oversized);
+      await screen.findByRole('alert');
+
+      await user.click(screen.getByRole('button', { name: 'Retry' }));
+
+      expect(await screen.findByRole('alert')).toHaveTextContent('5.00MB');
+      expect(FakeXHR.instances).toHaveLength(0);
+    });
   });
 
   it('renders every problem message, associated with the field', () => {

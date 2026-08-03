@@ -45,11 +45,22 @@ export interface RecordListProps<T extends { id: string }> {
 // rendering" -- the second case is what this function isolates.
 function unclaimedProblems(problems: ValidationProblem[], itemCount: number): ValidationProblem[] {
   return problems.filter((p) => {
+    // When NO RecordForm is mounted at all, nothing downstream can surface
+    // ANY problem -- not just an indexed one. This is not a corner case:
+    // validateContent('dishes.json', []) (src/content/validate.ts) emits
+    // exactly `{ field: '', message: 'dishes.json: the menu needs at least
+    // one dish' }` precisely when the array is empty, which is exactly the
+    // state in which `items.length === 0`. Without this branch, the one
+    // message the validator produces for an empty list is the one message
+    // this component drops -- she deletes her last dish, publishes, gets a
+    // 422, and sees an "Add a dish" button with no explanation anywhere.
+    if (itemCount === 0) return true;
     const index = arrayIndexOf(p.field);
     // A non-array-item problem (`''`, or a non-array file's own field) is
-    // never this list's concern -- every RecordForm this list mounts
-    // already surfaces it (via `!belongsToAnotherIndex`), so counting it
-    // here too would only duplicate it, not rescue it from being dropped.
+    // never this list's concern when at least one RecordForm IS mounted --
+    // every RecordForm this list mounts already surfaces it (via
+    // `!belongsToAnotherIndex`), so counting it here too would only
+    // duplicate it, not rescue it from being dropped.
     return index !== undefined && (index < 0 || index >= itemCount);
   });
 }

@@ -50,27 +50,45 @@ export interface PhotoFieldProps {
   problems: ValidationProblem[];
 }
 
-// Task 5's own arithmetic for why a PUBLISH (not a single upload -- this
-// route's own MAX_UPLOAD_BYTES, worker/upload.ts, already caps one photo at
-// 25MB) is capped at 8 staged photos. A single PhotoField only ever holds
-// one photo, so it cannot enforce a cross-field limit on its own -- this is
-// exported so whatever DOES assemble a publish across every PhotoField on
-// the page (Task 10's publish.ts, not built yet) has one number to import
-// rather than a second, independently-chosen one.
+// Review finding: an earlier version of this comment justified 8 staged
+// photos with "8 * 5MB" -- but the only thing that actually enforced 5MB
+// per photo was worker/upload.ts's MAX_UPLOAD_BYTES, which is 25MB, not
+// 5MB. Nothing stopped 8 real, legitimately-sized phone photos from being
+// 8 * 25MB, and 8 * 25MB * 4/3 (base64's own inflation, RFC 4648) is
+// ~267MB -- over both Cloudflare's own request-body ceiling and the
+// 128MB memory budget worker/upload.ts's own uploadPath comment already
+// reasons about for a SINGLE photo (that comment's own wording for the same
+// Workers runtime constraint is deliberately phrased to avoid the identical
+// Tailwind-scan hazard this comment just tripped once already -- see this
+// file's own git history). An arithmetic comment that assumes a
+// number nothing enforces is worse than no comment: it reads as a safety
+// margin that was never real, and Task 10 (which imports this constant to
+// build the actual cap) would have inherited that gap silently.
 //
-// `POST /api/publish` sends every staged photo's bytes as base64, which
-// inflates the original binary size by 4/3x (RFC 4648's own overhead): 8
-// photos at 5MB each -- a realistic size for one phone photo, well under
-// this route's own 25MB per-file ceiling -- is 8 * 5MB * 4/3 ~= 53MB of
-// JSON request body. The other constraint is commitFiles' own subrequest
-// budget (see worker/github.ts's comment on `commitFiles`): `baseSha`'s
-// conditional read adds up to one more GitHub read per file on top of that
-// function's own N + 5, for up to 2N + 6 subrequests against the
+// MAX_STAGED_PHOTO_BYTES below is what makes "8 * 5MB" true rather than
+// aspirational: THIS component refuses to stage a photo over 5MB at all
+// (see the check in `upload()`), so every one of up to
+// MAX_STAGED_PHOTOS_PER_PUBLISH staged photos really is <= 5MB by
+// construction, and a publish assembling all of them (Task 10, not built
+// yet) genuinely cannot exceed 8 * 5MB * 4/3 ~= 53MB of request body. The
+// other constraint is commitFiles' own subrequest budget (see
+// worker/github.ts's comment on `commitFiles`): `baseSha`'s conditional
+// read adds up to one more GitHub read per file on top of that function's
+// own N + 5, for up to 2N + 6 subrequests against the
 // Workers-per-invocation limit of 50 -- roughly 22 files before a publish
 // silently starts failing. 8 photos plus a handful of JSON content files
 // stays comfortably inside both ceilings; a publish anywhere near 22 files
 // would not, independent of the 53MB math.
+//
+// A single PhotoField only ever holds one photo, so it cannot enforce the
+// CROSS-field count limit on its own -- MAX_STAGED_PHOTOS_PER_PUBLISH is
+// exported so whatever DOES assemble a publish across every PhotoField on
+// the page (Task 10's publish.ts, not built yet) has one number to import
+// rather than a second, independently-chosen one. MAX_STAGED_PHOTO_BYTES
+// is exported for the same reason a caller might want to surface it (e.g.
+// in help text), even though this component already enforces it locally.
 export const MAX_STAGED_PHOTOS_PER_PUBLISH = 8;
+export const MAX_STAGED_PHOTO_BYTES = 5 * 1024 * 1024;
 
 // `fetch` cannot report upload progress at all -- there is no equivalent of
 // `XMLHttpRequest.upload.onprogress` anywhere in the Fetch API, and a phone
@@ -78,6 +96,13 @@ export const MAX_STAGED_PHOTOS_PER_PUBLISH = 8;
 // where "is this still working?" matters most. XMLHttpRequest is the only
 // browser API that can answer it.
 const UPLOAD_TIMEOUT_MS = 120_000;
+
+// Two decimals, matching worker/upload.ts's own `megabytes` -- at one
+// decimal, a photo sized right at the 5MB boundary can render identically
+// to the limit it just tripped, which reads as self-contradicting.
+function megabytes(bytes: number): string {
+  return `${(bytes / (1024 * 1024)).toFixed(2)}MB`;
+}
 
 function parseErrorMessage(xhr: XMLHttpRequest, fallback: string): string {
   try {
@@ -181,6 +206,24 @@ function PhotoField({ id, label, help, category, value, onChange, onStaged, prob
   );
 
   async function upload(file: File) {
+    // Enforced HERE, client-side, before any network call -- this is what
+    // makes MAX_STAGED_PHOTOS_PER_PUBLISH's own "8 * 5MB" arithmetic true
+    // rather than aspirational (see that constant's comment). Checked on
+    // every call to `upload`, including Retry's, so retrying a
+    // still-too-large file re-reports the same rejection rather than
+    // silently skipping the check the second time. worker/upload.ts's own
+    // MAX_UPLOAD_BYTES (25MB) is a separate, looser ceiling for a single
+    // upload regardless of staging -- this one is tighter, specific to
+    // keeping a full multi-photo publish's request body bounded.
+    if (file.size > MAX_STAGED_PHOTO_BYTES) {
+      setStatus({
+        kind: 'error',
+        message: `This photo is ${megabytes(file.size)}; photos included in one publish must be under ${megabytes(MAX_STAGED_PHOTO_BYTES)}. Try a smaller photo.`,
+        file,
+      });
+      return;
+    }
+
     setStatus({ kind: 'uploading', percent: 0 });
     try {
       const { path, contentPath } = await uploadStaged(category, file, (percent) =>

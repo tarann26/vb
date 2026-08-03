@@ -488,6 +488,39 @@ describe('POST /api/upload', () => {
       expect(stub.calls).toHaveLength(0);
     });
 
+    // Review gap: the four tests above cover auth, HEIC and size, but
+    // stage=1 had no direct coverage of `looksComplete` or `detectFormat`
+    // returning null -- both run strictly before the `?stage=1` branch
+    // (steps 5/5b, ahead of step 6/7 in handleUpload), so this was
+    // structurally safe, but untested is not the same as proven. These are
+    // the checks that stop a corrupt or unrecognizable photo reaching the
+    // repo at all, staged or not.
+    it('still rejects a truncated photo under ?stage=1 (looksComplete), and makes no GitHub call', async () => {
+      env = freshEnv();
+      const cookie = await sessionCookie();
+      const response = await handleUpload(
+        uploadRequest({ category: 'food', file: { bytes: TRUNCATED_JPEG }, cookie, stage: '1' }),
+        env,
+      );
+      expect(response.status).toBe(400);
+      const body = (await response.json()) as { message: string };
+      expect(body.message.toLowerCase()).toContain('incomplete');
+      expect(stub.calls).toHaveLength(0);
+    });
+
+    it('still rejects an unrecognized format under ?stage=1 (detectFormat), and makes no GitHub call', async () => {
+      env = freshEnv();
+      const cookie = await sessionCookie();
+      const response = await handleUpload(
+        uploadRequest({ category: 'food', file: { bytes: NOT_AN_IMAGE, filename: 'notes.txt' }, cookie, stage: '1' }),
+        env,
+      );
+      expect(response.status).toBe(400);
+      const body = (await response.json()) as { message: string };
+      expect(body.message.toLowerCase()).toContain('format');
+      expect(stub.calls).toHaveLength(0);
+    });
+
     // Idempotent staging: the path is content-addressed regardless of
     // whether it's ever committed, so staging the identical bytes twice
     // (e.g. a phone retrying a request it isn't sure landed) answers with

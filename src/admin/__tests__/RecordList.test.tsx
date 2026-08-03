@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import RecordList from '../RecordList';
 import { DISH_FIELDS } from '../fields';
 import type { Dish } from '../../content/types';
-import type { ValidationProblem } from '../../content/validate';
+import { validateContent, type ValidationProblem } from '../../content/validate';
 
 function dish(id: string, name: string): Dish {
   return { id, name, description: `${name}, described.`, image: `/food/${id}.webp`, tags: [] };
@@ -166,19 +166,67 @@ describe('RecordList: the aggregate guarantee -- a problem no mounted RecordForm
     expect(screen.queryByRole('alert', { name: 'Problems with items no longer shown' })).not.toBeInTheDocument();
   });
 
+  // A generic file-level rule, deliberately NOT the specific "the menu needs
+  // at least one dish" message: that message can only ever be produced by
+  // the real validator for an EMPTY array (see validateDishes,
+  // src/content/validate.ts), which can never coexist with THREE_DISHES
+  // below -- a review of this task's first draft correctly called out that
+  // testing this exact string against a non-empty list tests a
+  // configuration the real bug (see the "empty list" describe block below)
+  // cannot occur in. This test is about a DIFFERENT property: that a
+  // file-level problem, when at least one RecordForm IS mounted, is left to
+  // each RecordForm's own banner rather than also being duplicated into
+  // RecordList's aggregate one.
   it('a file-level problem (field === "") is left to each RecordForm\'s own banner, not duplicated here', () => {
-    const problems: ValidationProblem[] = [{ field: '', message: 'dishes.json: the menu needs at least one dish' }];
+    const problems: ValidationProblem[] = [{ field: '', message: 'dishes.json: some file-level rule failed' }];
     renderList({ problems });
     // Shown (by each RecordForm's own banner) -- but RecordList's own
     // aggregate banner must not ALSO claim it; unclaimedProblems only
     // concerns indexed problems that landed on an index nobody renders.
     expect(screen.queryByRole('alert', { name: 'Problems with items no longer shown' })).not.toBeInTheDocument();
-    expect(screen.getAllByText('dishes.json: the menu needs at least one dish').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('dishes.json: some file-level rule failed').length).toBeGreaterThan(0);
   });
 
   it('the aggregate banner is absent when every problem is claimed by a rendered item', () => {
     const problems: ValidationProblem[] = [{ field: '[0].name', message: 'negroni needs a name' }];
     renderList({ problems });
     expect(screen.queryByRole('alert', { name: 'Problems with items no longer shown' })).not.toBeInTheDocument();
+  });
+});
+
+// Critical review finding: when NO RecordForm is mounted at all (an empty
+// list), a problem's own field shape stopped mattering -- there is no
+// sibling form left to have "not claimed" it FOR, so the earlier
+// `index !== undefined && index >= itemCount` check dropped every problem
+// that didn't happen to look like `[N].key` too. Proven first against the
+// REAL validator, not a hand-typed string standing in for it: this is
+// EXACTLY the state `validateContent('dishes.json', [])` reaches by
+// construction (validateDishes' own empty-array check, src/content/validate.ts) --
+// she deletes her last dish, publishes, gets a 422 back, and this was the
+// one message the dashboard is supposed to show her for it.
+describe('RecordList: an EMPTY list still surfaces every problem -- nothing is mounted to claim ANY of them', () => {
+  it('surfaces the real validator\'s own empty-dishes-list message', () => {
+    const problems = validateContent('dishes.json', []);
+    expect(problems).toEqual([{ field: '', message: 'dishes.json: the menu needs at least one dish' }]);
+    renderList({ items: [], problems });
+    expect(screen.getByRole('alert', { name: 'Problems with items no longer shown' })).toBeInTheDocument();
+    expect(screen.getByText('dishes.json: the menu needs at least one dish')).toBeInTheDocument();
+  });
+
+  // Every shape a problem's `field` can take, all dropped before the fix --
+  // not just the file-level `''` case above. `[-1].name` and `[abc].name`
+  // are the review's own examples: the first is a real (if nonsensical)
+  // array-item shape `arrayIndexOf` parses to a real negative number; the
+  // second doesn't match the `[N].` pattern at all (`arrayIndexOf` returns
+  // `undefined` for it, same as a bare non-array-item field), so it used to
+  // fall through exactly like `heading` did.
+  it.each([
+    ['a negative index', '[-1].name'],
+    ['a non-numeric index', '[abc].name'],
+    ['a bare non-array key', 'heading'],
+  ])('surfaces a problem shaped as %s (field %s)', (_label, field) => {
+    const problems: ValidationProblem[] = [{ field, message: `problem for ${field}` }];
+    renderList({ items: [], problems });
+    expect(screen.getByText(`problem for ${field}`)).toBeInTheDocument();
   });
 });
