@@ -326,6 +326,10 @@ git commit -m "feat(admin): render a record's fields with its own validation mes
 **Interfaces:**
 - Produces: `<RecordList items fields onReorder onAdd onRemove />` where `onReorder(ids: string[])`; `derivativePath(sourcePath: string): string`; `POST /api/upload?stage=1`.
 
+**Carried from Task 4's review — a guarantee only this task can keep.** `RecordForm` suppresses problems belonging to *another* index, which fixes real cross-item leakage but works by assuming some sibling form renders the index the problem is actually on. No single form can verify that. Proven: a list rendering indices 0–37 with a problem on `[40].name` surfaces it in **zero** banners — a total silent drop, which the plan's own rule calls worse than showing it in the wrong place. Task 6 validates the whole array on a debounce tick while this task adds remove, so a remove landing between a scheduled tick and its resolution leaves `problems` referencing an index nobody renders.
+
+**So `RecordList` owns the aggregate guarantee:** render a top-level banner for every problem whose index no mounted `RecordForm` claims. Test it by validating against a longer array than you render.
+
 - [ ] **Step 1: Up/down buttons, named per item**
 
 The spec's Risks section already *mandates* buttons: *"On phones she gets tap-to-select with plus, minus and arrow buttons instead."* This is not a deferral of drag; it is the required touch interaction.
@@ -518,6 +522,10 @@ The spec: *"Step 5 exists because of step 4. Once a bad edit cannot break the si
 - [ ] **Step 1: One request, one commit**
 
 Every changed file plus every staged photo, in one `POST /api/publish`.
+
+**Attach `baseSha` to every content file.** Task 3 built the conditional write that stops a second device's edit being silently overwritten, and verified it end to end — but **nothing sends `baseSha` yet**. If this step omits it, publish reverts to the destructive overwrite and **no test goes red**. `src/admin/content.ts` keeps each file's sha; send it.
+
+**Flush the focused field before reading the payload.** `TagsInput` (Task 4) commits its buffer on blur. Clicking a button blurs first, so that path is safe — but a keyboard submit inside a wrapping `<form>` does not, and her last-typed tag would be silently excluded. One line: `if (document.activeElement instanceof HTMLElement) document.activeElement.blur();` before collecting values.
 
 - [ ] **Step 2: 409, not a parsed error string**
 
