@@ -43,3 +43,43 @@ describe('dist/assets/ excludes the libheif WASM decoder', () => {
     expect(offenders).toEqual([]);
   });
 });
+
+// The libheif check above guards one dependency. This guards the invariant
+// the whole lazy route exists for: admin code lands in its OWN chunk, never
+// in the entry chunk every visitor downloads.
+//
+// Written after the libheif check was found to pass while admin code WAS in
+// the main chunk: switching src/App.tsx's `lazy(() => import(...))` to a
+// static import puts AdminApp in index-*.js, and that mutation stayed green
+// here, because AdminApp does not import src/admin/heic.ts (that arrives in
+// Task 5). Correct for what it claimed, silent on what mattered.
+describe('dist/assets/ keeps admin code out of the entry chunk', () => {
+  const DIST_ASSETS = 'dist/assets';
+
+  // The login form's aria-label: present in admin source, in no public
+  // component, and stable enough to survive styling changes.
+  const ADMIN_MARKER = 'Admin login';
+
+  function assetsContaining(marker: string): string[] {
+    return readdirSync(DIST_ASSETS).filter((name) =>
+      readFileSync(join(DIST_ASSETS, name), 'utf8').includes(marker),
+    );
+  }
+
+  // Without this, a renamed aria-label would make the check below pass by
+  // finding the marker nowhere at all -- guarding nothing, silently. If this
+  // fails, the marker moved; re-point it rather than deleting the check.
+  it.skipIf(!existsSync(DIST_ASSETS))('the admin marker is present in some chunk', () => {
+    expect(assetsContaining(ADMIN_MARKER).length).toBeGreaterThan(0);
+  });
+
+  it.skipIf(!existsSync(DIST_ASSETS))('the entry chunk does not contain admin code', () => {
+    const entryChunks = readdirSync(DIST_ASSETS).filter((n) => /^index-.*\.js$/.test(n));
+    expect(entryChunks.length).toBeGreaterThan(0);
+
+    const leaking = entryChunks.filter((name) =>
+      readFileSync(join(DIST_ASSETS, name), 'utf8').includes(ADMIN_MARKER),
+    );
+    expect(leaking).toEqual([]);
+  });
+});
