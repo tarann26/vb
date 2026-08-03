@@ -233,6 +233,21 @@ describe('RecordList: the aggregate guarantee -- a problem no mounted RecordForm
     renderList({ problems });
     expect(screen.queryByRole('alert', { name: 'Problems with items no longer shown' })).not.toBeInTheDocument();
   });
+
+  // I6 review finding: `[40]`/`[99]` above are both far past THREE_DISHES'
+  // own length (3) -- neither one can tell `index >= itemCount` apart from
+  // `index > itemCount`, since both are true for either. The one index that
+  // separates them is `[3]`: one past the LAST real item, exactly the shape
+  // "she removes the last row while a 400ms debounce computed against the
+  // longer array is in flight" produces. The third and fourth instance of
+  // this project's own fixture-cannot-reach-the-boundary shape (already
+  // found in HoursField and RecordList's own empty-list case).
+  it('surfaces a problem at the EXACT boundary index (itemCount itself), not only ones far past it', () => {
+    const problems: ValidationProblem[] = [{ field: '[3].name', message: 'dish 3 needs a name' }];
+    renderList({ problems });
+    expect(screen.getByRole('alert', { name: 'Problems with items no longer shown' })).toBeInTheDocument();
+    expect(screen.getByText('dish 3 needs a name')).toBeInTheDocument();
+  });
 });
 
 // Critical review finding: when NO RecordForm is mounted at all (an empty
@@ -248,10 +263,10 @@ describe('RecordList: the aggregate guarantee -- a problem no mounted RecordForm
 describe('RecordList: an EMPTY list still surfaces every problem -- nothing is mounted to claim ANY of them', () => {
   it('surfaces the real validator\'s own empty-dishes-list message', () => {
     const problems = validateContent('dishes.json', []);
-    expect(problems).toEqual([{ field: '', message: 'dishes.json: the menu needs at least one dish' }]);
+    expect(problems).toEqual([{ field: '', message: 'the menu needs at least one dish' }]);
     renderList({ items: [], problems });
     expect(screen.getByRole('alert', { name: 'Problems with items no longer shown' })).toBeInTheDocument();
-    expect(screen.getByText('dishes.json: the menu needs at least one dish')).toBeInTheDocument();
+    expect(screen.getByText('the menu needs at least one dish')).toBeInTheDocument();
   });
 
   // Every shape a problem's `field` can take, all dropped before the fix --

@@ -16,6 +16,7 @@
 // wrong-category `image`-kind `src` field sitting there unused was a real
 // landmine, see its own comment). This component supplies the real
 // category itself, per list.
+import { useRef } from 'react';
 import Field from './Field';
 import PhotoField from './PhotoField';
 import { GALLERY_IMAGE_FIELDS } from './fields';
@@ -64,6 +65,49 @@ function bannerFor(problems: ValidationProblem[], prefix: string, itemCount: num
   });
 }
 
+// Review finding (Important): keying the staged-file collector on `item.src`
+// (Task 9's own fix for the reorder-eviction Critical) is not, by itself,
+// enough -- `src` is the exact value PhotoField's own onChange rewrites the
+// INSTANT a stage succeeds. Restaging the SAME row computes its eviction key
+// from the row's post-first-pick `src`, which was never the key the first
+// pick was actually staged under -- an orphan, not an eviction. Measured: 4
+// picks on one row left 3 staged files (2 of them dead weight), and 8 more
+// permanently disabled Publish with nothing on screen able to remove one.
+// `rowIdFor` is the identity fix instead: a WeakMap keyed on the actual
+// GalleryImage object REFERENCE, scoped to one list instance (via
+// `useRef`, not module state, so atmosphere/ourStory/heroCollage each track
+// their own rows independently -- their generated ids CAN collide as plain
+// strings; the `prefix` already in every stage key below is what keeps them
+// from colliding as COLLECTOR keys). GalleryImage carries no `id` of its
+// own (src/content/types.ts) for this to reuse RecordList's own
+// item.id-keying with, and adding one would change the committed JSON
+// schema for a purely client-side bookkeeping need.
+//
+// The one thing this identity must survive that RecordList's `id` gets for
+// free is an EDIT: `patchAt`/`patchSrc` below always build a fresh object
+// (never mutate `items` in place, the same "never reconstruct, never
+// mutate" contract every write path in this codebase keeps), so the row's
+// own object reference changes on every keystroke, not just a stage. Each
+// caller carries the SAME id forward onto the fresh reference the moment it
+// creates one -- `rowIdFor` mints a new id only the first time a reference
+// is ever seen, never on every lookup.
+function useRowIds<T extends object>() {
+  const rowIds = useRef(new WeakMap<T, string>()).current;
+  const nextId = useRef(0);
+  function rowIdFor(item: T): string {
+    let id = rowIds.get(item);
+    if (id === undefined) {
+      id = `row-${nextId.current++}`;
+      rowIds.set(item, id);
+    }
+    return id;
+  }
+  function carryForward(from: T, to: T): void {
+    rowIds.set(to, rowIdFor(from));
+  }
+  return { rowIdFor, carryForward };
+}
+
 interface GalleryImageListProps {
   prefix: 'atmosphere' | 'ourStory';
   // Used for every button/banner label below ("Move {heading} photo 1",
@@ -89,6 +133,7 @@ interface GalleryImageListProps {
 
 function GalleryImageList({ prefix, heading, sectionHeading, addLabel, category, items, onChange, problems, stage }: GalleryImageListProps) {
   const banner = bannerFor(problems, prefix, items.length);
+  const { rowIdFor, carryForward } = useRowIds<GalleryImage>();
 
   function swap(index: number, otherIndex: number) {
     const next = items.slice();
@@ -99,7 +144,17 @@ function GalleryImageList({ prefix, heading, sectionHeading, addLabel, category,
   }
 
   function patchAt(index: number, patch: Partial<GalleryImage>) {
-    onChange(items.map((item, i) => (i === index ? { ...item, ...patch } : item)));
+    onChange(
+      items.map((item, i) => {
+        if (i !== index) return item;
+        const nextItem = { ...item, ...patch };
+        // Carries the row's OWN identity forward onto the fresh reference
+        // this patch just created -- see useRowIds' own comment for why an
+        // edit (this call) must not read as a brand new row.
+        carryForward(item, nextItem);
+        return nextItem;
+      }),
+    );
   }
 
   return (
@@ -123,6 +178,12 @@ function GalleryImageList({ prefix, heading, sectionHeading, addLabel, category,
           const isFirst = index === 0;
           const isLast = index === items.length - 1;
           const rowProblems = problems.filter((p) => itemOf(prefix, p.field)?.index === index);
+          // Established once per row, at render time, for EVERY row -- not
+          // only inside the onStaged closure below -- so ids are assigned
+          // deterministically in array order (this list's first row is
+          // always "row-0"), the same identity `patchAt` already carries
+          // forward across an edit.
+          const rowId = rowIdFor(item);
           return (
             <li key={index} className="mb-6 rounded border border-gray-200 p-4">
               <div className="mb-3 flex items-center justify-between gap-2">
@@ -171,27 +232,21 @@ function GalleryImageList({ prefix, heading, sectionHeading, addLabel, category,
                 // exactly what validateGalleries' own "needs an image
                 // source" message would catch.
                 onChange={(next) => patchAt(index, { src: next ?? '' })}
-                // Keyed on `item.src` (the row's OWN current value, read at
-                // render time -- stable across a reorder, which only
-                // permutes ARRAY POSITION, never the row's own `src`), never
-                // `index`. `index` looked equivalent (both `onStaged(null)`
-                // and the eventual `onStaged(staged)` for one upload fire
-                // against the same render, so the KEY never changes mid-
-                // upload) but is not: a reorder BETWEEN two uploads on two
-                // different rows moves the record to a new index while the
-                // collector key stays behind, so a photo staged before a
-                // reorder gets silently evicted by a LATER pick on a
-                // DIFFERENT row that now happens to render at the old index
-                // -- confirmed directly (review finding) end to end through
-                // the real AdminApp: stage on row 1, move it to row 2, stage
-                // on the row now at position 1, and the FIRST photo's bytes
-                // vanish from the collector while its record still points at
-                // the new contentPath. `|| `new-${index}`` only matters for
-                // a freshly-added, still-blank row (`src: ''`), where
-                // multiple blank rows would otherwise collide on the same
-                // empty-string key; falling back to index there is safe
-                // because a blank row has nothing staged on it yet to lose.
-                onStaged={(staged) => stage(`galleries.json:${prefix}:${item.src || `new-${index}`}:src`, fromStagedPhoto(staged))}
+                // Keyed on `rowId` (useRowIds' own object-reference identity,
+                // established above) -- stable across BOTH a reorder (swap
+                // only permutes array POSITION, never touches the object
+                // itself) AND a restage on the SAME row (see useRowIds' own
+                // comment for why `item.src` -- the row's own mutable
+                // content, rewritten by PhotoField's onChange the instant a
+                // stage succeeds -- was never a safe key for either case: a
+                // reorder moved the record away from the key that named it,
+                // and a second pick on the same row computed its own
+                // eviction from the row's POST-first-pick src, which was
+                // never the key the first pick was staged under, orphaning
+                // it rather than evicting it. Confirmed directly (review
+                // finding): 4 picks on one row left 3 staged files, 2 of
+                // them dead weight nothing on screen could remove.
+                onStaged={(staged) => stage(`galleries.json:${prefix}:${rowId}:src`, fromStagedPhoto(staged))}
                 problems={rowProblems.filter((p) => itemOf(prefix, p.field)?.sub === 'src')}
               />
               <Field
@@ -230,6 +285,7 @@ interface HeroCollageListProps {
 function HeroCollageList({ items, onChange, problems, stage }: HeroCollageListProps) {
   const prefix = 'heroCollage';
   const banner = bannerFor(problems, prefix, items.length);
+  const { rowIdFor, carryForward } = useRowIds<Galleries['heroCollage'][number]>();
 
   function swap(index: number, otherIndex: number) {
     const next = items.slice();
@@ -237,6 +293,21 @@ function HeroCollageList({ items, onChange, problems, stage }: HeroCollageListPr
     next[index] = next[otherIndex];
     next[otherIndex] = moved;
     onChange(next);
+  }
+
+  // See useRowIds' own comment: `src` is the one mutable field this list
+  // ever writes, so this is the one place that has to carry a row's own
+  // identity forward onto the fresh object `{ ...row, src: next }` always
+  // creates.
+  function patchSrc(index: number, src: string) {
+    onChange(
+      items.map((row, i) => {
+        if (i !== index) return row;
+        const nextRow = { ...row, src };
+        carryForward(row, nextRow);
+        return nextRow;
+      }),
+    );
   }
 
   return (
@@ -276,6 +347,8 @@ function HeroCollageList({ items, onChange, problems, stage }: HeroCollageListPr
           const isFirst = index === 0;
           const isLast = index === items.length - 1;
           const rowProblems = problems.filter((p) => itemOf(prefix, p.field)?.index === index);
+          // See GalleryImageList's own identical comment above.
+          const rowId = rowIdFor(item);
           return (
             <li key={index} className="mb-6 rounded border border-gray-200 p-4">
               <div className="mb-3 flex items-center justify-between gap-2">
@@ -307,15 +380,13 @@ function HeroCollageList({ items, onChange, problems, stage }: HeroCollageListPr
                 label="Photo"
                 category="hero"
                 value={item.src}
-                onChange={(next) => onChange(items.map((row, i) => (i === index ? { ...row, src: next ?? '' } : row)))}
-                // Keyed on `item.src`, not `index` -- identical reasoning to
-                // GalleryImageList's own `src` field just above (see that
-                // comment for the reorder-eviction defect this avoids; a
-                // real, committed heroCollage entry always has a non-empty
-                // `src`, so the `new-${index}` fallback is only there for
-                // symmetry with GalleryImageList, not a state this list can
-                // actually reach).
-                onStaged={(staged) => stage(`galleries.json:heroCollage:${item.src || `new-${index}`}:src`, fromStagedPhoto(staged))}
+                onChange={(next) => patchSrc(index, next ?? '')}
+                // Keyed on `rowId`, not `item.src` or `index` -- identical
+                // reasoning to GalleryImageList's own `src` field above (see
+                // useRowIds' own comment for the restage-orphan defect this
+                // avoids, on top of the reorder-eviction one Task 9 already
+                // fixed).
+                onStaged={(staged) => stage(`galleries.json:heroCollage:${rowId}:src`, fromStagedPhoto(staged))}
                 problems={rowProblems.filter((p) => itemOf(prefix, p.field)?.sub === 'src')}
               />
               <Field

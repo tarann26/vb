@@ -65,8 +65,8 @@ function unclaimedProblems(problems: ValidationProblem[], itemCount: number): Va
     // When NO RecordForm is mounted at all, nothing downstream can surface
     // ANY problem -- not just an indexed one. This is not a corner case:
     // validateContent('dishes.json', []) (src/content/validate.ts) emits
-    // exactly `{ field: '', message: 'dishes.json: the menu needs at least
-    // one dish' }` precisely when the array is empty, which is exactly the
+    // exactly `{ field: '', message: 'the menu needs at least one dish' }`
+    // precisely when the array is empty, which is exactly the
     // state in which `items.length === 0`. Without this branch, the one
     // message the validator produces for an empty list is the one message
     // this component drops -- she deletes her last dish, publishes, gets a

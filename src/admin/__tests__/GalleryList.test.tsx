@@ -216,17 +216,17 @@ describe("GalleryList: Task 9's collector wiring -- src stages through PhotoFiel
     expect(FakeXHR.instances[0].sentForm?.get('category')).toBe('our_story');
 
     FakeXHR.instances[0].respond(200, { path: 'assets-source/our_story/ddd444ddd444.jpg', contentPath: '/our_story/ddd444ddd444.webp' });
-    // Keyed on the row's OWN pre-upload `src` ('/our_story/cut.webp' --
-    // GALLERIES' own fixture value), not its array index -- see
-    // GalleryList.tsx's own comment on why index-keying silently evicts a
-    // different row's bytes across a reorder.
+    // Keyed on the row's own client-only identity (GalleryList.tsx's own
+    // useRowIds -- "row-0", ourStory's first and only row here), not its
+    // array index or its mutable `src` -- see that file's own comment on why
+    // either of those silently evicts or orphans a different stage.
     // Not `expect.any(String)`/no content check at all: this test's own
     // name claims "real bytes" -- `''` would satisfy a bare presence check
     // and is exactly the defect a missing collector produces (a path that
     // looks right, no bytes behind it).
     await waitFor(() =>
       expect(stage).toHaveBeenCalledWith(
-        'galleries.json:ourStory:/our_story/cut.webp:src',
+        'galleries.json:ourStory:row-0:src',
         expect.objectContaining({
           path: 'assets-source/our_story/ddd444ddd444.jpg',
           encoding: 'base64',
@@ -255,7 +255,7 @@ describe("GalleryList: Task 9's collector wiring -- src stages through PhotoFiel
     FakeXHR.instances[0].respond(200, { path: 'assets-source/hero/eee555eee555.jpg', contentPath: '/hero/eee555eee555.webp' });
     await waitFor(() =>
       expect(stage).toHaveBeenCalledWith(
-        'galleries.json:heroCollage:/hero/scene.webp:src',
+        'galleries.json:heroCollage:row-0:src',
         expect.objectContaining({
           path: 'assets-source/hero/eee555eee555.jpg',
           encoding: 'base64',
@@ -303,7 +303,7 @@ describe('GalleryList: reordering between two stages does not evict the earlier 
     await user.upload(firstUpload, jpegFile('first.jpg'));
     await waitFor(() => expect(FakeXHR.instances).toHaveLength(1));
     FakeXHR.instances[0].respond(200, { path: 'assets-source/atmosphere/aaa111aaa111.jpg', contentPath: '/atmosphere/aaa111aaa111.webp' });
-    await waitFor(() => expect(screen.getByTestId('staged-keys')).toHaveTextContent('galleries.json:atmosphere:/atmosphere/dining.webp:src'));
+    await waitFor(() => expect(screen.getByTestId('staged-keys')).toHaveTextContent('galleries.json:atmosphere:row-0:src'));
 
     // 2. Reorder: "Move Atmosphere photo 1 down" -- the record (and its new
     // contentPath) moves to index 1; row 2's own '/atmosphere/bar.webp' is
@@ -320,16 +320,61 @@ describe('GalleryList: reordering between two stages does not evict the earlier 
     // Both keys present -- the first stage's bytes were NOT evicted by the
     // second. Under the old index-keyed scheme both stages would have
     // collided on `galleries.json:atmosphere:0:src`, and this assertion
-    // would see only ONE key.
+    // would see only ONE key. row-0 is dining (staged first, before the
+    // reorder); row-1 is bar (staged second, after moving to index 0) --
+    // useRowIds assigns both eagerly, in array order, at first render.
     await waitFor(() => {
       const keys = screen.getByTestId('staged-keys').textContent?.split('|') ?? [];
       expect(keys).toEqual(
-        expect.arrayContaining([
-          'galleries.json:atmosphere:/atmosphere/dining.webp:src',
-          'galleries.json:atmosphere:/atmosphere/bar.webp:src',
-        ]),
+        expect.arrayContaining(['galleries.json:atmosphere:row-0:src', 'galleries.json:atmosphere:row-1:src']),
       );
       expect(keys).toHaveLength(2);
+    });
+  });
+});
+
+// Important review finding, reproduced exactly and then proven fixed:
+// keying on `item.src` (the fix Task 9 shipped for the reorder-eviction
+// Critical above) is not enough on its own -- restaging the SAME row
+// computes its own eviction key from the row's post-first-pick `src`,
+// which was never the key the first pick was actually staged under.
+// Measured against the real dashboard: 4 picks on one row left 3 staged
+// files (2 of them dead weight), and 8 picks permanently disabled Publish
+// with no control anywhere to remove one.
+describe('GalleryList: restaging the SAME row does not orphan the earlier upload (Important fix)', () => {
+  beforeEach(() => {
+    FakeXHR.instances = [];
+    vi.stubGlobal('XMLHttpRequest', FakeXHR as unknown as typeof XMLHttpRequest);
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('picking a second photo on the same row evicts the first pick -- exactly ONE staged entry survives, not two', async () => {
+    const user = userEvent.setup();
+    render(<GalleryHarness initial={GALLERIES} />);
+
+    const upload = screen.getAllByLabelText('Photo')[0]; // Atmosphere photo 1
+    await user.upload(upload, jpegFile('first.jpg'));
+    await waitFor(() => expect(FakeXHR.instances).toHaveLength(1));
+    FakeXHR.instances[0].respond(200, { path: 'assets-source/atmosphere/aaa111aaa111.jpg', contentPath: '/atmosphere/aaa111aaa111.webp' });
+    await waitFor(() => expect(screen.getByTestId('staged-keys')).toHaveTextContent('galleries.json:atmosphere:row-0:src'));
+
+    // Pick AGAIN on the SAME row, on-screen position unchanged -- no
+    // reorder in between, the exact case index-of-src-keying missed.
+    await user.upload(screen.getAllByLabelText('Photo')[0], jpegFile('second.jpg'));
+    await waitFor(() => expect(FakeXHR.instances).toHaveLength(2));
+    FakeXHR.instances[1].respond(200, { path: 'assets-source/atmosphere/ccc333ccc333.jpg', contentPath: '/atmosphere/ccc333ccc333.webp' });
+
+    await waitFor(() => {
+      const keys = screen.getByTestId('staged-keys').textContent?.split('|').filter(Boolean) ?? [];
+      // Exactly one entry for this row -- the FIRST pick's bytes were
+      // evicted by the second, not left behind as an orphan counting
+      // against MAX_STAGED_PHOTOS_PER_PUBLISH. Reverting GalleryList.tsx's
+      // stage key back to `item.src` fires this assertion: it sees TWO
+      // keys, the dangling `.../aaa111aaa111.webp:src` alongside the new
+      // one.
+      expect(keys).toEqual(['galleries.json:atmosphere:row-0:src']);
     });
   });
 });
@@ -361,5 +406,15 @@ describe('GalleryList: a malformed row\'s own message attaches to that row only'
     const problems: ValidationProblem[] = [{ field: 'atmosphere[9].alt', message: 'a stale problem for a row no longer here' }];
     render(<GalleryList value={GALLERIES} onChange={vi.fn()} problems={problems} stage={vi.fn()} />);
     expect(screen.getByRole('alert', { name: 'Problems with Atmosphere' })).toHaveTextContent('a stale problem for a row no longer here');
+  });
+
+  // I6 review finding: `[9]` above is far past GALLERIES.atmosphere's own
+  // length (2) -- it can't tell `item.index >= itemCount` apart from
+  // `item.index > itemCount`, since both are true for either. `[2]` -- one
+  // past the LAST real row -- is the one index that separates them.
+  it('a problem at the EXACT boundary index (itemCount itself) still surfaces, not only ones far past it', () => {
+    const problems: ValidationProblem[] = [{ field: 'atmosphere[2].alt', message: 'a boundary problem for a row no longer here' }];
+    render(<GalleryList value={GALLERIES} onChange={vi.fn()} problems={problems} stage={vi.fn()} />);
+    expect(screen.getByRole('alert', { name: 'Problems with Atmosphere' })).toHaveTextContent('a boundary problem for a row no longer here');
   });
 });
