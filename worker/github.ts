@@ -164,6 +164,64 @@ async function getCommitTreeSha(env: GitHubEnv, commitSha: string): Promise<stri
   return sha;
 }
 
+// base64 -> UTF-8 text, for GET /contents' response. Not a byte-for-byte
+// `atob` + `String.fromCharCode` round trip (worker/auth.ts's
+// `base64ToBytes`, sized for small fixed-width secrets): this decodes real
+// file content that can contain multi-byte UTF-8 characters, and a naive
+// per-char decode would silently corrupt any of those into mojibake instead
+// of throwing -- a wrong-but-plausible-looking result is worse here than a
+// clean failure would be.
+//
+// No explicit newline-stripping before `atob`, despite GitHub's Contents
+// API wrapping its base64 payload at 60 characters -- an earlier version of
+// this comment claimed `atob` "does not tolerate" that and stripped
+// whitespace manually before decoding. Confirmed false, directly: both
+// Node's and workerd's `atob` implement the WHATWG "forgiving-base64"
+// decode algorithm, which strips ASCII whitespace (including embedded
+// newlines) before decoding, on its own. Reproduced with a real
+// newline-wrapped payload decoding correctly through a bare `atob` call,
+// no `.replace()` needed. Left out rather than kept as inert
+// belt-and-braces: dead code with a wrong justification in its own comment
+// is worse than no code, and worker/__tests__/github.test.ts's own
+// newline-wrapping test still exercises the real (native) behavior this
+// relies on.
+function base64ToUtf8(b64: string): string {
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new TextDecoder().decode(bytes);
+}
+
+// GET /contents/{path}?ref={branch} -- reads a file's current text content
+// directly from the branch Cloudflare Pages builds from, independent of
+// whatever commit last touched it. Task 8's `reconcileScheduleFromSource`
+// (worker/index.ts) is the one caller: it needs the *actual current* state
+// of dishes/drinks/press.json, including content that reached `main` some
+// way other than `POST /api/publish` (a direct commit, the GitHub web UI, a
+// revert) -- none of which ever runs through `recordScheduledDates`, since
+// that only fires from inside `handlePublish` itself.
+//
+// Returns `null` on a 404 (the file genuinely doesn't exist on this branch)
+// rather than throwing -- a schedulable file that doesn't exist yet isn't a
+// GitHub failure, it's "nothing to reconcile for this one". Any other
+// non-OK status, or a 200 whose body isn't the base64 shape the Contents API
+// documents, still throws: unlike `resolveCommitSha` (plugins/build-info.ts),
+// a read this function's one caller depends on to *recover* missed schedule
+// dates should not quietly pretend nothing changed on a genuine failure.
+export async function getFileContent(env: GitHubEnv, path: string): Promise<string | null> {
+  const url = repoUrl(env, `/contents/${path}?ref=${env.GITHUB_BRANCH}`);
+  const res = await fetch(url, { headers: ghHeaders(env) });
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    throw new Error(`could not read ${path} (GitHub returned ${res.status})${await describeFailure(res)}`);
+  }
+  const body = (await res.json()) as { content?: unknown; encoding?: unknown };
+  if (typeof body.content !== 'string' || body.encoding !== 'base64') {
+    throw new Error(`could not read ${path} -- GitHub's response had no base64 content`);
+  }
+  return base64ToUtf8(body.content);
+}
+
 // POST /git/blobs -- one per file. `encoding` travels through unchanged
 // from what the caller supplied; this is the one function in the whole
 // chain that actually uploads file bytes, so this is where a dropped or

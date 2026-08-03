@@ -11,7 +11,7 @@
 // `crypto`, none of which tsconfig.node.json's ES2023-only `lib` declares.
 import { verifyPassword, signToken, verifyToken, parseCookie } from './auth';
 import { checkLoginRate, recordLoginFailure, clearLoginFailures } from './ratelimit';
-import { commitFiles, DisallowedPathError, type CommitFile, type GitHubEnv } from './github';
+import { commitFiles, getFileContent, DisallowedPathError, type CommitFile, type GitHubEnv } from './github';
 import { validateContent, type ValidationProblem } from '../src/content/validate';
 import { handleUpload } from './upload';
 import { handleBuildStatus, type PagesEnv } from './status';
@@ -137,75 +137,124 @@ function basename(path: string): string {
 // files", so a fourth schedulable type would need this list updated too.
 const SCHEDULABLE_CONTENT_FILES = new Set(['dishes.json', 'drinks.json', 'press.json']);
 
-// One KV key, one JSON object: `{ "dishes.json": ["2026-09-01"], ... }`,
-// each file's own most-recently-known list of still-future `publishAt`
-// dates. Not one key per file -- `anythingPublishesToday` (below) needs to
-// ask "is anything at all due today" on every hourly cron tick, and a
-// single combined key answers that with exactly one KV read regardless of
-// how many of the three files currently carry a future date, rather than
-// up to three.
+// One KV key holding BOTH the pending-dates record and the reconciliation
+// marker (`lastReconciled`, see `reconcileScheduleFromSource` below) --
+// deliberately one object, not two keys, so the cron's per-tick predicate
+// (`anythingPublishesToday`) and the once-a-day decision "have I already
+// reconciled today" can share a single KV read. A second key would mean
+// every one of the ~23 daily "nothing due" ticks paid for two reads just to
+// ask two related questions about the same piece of state.
 const SCHEDULE_KV_KEY = 'schedule:pending-dates';
 
-type ScheduleRecord = Record<string, string[]>;
+interface Schedule {
+  // Each schedulable file's own most-recently-known list of still-future
+  // `publishAt` dates, e.g. `{ "dishes.json": ["2026-09-01"], ... }`.
+  files: Record<string, string[]>;
+  // The IST date (YYYY-MM-DD) this record was last reconciled against
+  // GitHub directly, or `null` if that has never happened. Compared against
+  // `today` in `scheduled` below to run reconciliation at most once a day.
+  lastReconciled: string | null;
+}
 
-async function readSchedule(kv: KVNamespace): Promise<ScheduleRecord> {
+function emptySchedule(): Schedule {
+  return { files: {}, lastReconciled: null };
+}
+
+async function readSchedule(kv: KVNamespace): Promise<Schedule> {
   const raw = await kv.get(SCHEDULE_KV_KEY);
-  if (!raw) return {};
+  if (!raw) return emptySchedule();
   try {
     const parsed: unknown = JSON.parse(raw);
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? (parsed as ScheduleRecord) : {};
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return emptySchedule();
+    const obj = parsed as Record<string, unknown>;
+    const files =
+      obj.files && typeof obj.files === 'object' && !Array.isArray(obj.files)
+        ? (obj.files as Record<string, string[]>)
+        : {};
+    const lastReconciled = typeof obj.lastReconciled === 'string' ? obj.lastReconciled : null;
+    return { files, lastReconciled };
   } catch {
     // A corrupted or hand-edited KV value must not crash the cron or a
-    // publish -- fail closed to "nothing known to be pending", the same
-    // posture as an empty/missing key.
-    return {};
+    // publish -- fail closed to "nothing known to be pending, never
+    // reconciled", the same posture as an empty/missing key. Forcing a
+    // reconciliation on the next tick (rather than trusting a value that
+    // failed to parse) is itself the recovery path here.
+    return emptySchedule();
   }
 }
 
-async function writeSchedule(kv: KVNamespace, schedule: ScheduleRecord): Promise<void> {
+async function writeSchedule(kv: KVNamespace, schedule: Schedule): Promise<void> {
   await kv.put(SCHEDULE_KV_KEY, JSON.stringify(schedule));
 }
 
-// Called from handlePublish, after a successful commit, once per published
-// file. Replaces -- does not merge with -- that one file's own slice of the
-// schedule record, so an edit that removes or reschedules an item is
-// reflected immediately rather than leaving a stale date behind forever.
-// The other files' slices are left exactly as they were last recorded,
-// which is the best information available without an extra GitHub read for
-// files this publish didn't touch.
-//
-// `!isPublished({ publishAt }, today)` -- not a bare `publishAt > today` --
-// is what makes this the one place besides the Vite plugin that consumes
-// `isPublished` itself, and is deliberate rather than equivalent-by-luck: it
-// reuses the exact same "is this item live yet" definition the Vite plugin
-// filters the production bundle with (including the malformed-date throw,
-// which is what the outer try/catch in handlePublish below exists to
-// contain), so this record can never disagree with what actually ships.
-// Only dates that are NOT YET published are worth tracking here -- an item
-// whose publishAt is today or already past is already covered by the commit
-// that just landed (Cloudflare's own build-on-push already handles it), so
-// tracking it too would just be a second, redundant source of "is it due".
+// A single item's `publishAt` is "still pending" (not yet published, and
+// worth tracking for the cron) when it parses as a real date strictly after
+// `today`. `isPublished` throws on a malformed date -- `validateContent`
+// (Task 2) has no rule for `publishAt`'s format at all, so a bad one really
+// can reach here -- and that throw must cost only THIS item's date, not
+// every other item's in the same file. An earlier version of this function
+// let the throw propagate out of a bare `.filter()`, which aborted the
+// whole file's slice over one bad date; confirmed by reproduction, fixed by
+// moving the try/catch to per-item scope.
+function isStillPending(publishAt: unknown, today: string): boolean {
+  if (typeof publishAt !== 'string') return false;
+  try {
+    return !isPublished({ publishAt }, today);
+  } catch {
+    // Skipped, not tracked -- the malformed date still surfaces loudly at
+    // build time (plugins/filter-unpublished.ts throws the same way, which
+    // fails `npm run build` rather than shipping the bad item), just not
+    // through this cron's bookkeeping.
+    return false;
+  }
+}
+
+// `!isPublished({ publishAt }, today)` (via `isStillPending`) -- not a bare
+// `publishAt > today` -- is what makes this the one place besides the Vite
+// plugin that consumes `isPublished` itself, and is deliberate rather than
+// equivalent-by-luck: it reuses the exact same "is this item live yet"
+// definition the Vite plugin filters the production bundle with, so this
+// record can never disagree with what actually ships. Only dates that are
+// NOT YET published are worth tracking here -- an item whose publishAt is
+// today or already past is already covered by the commit that just landed
+// (Cloudflare's own build-on-push already handles it), so tracking it too
+// would just be a second, redundant source of "is it due".
 function futurePublishAtDates(items: unknown[], today: string): string[] {
   const dates = items
     .filter((item): item is { publishAt?: unknown } => typeof item === 'object' && item !== null)
     .map((item) => item.publishAt)
-    .filter((d): d is string => typeof d === 'string' && !isPublished({ publishAt: d }, today));
+    .filter((d): d is string => isStillPending(d, today));
   return Array.from(new Set(dates)).sort();
 }
 
+// Called from handlePublish, after a successful commit, once per published
+// file, SEQUENTIALLY (see the `for...of` in handlePublish below, not
+// `Promise.all`). Replaces -- does not merge with -- that one file's own
+// slice of the schedule record, so an edit that removes or reschedules an
+// item is reflected immediately rather than leaving a stale date behind
+// forever. The other files' slices are left exactly as they were last
+// recorded, which is the best information available without an extra
+// GitHub read for files this publish didn't touch.
+//
+// MUST be awaited one call at a time, never concurrently, against this
+// single KV key: two files published in the same request each do their own
+// read-modify-write, and running them concurrently is a classic lost
+// update -- confirmed by reproduction with the previous `Promise.all`
+// version: publishing dishes.json and drinks.json together left only
+// whichever file's write landed last in KV, silently losing the other
+// file's schedule entirely.
 async function recordScheduledDates(env: Env, path: string, parsed: unknown, today: string): Promise<void> {
   const file = basename(path);
   if (!SCHEDULABLE_CONTENT_FILES.has(file) || !Array.isArray(parsed)) return;
   const schedule = await readSchedule(env.KV);
-  schedule[file] = futurePublishAtDates(parsed, today);
+  schedule.files[file] = futurePublishAtDates(parsed, today);
   await writeSchedule(env.KV, schedule);
 }
 
-// The cron's own predicate: is anything due to be live by today, as far as
-// the last publish of each schedulable file recorded? One KV read,
-// regardless of how many files or dates are tracked -- deliberately cheap
-// enough to run every hour without it mattering, unlike the thing it's
-// guarding: a Pages build.
+// Pure: does this schedule have anything due by `today`? Split out from
+// `anythingPublishesToday` below so `scheduled` can re-check it against an
+// in-memory `Schedule` (e.g. right after reconciling) without a second KV
+// read.
 //
 // `d <= today`, not `d === today`: catch-up matters here as much as it does
 // for `isPublished` itself. If a cron tick is ever missed on a date's exact
@@ -217,9 +266,21 @@ async function recordScheduledDates(env: Env, path: string, parsed: unknown, tod
 // needs to agree with -- using `===` here while that uses `<=` would leave
 // a permanently-missed date sitting inert in the schedule with nothing ever
 // asking about it again.
+function anythingDueIn(schedule: Schedule, today: string): boolean {
+  return Object.values(schedule.files).some((dates) => dates.some((d) => d <= today));
+}
+
+// The cron's own predicate, and the one exported for direct testing: is
+// anything due to be live by today, as far as the schedule record knows?
+// One KV read, regardless of how many files or dates are tracked --
+// deliberately cheap enough to run every hour without it mattering, unlike
+// the thing it's guarding: a Pages build. (`scheduled` itself below does
+// NOT call this -- it calls `readSchedule` once and reuses that same value
+// for both this check and, on reconciliation ticks, the re-check after --
+// this wrapper exists so callers outside `scheduled`, including this
+// file's own tests, still have a one-read, single-call way to ask.)
 export async function anythingPublishesToday(env: Env, today: string): Promise<boolean> {
-  const schedule = await readSchedule(env.KV);
-  return Object.values(schedule).some((dates) => dates.some((d) => d <= today));
+  return anythingDueIn(await readSchedule(env.KV), today);
 }
 
 // After the deploy hook has actually fired successfully for `today`, drop
@@ -230,15 +291,108 @@ export async function anythingPublishesToday(env: Env, today: string): Promise<b
 // below, never from `anythingPublishesToday` itself: if the fetch to
 // DEPLOY_HOOK_URL fails, the date must NOT be cleared, or a genuinely failed
 // attempt would never be retried on the next tick.
+//
+// Also stamps `lastReconciled = today`, unconditionally. Reasoned through,
+// not incidental: `plugins/filter-unpublished.ts` filters at BUILD time by
+// comparing each item's `publishAt` against the wall clock directly, not
+// against anything in this KV record -- so the build the hook above just
+// triggered will ship EVERY currently-due item on `main`, including any
+// hand-committed one `reconcileScheduleFromSource` might otherwise have
+// discovered, whether or not this schedule record ever knew about it.
+// Leaving `lastReconciled` untouched here was confirmed to cause exactly
+// the failure mode this whole feature exists to avoid: the very next tick,
+// finding nothing due (this file's own dates having just been cleared) and
+// `lastReconciled` still not today, immediately re-triggered a reconciliation
+// attempt for no benefit -- three pointless GitHub reads on a day a build
+// had already just happened.
 async function clearDueDates(env: Env, today: string): Promise<void> {
   const schedule = await readSchedule(env.KV);
-  let changed = false;
-  for (const file of Object.keys(schedule)) {
-    const remaining = schedule[file].filter((d) => d > today);
-    if (remaining.length !== schedule[file].length) changed = true;
-    schedule[file] = remaining;
+  for (const file of Object.keys(schedule.files)) {
+    schedule.files[file] = schedule.files[file].filter((d) => d > today);
   }
-  if (changed) await writeSchedule(env.KV, schedule);
+  schedule.lastReconciled = today;
+  await writeSchedule(env.KV, schedule);
+}
+
+// Once a day (gated on `schedule.lastReconciled`, part of the same KV value
+// `scheduled` already read this tick -- no second read spent deciding
+// whether to run this), re-derive the schedule record from GitHub directly
+// rather than trusting only what `recordScheduledDates` has ever recorded.
+// Closes three gaps a purely publish-driven record cannot:
+//  1. Content that reached `main` by any route OTHER than POST /api/publish
+//     -- a direct commit, the GitHub web UI, a revert -- never runs through
+//     recordScheduledDates at all, so a hand-committed future `publishAt`
+//     would otherwise be invisible to this cron forever. (Confirmed this is
+//     not a hypothetical for this repository: every dish in
+//     src/content/dishes.json today arrived by hand commit, not through
+//     this Worker.)
+//  2. A brand new KV namespace -- freshly created, e.g. the moment
+//     wrangler.toml's placeholder KV id is finally replaced with a real one
+//     -- starts with no memory at all of anything already committed before
+//     the Worker was first deployed.
+//  3. `isStillPending`'s per-item try/catch (above) already stops one
+//     malformed `publishAt` from losing every other item's date in the same
+//     publish; this is the second, independent backstop for the same class
+//     of gap, since it re-derives from source rather than trusting whatever
+//     the last publish happened to record.
+//
+// Preserves (does not discard) whatever's already recorded for any file
+// this read fails on -- a transient GitHub error must not make
+// reconciliation WORSE than not running it at all by wiping a known-good
+// slice down to nothing; it just means that one file goes uncorrected until
+// tomorrow's attempt.
+//
+// Cost: up to 3 extra GitHub reads, once a day (~93/month) -- not once an
+// hour. The other ~23 daily ticks never call this at all (see `scheduled`
+// below), so the "one KV read" cost `anythingPublishesToday` promises on
+// the common path stays true.
+//
+// Deliberately does NOT itself trigger a build, and `scheduled` below does
+// NOT re-check "is anything due" against this call's result. Reasoned
+// through, not an oversight: this only ever stores dates that are STILL
+// STRICTLY FUTURE (`futurePublishAtDates`/`isStillPending`, same as
+// `recordScheduledDates` uses), by construction -- an earlier version of
+// this function's caller re-checked `anythingDueIn` on the freshly
+// reconciled record expecting it could now be due, which is impossible: if
+// nothing was due when `scheduled` checked (the precondition for calling
+// this at all), and this only ever adds entries `> today`, the result can
+// never contain anything `<= today` either. That recheck was dead code
+// with a comment claiming behavior that could not happen; removed rather
+// than left in place. The real, closed loop is one tick later: once a
+// tracked future date's day arrives, the ordinary `anythingDueIn` check at
+// the top of the NEXT tick finds it `<= today` and fires normally -- no
+// different from a date `recordScheduledDates` tracked directly.
+//
+// Known, accepted residual gap this leaves open (not silently -- recorded
+// here): an item hand-committed with a `publishAt` that is ALREADY in the
+// past the very first time reconciliation ever reads that file will not be
+// tracked at all (it fails `isStillPending`, the same as any already-due
+// item does) and will not, by itself, trigger a rebuild. It still goes
+// live at the next rebuild triggered for any other reason -- a regular
+// publish, or a different item's date coming due -- exactly as if this
+// reconciliation didn't exist. Closing that fully would require detecting
+// "an item is due AND was not already known to be due", which needs
+// tracking already-seen overdue items to avoid re-firing forever on every
+// item that has ever gone live -- real complexity this task's brief did
+// not ask for and that a same-tick "just fire if anything's <= today" check
+// would get wrong (it would fire on EVERY reconciliation tick, forever, the
+// moment any content has ever had a past `publishAt`).
+async function reconcileScheduleFromSource(env: Env, schedule: Schedule, today: string): Promise<void> {
+  const files: Record<string, string[]> = { ...schedule.files };
+  for (const file of SCHEDULABLE_CONTENT_FILES) {
+    try {
+      const raw = await getFileContent(env, `src/content/${file}`);
+      if (raw === null) continue;
+      const parsed: unknown = JSON.parse(raw);
+      if (!Array.isArray(parsed)) continue;
+      files[file] = futurePublishAtDates(parsed, today);
+    } catch {
+      // Leaves `files[file]` exactly as it already was -- see this
+      // function's own comment above for why that, not clearing it, is the
+      // safe default on a read failure.
+    }
+  }
+  await writeSchedule(env.KV, { files, lastReconciled: today });
 }
 // ---------------------------------------------------------------------------
 
@@ -333,22 +487,27 @@ async function handlePublish(request: Request, env: Env): Promise<Response> {
     // callback above and validateContent's own default-deny already proved
     // it round-trips JSON.parse cleanly for every `.json` file that reached
     // this point without a problem.
+    //
+    // A plain `for...of` with `await` inside, NOT `files.map(...)` +
+    // `Promise.all` -- `recordScheduledDates` is a read-modify-write against
+    // one shared KV key, and running two of them concurrently is a lost
+    // update: reproduced directly with the `Promise.all` version this
+    // replaced, publishing dishes.json and drinks.json together in one
+    // request left only whichever file's write happened to land last in KV,
+    // silently discarding the other file's schedule. Sequential awaits make
+    // each file's read-modify-write finish before the next one starts.
     const today = todayInKolkata();
-    await Promise.all(
-      files
-        .filter((f) => f.encoding === 'utf-8' && f.path.endsWith('.json'))
-        .map(async (f) => {
-          try {
-            const parsed: unknown = JSON.parse(f.content);
-            await recordScheduledDates(env, f.path, parsed, today);
-          } catch {
-            // Never lets schedule bookkeeping fail a publish that already
-            // succeeded on GitHub -- worst case, the cron's own record of
-            // upcoming dates for this one file goes stale until the next
-            // successful publish of it.
-          }
-        }),
-    );
+    for (const f of files.filter((f) => f.encoding === 'utf-8' && f.path.endsWith('.json'))) {
+      try {
+        const parsed: unknown = JSON.parse(f.content);
+        await recordScheduledDates(env, f.path, parsed, today);
+      } catch {
+        // Never lets schedule bookkeeping fail a publish that already
+        // succeeded on GitHub -- worst case, the cron's own record of
+        // upcoming dates for this one file goes stale until the next
+        // successful publish of it (or the next daily reconciliation).
+      }
+    }
 
     return json(200, { sha });
   } catch (error) {
@@ -410,9 +569,37 @@ export default {
   // `await`s everything it does before returning, so there is nothing left
   // to keep alive with `ctx.waitUntil` -- the same reason `fetch` above
   // never takes one either.
+  //
+  // Reads the schedule record exactly ONCE per tick (`readSchedule` below),
+  // not via the `anythingPublishesToday` wrapper -- that wrapper does its
+  // own read, and calling it here as well as calling
+  // `reconcileScheduleFromSource` (which needs the same value) would spend
+  // a second KV read on every single tick just to decide whether today's
+  // once-a-day reconciliation is due. Sharing one in-memory `Schedule`
+  // across both checks keeps the ~23 "nothing due, already reconciled
+  // today" ticks at exactly the one read `anythingPublishesToday`'s own
+  // comment promises; only the reconciliation tick itself pays extra, and
+  // only in GitHub reads, not KV ones.
   async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
     const today = todayInKolkata();
-    if (!(await anythingPublishesToday(env, today))) return;
+    const schedule = await readSchedule(env.KV);
+    const due = anythingDueIn(schedule, today);
+
+    if (!due) {
+      // At most once a day: refresh the future-dates record from GitHub
+      // directly, so a hand-committed future `publishAt` this record never
+      // learned about gets picked up before its own day arrives. See
+      // reconcileScheduleFromSource's own comment for exactly what this
+      // closes -- and, importantly, what it deliberately does not: this
+      // call cannot itself make `due` become true this tick (it only ever
+      // stores dates that are still strictly in the future), so there is
+      // nothing to re-check here. A newly tracked date fires normally on
+      // whichever later tick its own day arrives.
+      if (schedule.lastReconciled !== today) {
+        await reconcileScheduleFromSource(env, schedule, today);
+      }
+      return;
+    }
 
     const res = await fetch(env.DEPLOY_HOOK_URL, { method: 'POST' });
     if (!res.ok) {

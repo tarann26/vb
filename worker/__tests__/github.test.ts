@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { commitFiles, DisallowedPathError, type GitHubEnv } from '../github';
+import { commitFiles, getFileContent, DisallowedPathError, type GitHubEnv } from '../github';
 import {
   BASE_COMMIT_SHA,
   BASE_TREE_SHA,
@@ -258,5 +258,98 @@ describe('commitFiles', () => {
         DisallowedPathError,
       );
     });
+  });
+});
+
+// getFileContent: added for Task 8's daily schedule reconciliation
+// (worker/index.ts's reconcileScheduleFromSource), the one caller. Unlike
+// commitFiles above, this hits GET /contents/{path}, not the Git Data API,
+// so it needs its own small stub rather than githubStub.ts's.
+describe('getFileContent', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function stubContentsResponse(body: unknown, status = 200): void {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify(body), { status })),
+    );
+  }
+
+  it('reads and base64-decodes a file\'s content from the Contents API', async () => {
+    stubContentsResponse({ content: btoa('[{"id":"x"}]'), encoding: 'base64' });
+    const result = await getFileContent(NO_FETCH_ENV, 'src/content/dishes.json');
+    expect(result).toBe('[{"id":"x"}]');
+  });
+
+  // GitHub's Contents API wraps its base64 payload at 60 characters. This
+  // decodes correctly today because Node's/workerd's `atob` implements the
+  // WHATWG forgiving-base64 algorithm, which strips embedded ASCII
+  // whitespace on its own -- confirmed directly (see base64ToUtf8's own
+  // comment in worker/github.ts, corrected there after an earlier version
+  // claimed the opposite). Kept as a real-shape regression test of the
+  // actual documented GitHub response format, not of a manual strip step
+  // this code no longer has.
+  it('decodes a newline-wrapped base64 payload (GitHub\'s real Contents API shape) correctly', async () => {
+    const wrapped = btoa('[{"id":"wrapped-content-longer-than-sixty-chars-to-actually-wrap"}]')
+      .match(/.{1,10}/g)!
+      .join('\n');
+    stubContentsResponse({ content: wrapped, encoding: 'base64' });
+    const result = await getFileContent(NO_FETCH_ENV, 'src/content/dishes.json');
+    expect(result).toBe('[{"id":"wrapped-content-longer-than-sixty-chars-to-actually-wrap"}]');
+  });
+
+  // The reason this isn't a byte-by-byte `atob` + `String.fromCharCode`
+  // decode (worker/auth.ts's `base64ToBytes`, fine for small fixed-width
+  // secrets): real file content can carry multi-byte UTF-8 characters, and
+  // a naive per-char decode would silently corrupt one into mojibake
+  // instead of throwing -- confirmed directly against a real one here.
+  it('decodes multi-byte UTF-8 content correctly, not as mojibake', async () => {
+    const text = '{"name":"Bicerin — café favourite"}';
+    const bytes = new TextEncoder().encode(text);
+    let binary = '';
+    for (const byte of bytes) binary += String.fromCharCode(byte);
+    stubContentsResponse({ content: btoa(binary), encoding: 'base64' });
+    const result = await getFileContent(NO_FETCH_ENV, 'src/content/dishes.json');
+    expect(result).toBe(text);
+  });
+
+  // The property a mutation confirmed has no OTHER test covering it:
+  // reconcileScheduleFromSource's own try/catch swallows both "genuinely
+  // missing" and "GitHub failed" identically (leaving that file's already-
+  // known schedule untouched either way), so nothing at that call site can
+  // tell a 404 apart from a 500 -- this has to be proven at this function's
+  // own level instead.
+  it('returns null on a 404, rather than throwing', async () => {
+    stubContentsResponse({ message: 'Not Found' }, 404);
+    const result = await getFileContent(NO_FETCH_ENV, 'src/content/dishes.json');
+    expect(result).toBeNull();
+  });
+
+  it('throws on a non-404 failure, distinguishable from "file does not exist"', async () => {
+    stubContentsResponse({ message: 'server error' }, 500);
+    await expect(getFileContent(NO_FETCH_ENV, 'src/content/dishes.json')).rejects.toThrow(/500/);
+  });
+
+  // A 200 OK whose body doesn't have the shape the Contents API documents
+  // (no base64 `content`, or a different `encoding`) must not be silently
+  // treated as empty content -- that would make reconciliation compute
+  // "nothing scheduled" from a response that never actually said that.
+  it('throws on a 200 response with no base64 content, rather than treating it as empty', async () => {
+    stubContentsResponse({ type: 'dir' }, 200);
+    await expect(getFileContent(NO_FETCH_ENV, 'src/content/dishes.json')).rejects.toThrow(/base64/);
+  });
+
+  it('requests the Contents API at the right path, ref, and with an authenticated header', async () => {
+    const fetchStub = vi.fn(async () => new Response(JSON.stringify({ content: btoa('[]'), encoding: 'base64' }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchStub);
+    await getFileContent(NO_FETCH_ENV, 'src/content/dishes.json');
+    expect(fetchStub).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchStub.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe(
+      `https://api.github.com/repos/${NO_FETCH_ENV.GITHUB_OWNER}/${NO_FETCH_ENV.GITHUB_REPO}/contents/src/content/dishes.json?ref=${NO_FETCH_ENV.GITHUB_BRANCH}`,
+    );
+    expect((init.headers as Record<string, string>).Authorization).toBe(`Bearer ${NO_FETCH_ENV.GITHUB_TOKEN}`);
   });
 });

@@ -22,6 +22,11 @@ this GitHub repository.
 
 ## 2. Set the build configuration
 
+**After entering the build command below, jump to Step 12 and do that check now, before moving on
+to Step 3** — it confirms what you just typed into the dashboard actually landed the way this page
+describes, before anything downstream (the cron in particular) comes to depend on it silently
+matching.
+
 - **Build command:** `npm run images && npm run test:deploy && npm run build`
   Yes, `npm run images` runs twice — once here, once again inside `npm run build` (which runs
   `npm run images && tsc -b && vite build`). That costs about six seconds. It is not a mistake:

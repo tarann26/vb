@@ -205,7 +205,7 @@ describe('GET /api/build-status', () => {
     expect(response.status).toBe(502);
   });
 
-  it('requests the correct Cloudflare deployments URL, authenticated with the Pages token', async () => {
+  it('requests the correct Cloudflare deployments URL, scoped to production, authenticated with the Pages token', async () => {
     const cookie = await sessionCookie();
     const fetchStub = vi.fn(async () => cloudflareDeploymentsResponse([]));
     vi.stubGlobal('fetch', fetchStub);
@@ -213,8 +213,50 @@ describe('GET /api/build-status', () => {
     expect(fetchStub).toHaveBeenCalledTimes(1);
     const [url, init] = fetchStub.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe(
-      `https://api.cloudflare.com/client/v4/accounts/${env.CLOUDFLARE_ACCOUNT_ID}/pages/projects/${env.CLOUDFLARE_PAGES_PROJECT}/deployments`,
+      `https://api.cloudflare.com/client/v4/accounts/${env.CLOUDFLARE_ACCOUNT_ID}/pages/projects/${env.CLOUDFLARE_PAGES_PROJECT}/deployments?env=production`,
     );
     expect((init.headers as Record<string, string>).Authorization).toBe(`Bearer ${env.CLOUDFLARE_API_TOKEN}`);
+  });
+
+  // Important 1 (review round 2): a canceled deployment's `latest_stage`
+  // never moves again -- confirmed unmapped in the first version of this
+  // function, which fell through to the catch-all `building` return and
+  // would have reported "building" forever for a deployment that will never
+  // finish. Cloudflare cancels superseded builds; docs/cloudflare-cutover.md
+  // §11c's own scenario (a photo upload immediately followed by a publish)
+  // is a realistic trigger, not an edge case.
+  it('a canceled deployment reports "failed", not stuck "building" forever', async () => {
+    const cookie = await sessionCookie();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => cloudflareDeploymentsResponse([deployment(SHA, { name: 'build', status: 'canceled' })])),
+    );
+    const response = await handleBuildStatus(statusRequest(SHA, cookie), env);
+    const body = (await response.json()) as { state: string };
+    expect(body.state).toBe('failed');
+  });
+
+  // Minor 1 (review round 2): a 200 whose body is garbage (a maintenance
+  // page, a misconfigured proxy) used to collapse to "no deployments" ->
+  // `queued` -- the single most reassuring state this endpoint can report,
+  // exactly backwards for an endpoint whose job is being the honest failure
+  // signal. Must be 502, not a falsely-calm 200.
+  it('an unparseable 200 body from Cloudflare is 502, not a falsely-reassuring "queued"', async () => {
+    const cookie = await sessionCookie();
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('<html>not json</html>', { status: 200 })));
+    const response = await handleBuildStatus(statusRequest(SHA, cookie), env);
+    expect(response.status).toBe(502);
+  });
+
+  // Same failure mode, different trigger: Cloudflare's own envelope saying
+  // `success: false` on a 200 must not be read as "zero deployments".
+  it('a 200 body with success:false from Cloudflare is 502, not treated as an empty deployment list', async () => {
+    const cookie = await sessionCookie();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({ success: false, result: [] }), { status: 200 })),
+    );
+    const response = await handleBuildStatus(statusRequest(SHA, cookie), env);
+    expect(response.status).toBe(502);
   });
 });

@@ -56,8 +56,17 @@ function findDeploymentBySha(deployments: CloudflareDeployment[], sha: string): 
 
 // Maps a Cloudflare Pages deployment's `latest_stage` onto the four states
 // the dashboard needs. Documented stage names are `queued`, `initialize`,
-// `clone_repo`, `build`, `deploy`; documented statuses are `idle`, `active`,
-// `success`, `failure`.
+// `clone_repo`, `build`, `deploy`; documented statuses are FIVE, not four --
+// `idle`, `active`, `success`, `failure`, `canceled`. An earlier version of
+// this comment (and this function) only accounted for four, which left
+// `canceled` falling through to the catch-all `building` return below --
+// confirmed by reproduction: a superseded deployment Cloudflare cancels
+// (which it does -- the exact scenario docs/cloudflare-cutover.md §11c
+// names, a photo-upload commit immediately followed by a publish commit)
+// would report "building" forever, since a canceled deployment's stage
+// never moves again. Fixed by treating `canceled` the same as `failure`:
+// both mean this specific deployment will never reach `live`, and "failed"
+// is the honest word for that, not "still going".
 //
 // No deployment found for this sha at all -- either GitHub hasn't told
 // Cloudflare about the push yet, or Cloudflare hasn't created a deployment
@@ -68,21 +77,18 @@ function findDeploymentBySha(deployments: CloudflareDeployment[], sha: string): 
 // "queued" is the honest word for "nothing to report yet, not necessarily
 // wrong".
 //
-// `failure` on the deployment's own most-recent stage wins over everything
-// else -- a deploy that failed during, say, the `build` stage is `failed`,
-// full stop, regardless of what earlier stages reported. `deploy` succeeding
-// is the only stage/status combination that means genuinely live: every
-// earlier stage succeeding is necessary but not sufficient, since the site
-// isn't actually serving the new build until `deploy` itself finishes.
-// Anything else still in flight (queued/idle, or any stage active) is
-// `building`.
+// `deploy` succeeding is the only stage/status combination that means
+// genuinely live: every earlier stage succeeding is necessary but not
+// sufficient, since the site isn't actually serving the new build until
+// `deploy` itself finishes. Anything else still in flight (queued/idle, or
+// any stage active) is `building`.
 export function mapDeploymentState(deployment: CloudflareDeployment | undefined): BuildState {
   if (!deployment) return 'queued';
   const stage = deployment.latest_stage;
   if (!stage) return 'queued';
   const status = typeof stage.status === 'string' ? stage.status : undefined;
   const name = typeof stage.name === 'string' ? stage.name : undefined;
-  if (status === 'failure') return 'failed';
+  if (status === 'failure' || status === 'canceled') return 'failed';
   if (name === 'deploy' && status === 'success') return 'live';
   return 'building';
 }
@@ -119,12 +125,22 @@ export async function handleBuildStatus(request: Request, env: BuildStatusEnv): 
     return json(400, { message: 'A valid commit sha is required.' });
   }
 
-  const apiUrl = `https://api.cloudflare.com/client/v4/accounts/${env.CLOUDFLARE_ACCOUNT_ID}/pages/projects/${env.CLOUDFLARE_PAGES_PROJECT}/deployments`;
+  // `?env=production` scopes this to the deployments that actually serve
+  // the live domain -- without it, Cloudflare returns preview deployments
+  // too (one per non-production branch/PR), which this project doesn't use
+  // today but would otherwise be free to shift which page a given sha's
+  // deployment record lands on.
+  const apiUrl = `https://api.cloudflare.com/client/v4/accounts/${env.CLOUDFLARE_ACCOUNT_ID}/pages/projects/${env.CLOUDFLARE_PAGES_PROJECT}/deployments?env=production`;
 
   let res: Response;
   try {
+    // 10s: generous for a JSON list call, but bounded -- a Worker's own
+    // request has real limits regardless, and a hung upstream fetch
+    // shouldn't tie this route up for longer than a human waiting on "did
+    // it work?" would tolerate.
     res = await fetch(apiUrl, {
       headers: { Authorization: `Bearer ${env.CLOUDFLARE_API_TOKEN}` },
+      signal: AbortSignal.timeout(10_000),
     });
   } catch (error) {
     return json(502, { message: error instanceof Error ? error.message : 'Could not reach Cloudflare.' });
@@ -133,8 +149,20 @@ export async function handleBuildStatus(request: Request, env: BuildStatusEnv): 
     return json(502, { message: `Cloudflare returned ${res.status} listing deployments.` });
   }
 
-  const body = (await res.json().catch(() => null)) as { result?: unknown } | null;
-  const deployments = Array.isArray(body?.result) ? (body!.result as CloudflareDeployment[]) : [];
+  // A 200 whose body doesn't parse, or whose envelope says `success: false`
+  // (Cloudflare's API can answer this way even with a 200 status), must NOT
+  // collapse to "no deployments found" -- that reads as `queued`, the most
+  // reassuring state this endpoint can report, which is exactly backwards
+  // for a route whose whole job is being the honest failure signal
+  // build-info.json can't be. An earlier version of this route treated a
+  // parse failure the same as a genuinely empty deployments list; a
+  // maintenance-mode HTML body or a malformed proxy response would have
+  // silently reported "queued" indefinitely instead of the 502 this is.
+  const parsedBody = (await res.json().catch(() => null)) as { success?: unknown; result?: unknown } | null;
+  if (parsedBody === null || parsedBody.success === false) {
+    return json(502, { message: 'Cloudflare returned an unreadable response listing deployments.' });
+  }
+  const deployments = Array.isArray(parsedBody.result) ? (parsedBody.result as CloudflareDeployment[]) : [];
   const deployment = findDeploymentBySha(deployments, sha);
 
   return json(200, {
