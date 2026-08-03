@@ -51,20 +51,18 @@ describe('fetchContent', () => {
   // file" block pins on the write side -- this is that list's read-side
   // twin, so the two are the ones that could quietly drift, not any
   // ad-hoc subset a test author happened to type here.
-  it('CONTENT_FILES lists exactly the nine real content files', () => {
-    expect([...CONTENT_FILES].sort()).toEqual(
-      [
-        'copy.json',
-        'dishes.json',
-        'drinks.json',
-        'galleries.json',
-        'menus.json',
-        'press.json',
-        'sections.json',
-        'site.json',
-        'story.json',
-      ].sort(),
-    );
+  // Review finding: a hand-typed nine-name literal compared against
+  // CONTENT_FILES's own hand-typed nine names is a change detector, not a
+  // real check -- neither side ever reads the actual repository. Derived
+  // from `git ls-files` instead (the same tool `gitLsFiles`, below, already
+  // shells out to for the import-graph check), so a real content file added
+  // or removed under src/content/ without updating CONTENT_FILES fails this
+  // for the right reason.
+  it('CONTENT_FILES lists exactly the real *.json files under src/content/', () => {
+    const real = gitLsFiles('src/content')
+      .filter((f) => f.endsWith('.json'))
+      .map((f) => f.slice('src/content/'.length));
+    expect([...CONTENT_FILES].sort()).toEqual(real.sort());
   });
 });
 
@@ -103,9 +101,28 @@ function dotsNeeded(filePath: string): number {
   return filePath.split('/').length - 2;
 }
 
+// The four modules under src/content/ that are legitimate to import from
+// src/admin/ -- none of them import any JSON, and `types` erases entirely
+// at compile time. Anything else reachable via `content/<subpath>` is NOT
+// safe, and a first version of this check (`content(?:/index)?`, matching
+// only the bare barrel and an explicit `/index`) missed that: it let
+// `import dishes from '../content/dishes.json'` -- a DIRECT import of the
+// JSON itself, arguably the most likely form of this mistake, since a later
+// task wanting one file's real shape reaches for exactly this -- straight
+// through. Confirmed directly: that version left this exact line green
+// across all 21 tests in this file's previous revision.
+const SAFE_CONTENT_SUBMODULES = ['types', 'validate', 'guards', 'publish'];
+
 function importsContentSnapshot(source: string, filePath: string): boolean {
   const dots = dotsNeeded(filePath);
-  const pattern = new RegExp(`(?:from|import)\\s*\\(?\\s*['"](?:\\.\\./){${dots}}content(?:/index)?['"]`);
+  const safe = SAFE_CONTENT_SUBMODULES.join('|');
+  // After `content`, either nothing (the bare barrel) or a `/` NOT
+  // immediately followed by one of the safe submodule names -- so
+  // `/types`, `/validate`, `/guards`, `/publish` (and their own further
+  // subpaths, e.g. a hypothetical `/types/foo`) stay legal, while
+  // `/index`, `/dishes.json`, `/index.ts`, or a bare trailing `/` with
+  // nothing after it all match.
+  const pattern = new RegExp(`(?:from|import)\\s*\\(?\\s*['"](?:\\.\\./){${dots}}content(?:/(?!(?:${safe})(?:['"/]|$))[^'"]*)?['"]`);
   return pattern.test(source);
 }
 
@@ -116,11 +133,42 @@ function gitLsFiles(dir: string): string[] {
 }
 
 describe('nothing under src/admin imports the build-time content snapshot', () => {
-  it('no file under src/admin imports ../content or ../content/index, at the depth that actually reaches src/content', () => {
+  // Scoped to PRODUCTION files (excludes `*.test.ts(x)`) -- the invariant
+  // this guards is bundle pollution and a stale data source reaching the
+  // browser, neither of which a test file can cause: Vitest transforms
+  // `__tests__/*.test.ts` directly and nothing in `vite build` ever touches
+  // it, so it never reaches the shipped admin chunk regardless of what it
+  // imports. Confirmed this distinction is real, not assumed: widening the
+  // direct-JSON-subpath check (below) to also cover `content/<name>.json`
+  // immediately caught `src/admin/__tests__/fields.test.ts`'s own `import
+  // copyRaw from '../../content/copy.json'` -- a DELIBERATE Task 2 choice
+  // (see that file's own comment) to test `FieldsOf<Copy>`/`FieldsOf<
+  // SiteContent>` against the real committed shape without pulling in the
+  // stale barrel's other eight files. That's legitimate test infrastructure,
+  // not the defect this check exists to catch.
+  it('no production file under src/admin imports ../content or ../content/index, at the depth that actually reaches src/content', () => {
     const offenders = gitLsFiles('src/admin')
-      .filter((f) => /\.tsx?$/.test(f))
+      .filter((f) => /\.tsx?$/.test(f) && !/\.test\.tsx?$/.test(f))
       .filter((f) => importsContentSnapshot(readFileSync(f, 'utf8'), f));
     expect(offenders).toEqual([]);
+  });
+
+  // The exclusion above is scoped by filename, not blanket-applied --
+  // proven directly against the real file it exists for, rather than left
+  // as an assertion in a comment.
+  it('fields.test.ts really does import a JSON subpath directly, and really is excluded by the *.test.ts(x) filter', () => {
+    const source = readFileSync('src/admin/__tests__/fields.test.ts', 'utf8');
+    expect(importsContentSnapshot(source, 'src/admin/__tests__/fields.test.ts')).toBe(true);
+    const scanned = gitLsFiles('src/admin').filter((f) => /\.tsx?$/.test(f) && !/\.test\.tsx?$/.test(f));
+    expect(scanned).not.toContain('src/admin/__tests__/fields.test.ts');
+  });
+
+  // The exclusion is for TEST files specifically, not a loophole that
+  // exempts every direct-JSON-import mistake -- a production file doing the
+  // exact same thing fields.test.ts does must still be caught.
+  it('the same import from a hypothetical PRODUCTION file (not *.test.ts) would still match', () => {
+    const source = `import copyRaw from '../../content/copy.json';`;
+    expect(importsContentSnapshot(source, 'src/admin/__tests__/notATestFile.ts')).toBe(true);
   });
 });
 
@@ -139,6 +187,12 @@ describe('importsContentSnapshot catches every import form, at the right depth',
     'dynamic import()': `const c = await import('../content');`,
     'no-space from': `import content from'../content';`,
     'explicit /index': `import { dishes } from '../content/index';`,
+    'explicit /index.ts': `import { dishes } from '../content/index.ts';`,
+    // The likeliest real version of this mistake: a later task wanting one
+    // file's actual shape reaches straight for its JSON, not the barrel.
+    'direct JSON subpath (the review-found gap)': `import dishes from '../content/dishes.json';`,
+    'a different JSON subpath': `import site from '../content/site.json';`,
+    'trailing slash with nothing after (the other review-found gap)': `import '../content/';`,
     'prettier-wrapped multi-line': `import {\n  site,\n  dishes,\n} from\n  '../content';`,
   };
 
@@ -175,6 +229,22 @@ describe('importsContentSnapshot catches every import form, at the right depth',
     expect(importsContentSnapshot(`import { validateContent } from '../content/validate';`, AT_DEPTH_1)).toBe(false);
     expect(importsContentSnapshot(`import { assertSections } from '../content/guards';`, AT_DEPTH_1)).toBe(false);
     expect(importsContentSnapshot(`import { isPublished } from '../content/publish';`, AT_DEPTH_1)).toBe(false);
+  });
+
+  // The direct-JSON-import fix must not overreach into flagging the four
+  // safe modules' OWN JSON-free submodule imports were they ever split up
+  // further, e.g. a hypothetical 'validate/rules'.
+  it('does not match a further subpath of a safe module', () => {
+    expect(importsContentSnapshot(`import { x } from '../content/validate/rules';`, AT_DEPTH_1)).toBe(false);
+    expect(importsContentSnapshot(`import type { Y } from '../content/types/leaf';`, AT_DEPTH_1)).toBe(false);
+  });
+
+  // A real file that merely starts with the same letters as a safe module
+  // name must still be flagged -- the exclusion is for the four exact safe
+  // modules, not a bare prefix match.
+  it('still matches a lookalike name that only shares a prefix with a safe module', () => {
+    expect(importsContentSnapshot(`import { x } from '../content/typesomething.json';`, AT_DEPTH_1)).toBe(true);
+    expect(importsContentSnapshot(`import { x } from '../content/publishers.json';`, AT_DEPTH_1)).toBe(true);
   });
 
   it('does not match the word "content" appearing outside an import/export specifier', () => {

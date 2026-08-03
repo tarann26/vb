@@ -361,14 +361,23 @@ async function updateBranchHead(env: GitHubEnv, commitSha: string): Promise<void
 
 // ---------------------------------------------------------------------------
 
-// One publish costs N + 5 subrequests (N = files.length) against the
-// Workers-per-invocation subrequest limit of 50: read the ref (1), read its
-// commit for the base tree sha (1), one blob per file (N), create the tree
-// (1), create the commit (1), update the ref (1). Fine for today's content
-// files and Task 6's photo uploads, but a future "publish everything at
-// once" button north of ~45 files would hit the ceiling silently (fetch
-// just starts failing) rather than with a clear error -- worth checking
-// against this comment before adding one.
+// This function's own cost is still N + 5 subrequests (N = files.length):
+// read the ref (1), read its commit for the base tree sha (1), one blob per
+// file (N), create the tree (1), create the commit (1), update the ref (1).
+//
+// Review finding: that is no longer the whole story for one POST
+// /api/publish REQUEST, which is what actually counts against the
+// Workers-per-invocation subrequest limit of 50 -- Task 3's `baseSha`
+// conditional write and the site.json developer-owned re-check
+// (worker/index.ts's handlePublish, steps 3 and 5) both call
+// `getFileContent` BEFORE this function ever runs, and those reads share
+// the same one invocation's budget. Worst case -- every file in the
+// request carries a `baseSha` -- adds up to N more reads on top of this
+// function's own N + 5, for up to 2N + 6 total. A future "publish
+// everything at once" button hits the ceiling silently (fetch just starts
+// failing, not a clear error) around ~22 files now, not the ~45 this
+// function's own cost alone would suggest -- check the request-level total
+// in handlePublish, not just this comment, before adding one.
 export async function commitFiles(
   env: GitHubEnv,
   files: CommitFile[],

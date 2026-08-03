@@ -42,10 +42,10 @@ export interface Env extends GitHubEnv, PagesEnv {
 // docs/cloudflare-cutover.md.
 const SESSION_SECONDS = 604_800;
 
-function json(status: number, body: unknown): Response {
+function json(status: number, body: unknown, extraHeaders: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...extraHeaders },
   });
 }
 
@@ -499,12 +499,35 @@ async function handlePublish(request: Request, env: Env): Promise<Response> {
   // outage) map to 502, not 409 -- a stale-vs-current comparison that could
   // not actually be made is not evidence of a conflict.
   //
+  // Review finding: `f.path` is client-supplied and this read runs BEFORE
+  // step 6's `commitFiles` -- the only other place a path gets checked --
+  // ever does. Without `isContentPath` here, a `baseSha` attached to an
+  // arbitrary path (`.github/workflows/evil.yml`, or a `../`-laden string
+  // the URL parser silently normalises into an entirely different
+  // `api.github.com` endpoint) reached a real, token-authenticated GET.
+  // Writes stayed safe either way (commitFiles' own allowlist still refuses
+  // the write), but the owner-facing failure was worse than a leaked read:
+  // a malformed path from a future bug would answer "Someone else changed
+  // this while you were editing" -- the one message that tells her to
+  // discard her buffer and reload -- for a request that was never a real
+  // conflict. Checked here, per file, before the read it guards -- not
+  // folded into step 2's envelope parse, since `baseSha` (and therefore
+  // this whole check) is optional per file.
+  //
   // Reads shared with step 5 below (the site.json developer-owned-field
   // check) via `currentByPath`, so a file that needs both checks costs one
   // GitHub read, not two.
+  //
+  // Every mismatch is collected, not just the first: an early return here
+  // used to mean she'd fix one conflict, republish, and immediately hit a
+  // second one the first response never mentioned.
   const currentByPath = new Map<string, FileContent | null>();
+  const conflicts: ValidationProblem[] = [];
   for (const f of files) {
     if (f.baseSha === undefined) continue;
+    if (!isContentPath(f.path)) {
+      return json(400, { field: f.path, message: 'This path cannot be published.' });
+    }
     let current: FileContent | null;
     try {
       current = await getFileContent(env, f.path);
@@ -512,14 +535,18 @@ async function handlePublish(request: Request, env: Env): Promise<Response> {
       return json(502, { message: error instanceof Error ? error.message : 'Could not check for a conflicting edit.' });
     }
     currentByPath.set(f.path, current);
-    // No current content at all (the file was deleted, or never existed)
-    // is treated the same as a sha mismatch -- either way, whatever the
-    // dashboard read when it fetched `baseSha` no longer describes what is
-    // actually on `main`.
-    if (!current || current.sha !== f.baseSha) {
-      return json(409, { field: f.path, message: 'Someone else changed this while you were editing.' });
+    // A file with no current content at all (deleted, or never existed) is
+    // a real conflict too -- whatever the dashboard read when it fetched
+    // `baseSha` no longer describes what is actually on `main` -- but it
+    // gets its own message: "someone else changed this" is actively
+    // misleading when nothing to compare against exists at all.
+    if (!current) {
+      conflicts.push({ field: f.path, message: 'This file no longer exists on the site -- reload before publishing.' });
+    } else if (current.sha !== f.baseSha) {
+      conflicts.push({ field: f.path, message: 'Someone else changed this while you were editing.' });
     }
   }
+  if (conflicts.length) return json(409, { problems: conflicts });
 
   // 4. Validate every file before committing any of them. `validateContent`
   // (Task 2) never throws, but `JSON.parse` on her submitted content -- not
@@ -588,7 +615,11 @@ async function handlePublish(request: Request, env: Env): Promise<Response> {
   // 6. Commit only if every file passed. commitFiles carries its own,
   // independent path allowlist (worker/github.ts) -- so a request that
   // somehow reached this point with a path outside src/content/ or
-  // assets-source/ still can't make it to GitHub.
+  // assets-source/ still can't get anything WRITTEN to GitHub. That is no
+  // longer the whole story for a READ: a file carrying a `baseSha` already
+  // had its path checked against `isContentPath` in step 3, before this
+  // point, specifically because that read happens earlier than this write
+  // check does (see step 3's own comment).
   try {
     const { sha } = await commitFiles(env, files, message);
 
@@ -677,7 +708,16 @@ async function handleGetContent(request: Request, env: Env): Promise<Response> {
     if (!file) {
       return json(404, { message: 'That file does not exist yet.' });
     }
-    return json(200, { content: file.content, sha: file.sha });
+    // This route's entire purpose is freshness -- see this task's own
+    // reasoning on why the dashboard cannot read from the build-time
+    // bundle. A cache sitting between here and the browser (or the browser
+    // itself, on a back/forward navigation) serving a stale response would
+    // quietly reintroduce exactly that problem. Degrades safely even
+    // without this header (a stale `sha` sent back as `baseSha` just yields
+    // a 409, never a silent overwrite), but she'd see stale content AND a
+    // conflict a reload can't clear -- `no-store` is what keeps the reload
+    // she's told to do on a 409 actually work.
+    return json(200, { content: file.content, sha: file.sha }, { 'Cache-Control': 'no-store' });
   } catch (error) {
     return json(502, { message: error instanceof Error ? error.message : 'Could not read that file.' });
   }

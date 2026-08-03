@@ -452,6 +452,32 @@ describe('worker entry point', () => {
       expect(stub.calls).toHaveLength(0);
     });
 
+    // Review finding: without a `baseSha` on this file, the test above
+    // never actually exercises the baseSha loop at all -- it passes purely
+    // on commitFiles' own allowlist (step 6), which runs much later. Adding
+    // one here is what proves the allowlist is also enforced at step 3,
+    // BEFORE the read a `baseSha` triggers -- confirmed directly: removing
+    // step 3's `isContentPath` check let this exact request issue a real,
+    // token-authenticated GET to GitHub for `.github/workflows/evil.yml`.
+    it('a disallowed path with a baseSha is also 400, not a conflict-triggering read, and makes no GitHub call', async () => {
+      const cookie = await sessionCookie();
+      const response = await worker.fetch(
+        publishRequest(
+          {
+            files: [
+              { path: '.github/workflows/evil.yml', content: 'AA', encoding: 'base64', baseSha: 'anything' },
+            ],
+          },
+          cookie,
+        ),
+        env,
+      );
+      expect(response.status).toBe(400);
+      // Not 409 -- a malformed path is a client mistake, never a conflict,
+      // and must never tell her to discard her buffer and reload.
+      expect(stub.calls).toHaveLength(0);
+    });
+
     it('publishes every valid file in one commit and returns its sha', async () => {
       const cookie = await sessionCookie();
       const response = await worker.fetch(
@@ -501,11 +527,56 @@ describe('worker entry point', () => {
           env,
         );
         expect(response.status).toBe(409);
-        const body = (await response.json()) as { field: string; message: string };
-        expect(body).toEqual({ field: 'src/content/dishes.json', message: 'Someone else changed this while you were editing.' });
+        const body = (await response.json()) as { problems: { field: string; message: string }[] };
+        expect(body).toEqual({
+          problems: [{ field: 'src/content/dishes.json', message: 'Someone else changed this while you were editing.' }],
+        });
         // Not just "no PATCH" (the ref update) -- no POST at all (no blob,
         // tree or commit either). Only the GET this check itself made may
         // have reached GitHub.
+        expect(stub.calls.some((c) => c.method === 'POST' || c.method === 'PATCH')).toBe(false);
+      });
+
+      // Review finding: an early return on the first mismatch meant she'd
+      // fix one conflict, republish, and immediately hit a SECOND one the
+      // first response never mentioned. Two files, both stale, in one
+      // request -- both must be named in one response.
+      it('collects every stale file into one response, not just the first', async () => {
+        stub = makeGitHubStub({
+          contents: {
+            'src/content/dishes.json': { content: '[]', sha: CURRENT_DISHES_SHA },
+            'src/content/drinks.json': { content: '[]', sha: 'current-drinks-blob-sha' },
+          },
+        });
+        vi.stubGlobal('fetch', stub.fetch);
+        const cookie = await sessionCookie();
+        const goodDish = { id: 'x', name: 'X', description: 'd', image: '/food/x.webp', tags: [] };
+        const goodDrink = { id: 'y', name: 'Y', description: 'd', category: 'mocktail', image: null };
+        const response = await worker.fetch(
+          publishRequest(
+            {
+              files: [
+                {
+                  path: 'src/content/dishes.json',
+                  content: JSON.stringify([goodDish]),
+                  encoding: 'utf-8',
+                  baseSha: 'stale-dishes-sha',
+                },
+                {
+                  path: 'src/content/drinks.json',
+                  content: JSON.stringify([goodDrink]),
+                  encoding: 'utf-8',
+                  baseSha: 'stale-drinks-sha',
+                },
+              ],
+            },
+            cookie,
+          ),
+          env,
+        );
+        expect(response.status).toBe(409);
+        const body = (await response.json()) as { problems: { field: string; message: string }[] };
+        expect(body.problems.map((p) => p.field).sort()).toEqual(['src/content/dishes.json', 'src/content/drinks.json']);
         expect(stub.calls.some((c) => c.method === 'POST' || c.method === 'PATCH')).toBe(false);
       });
 
@@ -579,7 +650,7 @@ describe('worker entry point', () => {
         expect(stub.calls.some((c) => c.method === 'PATCH')).toBe(true);
       });
 
-      it('a baseSha for a file GitHub no longer has (404) is also treated as a conflict, not a crash', async () => {
+      it('a baseSha for a file GitHub no longer has (404) is also treated as a conflict, with its own message', async () => {
         stub = makeGitHubStub(); // no `contents` fixture at all -> 404
         vi.stubGlobal('fetch', stub.fetch);
         const cookie = await sessionCookie();
@@ -593,8 +664,21 @@ describe('worker entry point', () => {
           env,
         );
         expect(response.status).toBe(409);
+        const body = (await response.json()) as { problems: { field: string; message: string }[] };
+        // Distinct from the sha-mismatch message above: "someone else
+        // changed this" is actively misleading when there is nothing to
+        // compare against at all.
+        expect(body.problems).toEqual([
+          { field: 'src/content/dishes.json', message: 'This file no longer exists on the site -- reload before publishing.' },
+        ]);
         expect(stub.calls.some((c) => c.method === 'POST' || c.method === 'PATCH')).toBe(false);
       });
+
+      // The path-allowlist regression this loop's own `isContentPath` check
+      // guards against is pinned above, alongside the other 400 "the same
+      // file was sent twice"/"disallowed path" client-mistake cases (see
+      // "a disallowed path with a baseSha is also 400" in the plain
+      // POST /api/publish tests) -- not duplicated here.
     });
 
     // Plan 4 Task 2's site.json developer-owned-field rule
@@ -745,6 +829,15 @@ describe('worker entry point', () => {
       expect(response.status).toBe(200);
       const body = (await response.json()) as { content: string; sha: string };
       expect(body).toEqual({ content: '[{"id":"x"}]', sha: 'dishes-sha-read' });
+    });
+
+    // Review finding: this route's entire purpose is freshness -- a cache
+    // sitting anywhere between here and the dashboard would quietly
+    // reintroduce the stale-read problem this task exists to close.
+    it('answers with Cache-Control: no-store', async () => {
+      const cookie = await sessionCookie();
+      const response = await worker.fetch(contentRequest('src/content/dishes.json', cookie), env);
+      expect(response.headers.get('Cache-Control')).toBe('no-store');
     });
 
     it('answers 404 for a well-formed path that does not exist on GitHub', async () => {
