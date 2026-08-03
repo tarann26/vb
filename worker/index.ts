@@ -1,17 +1,17 @@
 // The admin Worker's entry point. `/api/*` on the site's own zone is the
 // only thing routed to this Worker (see wrangler.toml); every path other
-// than /api/health, POST /api/login, POST /api/publish, POST /api/upload and
-// GET /api/build-status still replies 404 until a later task adds a real
-// route. Also exports `scheduled`, the cron handler that rebuilds the site
-// only when scheduled content is actually due -- see `anythingPublishesToday`
-// below.
+// than /api/health, POST /api/login, POST /api/publish, POST /api/upload,
+// GET /api/build-status and GET /api/content still replies 404 until a
+// later task adds a real route. Also exports `scheduled`, the cron handler
+// that rebuilds the site only when scheduled content is actually due -- see
+// `anythingPublishesToday` below.
 //
 // Deliberately typed against `@cloudflare/workers-types` (tsconfig.worker.json)
 // rather than tsconfig.node.json: this file needs `Response`/`Request`/`fetch`/
 // `crypto`, none of which tsconfig.node.json's ES2023-only `lib` declares.
 import { verifyPassword, signToken, verifyToken, parseCookie } from './auth';
 import { checkLoginRate, recordLoginFailure, clearLoginFailures, checkRate, recordHit } from './ratelimit';
-import { commitFiles, getFileContent, DisallowedPathError, type CommitFile, type GitHubEnv } from './github';
+import { commitFiles, getFileContent, isContentPath, DisallowedPathError, type CommitFile, type FileContent, type GitHubEnv } from './github';
 import { validateContent, type ValidationProblem } from '../src/content/validate';
 import { handleUpload } from './upload';
 import { handleBuildStatus, type PagesEnv } from './status';
@@ -410,7 +410,7 @@ async function reconcileScheduleFromSource(env: Env, schedule: Schedule, today: 
     try {
       const raw = await getFileContent(env, `src/content/${file}`);
       if (raw === null) continue;
-      const parsed: unknown = JSON.parse(raw);
+      const parsed: unknown = JSON.parse(raw.content);
       if (!Array.isArray(parsed)) continue;
       files[file] = futurePublishAtDates(parsed, today);
     } catch {
@@ -423,10 +423,24 @@ async function reconcileScheduleFromSource(env: Env, schedule: Schedule, today: 
 }
 // ---------------------------------------------------------------------------
 
-function isPublishFile(value: unknown): value is CommitFile {
+// A publish file is a CommitFile plus an optional `baseSha` -- the blob sha
+// the dashboard read via GET /api/content when it last loaded this file
+// (worker/github.ts's FileContent.sha). Optional because not every caller
+// tracks it: the Worker's own tests, and any future direct API caller that
+// doesn't fetch through that route first, must still be able to publish
+// without one (see handlePublish's step 3 below for what happens when it's
+// present vs. absent).
+type PublishFile = CommitFile & { baseSha?: string };
+
+function isPublishFile(value: unknown): value is PublishFile {
   if (!value || typeof value !== 'object') return false;
-  const { path, content, encoding } = value as Record<string, unknown>;
-  return typeof path === 'string' && typeof content === 'string' && (encoding === 'utf-8' || encoding === 'base64');
+  const { path, content, encoding, baseSha } = value as Record<string, unknown>;
+  return (
+    typeof path === 'string' &&
+    typeof content === 'string' &&
+    (encoding === 'utf-8' || encoding === 'base64') &&
+    (baseSha === undefined || typeof baseSha === 'string')
+  );
 }
 
 async function handlePublish(request: Request, env: Env): Promise<Response> {
@@ -445,7 +459,7 @@ async function handlePublish(request: Request, env: Env): Promise<Response> {
   // missing `path`/`content`/`encoding`) is a clean 400 here -- distinct
   // from step 3 below, which is about the *content* of otherwise
   // well-formed files.
-  let files: CommitFile[];
+  let files: PublishFile[];
   let message: string;
   try {
     const body: unknown = await request.json();
@@ -470,12 +484,52 @@ async function handlePublish(request: Request, env: Env): Promise<Response> {
     return json(400, { message: 'Invalid request body.' });
   }
 
-  // 3. Validate every file before committing any of them. `validateContent`
+  // 3. Conditional write: a `baseSha` is the blob sha the dashboard read
+  // via GET /api/content when it last loaded this file (worker/github.ts's
+  // FileContent.sha) -- present only from a caller that actually tracks
+  // one. Re-read fresh here and compare, BEFORE any content validation or
+  // GitHub write: a stale edit must answer 409 even when the content it
+  // would overwrite the file with is *also* independently invalid, not 422
+  // for a problem that isn't hers to fix from a copy she never saw commit.
+  // This is the guard Plan 4 Task 3 exists for -- without it, a `base_tree`
+  // publish fast-forwards cleanly over a change from a second device or an
+  // earlier tab, and the only other conflict check (`updateBranchHead`'s
+  // 422) never fires, because the branch never moved *inside this one
+  // request*. `getFileContent`'s own read failures (a genuine GitHub
+  // outage) map to 502, not 409 -- a stale-vs-current comparison that could
+  // not actually be made is not evidence of a conflict.
+  //
+  // Reads shared with step 5 below (the site.json developer-owned-field
+  // check) via `currentByPath`, so a file that needs both checks costs one
+  // GitHub read, not two.
+  const currentByPath = new Map<string, FileContent | null>();
+  for (const f of files) {
+    if (f.baseSha === undefined) continue;
+    let current: FileContent | null;
+    try {
+      current = await getFileContent(env, f.path);
+    } catch (error) {
+      return json(502, { message: error instanceof Error ? error.message : 'Could not check for a conflicting edit.' });
+    }
+    currentByPath.set(f.path, current);
+    // No current content at all (the file was deleted, or never existed)
+    // is treated the same as a sha mismatch -- either way, whatever the
+    // dashboard read when it fetched `baseSha` no longer describes what is
+    // actually on `main`.
+    if (!current || current.sha !== f.baseSha) {
+      return json(409, { field: f.path, message: 'Someone else changed this while you were editing.' });
+    }
+  }
+
+  // 4. Validate every file before committing any of them. `validateContent`
   // (Task 2) never throws, but `JSON.parse` on her submitted content -- not
   // on the request envelope parsed in step 2 -- can, and this try/catch is
   // what keeps a malformed file body from becoming a 500 reading "something
   // went wrong" one line before the function whose entire contract is
-  // "never throws".
+  // "never throws". Tracks each file's already-parsed value in
+  // `parsedByPath`, keyed by path, so step 5 below (site.json only) doesn't
+  // need to re-parse `f.content` a second time.
+  const parsedByPath = new Map<string, unknown>();
   const problems: ValidationProblem[] = files.flatMap((f) => {
     // `encoding` is client-supplied. A security review found that labelling
     // any file `'base64'` -- including one whose *path* is a `.json` file
@@ -494,22 +548,55 @@ async function handlePublish(request: Request, env: Env): Promise<Response> {
     } catch {
       return [{ field: f.path, message: 'This file is not valid JSON.' }];
     }
+    parsedByPath.set(f.path, parsed);
     return validateContent(basename(f.path), parsed);
   });
   if (problems.length) return json(422, { problems });
 
-  // 4. Commit only if every file passed. commitFiles carries its own,
+  // 5. site.json's developer-owned fields (`name`, `tagline`, every
+  // `seo.*`) -- validateContent's rule for these (Task 2) only fires when
+  // given a `current` value to compare against, and this is the one place
+  // the Worker has one. Deliberately AFTER step 4, not folded into it: step
+  // 4's own per-file check runs before every OTHER file in the same
+  // request is known to be valid, and the read this needs must not become
+  // one more GitHub call a request that's about to 422 for an unrelated
+  // file pays for (see index.test.ts's `stub.calls` assertions on those
+  // paths). Only fires for a request that actually includes site.json, and
+  // reuses step 3's read when the same file also carried a `baseSha`.
+  //
+  // A read failure here is never a reason to block an otherwise-valid
+  // publish of every field she IS allowed to change -- caught and mapped to
+  // `undefined`, **never `null`**: validateContent's `current` parameter
+  // only skips this rule for a value `isPlainObject` rejects, and `null` is
+  // typeof `"object"` in JS, so passing it through would read as "every
+  // developer-owned field just changed" and blame her for eight fields she
+  // never touched (see src/content/validate.ts's own comment on
+  // `isPlainObject` for the exact failure this avoids).
+  const siteFile = files.find((f) => f.encoding === 'utf-8' && basename(f.path) === 'site.json');
+  if (siteFile) {
+    let current: unknown;
+    try {
+      const read = currentByPath.has(siteFile.path) ? currentByPath.get(siteFile.path)! : await getFileContent(env, siteFile.path);
+      current = read ? JSON.parse(read.content) : undefined;
+    } catch {
+      current = undefined;
+    }
+    const ownershipProblems = validateContent('site.json', parsedByPath.get(siteFile.path), current);
+    if (ownershipProblems.length) return json(422, { problems: ownershipProblems });
+  }
+
+  // 6. Commit only if every file passed. commitFiles carries its own,
   // independent path allowlist (worker/github.ts) -- so a request that
   // somehow reached this point with a path outside src/content/ or
   // assets-source/ still can't make it to GitHub.
   try {
     const { sha } = await commitFiles(env, files, message);
 
-    // 5. Best-effort schedule bookkeeping for the cron (Task 8). The commit
+    // 7. Best-effort schedule bookkeeping for the cron (Task 8). The commit
     // has already landed -- nothing below this line may turn this response
     // into anything other than the 200 the publish itself earned, so every
     // step is wrapped to swallow its own failure rather than throw into the
-    // response. Re-parses `f.content` rather than threading step 3's
+    // response. Re-parses `f.content` rather than threading step 4's
     // already-parsed value down here: that value lives inside the `flatMap`
     // callback above and validateContent's own default-deny already proved
     // it round-trips JSON.parse cleanly for every `.json` file that reached
@@ -545,6 +632,54 @@ async function handlePublish(request: Request, env: Env): Promise<Response> {
       return json(400, { message: error.message });
     }
     return json(502, { message: error instanceof Error ? error.message : 'Publish failed.' });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// GET /api/content?path=src/content/<name>.json -- Plan 4 Task 3. Reads
+// current content directly from `main`, not from whatever build-time bundle
+// happens to be loaded in her browser. Without this route the dashboard has
+// no way to know what is actually committed: she publishes at 14:00,
+// Cloudflare's rebuild takes 1-2 minutes, and a reload (or a second device)
+// inside that window would otherwise only ever see the bundle from before
+// her edit -- editing a different field and publishing the whole file back
+// would silently drop the 14:00 change, with `base_tree` set and the ref
+// fast-forwarding cleanly, 200 OK. `getFileContent` (worker/github.ts) is
+// what makes this possible; it existed already for the cron's
+// `reconcileScheduleFromSource` but sat on no route until now. The `sha`
+// this returns is what a caller sends back as `baseSha` on `POST
+// /api/publish`, so a stale copy is refused instead of silently overwriting
+// a newer one (see that route's step 3).
+async function handleGetContent(request: Request, env: Env): Promise<Response> {
+  // Same session check as every other admin route (handlePublish,
+  // handleReadWaCounts) -- this is current, unpublished-elsewhere content
+  // from a private repository, not something to hand to an unauthenticated
+  // request just because reading is less dangerous than writing.
+  const token = parseCookie(request.headers.get('Cookie'), 'vb_session');
+  const now = Math.floor(Date.now() / 1000);
+  if (!token || !(await verifyToken(env.TOKEN_SECRET, token, now))) {
+    return json(401, { message: 'Not authenticated.' });
+  }
+
+  // Reuses `isContentPath` (worker/github.ts) -- the exact same shape check
+  // `commitFiles` enforces on writes, not a second, independently
+  // maintained allowlist for reads that could quietly drift weaker than the
+  // write side. Deliberately narrower than what `commitFiles` itself
+  // allows: only `src/content/<name>.json`, never `assets-source/` -- there
+  // is no reason this route ever serves a binary asset as text.
+  const path = new URL(request.url).searchParams.get('path');
+  if (!path || !isContentPath(path)) {
+    return json(400, { message: 'This path cannot be read here.' });
+  }
+
+  try {
+    const file = await getFileContent(env, path);
+    if (!file) {
+      return json(404, { message: 'That file does not exist yet.' });
+    }
+    return json(200, { content: file.content, sha: file.sha });
+  } catch (error) {
+    return json(502, { message: error instanceof Error ? error.message : 'Could not read that file.' });
   }
 }
 
@@ -765,6 +900,10 @@ export default {
 
     if (url.pathname === '/api/publish' && request.method === 'POST') {
       return handlePublish(request, env);
+    }
+
+    if (url.pathname === '/api/content' && request.method === 'GET') {
+      return handleGetContent(request, env);
     }
 
     if (url.pathname === '/api/upload' && request.method === 'POST') {

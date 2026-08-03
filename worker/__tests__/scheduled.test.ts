@@ -71,8 +71,15 @@ function seedSchedule(kv: FakeKV, files: Record<string, string[]>, lastReconcile
 // GitHub's Contents API shape, base64-encoded -- what worker/github.ts's
 // getFileContent (used only by reconcileScheduleFromSource) actually reads.
 // ASCII-only fixtures throughout, so plain `btoa` round-trips cleanly.
+// `sha` is a fixed placeholder -- Task 3 made getFileContent require one
+// (the same defensive shape-check posture as getBranchHeadSha/
+// getCommitTreeSha), and reconcileScheduleFromSource never reads it, so any
+// non-empty string satisfies that check without meaning anything here.
 function contentsApiResponse(items: unknown[]): Response {
-  return new Response(JSON.stringify({ content: btoa(JSON.stringify(items)), encoding: 'base64' }), { status: 200 });
+  return new Response(
+    JSON.stringify({ content: btoa(JSON.stringify(items)), encoding: 'base64', sha: 'reconcile-stub-sha' }),
+    { status: 200 },
+  );
 }
 
 // A fetch stub for the reconciliation path: answers GitHub's Contents API

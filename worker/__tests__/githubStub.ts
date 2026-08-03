@@ -47,6 +47,29 @@ export function makeGitHubStub(
     // `body.tree.sha` to be a string.
     malformedRefSha?: boolean;
     malformedTreeSha?: boolean;
+    // GET /contents/{path} fixtures for `getFileContent` -- Task 3's
+    // `baseSha` check on POST /api/publish, the site.json developer-owned
+    // re-check, and GET /api/content all read through it now, not just the
+    // cron's `reconcileScheduleFromSource`. Keyed by the exact
+    // repo-relative path (e.g. 'src/content/site.json'), ASCII-only content
+    // so a plain `btoa` round-trips it cleanly (same constraint
+    // scheduled.test.ts's own `contentsApiResponse` documents). A path with
+    // no entry here answers 404 -- `getFileContent` treats that as "no
+    // current content" without throwing, which is the safe, deliberate
+    // default: unlike every other GitHub endpoint this stub answers, a GET
+    // /contents/ request is now something MANY existing tests trigger
+    // incidentally (any site.json publish, via the developer-owned
+    // re-check) rather than only tests that opted into it -- an
+    // "unexpected request" throw here would turn every one of those into a
+    // failure over a read they never meant to exercise.
+    contents?: Record<string, { content: string; sha: string }>;
+    // A genuine read failure for one specific GET /contents/ path (a GitHub
+    // outage, not "file doesn't exist") -- separate from `failOn` above
+    // because that option matches with `url.endsWith(...)`, and a Contents
+    // API request always ends with `?ref={branch}`, never with the bare
+    // path -- `failOn` alone can never target this endpoint.
+    contentsFailPath?: string;
+    contentsFailStatus?: number;
   } = {},
 ): GitHubStub {
   const calls: RecordedCall[] = [];
@@ -75,6 +98,26 @@ export function makeGitHubStub(
     if (opts.failOn && url.endsWith(opts.failOn)) {
       return new Response(opts.failBody ?? JSON.stringify({ message: 'stubbed failure' }), {
         status: opts.failStatus ?? 500,
+      });
+    }
+
+    // GET /contents/{path}?ref={branch} -- getFileContent's endpoint, the
+    // Contents API rather than the Git Data API every other branch here
+    // answers. Split on '?' and on '/contents/' rather than a regex, so
+    // this doesn't care where `?ref=` falls or what branch name it names.
+    if (method === 'GET' && url.includes('/contents/')) {
+      const path = url.split('?')[0].split('/contents/')[1];
+      if (opts.contentsFailPath && path === opts.contentsFailPath) {
+        return new Response(JSON.stringify({ message: 'stubbed failure' }), {
+          status: opts.contentsFailStatus ?? 500,
+        });
+      }
+      const fixture = opts.contents?.[path];
+      if (!fixture) {
+        return new Response(JSON.stringify({ message: 'Not Found' }), { status: 404 });
+      }
+      return new Response(JSON.stringify({ content: btoa(fixture.content), encoding: 'base64', sha: fixture.sha }), {
+        status: 200,
       });
     }
 

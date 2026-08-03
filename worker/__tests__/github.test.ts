@@ -286,10 +286,10 @@ describe('getFileContent', () => {
     );
   }
 
-  it('reads and base64-decodes a file\'s content from the Contents API', async () => {
-    stubContentsResponse({ content: btoa('[{"id":"x"}]'), encoding: 'base64' });
+  it('reads and base64-decodes a file\'s content from the Contents API, alongside its blob sha', async () => {
+    stubContentsResponse({ content: btoa('[{"id":"x"}]'), encoding: 'base64', sha: 'blob-sha-123' });
     const result = await getFileContent(NO_FETCH_ENV, 'src/content/dishes.json');
-    expect(result).toBe('[{"id":"x"}]');
+    expect(result).toEqual({ content: '[{"id":"x"}]', sha: 'blob-sha-123' });
   });
 
   // GitHub's Contents API wraps its base64 payload at 60 characters. This
@@ -304,9 +304,9 @@ describe('getFileContent', () => {
     const wrapped = btoa('[{"id":"wrapped-content-longer-than-sixty-chars-to-actually-wrap"}]')
       .match(/.{1,10}/g)!
       .join('\n');
-    stubContentsResponse({ content: wrapped, encoding: 'base64' });
+    stubContentsResponse({ content: wrapped, encoding: 'base64', sha: 'blob-sha-wrapped' });
     const result = await getFileContent(NO_FETCH_ENV, 'src/content/dishes.json');
-    expect(result).toBe('[{"id":"wrapped-content-longer-than-sixty-chars-to-actually-wrap"}]');
+    expect(result?.content).toBe('[{"id":"wrapped-content-longer-than-sixty-chars-to-actually-wrap"}]');
   });
 
   // The reason this isn't a byte-by-byte `atob` + `String.fromCharCode`
@@ -319,9 +319,9 @@ describe('getFileContent', () => {
     const bytes = new TextEncoder().encode(text);
     let binary = '';
     for (const byte of bytes) binary += String.fromCharCode(byte);
-    stubContentsResponse({ content: btoa(binary), encoding: 'base64' });
+    stubContentsResponse({ content: btoa(binary), encoding: 'base64', sha: 'blob-sha-utf8' });
     const result = await getFileContent(NO_FETCH_ENV, 'src/content/dishes.json');
-    expect(result).toBe(text);
+    expect(result?.content).toBe(text);
   });
 
   // The property a mutation confirmed has no OTHER test covering it:
@@ -350,8 +350,21 @@ describe('getFileContent', () => {
     await expect(getFileContent(NO_FETCH_ENV, 'src/content/dishes.json')).rejects.toThrow(/base64/);
   });
 
+  // Task 3: a 200 OK that has base64 content but no `sha` at all (or an
+  // empty one) must not silently become a `baseSha` a caller could round
+  // -trip back to POST /api/publish and have compared as a match against
+  // anything -- the same defensive posture github.ts already applies to
+  // getBranchHeadSha/getCommitTreeSha's own malformed-200 cases.
+  it('throws on a 200 response with content but no blob sha', async () => {
+    stubContentsResponse({ content: btoa('[]'), encoding: 'base64' }, 200);
+    await expect(getFileContent(NO_FETCH_ENV, 'src/content/dishes.json')).rejects.toThrow(/sha/);
+  });
+
   it('requests the Contents API at the right path, ref, and with an authenticated header', async () => {
-    const fetchStub = vi.fn(async () => new Response(JSON.stringify({ content: btoa('[]'), encoding: 'base64' }), { status: 200 }));
+    const fetchStub = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ content: btoa('[]'), encoding: 'base64', sha: 'blob-sha-req' }), { status: 200 }),
+    );
     vi.stubGlobal('fetch', fetchStub);
     await getFileContent(NO_FETCH_ENV, 'src/content/dishes.json');
     expect(fetchStub).toHaveBeenCalledTimes(1);

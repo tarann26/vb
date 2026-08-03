@@ -76,6 +76,20 @@ const ASSET_PATH = /^assets-source\/[a-z0-9_-]+\/[A-Za-z0-9 ._-]+$/;
 // actually "the request named a path outside the allowlist".
 export class DisallowedPathError extends Error {}
 
+// Exported so `GET /api/content` (worker/index.ts's handleGetContent, Task
+// 3) can restrict *reads* to exactly the same path shape assertAllowedPath
+// below already restricts *writes* to -- built on the same CONTENT_PATH
+// regex and the same `..` substring rule, not a second, independently
+// maintained allowlist that could quietly drift from this one. Deliberately
+// narrower than assertAllowedPath: only the content half of its two
+// allowed shapes. There is no reason a read route ever serves anything
+// under assets-source/ -- those are binary photos, not JSON this route
+// could sensibly return as text -- so ASSET_PATH has no equivalent export
+// here.
+export function isContentPath(path: string): boolean {
+  return !path.includes('..') && CONTENT_PATH.test(path);
+}
+
 function assertAllowedPath(path: string): void {
   if (path.includes('..') || !(CONTENT_PATH.test(path) || ASSET_PATH.test(path))) {
     throw new DisallowedPathError(
@@ -200,34 +214,62 @@ function base64ToUtf8(b64: string): string {
   return new TextDecoder().decode(bytes);
 }
 
+// What GET /contents/{path} resolves to below -- the decoded text plus the
+// blob `sha` GitHub's Contents API already includes in the same response
+// body. Task 3 is the reason `sha` exists on this type at all: a caller
+// (`GET /api/content`, worker/index.ts) hands it back to the dashboard as
+// `baseSha`, and `POST /api/publish` compares a re-read of this same field
+// against whatever the dashboard sends back before committing over it -- a
+// conditional write, so a second device publishing in between is caught
+// even though `updateBranchHead`'s 422 (a non-fast-forward) never fires for
+// two edits ten minutes apart.
+export interface FileContent {
+  content: string;
+  sha: string;
+}
+
 // GET /contents/{path}?ref={branch} -- reads a file's current text content
 // directly from the branch Cloudflare Pages builds from, independent of
-// whatever commit last touched it. Task 8's `reconcileScheduleFromSource`
-// (worker/index.ts) is the one caller: it needs the *actual current* state
-// of dishes/drinks/press.json, including content that reached `main` some
-// way other than `POST /api/publish` (a direct commit, the GitHub web UI, a
-// revert) -- none of which ever runs through `recordScheduledDates`, since
-// that only fires from inside `handlePublish` itself.
+// whatever commit last touched it. Originally added for Task 8's
+// `reconcileScheduleFromSource` (worker/index.ts), which needs the *actual
+// current* state of dishes/drinks/press.json, including content that
+// reached `main` some way other than `POST /api/publish` (a direct commit,
+// the GitHub web UI, a revert) -- none of which ever runs through
+// `recordScheduledDates`, since that only fires from inside `handlePublish`
+// itself. Task 3 added the `sha` field and a second caller: `GET
+// /api/content` and `POST /api/publish`'s `baseSha` check both need it too.
 //
 // Returns `null` on a 404 (the file genuinely doesn't exist on this branch)
 // rather than throwing -- a schedulable file that doesn't exist yet isn't a
-// GitHub failure, it's "nothing to reconcile for this one". Any other
-// non-OK status, or a 200 whose body isn't the base64 shape the Contents API
-// documents, still throws: unlike `resolveCommitSha` (plugins/build-info.ts),
-// a read this function's one caller depends on to *recover* missed schedule
-// dates should not quietly pretend nothing changed on a genuine failure.
-export async function getFileContent(env: GitHubEnv, path: string): Promise<string | null> {
+// GitHub failure, it's "nothing to reconcile for this one" (and, for Task
+// 3's conditional write, a `baseSha` sent for a file that no longer exists
+// is itself treated as a conflict, not a crash -- see handlePublish). Any
+// other non-OK status, or a 200 whose body isn't the base64-plus-sha shape
+// the Contents API documents, still throws: unlike `resolveCommitSha`
+// (plugins/build-info.ts), a read this function's callers depend on to
+// *recover* missed schedule dates, detect a stale edit, or re-check a
+// developer-owned field should not quietly pretend nothing changed on a
+// genuine failure.
+export async function getFileContent(env: GitHubEnv, path: string): Promise<FileContent | null> {
   const url = repoUrl(env, `/contents/${path}?ref=${env.GITHUB_BRANCH}`);
   const res = await fetch(url, { headers: ghHeaders(env) });
   if (res.status === 404) return null;
   if (!res.ok) {
     throw new Error(`could not read ${path} (GitHub returned ${res.status})${await describeFailure(res)}`);
   }
-  const body = (await res.json()) as { content?: unknown; encoding?: unknown };
+  const body = (await res.json()) as { content?: unknown; encoding?: unknown; sha?: unknown };
   if (typeof body.content !== 'string' || body.encoding !== 'base64') {
     throw new Error(`could not read ${path} -- GitHub's response had no base64 content`);
   }
-  return base64ToUtf8(body.content);
+  // Same defensive posture as getBranchHeadSha/getCommitTreeSha above: a 200
+  // OK with a present-but-malformed `sha` (missing, or an empty string) must
+  // not silently become a `baseSha` a client could round-trip back and have
+  // treated as a match against literally anything -- checked here, not left
+  // for a caller to eventually notice.
+  if (typeof body.sha !== 'string' || body.sha.length === 0) {
+    throw new Error(`could not read ${path} -- GitHub's response had no blob sha`);
+  }
+  return { content: base64ToUtf8(body.content), sha: body.sha };
 }
 
 // POST /git/blobs -- one per file. `encoding` travels through unchanged

@@ -263,11 +263,14 @@ describe('worker entry point', () => {
 
   describe('POST /api/publish', () => {
     // The order this whole task is built around: verify token -> parse ->
-    // validate every file -> commit only if every file passed. Each test
-    // below proves one link of that chain by checking not just the HTTP
-    // status but that `stub.calls` -- every request that would have reached
-    // GitHub -- stayed empty. Asserting the status alone would pass even if
-    // a bug let the Worker call GitHub first and only reject afterwards.
+    // check baseSha (Task 3) -> validate every file -> site.json's
+    // developer-owned re-check (Task 3, site.json only) -> commit only if
+    // every file passed. Each test below proves one link of that chain by
+    // checking not just the HTTP status but that `stub.calls` -- every
+    // request that would have reached GitHub -- stayed empty, or that no
+    // write (POST/PATCH) happened. Asserting the status alone would pass
+    // even if a bug let the Worker call GitHub first and only reject
+    // afterwards.
     let stub: GitHubStub;
 
     beforeEach(() => {
@@ -462,6 +465,300 @@ describe('worker entry point', () => {
       // github.test.ts's job; this only proves the Worker actually reached
       // commitFiles on a fully valid publish.
       expect(stub.calls.some((c) => c.method === 'PATCH')).toBe(true);
+    });
+
+    // Plan 4 Task 3: the conditional write. Without this, a dashboard reload
+    // (or a second device) that publishes from a copy of dishes.json older
+    // than what's actually on `main` succeeds silently -- `base_tree` is
+    // set, the ref fast-forwards, 200 OK -- and whatever changed in between
+    // is gone. `baseSha` is the blob sha GET /api/content handed back when
+    // the dashboard last read this file; a mismatch means someone else's
+    // edit landed since.
+    describe('baseSha (Task 3 conditional write)', () => {
+      const CURRENT_DISHES_SHA = 'current-dishes-blob-sha';
+
+      it('refuses a publish whose baseSha is stale, and makes no GitHub write call at all', async () => {
+        stub = makeGitHubStub({
+          contents: { 'src/content/dishes.json': { content: '[]', sha: CURRENT_DISHES_SHA } },
+        });
+        vi.stubGlobal('fetch', stub.fetch);
+        const cookie = await sessionCookie();
+        const goodDish = { id: 'x', name: 'X', description: 'd', image: '/food/x.webp', tags: [] };
+        const response = await worker.fetch(
+          publishRequest(
+            {
+              files: [
+                {
+                  path: 'src/content/dishes.json',
+                  content: JSON.stringify([goodDish]),
+                  encoding: 'utf-8',
+                  baseSha: 'old-stale-sha',
+                },
+              ],
+            },
+            cookie,
+          ),
+          env,
+        );
+        expect(response.status).toBe(409);
+        const body = (await response.json()) as { field: string; message: string };
+        expect(body).toEqual({ field: 'src/content/dishes.json', message: 'Someone else changed this while you were editing.' });
+        // Not just "no PATCH" (the ref update) -- no POST at all (no blob,
+        // tree or commit either). Only the GET this check itself made may
+        // have reached GitHub.
+        expect(stub.calls.some((c) => c.method === 'POST' || c.method === 'PATCH')).toBe(false);
+      });
+
+      // The brief's own reproduction: stale baseSha PLUS content that would
+      // independently fail validateContent (`[]` is not a valid dishes.json
+      // -- validateDishes refuses an empty menu). This must still answer
+      // 409, not 422 -- the baseSha check runs before content validation,
+      // deliberately, so she isn't shown a problem to fix in content she
+      // never actually committed.
+      it('a stale baseSha is 409 even when the content sent alongside it is independently invalid', async () => {
+        stub = makeGitHubStub({
+          contents: { 'src/content/dishes.json': { content: '[]', sha: CURRENT_DISHES_SHA } },
+        });
+        vi.stubGlobal('fetch', stub.fetch);
+        const cookie = await sessionCookie();
+        const response = await worker.fetch(
+          publishRequest(
+            {
+              files: [
+                { path: 'src/content/dishes.json', content: '[]', encoding: 'utf-8', baseSha: 'old-stale-sha' },
+              ],
+            },
+            cookie,
+          ),
+          env,
+        );
+        expect(response.status).toBe(409);
+        expect(stub.calls.some((c) => c.method === 'POST' || c.method === 'PATCH')).toBe(false);
+      });
+
+      it('publishes when baseSha matches the current blob sha', async () => {
+        stub = makeGitHubStub({
+          contents: { 'src/content/dishes.json': { content: '[]', sha: CURRENT_DISHES_SHA } },
+        });
+        vi.stubGlobal('fetch', stub.fetch);
+        const cookie = await sessionCookie();
+        const goodDish = { id: 'x', name: 'X', description: 'd', image: '/food/x.webp', tags: [] };
+        const response = await worker.fetch(
+          publishRequest(
+            {
+              files: [
+                {
+                  path: 'src/content/dishes.json',
+                  content: JSON.stringify([goodDish]),
+                  encoding: 'utf-8',
+                  baseSha: CURRENT_DISHES_SHA,
+                },
+              ],
+            },
+            cookie,
+          ),
+          env,
+        );
+        expect(response.status).toBe(200);
+        expect(stub.calls.some((c) => c.method === 'PATCH')).toBe(true);
+      });
+
+      it('publishes when baseSha is absent, for callers that do not track it', async () => {
+        const cookie = await sessionCookie();
+        const goodDish = { id: 'x', name: 'X', description: 'd', image: '/food/x.webp', tags: [] };
+        const response = await worker.fetch(
+          publishRequest({ files: [utf8('src/content/dishes.json', JSON.stringify([goodDish]))] }, cookie),
+          env,
+        );
+        expect(response.status).toBe(200);
+        // No baseSha on the one file sent, and it isn't site.json -- neither
+        // Task 3 read (the baseSha check, or the developer-owned re-check)
+        // applies, so the only GET calls made are commitFiles' own two
+        // (branch head, base tree), never a GET /contents/{path}.
+        expect(stub.calls.some((c) => c.method === 'GET' && c.url.includes('/contents/'))).toBe(false);
+        expect(stub.calls.some((c) => c.method === 'PATCH')).toBe(true);
+      });
+
+      it('a baseSha for a file GitHub no longer has (404) is also treated as a conflict, not a crash', async () => {
+        stub = makeGitHubStub(); // no `contents` fixture at all -> 404
+        vi.stubGlobal('fetch', stub.fetch);
+        const cookie = await sessionCookie();
+        const response = await worker.fetch(
+          publishRequest(
+            {
+              files: [{ path: 'src/content/dishes.json', content: '[]', encoding: 'utf-8', baseSha: 'any-sha' }],
+            },
+            cookie,
+          ),
+          env,
+        );
+        expect(response.status).toBe(409);
+        expect(stub.calls.some((c) => c.method === 'POST' || c.method === 'PATCH')).toBe(false);
+      });
+    });
+
+    // Plan 4 Task 2's site.json developer-owned-field rule
+    // (validateSiteDeveloperOwnedFields, src/content/validate.ts) only fires
+    // when validateContent is given a `current` value -- Task 3 is what
+    // actually wires a real one in, by reading site.json fresh from GitHub
+    // before committing. These prove that wiring end to end, not just the
+    // rule's own unit-level behavior (already covered in validate.test.ts).
+    describe('site.json developer-owned fields, re-checked against a fresh read (Task 3)', () => {
+      it('refuses a site.json publish that changes a developer-owned field, even though it is structurally valid', async () => {
+        stub = makeGitHubStub({
+          contents: { 'src/content/site.json': { content: JSON.stringify(VALID_SITE), sha: 'site-sha-1' } },
+        });
+        vi.stubGlobal('fetch', stub.fetch);
+        const cookie = await sessionCookie();
+        const renamed = { ...VALID_SITE, name: 'A Totally Different Restaurant' };
+        const response = await worker.fetch(
+          publishRequest({ files: [utf8('src/content/site.json', JSON.stringify(renamed))] }, cookie),
+          env,
+        );
+        expect(response.status).toBe(422);
+        const body = (await response.json()) as { problems: { field: string; message: string }[] };
+        expect(body.problems.some((p) => p.field === 'name')).toBe(true);
+        expect(stub.calls.some((c) => c.method === 'POST' || c.method === 'PATCH')).toBe(false);
+      });
+
+      it('publishes site.json when nothing developer-owned changed from the freshly-read current value', async () => {
+        stub = makeGitHubStub({
+          contents: { 'src/content/site.json': { content: JSON.stringify(VALID_SITE), sha: 'site-sha-1' } },
+        });
+        vi.stubGlobal('fetch', stub.fetch);
+        const cookie = await sessionCookie();
+        // strapline is hers to change; name/tagline/seo are not.
+        const response = await worker.fetch(
+          publishRequest(
+            { files: [utf8('src/content/site.json', JSON.stringify({ ...VALID_SITE, strapline: 'A new line' }))] },
+            cookie,
+          ),
+          env,
+        );
+        expect(response.status).toBe(200);
+      });
+
+      // If the fresh read fails (GitHub outage, malformed response), the
+      // rule must skip -- not fabricate a `current` that blames every
+      // developer-owned field. Proven end to end: the read here throws
+      // (`contentsFailPath` targets exactly the Contents API request this
+      // re-check makes), and the publish must still succeed since nothing
+      // else about the file is invalid.
+      it('a failed re-read of current site.json does not block an otherwise-valid publish', async () => {
+        stub = makeGitHubStub({ contentsFailPath: 'src/content/site.json', contentsFailStatus: 500 });
+        vi.stubGlobal('fetch', stub.fetch);
+        const cookie = await sessionCookie();
+        const response = await worker.fetch(
+          publishRequest({ files: [utf8('src/content/site.json', JSON.stringify(VALID_SITE))] }, cookie),
+          env,
+        );
+        expect(response.status).toBe(200);
+      });
+    });
+  });
+
+  // Plan 4 Task 3: GET /api/content. The dashboard's only source of current
+  // content -- see worker/index.ts's own comment on handleGetContent for
+  // the silent-overwrite scenario this exists to close. Authenticated the
+  // same way every other admin route is, and restricted to the same
+  // src/content/<name>.json shape commitFiles enforces on writes (Task 3's
+  // brief: "do not write a second [allowlist]").
+  describe('GET /api/content', () => {
+    let stub: GitHubStub;
+
+    beforeEach(() => {
+      stub = makeGitHubStub({
+        contents: { 'src/content/dishes.json': { content: '[{"id":"x"}]', sha: 'dishes-sha-read' } },
+      });
+      vi.stubGlobal('fetch', stub.fetch);
+    });
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    async function sessionCookie(): Promise<string> {
+      const expiresAt = Math.floor(Date.now() / 1000) + 3600;
+      const token = await signToken(TOKEN_SECRET, expiresAt);
+      return `vb_session=${token}`;
+    }
+
+    function contentRequest(path: string, cookie?: string): Request {
+      const headers: Record<string, string> = {};
+      if (cookie) headers['Cookie'] = cookie;
+      const url = new URL('https://viabiancadelhi.com/api/content');
+      url.searchParams.set('path', path);
+      return new Request(url, { headers });
+    }
+
+    it('requires a session token to read content', async () => {
+      const response = await worker.fetch(contentRequest('src/content/dishes.json'), env);
+      expect(response.status).toBe(401);
+      expect(stub.calls).toHaveLength(0);
+    });
+
+    // Same forged-signature reproduction as POST /api/publish's own 401
+    // test -- a cookie must actually verify, not merely be present.
+    it('a forged session cookie is also 401', async () => {
+      const forgedToken = await signToken('a-different-secret-entirely', Math.floor(Date.now() / 1000) + 3600);
+      const response = await worker.fetch(
+        contentRequest('src/content/dishes.json', `vb_session=${forgedToken}`),
+        env,
+      );
+      expect(response.status).toBe(401);
+      expect(stub.calls).toHaveLength(0);
+    });
+
+    it('refuses a content path outside src/content, and makes no GitHub call', async () => {
+      const cookie = await sessionCookie();
+      const response = await worker.fetch(contentRequest('package.json', cookie), env);
+      expect(response.status).toBe(400);
+      expect(stub.calls).toHaveLength(0);
+    });
+
+    // The other half of Task 3's own allowlist reuse: assets-source/ is a
+    // legal commitFiles WRITE path, but this READ route must still refuse
+    // it -- there is no reason it ever serves a binary photo as text.
+    it('refuses an assets-source path, even though commitFiles would accept it for a write', async () => {
+      const cookie = await sessionCookie();
+      const response = await worker.fetch(
+        contentRequest('assets-source/food/a.jpg', cookie),
+        env,
+      );
+      expect(response.status).toBe(400);
+      expect(stub.calls).toHaveLength(0);
+    });
+
+    it('missing the path query entirely is 400', async () => {
+      const cookie = await sessionCookie();
+      const response = await worker.fetch(
+        new Request('https://viabiancadelhi.com/api/content', { headers: { Cookie: cookie } }),
+        env,
+      );
+      expect(response.status).toBe(400);
+      expect(stub.calls).toHaveLength(0);
+    });
+
+    it('returns the current content and its blob sha for an allowed path', async () => {
+      const cookie = await sessionCookie();
+      const response = await worker.fetch(contentRequest('src/content/dishes.json', cookie), env);
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as { content: string; sha: string };
+      expect(body).toEqual({ content: '[{"id":"x"}]', sha: 'dishes-sha-read' });
+    });
+
+    it('answers 404 for a well-formed path that does not exist on GitHub', async () => {
+      const cookie = await sessionCookie();
+      const response = await worker.fetch(contentRequest('src/content/site.json', cookie), env);
+      expect(response.status).toBe(404);
+    });
+
+    it('answers 502, not a raw throw, when the GitHub read itself fails', async () => {
+      stub = makeGitHubStub({ contentsFailPath: 'src/content/dishes.json', contentsFailStatus: 500 });
+      vi.stubGlobal('fetch', stub.fetch);
+      const cookie = await sessionCookie();
+      const response = await worker.fetch(contentRequest('src/content/dishes.json', cookie), env);
+      expect(response.status).toBe(502);
     });
   });
 });
