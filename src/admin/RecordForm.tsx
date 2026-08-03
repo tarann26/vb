@@ -3,6 +3,7 @@ import Field from './Field';
 import ScheduleField from './ScheduleField';
 import { problemsFor, arrayIndexOf } from './problems';
 import type { FieldsOf } from './fields';
+import type { StagedPhoto } from './PhotoField';
 import type { ValidationProblem } from '../content/validate';
 
 export interface RecordFormProps<T> {
@@ -23,6 +24,26 @@ export interface RecordFormProps<T> {
   // dropped: showing it in the wrong place is bad, showing it nowhere is
   // worse.
   problems: ValidationProblem[];
+  // Task 9's wiring: fires as `(fieldKey, staged)` for whichever of this
+  // record's OWN fields is `kind: 'image'` (Dish/Drink/Article each have
+  // exactly one -- `image`). RecordForm has no notion of "this record's own
+  // globally unique identity" (T isn't required to carry an `id`; Hours
+  // rows don't), so it only ever adds the FIELD's own key, e.g. "image" --
+  // never an item id or a file name. RecordList (its caller, for every
+  // record type that actually has one) is what prefixes that with the
+  // item's own id, and ArraySection above that with the file name, building
+  // up the fully-qualified key src/admin/staged.ts's collector is keyed by.
+  //
+  // Optional so every OTHER caller (HoursField, SectionList's own
+  // RecordForm-less rendering -- neither renders an image field) keeps
+  // working unchanged. When a record type's `fields` DOES include an
+  // `image`-kind field, omitting this is exactly the "worse than the text
+  // box" state this task's brief warns against -- see Field.tsx's own
+  // `onStaged` for where that guarantee actually gets enforced (or rather,
+  // where it does not: nothing throws here if it's missing, since RecordForm
+  // is generic over every record type, including ones with no image field
+  // at all, and cannot tell the two apart at compile time).
+  onStaged?: (fieldKey: string, staged: StagedPhoto | null) => void;
 }
 
 // `[N].key` for an N other than the index this instance renders -- a
@@ -59,7 +80,7 @@ function omitKey<T>(value: T, key: keyof T): T {
   return clone as T;
 }
 
-function RecordForm<T extends object>({ fields, index, value, onChange, problems }: RecordFormProps<T>) {
+function RecordForm<T extends object>({ fields, index, value, onChange, problems, onStaged }: RecordFormProps<T>) {
   const keys = Object.keys(fields) as (keyof T)[];
 
   // Every problem actually matched to a rendered field, tracked by
@@ -144,6 +165,13 @@ function RecordForm<T extends object>({ fields, index, value, onChange, problems
         value={current}
         onChange={(next) => onChange({ ...value, [key]: next })}
         problems={fieldProblems}
+        // Bound with this field's own key (e.g. "image"), never a
+        // pre-formed compound key -- see this component's own onStaged
+        // comment above for why RecordForm itself stops there. Harmless to
+        // pass unconditionally for every field, image-kind or not: Field.tsx
+        // only ever reads `onStaged` inside its own `spec.kind === 'image'`
+        // branch.
+        onStaged={onStaged ? (staged) => onStaged(String(key), staged) : undefined}
       />
     );
   }

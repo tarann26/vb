@@ -51,22 +51,66 @@ it.runIf(REQUIRED)('dist/assets exists', () => {
   expect(existsSync(DIST_ASSETS)).toBe(true);
 });
 
-describe('dist/assets/ excludes the libheif WASM decoder', () => {
+// Updated by Task 9 (Plan 4): this describe group used to assert the
+// libheif marker appeared in NO built asset at all -- true only because
+// src/admin/heic.ts, though it existed since Task 5, was not yet reachable
+// from anywhere real. PhotoField.tsx (Task 5) called `convertHeic`, but
+// nothing rendered PhotoField until this task wires it into Field.tsx's own
+// `image`-kind dispatch, which RecordForm/RecordList/AdminApp already reach
+// -- so heic.ts's own dynamic `import('heic-to')` (heic.ts's own comment
+// explains why it's dynamic, not static) only NOW actually produces a
+// chunk. This is the exact, anticipated shape: a comment already sitting in
+// this file (below) said "that arrives in Task 5" about heic.ts becoming
+// reachable -- it actually arrived here, in Task 9, once PhotoField itself
+// was finally wired in.
+//
+// The invariant that actually matters was never "heic-to must not exist in
+// dist/assets at all" -- it was always the SAME one the admin-code check
+// below already encodes correctly: a visitor who never opens the dashboard
+// (let alone picks a HEIC photo inside it) must never download the decoder.
+// Confirmed directly against a real build: `heic-to-<hash>.js` is its own
+// ~3MB chunk, entirely separate from both the entry chunk and the AdminApp
+// chunk, produced by Rollup's own code-splitting for a genuine dynamic
+// `import()` -- exactly what heic.ts's own comment on why the import is
+// dynamic (not static) describes as the point.
+describe('dist/assets/ keeps the libheif WASM decoder out of every EAGERLY-loaded chunk', () => {
   // "libheif" itself, not a more specific symbol name: it is the single
   // most direct textual trace of the decoder actually being present,
   // appears exactly once in heic-to's own built bundle (verified directly
-  // against node_modules/heic-to/dist/heic-to.js while writing this test),
-  // and does not appear anywhere in this repository's current dist/assets/
-  // output (also verified directly) -- so neither a false positive nor a
-  // false negative today.
+  // against node_modules/heic-to/dist/heic-to.js while writing this test).
   const LIBHEIF_MARKER = 'libheif';
 
-  it.skipIf(!REQUIRED && !existsSync(DIST_ASSETS))('no built asset contains the libheif marker', () => {
-    const offenders = readdirSync(DIST_ASSETS).filter((name) =>
-      readFileSync(join(DIST_ASSETS, name)).includes(LIBHEIF_MARKER),
-    );
+  function assetsContainingLibheif(): string[] {
+    return readdirSync(DIST_ASSETS).filter((name) => readFileSync(join(DIST_ASSETS, name)).includes(LIBHEIF_MARKER));
+  }
 
-    expect(offenders).toEqual([]);
+  // The decoder DOES land in the build now -- proven first, so the "clean"
+  // checks below are proving something real (a marker never present
+  // anywhere trivially passes every "absent from X" check that follows,
+  // the same "a test that cannot fail" trap this project's own standing
+  // rule warns about).
+  it.skipIf(!REQUIRED && !existsSync(DIST_ASSETS))('the decoder IS present somewhere in dist/assets -- it is reachable now, not silently dropped', () => {
+    expect(assetsContainingLibheif().length).toBeGreaterThan(0);
+  });
+
+  it.skipIf(!REQUIRED && !existsSync(DIST_ASSETS))('the entry chunk does not contain it', () => {
+    const entryChunks = readdirSync(DIST_ASSETS).filter((n) => /^index-.*\.js$/.test(n));
+    expect(entryChunks.length).toBeGreaterThan(0);
+    const leaking = assetsContainingLibheif().filter((name) => entryChunks.includes(name));
+    expect(leaking).toEqual([]);
+  });
+
+  // Not just the entry chunk: the AdminApp chunk itself must also stay
+  // clean, or every dashboard visit (not just one that picks a HEIC photo)
+  // pays for the ~3MB decoder -- heic.ts's own comment on why the
+  // `import('heic-to')` is dynamic, gated behind a per-file content check,
+  // rather than a static import at the top of the module, is precisely what
+  // this asserts actually held.
+  it.skipIf(!REQUIRED && !existsSync(DIST_ASSETS))('the AdminApp chunk does not contain it either -- it stays in its own, separately-loaded chunk', () => {
+    const adminChunks = readdirSync(DIST_ASSETS).filter((n) => /^AdminApp-.*\.js$/.test(n));
+    expect(adminChunks.length).toBeGreaterThan(0);
+    const leaking = assetsContainingLibheif().filter((name) => adminChunks.includes(name));
+    expect(leaking).toEqual([]);
   });
 });
 

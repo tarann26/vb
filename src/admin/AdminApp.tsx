@@ -6,10 +6,18 @@ import type { ContentFileName, ContentTypeMap, LoadedContent } from './content';
 import RecordList from './RecordList';
 import SectionList from './SectionList';
 import HoursField from './HoursField';
-import { ARTICLE_FIELDS, DISH_FIELDS, DRINK_FIELDS } from './fields';
+import GalleryList from './GalleryList';
+import StoryForm from './StoryForm';
+import Field from './Field';
+import PdfField from './PdfField';
+import { ARTICLE_FIELDS, DISH_FIELDS, DRINK_FIELDS, MENU_FIELDS, COPY_FIELDS } from './fields';
 import type { FieldsOf } from './fields';
 import { replaceAt, useValidation } from './useValidation';
-import type { Article, Dish, Drink, Section, SiteContent } from '../content/types';
+import { problemsFor, arrayIndexOf } from './problems';
+import { useStagedFiles, fromStagedPhoto, fromStagedMenuPdf } from './staged';
+import type { StagedFile } from './staged';
+import type { Article, Copy, Dish, Drink, Galleries, MenuFile, Section, SiteContent, StoryContent } from '../content/types';
+import type { ValidationProblem } from '../content/validate';
 
 // Default export, deliberately: React.lazy (src/App.tsx) requires one --
 // there is no lazy() form that takes a named export.
@@ -27,6 +35,15 @@ import type { Article, Dish, Drink, Section, SiteContent } from '../content/type
 // this one's.
 const AdminApp: React.FC = () => {
   const { status, logIn } = useSession();
+  // The one collector every screen below that renders a PhotoField or a
+  // PdfField shares -- see src/admin/staged.ts's own header comment for why
+  // ONE shared instance, not one per section, is what makes "she stages
+  // photos on three different dishes and a drink, then swaps a menu PDF,
+  // and all of it reaches the same eventual publish" true. Called
+  // unconditionally, before either early return below, the same as
+  // `useSession()` already is -- React's own rule that hooks can't run
+  // conditionally, not a new constraint this task introduces.
+  const { files: stagedFiles, stage } = useStagedFiles();
 
   if (status === 'checking') {
     // src/App.tsx's <Suspense fallback={null}> already covers the moment
@@ -49,9 +66,14 @@ const AdminApp: React.FC = () => {
         {/* Publish (Task 10) doesn't exist yet -- nothing typed below this
             line leaves the browser. Said plainly, not left to be discovered
             the hard way by an owner who assumes a form that validates as
-            she types must also be one that saves. */}
+            she types must also be one that saves. The staged-file count
+            keeps that honest in the other direction too: a photo she picks
+            genuinely uploads (PhotoField's own "Uploaded" status already
+            says so) and genuinely sits in this collector, waiting -- this
+            is what tells her that much is real, without overclaiming that
+            publishing itself works yet. */}
         <p className="mb-8 font-['Montserrat'] text-sm text-gray-500">
-          Publishing isn't built yet — nothing you change below is saved anywhere.
+          {stagedFileCountMessage(Object.keys(stagedFiles).length)}
         </p>
         <ArraySection<Dish>
           file="dishes.json"
@@ -61,6 +83,7 @@ const AdminApp: React.FC = () => {
           fields={DISH_FIELDS}
           itemLabel={(dish) => dish.name || 'Untitled dish'}
           makeBlank={blankDish}
+          stage={stage}
         />
         <ArraySection<Drink>
           file="drinks.json"
@@ -70,6 +93,7 @@ const AdminApp: React.FC = () => {
           fields={DRINK_FIELDS}
           itemLabel={(drink) => drink.name || 'Untitled drink'}
           makeBlank={blankDrink}
+          stage={stage}
         />
         <ArraySection<Article>
           file="press.json"
@@ -79,13 +103,28 @@ const AdminApp: React.FC = () => {
           fields={ARTICLE_FIELDS}
           itemLabel={(article) => article.title || 'Untitled article'}
           makeBlank={blankArticle}
+          stage={stage}
         />
         <SectionsSection />
         <HoursSection />
+        <MenusSection stage={stage} />
+        <GallerySection stage={stage} />
+        <StorySection />
+        <CopySection />
       </div>
     </div>
   );
 };
+
+// Zero staged files is the common case (nothing picked yet, or a session
+// that never touches a photo/PDF at all) and reads better as the plain,
+// unconditional first sentence than as "0 files staged."
+function stagedFileCountMessage(count: number): string {
+  const base = "Publishing isn't built yet — nothing you change below is saved anywhere.";
+  if (count === 0) return base;
+  const noun = count === 1 ? 'file is' : 'files are';
+  return `${base} ${count} ${noun} staged and waiting for it.`;
+}
 
 type LoadState<Item> =
   | { status: 'loading' }
@@ -111,6 +150,14 @@ interface ArraySectionProps<Item extends { id: string }> {
   fields: FieldsOf<Item>;
   itemLabel: (item: Item) => string;
   makeBlank: () => Item;
+  // src/admin/staged.ts's shared collector, threaded down to RecordList so a
+  // photo staged on any Dish/Drink/Article reaches it -- see that file's own
+  // header comment. Every call site above binds this to the SAME instance
+  // AdminApp created once; ArraySection's own job is only to add the `file`
+  // name to the key RecordList reports (`${file}:${itemId}:${fieldKey}`),
+  // finishing the key RecordForm/RecordList's own comments describe as
+  // building "up".
+  stage: (key: string, file: StagedFile | null) => void;
 }
 
 // The one generic screen every array-shaped, id-keyed content file needs:
@@ -129,6 +176,7 @@ function ArraySection<Item extends { id: string }>({
   fields,
   itemLabel,
   makeBlank,
+  stage,
 }: ArraySectionProps<Item>) {
   const [state, setState] = useState<LoadState<Item>>({ status: 'loading' });
 
@@ -206,6 +254,7 @@ function ArraySection<Item extends { id: string }>({
         noun={noun}
         itemLabel={itemLabel}
         problems={problems}
+        onStaged={(key, staged) => stage(`${file}:${key}`, fromStagedPhoto(staged))}
       />
     </section>
   );
@@ -350,6 +399,460 @@ function HoursSection() {
         }
         problems={problems}
       />
+    </section>
+  );
+}
+
+// menus.json's own screen: a plain text label plus PdfField for the file
+// itself. MENU_FIELDS.file's own comment (fields.ts) explains why that field
+// is never rendered as `kind: 'text'` here -- PdfField needs a `name`
+// derived from the CURRENT `file` value, and only this screen (which holds
+// the whole record) has that.
+//
+// Deliberately no Add/Remove/Reorder here, unlike every ArraySection above:
+// this task's brief only asks that she be able to REPLACE an existing
+// menu's printed PDF, and confirmed directly, nothing on the public site
+// reads `menus.json` at all today -- src/components/SignatureMocktails.tsx's
+// own menu link is hand-written directly to the food menu PDF's public path,
+// not driven by this file -- so there is no live consumer a THIRD or missing
+// entry here would need to stay in sync with. A future task that wires the
+// public site to this file for real should revisit whether add/remove
+// belongs here too.
+type MenusLoadState =
+  | { status: 'loading' }
+  | { status: 'error'; message: string }
+  | { status: 'loaded'; data: MenuFile[]; sha: string };
+
+// worker/upload.ts's `menuAssetPath` commits to `public/menus/<name>.pdf` --
+// name-based, not content-addressed, so a REPLACEMENT under the same name
+// must derive the exact same name every time, or it lands at a brand new
+// path instead of overwriting the one menus.json already points at. The
+// real, committed menus.json stores a `file` value rooted at "/menus/" with
+// a stem like "food-menu.pdf" -- note the stem ("food-menu") is NOT simply
+// the record's own `id` ("food") -- so the name has to come from the CURRENT
+// `file` value, not
+// `id`. Falls back to `id` only for a menu with no file yet (nothing to
+// derive a stem from), matching worker/upload.ts's own MENU_NAME_PATTERN
+// shape closely enough that a sane `id` reaches the Worker as a valid name;
+// an `id` that doesn't match is refused there, the same "not re-validated
+// client-side" precedent PdfField.tsx's own comment already documents for
+// `name`.
+const MENU_FILE_NAME = /\/([a-z0-9-]{1,64})\.pdf$/;
+function menuNameFor(menu: MenuFile): string {
+  const match = menu.file.match(MENU_FILE_NAME);
+  return match ? match[1] : menu.id;
+}
+
+function MenusSection({ stage }: { stage: (key: string, file: StagedFile | null) => void }) {
+  const [state, setState] = useState<MenusLoadState>({ status: 'loading' });
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchContent('menus.json')
+      .then((loaded) => {
+        if (!cancelled) setState({ status: 'loaded', data: loaded.data, sha: loaded.sha });
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setState({ status: 'error', message: error instanceof Error ? error.message : String(error) });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const data = state.status === 'loaded' ? state.data : undefined;
+  const problems = useValidation('menus.json', data);
+
+  if (state.status === 'loading') {
+    return <p className="mb-10 font-['Montserrat'] text-sm text-gray-500">Loading menus…</p>;
+  }
+  if (state.status === 'error') {
+    return (
+      <p role="alert" className="mb-10 font-['Montserrat'] text-sm text-red-600">
+        {`Could not load menus: ${state.message}`}
+      </p>
+    );
+  }
+
+  const items = state.data;
+  function commit(next: MenuFile[]) {
+    setState({ status: 'loaded', data: next, sha: (state as { status: 'loaded'; sha: string }).sha });
+  }
+
+  // The bare, whole-file message (validateMenus' "the site needs at least
+  // one downloadable menu", only reachable if menus.json were hand-edited
+  // down to an empty array -- this screen has no Remove button that could
+  // produce it itself) plus any `[i].key` naming an index this screen isn't
+  // currently rendering -- the identical "nowhere else for this to go"
+  // reasoning RecordList's own unclaimedProblems documents.
+  const banner = problems.filter((p) => {
+    if (items.length === 0) return true;
+    const index = arrayIndexOf(p.field);
+    return index !== undefined && (index < 0 || index >= items.length);
+  });
+
+  return (
+    <section className="mb-10">
+      <h2 className="mb-4 font-['Montserrat'] text-lg uppercase tracking-wide text-[#222]">Menus</h2>
+      {banner.length > 0 && (
+        <div
+          role="alert"
+          aria-label="Problems with menus no longer shown"
+          className="mb-4 rounded border border-red-300 bg-red-50 p-3 text-sm text-red-700"
+        >
+          <ul className="list-disc pl-5">
+            {banner.map((p, i) => (
+              <li key={i}>{p.message}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+      <ul>
+        {items.map((menu, index) => (
+          <li key={menu.id} className="mb-6 rounded border border-gray-200 p-4">
+            <Field
+              id={`menu-${index}-id`}
+              spec={MENU_FIELDS.id}
+              value={menu.id}
+              onChange={(next) => commit(replaceAt(items, index, { ...menu, id: next }))}
+              problems={problemsFor(problems, index, 'id')}
+            />
+            <Field
+              id={`menu-${index}-label`}
+              spec={MENU_FIELDS.label}
+              value={menu.label}
+              onChange={(next) => commit(replaceAt(items, index, { ...menu, label: next }))}
+              problems={problemsFor(problems, index, 'label')}
+            />
+            <PdfField
+              id={`menu-${index}-file`}
+              label="PDF file"
+              name={menuNameFor(menu)}
+              value={menu.file}
+              onChange={(next) => commit(replaceAt(items, index, { ...menu, file: next ?? '' }))}
+              onStaged={(staged) => stage(`menus.json:${menu.id}:file`, fromStagedMenuPdf(staged))}
+              problems={problemsFor(problems, index, 'file')}
+            />
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+// galleries.json's own screen -- fetches the whole file (atmosphere,
+// ourStory, heroCollage all live in the one file) and hands it whole to
+// GalleryList.tsx, the same fetch-whole-hold-whole shape ArraySection/
+// HoursSection above already use.
+type GalleriesLoadState =
+  | { status: 'loading' }
+  | { status: 'error'; message: string }
+  | { status: 'loaded'; data: Galleries; sha: string };
+
+function GallerySection({ stage }: { stage: (key: string, file: StagedFile | null) => void }) {
+  const [state, setState] = useState<GalleriesLoadState>({ status: 'loading' });
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchContent('galleries.json')
+      .then((loaded) => {
+        if (!cancelled) setState({ status: 'loaded', data: loaded.data, sha: loaded.sha });
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setState({ status: 'error', message: error instanceof Error ? error.message : String(error) });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const data = state.status === 'loaded' ? state.data : undefined;
+  const problems = useValidation('galleries.json', data);
+
+  if (state.status === 'loading') {
+    return <p className="mb-10 font-['Montserrat'] text-sm text-gray-500">Loading galleries…</p>;
+  }
+  if (state.status === 'error') {
+    return (
+      <p role="alert" className="mb-10 font-['Montserrat'] text-sm text-red-600">
+        {`Could not load galleries: ${state.message}`}
+      </p>
+    );
+  }
+
+  return (
+    <section className="mb-10">
+      <h2 className="mb-4 font-['Montserrat'] text-lg uppercase tracking-wide text-[#222]">Galleries</h2>
+      <GalleryList
+        value={state.data}
+        onChange={(next) => setState({ status: 'loaded', data: next, sha: state.sha })}
+        problems={problems}
+        stage={stage}
+      />
+    </section>
+  );
+}
+
+// story.json's own screen -- see StoryForm.tsx's own header comment for why
+// the paragraph list is a bespoke component rather than routed through
+// FieldsOf/RecordForm.
+type StoryLoadState =
+  | { status: 'loading' }
+  | { status: 'error'; message: string }
+  | { status: 'loaded'; data: StoryContent; sha: string };
+
+function StorySection() {
+  const [state, setState] = useState<StoryLoadState>({ status: 'loading' });
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchContent('story.json')
+      .then((loaded) => {
+        if (!cancelled) setState({ status: 'loaded', data: loaded.data, sha: loaded.sha });
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setState({ status: 'error', message: error instanceof Error ? error.message : String(error) });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const data = state.status === 'loaded' ? state.data : undefined;
+  const problems = useValidation('story.json', data);
+
+  if (state.status === 'loading') {
+    return <p className="mb-10 font-['Montserrat'] text-sm text-gray-500">Loading the story…</p>;
+  }
+  if (state.status === 'error') {
+    return (
+      <p role="alert" className="mb-10 font-['Montserrat'] text-sm text-red-600">
+        {`Could not load the story: ${state.message}`}
+      </p>
+    );
+  }
+
+  return (
+    <section className="mb-10">
+      <h2 className="mb-4 font-['Montserrat'] text-lg uppercase tracking-wide text-[#222]">Our Story</h2>
+      <StoryForm
+        value={state.data}
+        onChange={(next) => setState({ status: 'loaded', data: next, sha: state.sha })}
+        problems={problems}
+      />
+    </section>
+  );
+}
+
+// copy.json's own screen -- every leaf COPY_FIELDS (fields.ts) describes,
+// grouped by the section of the site each one belongs to. Human names, not
+// the raw top-level Copy key -- the same "her vocabulary, not the type's own
+// property names" reasoning SectionList.tsx's own SECTION_NAMES documents.
+// Deliberately none of these collides with another `role="heading"` element
+// already on the page -- confirmed directly (an earlier version used the
+// plain "Drinks"/"Press", which collided with the Drinks/Press ArraySection
+// headings above and made `getByRole('heading', { name: 'Drinks' })`
+// ambiguous). "Atmosphere gallery heading" and "Menu heading" avoid the
+// identical collision with GalleryList.tsx's own "Atmosphere" <h3> and any
+// future "Menu" heading.
+const COPY_SECTION_HEADINGS: Record<string, string> = {
+  nav: 'Navigation',
+  hero: 'Hero',
+  atmosphere: 'Atmosphere gallery heading',
+  food: 'Menu heading',
+  drinks: 'Drinks copy',
+  press: 'Press copy',
+  visit: 'Visit',
+  footer: 'Footer',
+  blogsPage: 'Stories page',
+  notFound: 'Not-found page',
+};
+
+// Grouped once, at module load, not on every render -- COPY_FIELDS is an
+// unchanging, hand-written literal (fields.ts), so the grouping can never change
+// between renders either. `Object.keys` preserves the insertion order
+// COPY_FIELDS was written in, which is already grouped by section there --
+// this just reads that order back out rather than re-deriving or
+// alphabetizing it.
+const COPY_GROUPS: { section: string; heading: string; keys: (keyof typeof COPY_FIELDS)[] }[] = (() => {
+  const order: string[] = [];
+  const groups: Record<string, (keyof typeof COPY_FIELDS)[]> = {};
+  (Object.keys(COPY_FIELDS) as (keyof typeof COPY_FIELDS)[]).forEach((key) => {
+    const section = key.split('.')[0];
+    if (!groups[section]) {
+      groups[section] = [];
+      order.push(section);
+    }
+    groups[section].push(key);
+  });
+  return order.map((section) => ({ section, heading: COPY_SECTION_HEADINGS[section] ?? section, keys: groups[section] }));
+})();
+
+// Reads one dotted leaf back out of a fetched Copy object WITHOUT assuming
+// its shape -- src/admin/content.ts's own header comment warns that
+// `fetchContent`'s `JSON.parse(...) as ContentTypeMap[K]` is an unchecked
+// cast, and Task 7's own review found the first crash that unchecked cast
+// caused (an unrecognised section id took down the entire admin page, not
+// just its own section -- see SectionList.tsx's own comment on the fix).
+// copy.json reaching this screen with a section genuinely missing (a
+// hand-edited file, a future Copy shape this build predates) must show an
+// empty field and let the debounced validator explain what's wrong, not
+// throw reading a property off `undefined` and take the whole page down
+// with it.
+function leafValue(data: Copy, path: string): string {
+  const parts = path.split('.');
+  let current: unknown = data;
+  for (const part of parts) {
+    if (current === null || typeof current !== 'object') return '';
+    current = (current as Record<string, unknown>)[part];
+  }
+  return typeof current === 'string' ? current : '';
+}
+
+// The write side of `leafValue` above -- every COPY_FIELDS key is exactly
+// two segments (`section.key`; confirmed directly, none of the 34 keys in
+// fields.ts's own COPY_FIELDS has a third dot), so this only ever has to
+// rebuild one level of nesting. `{ ...sectionValue, [key]: value }`, never a
+// reconstruction from a named list of known keys, is what preserves every
+// OTHER key on both the top-level object and the target section -- the same
+// "never reconstruct from known fields" guarantee useValidation.ts's own
+// `replaceAt` documents for a whole-array update. Refuses to guess at a
+// shape for a section that arrived malformed (returns `data` unchanged)
+// rather than overwriting whatever WAS there with a brand new, mostly-empty
+// object -- the write-side twin of `leafValue`'s own defensive fallback.
+function withLeaf(data: Copy, path: string, value: string): Copy {
+  const [section, key] = path.split('.');
+  const sectionValue = (data as unknown as Record<string, unknown>)[section];
+  if (sectionValue === null || typeof sectionValue !== 'object') return data;
+  return {
+    ...data,
+    [section]: { ...(sectionValue as Record<string, unknown>), [key]: value },
+  } as Copy;
+}
+
+// U+00A0 (a non-breaking space) renders IDENTICALLY to an ordinary space in
+// a browser -- that is the entire reason validateFollowLabelSpacing
+// (src/content/validate.ts) exists as a rule at all, and exactly why an
+// owner editing this one field by eye or by copy-paste can silently replace
+// it with a regular space with nothing on screen looking any different.
+// This preview line is the fix: NBSP_MARKER is a visible stand-in character,
+// shown only in this read-only preview underneath the real, editable field
+// -- the actual input keeps the real character, untouched, so typing in it
+// still saves whatever she actually typed.
+// Written as the explicit \u00a0 escape, not a literal non-breaking-space
+// character sitting invisibly in this source file -- the identical reasoning
+// validateFollowLabelSpacing's own comment (src/content/validate.ts) gives
+// for the same choice, so the character this preview depends on stays
+// legible in a diff instead of looking like an ordinary space.
+const NBSP = '\u00a0';
+const NBSP_MARKER = '\u2423'; // OPEN BOX -- a common convention for "a space is here"
+function withVisibleNbsp(text: string): string {
+  return text.split(NBSP).join(NBSP_MARKER);
+}
+
+type CopyLoadState =
+  | { status: 'loading' }
+  | { status: 'error'; message: string }
+  | { status: 'loaded'; data: Copy; sha: string };
+
+function CopySection() {
+  const [state, setState] = useState<CopyLoadState>({ status: 'loading' });
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchContent('copy.json')
+      .then((loaded) => {
+        if (!cancelled) setState({ status: 'loaded', data: loaded.data, sha: loaded.sha });
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setState({ status: 'error', message: error instanceof Error ? error.message : String(error) });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const data = state.status === 'loaded' ? state.data : undefined;
+  const problems = useValidation('copy.json', data);
+
+  if (state.status === 'loading') {
+    return <p className="mb-10 font-['Montserrat'] text-sm text-gray-500">Loading page copy…</p>;
+  }
+  if (state.status === 'error') {
+    return (
+      <p role="alert" className="mb-10 font-['Montserrat'] text-sm text-red-600">
+        {`Could not load page copy: ${state.message}`}
+      </p>
+    );
+  }
+
+  function commit(next: Copy) {
+    setState({ status: 'loaded', data: next, sha: (state as { status: 'loaded'; sha: string }).sha });
+  }
+
+  // Every leaf problem actually rendered below, tracked by reference so the
+  // banner is simply "whatever's left over" -- the identical guarantee
+  // RecordForm.tsx's own `matched` Set documents (a problem must never be
+  // counted in both places, or in neither). Catches assertCopy's own
+  // whole-file `''` failures and drinks.intro's retired-phrase check, which
+  // COPY_FIELDS has no per-leaf entry for `''` to ever match.
+  const matched = new Set<ValidationProblem>();
+  function leafProblems(key: string): ValidationProblem[] {
+    const found = problemsFor(problems, undefined, key);
+    found.forEach((p) => matched.add(p));
+    return found;
+  }
+  const rows = COPY_GROUPS.map((group) => ({
+    ...group,
+    fields: group.keys.map((key) => ({ key, problems: leafProblems(key) })),
+  }));
+  const banner = problems.filter((p) => !matched.has(p));
+
+  return (
+    <section className="mb-10">
+      <h2 className="mb-4 font-['Montserrat'] text-lg uppercase tracking-wide text-[#222]">Page copy</h2>
+      {banner.length > 0 && (
+        <div
+          role="alert"
+          aria-label="Problems with page copy"
+          className="mb-4 rounded border border-red-300 bg-red-50 p-3 text-sm text-red-700"
+        >
+          <ul className="list-disc pl-5">
+            {banner.map((p, i) => (
+              <li key={i}>{p.message}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {rows.map(({ section, heading, fields }) => (
+        <div key={section} className="mb-6">
+          <h3 className="mb-3 font-['Montserrat'] text-base text-[#222]">{heading}</h3>
+          {fields.map(({ key, problems: fieldProblems }) => (
+            <div key={key}>
+              <Field
+                id={`copy-${key}`}
+                spec={COPY_FIELDS[key]}
+                value={leafValue(state.data, key)}
+                onChange={(next) => commit(withLeaf(state.data, key, next))}
+                problems={fieldProblems}
+              />
+              {key === 'footer.followLabel' && (
+                <p className="-mt-3 mb-4 text-xs text-gray-500">
+                  {`Shown with its non-breaking space marked: ${withVisibleNbsp(leafValue(state.data, key))}`}
+                </p>
+              )}
+            </div>
+          ))}
+        </div>
+      ))}
     </section>
   );
 }

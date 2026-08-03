@@ -1,10 +1,51 @@
-import { describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import RecordList from '../RecordList';
 import { DISH_FIELDS } from '../fields';
 import type { Dish } from '../../content/types';
 import { validateContent, type ValidationProblem } from '../../content/validate';
+
+// The identical fake XHR double PhotoField.test.tsx defines -- needed here
+// for a REAL upload through the full RecordList -> RecordForm -> Field ->
+// PhotoField chain, not a synthetic stand-in for what onStaged would report.
+class FakeXHR {
+  static instances: FakeXHR[] = [];
+  method = '';
+  url = '';
+  status = 0;
+  responseText = '';
+  timeout = 0;
+  withCredentials = false;
+  upload: { onprogress: ((event: { lengthComputable: boolean; loaded: number; total: number }) => void) | null } = {
+    onprogress: null,
+  };
+  onload: (() => void) | null = null;
+  onerror: (() => void) | null = null;
+  ontimeout: (() => void) | null = null;
+  sentForm: FormData | null = null;
+
+  constructor() {
+    FakeXHR.instances.push(this);
+  }
+  open(method: string, url: string) {
+    this.method = method;
+    this.url = url;
+  }
+  send(body: FormData) {
+    this.sentForm = body;
+  }
+  respond(status: number, body: unknown) {
+    this.status = status;
+    this.responseText = JSON.stringify(body);
+    this.onload?.();
+  }
+}
+
+function jpegFile(name = 'photo.jpg'): File {
+  const bytes = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 0, 0, 0, ...new TextEncoder().encode('JFIF')]);
+  return new File([bytes], name, { type: 'image/jpeg' });
+}
 
 function dish(id: string, name: string): Dish {
   return { id, name, description: `${name}, described.`, image: `/food/${id}.webp`, tags: [] };
@@ -228,5 +269,113 @@ describe('RecordList: an EMPTY list still surfaces every problem -- nothing is m
     const problems: ValidationProblem[] = [{ field, message: `problem for ${field}` }];
     renderList({ items: [], problems });
     expect(screen.getByText(`problem for ${field}`)).toBeInTheDocument();
+  });
+});
+
+// Task 9's wiring. Proven through a REAL upload (FakeXHR), through the
+// ENTIRE real chain (PhotoField -> Field -> RecordForm -> RecordList's own
+// `onStaged`) -- not a synthetic StagedPhoto object handed straight to a
+// mock, which would prove nothing about whether the chain in between is
+// actually connected. This is the exact guard the brief asks for by name:
+// "assert the publish payload contains the assets-source/ entry, not just
+// the contentPath in the record."
+describe("RecordList: Task 9's collector wiring -- a staged photo reaches onStaged with a real, item-scoped key", () => {
+  beforeEach(() => {
+    FakeXHR.instances = [];
+    vi.stubGlobal('XMLHttpRequest', FakeXHR as unknown as typeof XMLHttpRequest);
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("keys the staged file \"<item id>:<field key>\", and BOTH onChange (the record's contentPath) and onStaged (the actual bytes) fire", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    const onStaged = vi.fn();
+    render(
+      <RecordList<Dish>
+        fields={DISH_FIELDS}
+        items={THREE_DISHES}
+        onChange={onChange}
+        onReorder={vi.fn()}
+        onAdd={vi.fn()}
+        onRemove={vi.fn()}
+        noun="dish"
+        itemLabel={(d) => d.name}
+        problems={[]}
+        onStaged={onStaged}
+      />,
+    );
+
+    // Spritz is index 1 -- picking on ITS photo field, not the first item's,
+    // is what proves the key is built from the ITEM's own id, not always
+    // index 0.
+    const photoInputs = screen.getAllByLabelText(DISH_FIELDS.image.label);
+    await user.upload(photoInputs[1], jpegFile());
+    await waitFor(() => expect(FakeXHR.instances).toHaveLength(1));
+    FakeXHR.instances[0].respond(200, { path: 'assets-source/food/abc123abc123.jpg', contentPath: '/food/abc123abc123.webp' });
+
+    // The record's own field: a path, not the bytes.
+    await waitFor(() => expect(onChange).toHaveBeenCalledWith(1, { ...THREE_DISHES[1], image: '/food/abc123abc123.webp' }));
+    // The collector: the ACTUAL bytes, under a real assets-source/ path --
+    // not just "onChange happened", which alone would be exactly the "worse
+    // than the text box" defect the brief warns a missing collector causes.
+    await waitFor(() =>
+      expect(onStaged).toHaveBeenCalledWith(
+        'spritz:image',
+        expect.objectContaining({ path: 'assets-source/food/abc123abc123.jpg', encoding: 'base64', content: expect.any(String) }),
+      ),
+    );
+  });
+
+  it('staging photos on two DIFFERENT records produces two DISTINCT keys, neither overwriting the other', async () => {
+    const user = userEvent.setup();
+    const onStaged = vi.fn();
+    render(
+      <RecordList<Dish>
+        fields={DISH_FIELDS}
+        items={THREE_DISHES}
+        onChange={vi.fn()}
+        onReorder={vi.fn()}
+        onAdd={vi.fn()}
+        onRemove={vi.fn()}
+        noun="dish"
+        itemLabel={(d) => d.name}
+        problems={[]}
+        onStaged={onStaged}
+      />,
+    );
+
+    const photoInputs = screen.getAllByLabelText(DISH_FIELDS.image.label);
+    await user.upload(photoInputs[0], jpegFile('a.jpg'));
+    await waitFor(() => expect(FakeXHR.instances).toHaveLength(1));
+    FakeXHR.instances[0].respond(200, { path: 'assets-source/food/aaa111aaa111.jpg', contentPath: '/food/aaa111aaa111.webp' });
+    await waitFor(() => expect(onStaged).toHaveBeenCalledWith('negroni:image', expect.objectContaining({ path: 'assets-source/food/aaa111aaa111.jpg' })));
+
+    await user.upload(photoInputs[2], jpegFile('b.jpg'));
+    await waitFor(() => expect(FakeXHR.instances).toHaveLength(2));
+    FakeXHR.instances[1].respond(200, { path: 'assets-source/food/bbb222bbb222.jpg', contentPath: '/food/bbb222bbb222.webp' });
+    await waitFor(() => expect(onStaged).toHaveBeenCalledWith('bellini:image', expect.objectContaining({ path: 'assets-source/food/bbb222bbb222.jpg' })));
+
+    // Both calls actually happened -- the second pick did not silently
+    // replace or cancel the first one's own report.
+    expect(onStaged).toHaveBeenCalledWith('negroni:image', expect.objectContaining({ path: 'assets-source/food/aaa111aaa111.jpg' }));
+  });
+
+  it('rendering the list with NO onStaged prop still renders PhotoField (never silently falls back to a text box)', () => {
+    render(
+      <RecordList<Dish>
+        fields={DISH_FIELDS}
+        items={THREE_DISHES}
+        onChange={vi.fn()}
+        onReorder={vi.fn()}
+        onAdd={vi.fn()}
+        onRemove={vi.fn()}
+        noun="dish"
+        itemLabel={(d) => d.name}
+        problems={[]}
+      />,
+    );
+    expect(screen.getAllByLabelText(DISH_FIELDS.image.label)[0]).toHaveAttribute('type', 'file');
   });
 });

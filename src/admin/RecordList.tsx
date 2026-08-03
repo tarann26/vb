@@ -1,6 +1,7 @@
 import RecordForm from './RecordForm';
 import { arrayIndexOf } from './problems';
 import type { FieldsOf } from './fields';
+import type { StagedPhoto } from './PhotoField';
 import type { ValidationProblem } from '../content/validate';
 
 export interface RecordListProps<T extends { id: string }> {
@@ -10,6 +11,16 @@ export interface RecordListProps<T extends { id: string }> {
   onReorder: (ids: string[]) => void;
   onAdd: () => void;
   onRemove: (index: number) => void;
+  // Task 9's wiring, one level up from RecordForm's own `onStaged` (see that
+  // file's comment for the field-key half of this). RecordList is the one
+  // place in this chain that actually has a stable, reorder-proof identity
+  // for "which record" a staged photo belongs to -- `item.id` -- so it is
+  // the one place that prefixes the field key RecordForm reports with it,
+  // before handing the result up to whatever caller (ArraySection) adds the
+  // FILE name on top. Optional for the identical reason RecordForm's own
+  // `onStaged` is: most `RecordList` instances (were there ever a record
+  // type with no image-kind field) would have nothing to forward.
+  onStaged?: (key: string, staged: StagedPhoto | null) => void;
   // Every record type this list can hold names itself differently
   // (Dish.name, Drink.name, Article.title) -- there is no field common to
   // all of them for RecordList to read a display name from on its own, so
@@ -95,6 +106,7 @@ function RecordList<T extends { id: string }>({
   noun,
   itemLabel,
   problems,
+  onStaged,
 }: RecordListProps<T>) {
   // Swaps the item at `index` with its neighbour at `otherIndex` and hands
   // the resulting id ORDER back to the caller -- RecordList never reorders
@@ -178,6 +190,7 @@ function RecordList<T extends { id: string }>({
                 value={item}
                 onChange={(next) => onChange(index, next)}
                 problems={problems}
+                onStaged={onStaged ? (fieldKey, staged) => onStaged(`${item.id}:${fieldKey}`, staged) : undefined}
               />
             </li>
           );

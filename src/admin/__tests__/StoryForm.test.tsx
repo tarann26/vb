@@ -1,0 +1,126 @@
+import { describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import StoryForm from '../StoryForm';
+import { validateContent } from '../../content/validate';
+import type { StoryContent } from '../../content/types';
+import type { ValidationProblem } from '../../content/validate';
+
+const STORY: StoryContent = {
+  heading: 'Our Story',
+  paragraphs: ['First paragraph, a real sentence.', 'Second paragraph, also real.'],
+};
+
+function renderForm(overrides: Partial<Parameters<typeof StoryForm>[0]> = {}) {
+  const onChange = vi.fn();
+  render(<StoryForm value={STORY} onChange={onChange} problems={[]} {...overrides} />);
+  return { onChange };
+}
+
+describe('StoryForm: renders the heading and every paragraph, prefilled', () => {
+  it('shows the heading and both paragraphs', () => {
+    renderForm();
+    expect(screen.getByLabelText('Heading')).toHaveValue('Our Story');
+    expect(screen.getByLabelText('Paragraph 1')).toHaveValue('First paragraph, a real sentence.');
+    expect(screen.getByLabelText('Paragraph 2')).toHaveValue('Second paragraph, also real.');
+  });
+
+  it('editing the heading reports the whole StoryContent object, paragraphs untouched', () => {
+    const { onChange } = renderForm();
+    fireEvent.change(screen.getByLabelText('Heading'), { target: { value: 'A New Heading' } });
+    expect(onChange).toHaveBeenCalledWith({ ...STORY, heading: 'A New Heading' });
+  });
+
+  it("editing paragraph 2 reports the whole array, only that paragraph changed, paragraph 1 the SAME reference", () => {
+    const { onChange } = renderForm();
+    fireEvent.change(screen.getByLabelText('Paragraph 2'), { target: { value: 'Edited second paragraph.' } });
+    expect(onChange).toHaveBeenCalledWith({ ...STORY, paragraphs: [STORY.paragraphs[0], 'Edited second paragraph.'] });
+  });
+});
+
+describe('StoryForm: add, remove, and reorder paragraphs', () => {
+  it('names move buttons per paragraph, omitted at the ends', () => {
+    renderForm();
+    expect(screen.queryByRole('button', { name: 'Move paragraph 1 up' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Move paragraph 1 down' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Move paragraph 2 up' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Move paragraph 2 down' })).not.toBeInTheDocument();
+  });
+
+  it('moving paragraph 1 down swaps the two paragraphs', async () => {
+    const user = userEvent.setup();
+    const { onChange } = renderForm();
+    await user.click(screen.getByRole('button', { name: 'Move paragraph 1 down' }));
+    expect(onChange).toHaveBeenCalledWith({ ...STORY, paragraphs: [STORY.paragraphs[1], STORY.paragraphs[0]] });
+  });
+
+  it('"Add a paragraph" appends a blank paragraph that fails validation until filled in', async () => {
+    const user = userEvent.setup();
+    const { onChange } = renderForm();
+    await user.click(screen.getByRole('button', { name: 'Add a paragraph' }));
+    expect(onChange).toHaveBeenCalledWith({ ...STORY, paragraphs: [...STORY.paragraphs, ''] });
+  });
+
+  it('"Remove paragraph 1" drops only that paragraph, leaving the other intact', async () => {
+    const user = userEvent.setup();
+    const { onChange } = renderForm();
+    await user.click(screen.getByRole('button', { name: 'Remove paragraph 1' }));
+    expect(onChange).toHaveBeenCalledWith({ ...STORY, paragraphs: [STORY.paragraphs[1]] });
+  });
+});
+
+// The brief's own instruction: "the no-trailing-ellipsis rule already lives
+// in validateContent; surface it inline rather than at publish." Proven
+// against the REAL validator, through the SAME debounced `problems` prop
+// every other field in this dashboard already uses -- not a rule this
+// component invents or re-checks itself.
+describe('StoryForm: the ellipsis rule is surfaced inline, from the real validator, not re-implemented here', () => {
+  it('a paragraph trailing off with "..." shows the real validator\'s own message on that paragraph', () => {
+    const trailing: StoryContent = { heading: 'Our Story', paragraphs: ['This trails off...'] };
+    const problems = validateContent('story.json', trailing);
+    expect(problems).toEqual([{ field: 'paragraphs[0]', message: expect.stringMatching(/trails off with an ellipsis/) }]);
+
+    render(<StoryForm value={trailing} onChange={vi.fn()} problems={problems} />);
+    expect(screen.getByLabelText('Paragraph 1')).toHaveAccessibleDescription(expect.stringMatching(/trails off with an ellipsis/));
+  });
+
+  it('a paragraph ending in a real sentence has no problem attached', () => {
+    const problems = validateContent('story.json', STORY);
+    expect(problems).toEqual([]);
+    render(<StoryForm value={STORY} onChange={vi.fn()} problems={problems} />);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+});
+
+describe('StoryForm: an EMPTY paragraph list still surfaces the real validator\'s own message', () => {
+  it('shows "the story needs at least one paragraph" when every paragraph is removed', () => {
+    const empty: StoryContent = { heading: 'Our Story', paragraphs: [] };
+    const problems = validateContent('story.json', empty);
+    expect(problems).toEqual([{ field: 'paragraphs', message: 'the story needs at least one paragraph' }]);
+    render(<StoryForm value={empty} onChange={vi.fn()} problems={problems} />);
+    expect(screen.getByRole('alert', { name: "Problems with the story's paragraphs" })).toHaveTextContent(
+      'the story needs at least one paragraph',
+    );
+  });
+});
+
+describe("StoryForm: a blank heading's own message attaches to the heading, not the paragraph banner", () => {
+  it('shows "the story needs a heading" on the heading field only', () => {
+    const blankHeading: StoryContent = { heading: '', paragraphs: STORY.paragraphs };
+    const problems = validateContent('story.json', blankHeading);
+    expect(problems).toEqual([{ field: 'heading', message: 'the story needs a heading' }]);
+    render(<StoryForm value={blankHeading} onChange={vi.fn()} problems={problems} />);
+    expect(screen.getByLabelText('Heading')).toHaveAccessibleDescription('the story needs a heading');
+    expect(screen.queryByRole('alert', { name: "Problems with the story's paragraphs" })).not.toBeInTheDocument();
+  });
+});
+
+describe('StoryForm: a problem naming a paragraph index past the end of what is rendered still surfaces, in the banner', () => {
+  it('surfaces a stale paragraphs[N] problem for an index no longer rendered', () => {
+    const problems: ValidationProblem[] = [{ field: 'paragraphs[9]', message: 'a stale problem for a paragraph no longer here' }];
+    renderForm({ problems });
+    expect(screen.getByRole('alert', { name: "Problems with the story's paragraphs" })).toHaveTextContent(
+      'a stale problem for a paragraph no longer here',
+    );
+  });
+});

@@ -7,12 +7,24 @@
 // through hand-built harness components that never mount `AdminApp` or
 // `ArraySection` at all. A broken Remove button, or a fetch error that
 // never surfaces, would ship with nothing here to catch it.
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import AdminApp from '../AdminApp';
 import { DISH_FIELDS } from '../fields';
-import type { Article, Dish, Drink, Section, SiteContent } from '../../content/types';
+import type { Article, Copy, Dish, Drink, Galleries, MenuFile, Section, SiteContent, StoryContent } from '../../content/types';
+// The real, committed files -- not hand-typed fixtures -- for galleries.json,
+// menus.json, story.json and copy.json specifically: each one has real
+// structural rules (assertCopy's nav.links shape and non-blank sweep,
+// validateGalleries' non-empty lists, MENU_FILE_NAME's own path shape) that
+// a hand-typed fixture would have to reproduce by hand and could easily get
+// subtly wrong. Reusing the real files is the same choice
+// useValidation.test.tsx's own REAL_DISHES already makes, for the identical
+// reason (see that file's own comment).
+import galleriesJson from '../../content/galleries.json';
+import menusJson from '../../content/menus.json';
+import storyJson from '../../content/story.json';
+import copyJson from '../../content/copy.json';
 
 function dish(id: string, name: string): Dish {
   return { id, name, description: `${name}, described.`, image: `/food/${id}.webp`, tags: [] };
@@ -49,6 +61,11 @@ const SITE: SiteContent = {
   copyrightYear: 2026,
 };
 
+const GALLERIES = galleriesJson as Galleries;
+const MENUS = menusJson as MenuFile[];
+const STORY = storyJson as StoryContent;
+const COPY = copyJson as Copy;
+
 const WA_RESPONSE = () =>
   new Response(JSON.stringify({ lowerBound: true }), { status: 200, headers: { 'content-type': 'application/json' } });
 
@@ -84,6 +101,10 @@ function stubFetch(dishesResponse: Promise<Response> | Response = contentRespons
       if (url.includes('press.json')) return contentResponse(PRESS, 'sha-press');
       if (url.includes('sections.json')) return contentResponse(SECTIONS, 'sha-sections');
       if (url.includes('site.json')) return contentResponse(SITE, 'sha-site');
+      if (url.includes('galleries.json')) return contentResponse(GALLERIES, 'sha-galleries');
+      if (url.includes('menus.json')) return contentResponse(MENUS, 'sha-menus');
+      if (url.includes('story.json')) return contentResponse(STORY, 'sha-story');
+      if (url.includes('copy.json')) return contentResponse(COPY, 'sha-copy');
       throw new Error(`AdminApp.test.tsx: unexpected fetch to ${url}`);
     }),
   );
@@ -142,6 +163,60 @@ async function dishesSection(): Promise<HTMLElement> {
   const section = heading.closest('section');
   if (!section) throw new Error('Dishes heading is not inside a <section>');
   return section as HTMLElement;
+}
+
+async function sectionByHeading(name: string): Promise<HTMLElement> {
+  const heading = await screen.findByRole('heading', { name });
+  const section = heading.closest('section');
+  if (!section) throw new Error(`"${name}" heading is not inside a <section>`);
+  return section as HTMLElement;
+}
+
+// The identical fake XHR double PhotoField.test.tsx/PdfField.test.tsx each
+// define -- needed here for Task 9's own wiring tests, which have to prove
+// a REAL upload reaches the shared collector through the whole real chain,
+// not a synthetic stand-in for it.
+class FakeXHR {
+  static instances: FakeXHR[] = [];
+  method = '';
+  url = '';
+  status = 0;
+  responseText = '';
+  timeout = 0;
+  withCredentials = false;
+  upload: { onprogress: ((event: { lengthComputable: boolean; loaded: number; total: number }) => void) | null } = {
+    onprogress: null,
+  };
+  onload: (() => void) | null = null;
+  onerror: (() => void) | null = null;
+  ontimeout: (() => void) | null = null;
+  sentForm: FormData | null = null;
+
+  constructor() {
+    FakeXHR.instances.push(this);
+  }
+  open(method: string, url: string) {
+    this.method = method;
+    this.url = url;
+  }
+  send(body: FormData) {
+    this.sentForm = body;
+  }
+  respond(status: number, body: unknown) {
+    this.status = status;
+    this.responseText = JSON.stringify(body);
+    this.onload?.();
+  }
+}
+
+function jpegFile(name = 'photo.jpg'): File {
+  const bytes = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 0, 0, 0, ...new TextEncoder().encode('JFIF')]);
+  return new File([bytes], name, { type: 'image/jpeg' });
+}
+
+function pdfFile(name = 'menu.pdf'): File {
+  const bytes = new Uint8Array([...new TextEncoder().encode('%PDF-1.4\n'), ...new TextEncoder().encode('%%EOF')]);
+  return new File([bytes], name, { type: 'application/pdf' });
 }
 
 describe('AdminApp: Add, Remove and Reorder, exercised through the real component', () => {
@@ -288,5 +363,156 @@ describe('AdminApp: the real "Opening hours" screen', () => {
       await new Promise((resolve) => setTimeout(resolve, 450));
     });
     expect(within(section).getByRole('alert')).toHaveTextContent(/invalid "opens" time/);
+  });
+});
+
+// Task 9's four new screens, each fetched and rendered through the real
+// component -- the same "not just built in isolation" bar the Sections/
+// Hours describe blocks above already hold this file to.
+describe('AdminApp: the new prose, gallery, menus and copy screens all render, fetched independently', () => {
+  it('renders Menus, prefilled with both real menu labels', async () => {
+    stubFetch();
+    render(<AdminApp />);
+    const section = await sectionByHeading('Menus');
+    expect(await within(section).findByDisplayValue('Food Menu')).toBeInTheDocument();
+    expect(within(section).getByDisplayValue('Drinks Menu')).toBeInTheDocument();
+  });
+
+  it('renders Galleries, prefilled with real atmosphere/ourStory alt text and read-only heroCollage positions', async () => {
+    stubFetch();
+    render(<AdminApp />);
+    const section = await sectionByHeading('Galleries');
+    expect(await within(section).findByDisplayValue(GALLERIES.atmosphere[0].alt)).toBeInTheDocument();
+    expect(within(section).getByDisplayValue(GALLERIES.ourStory[0].alt)).toBeInTheDocument();
+    const positions = within(section).getAllByLabelText('Layout position');
+    expect(positions.length).toBe(GALLERIES.heroCollage.length);
+    expect(positions[0]).toBeDisabled();
+  });
+
+  it('renders Our Story, prefilled with the real heading and first paragraph', async () => {
+    stubFetch();
+    render(<AdminApp />);
+    const section = await sectionByHeading('Our Story');
+    expect(await within(section).findByDisplayValue(STORY.heading)).toBeInTheDocument();
+    expect(within(section).getByDisplayValue(STORY.paragraphs[0])).toBeInTheDocument();
+  });
+
+  it('renders Page copy, grouped by section, with the real footer hours heading value', async () => {
+    stubFetch();
+    render(<AdminApp />);
+    const section = await sectionByHeading('Page copy');
+    expect(await within(section).findByDisplayValue(COPY.footer.hoursHeading)).toBeInTheDocument();
+    expect(within(section).getByRole('heading', { name: 'Footer' })).toBeInTheDocument();
+  });
+
+  // The brief's own explicit requirement: footer.followLabel's U+00A0 must
+  // render VISIBLY -- a marker, not a raw space -- so she can see it exists
+  // at all, since an ordinary space looks IDENTICAL in the browser.
+  it("shows footer.followLabel's non-breaking space as a visible marker, not an invisible raw space", async () => {
+    stubFetch();
+    render(<AdminApp />);
+    const section = await sectionByHeading('Page copy');
+    await within(section).findByDisplayValue(COPY.footer.hoursHeading);
+    expect(within(section).getByText(/Shown with its non-breaking space marked:/)).toHaveTextContent('␣');
+  });
+});
+
+// The two "risky" wirings, proven end-to-end through the REAL, fully
+// assembled AdminApp -- not RecordList/GalleryList in isolation, which only
+// prove their OWN link in the chain. This is what the brief calls "verify
+// the wirings specifically": both must reach ONE shared collector, and a
+// same-name PDF replacement must carry real bytes, not silently do nothing.
+describe("AdminApp: Task 9's wiring, proven end-to-end -- staged photos across DIFFERENT records reach ONE shared collector", () => {
+  beforeEach(() => {
+    FakeXHR.instances = [];
+    vi.stubGlobal('XMLHttpRequest', FakeXHR as unknown as typeof XMLHttpRequest);
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('staging a photo on a dish, then a DIFFERENT photo on a drink, grows the same staged-file count -- neither replaces the other', async () => {
+    stubFetch();
+    const user = userEvent.setup();
+    render(<AdminApp />);
+
+    const dSection = await dishesSection();
+    await within(dSection).findByDisplayValue('Dish A');
+    // Nothing staged yet -- checked only once the page has actually
+    // finished its initial (async) render, not in the "checking session"
+    // gap right after `render`, where nothing meaningful is on screen yet.
+    expect(screen.getByText(/nothing you change below is saved anywhere\.$/)).toBeInTheDocument();
+    const dishPhotoInput = within(dSection).getAllByLabelText(DISH_FIELDS.image.label)[0];
+    await user.upload(dishPhotoInput, jpegFile('dish.jpg'));
+    await waitFor(() => expect(FakeXHR.instances).toHaveLength(1));
+    FakeXHR.instances[0].respond(200, { path: 'assets-source/food/aaa111aaa111.jpg', contentPath: '/food/aaa111aaa111.webp' });
+    await screen.findByText(/1 file is staged and waiting for it\.$/);
+
+    const drSection = await sectionByHeading('Drinks');
+    await within(drSection).findByDisplayValue('Drink X');
+    // Not `getAllByLabelText('Photo')`: Dishes' and Drinks' own first record
+    // both render RecordForm's `idFor` output "field-image-0" (RecordForm.tsx
+    // has no per-SECTION namespace, only a per-INDEX one) -- a real,
+    // pre-existing duplicate-id defect across every field this dashboard
+    // renders, not new to this test (see this task's own report). A plain
+    // CSS query scoped to THIS section's own DOM subtree sidesteps it
+    // (unlike `for`/id label resolution, which is not scoped by the
+    // enclosing element at all and can silently resolve to a DIFFERENT
+    // section's element with the same id).
+    const drinkPhotoInput = drSection.querySelector('input[type="file"]') as HTMLInputElement;
+    expect(drinkPhotoInput).toBeInTheDocument();
+    await user.upload(drinkPhotoInput, jpegFile('drink.jpg'));
+    await waitFor(() => expect(FakeXHR.instances).toHaveLength(2));
+    FakeXHR.instances[1].respond(200, { path: 'assets-source/mocktails/bbb222bbb222.jpg', contentPath: '/mocktails/bbb222bbb222.webp' });
+
+    // Two, not one -- the drink's own staged photo did not overwrite the
+    // dish's. If AdminApp's ArraySection instances shared one KEY (rather
+    // than each prefixing with its own `file` name and item id), the second
+    // stage would collide with the first and the count would stay at 1.
+    await screen.findByText(/2 files are staged and waiting for it\.$/);
+  });
+});
+
+describe("AdminApp: Task 9's wiring -- replacing a menu PDF under the SAME name carries real bytes, not a silent no-op", () => {
+  beforeEach(() => {
+    FakeXHR.instances = [];
+    vi.stubGlobal('XMLHttpRequest', FakeXHR as unknown as typeof XMLHttpRequest);
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("uploads under the CURRENT file's own stem (\"food-menu\"), not the record's `id` (\"food\") -- so it overwrites the same live path", async () => {
+    stubFetch();
+    const user = userEvent.setup();
+    render(<AdminApp />);
+    const section = await sectionByHeading('Menus');
+    await within(section).findByDisplayValue('Food Menu');
+
+    const pdfInput = within(section).getAllByLabelText('PDF file')[0];
+    await user.upload(pdfInput, pdfFile());
+    await waitFor(() => expect(FakeXHR.instances).toHaveLength(1));
+    expect(FakeXHR.instances[0].sentForm?.get('name')).toBe('food-menu');
+    expect(FakeXHR.instances[0].sentForm?.get('category')).toBe('menu');
+  });
+
+  it('a completed same-name replacement still grows the staged-file count -- the bytes really are collected, not dropped on the floor', async () => {
+    stubFetch();
+    const user = userEvent.setup();
+    render(<AdminApp />);
+    const section = await sectionByHeading('Menus');
+    await within(section).findByDisplayValue('Food Menu');
+
+    const pdfInput = within(section).getAllByLabelText('PDF file')[0];
+    await user.upload(pdfInput, pdfFile());
+    await waitFor(() => expect(FakeXHR.instances).toHaveLength(1));
+    FakeXHR.instances[0].respond(200, { path: 'public/menus/food-menu.pdf', file: '/menus/food-menu.pdf' });
+
+    // menus.json's OWN `file` field is unchanged (same name -> same path,
+    // by design -- worker/upload.ts's own menuAssetPath), which is exactly
+    // the shape that makes the collector the ONLY place proof this actually
+    // happened can live.
+    await screen.findByText(/1 file is staged and waiting for it\.$/);
+    expect(within(section).getByDisplayValue('Food Menu')).toBeInTheDocument();
   });
 });

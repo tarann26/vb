@@ -1,10 +1,55 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useState } from 'react';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import Field from '../Field';
+import type { StagedPhoto } from '../PhotoField';
 import type { FieldSpec } from '../fields';
 import type { ValidationProblem } from '../../content/validate';
+
+// The identical fake XHR double PhotoField.test.tsx/PdfField.test.tsx each
+// define, needed here too: a real end-to-end proof that the 'image' kind's
+// early return (Field.tsx) actually reaches PhotoField's own network call
+// with THIS field's own category, not a placeholder that only asserts the
+// label renders (which would stay green even if `category` were hardcoded
+// or dropped entirely).
+class FakeXHR {
+  static instances: FakeXHR[] = [];
+  method = '';
+  url = '';
+  status = 0;
+  responseText = '';
+  timeout = 0;
+  withCredentials = false;
+  upload: { onprogress: ((event: { lengthComputable: boolean; loaded: number; total: number }) => void) | null } = {
+    onprogress: null,
+  };
+  onload: (() => void) | null = null;
+  onerror: (() => void) | null = null;
+  ontimeout: (() => void) | null = null;
+  sentForm: FormData | null = null;
+
+  constructor() {
+    FakeXHR.instances.push(this);
+  }
+  open(method: string, url: string) {
+    this.method = method;
+    this.url = url;
+  }
+  send(body: FormData) {
+    this.sentForm = body;
+  }
+  respond(status: number, body: unknown) {
+    this.status = status;
+    this.responseText = JSON.stringify(body);
+    this.onload?.();
+  }
+}
+
+function jpegFile(): File {
+  const bytes = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 0, 0, 0, ...new TextEncoder().encode('JFIF')]);
+  return new File([bytes], 'photo.jpg', { type: 'image/jpeg' });
+}
 
 // `Field` is a controlled input -- its DOM value is `value`, not its own
 // internal state. Typing multiple characters into it (userEvent.type) needs
@@ -111,18 +156,44 @@ describe('Field: one input per kind, wired to onChange', () => {
     expect(onChange).toHaveBeenCalledWith('x');
   });
 
-  it('image: the same plain text input as \'text\' (no upload widget yet)', () => {
-    render(<Field id="f-img" spec={{ label: 'Photo', kind: 'image' }} value="/food/x.webp" onChange={vi.fn()} problems={[]} />);
+  it("image: renders the real PhotoField upload widget, not a plain text box", () => {
+    render(
+      <Field
+        id="f-img"
+        spec={{ label: 'Photo', kind: 'image', category: 'food' }}
+        value="/food/x.webp"
+        onChange={vi.fn()}
+        problems={[]}
+      />,
+    );
     const input = screen.getByLabelText('Photo');
-    expect(input.tagName).toBe('INPUT');
-    expect(input).toHaveAttribute('type', 'text');
-    expect(input).toHaveValue('/food/x.webp');
+    // A PhotoField, not the 'text' case's plain <input type="text"> --
+    // confirmed by the one attribute a text box could never have: a file
+    // picker restricted to images.
+    expect(input).toHaveAttribute('type', 'file');
+    expect(input).toHaveAttribute('accept', 'image/*');
   });
 
-  it('image: falls back to an empty string for a null value, not the literal string "null"', () => {
-    render(<Field id="f-img" spec={{ label: 'Photo', kind: 'image' }} value={null} onChange={vi.fn()} problems={[]} />);
-    expect(screen.getByLabelText('Photo')).toHaveValue('');
+  it('image: shows the current value as a live preview image, not a text value', () => {
+    render(
+      <Field
+        id="f-img"
+        spec={{ label: 'Photo', kind: 'image', category: 'food' }}
+        value="/food/x.webp"
+        onChange={vi.fn()}
+        problems={[]}
+      />,
+    );
+    expect(document.querySelector('img')).toHaveAttribute('src', '/food/x.webp');
   });
+
+  it('image: shows no preview for a null value, not a broken image pointed at the literal string "null"', () => {
+    render(
+      <Field id="f-img" spec={{ label: 'Photo', kind: 'image', category: 'food' }} value={null} onChange={vi.fn()} problems={[]} />,
+    );
+    expect(document.querySelector('img')).not.toBeInTheDocument();
+  });
+
 
   it('textarea: a real <textarea>, reporting the typed value', async () => {
     const onChange = vi.fn();
@@ -238,5 +309,63 @@ describe('Field: one input per kind, wired to onChange', () => {
     const lastCall = onChange.mock.calls[onChange.mock.calls.length - 1];
     expect(lastCall?.[0]).toBe(2026);
     expect(typeof lastCall?.[0]).toBe('number');
+  });
+});
+
+// Task 9's wiring, proven end-to-end through a REAL upload, not just that
+// PhotoField renders. Mutation this guards against: `category` silently
+// hardcoded to some unchanging value in Field.tsx's early return instead of
+// read off `spec.category` -- every earlier test in this file happens to
+// use 'food', so only a test that uses a DIFFERENT category and checks the
+// actual network request can catch that.
+describe("Field: the 'image' kind's wiring to PhotoField is real, not cosmetic", () => {
+  beforeEach(() => {
+    FakeXHR.instances = [];
+    vi.stubGlobal('XMLHttpRequest', FakeXHR as unknown as typeof XMLHttpRequest);
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("sends THIS field's own category ('press'), not a different one", async () => {
+    const user = userEvent.setup();
+    render(
+      <Field
+        id="f-img"
+        spec={{ label: 'Photo', kind: 'image', category: 'press' }}
+        value={null}
+        onChange={vi.fn()}
+        problems={[]}
+      />,
+    );
+    await user.upload(screen.getByLabelText('Photo'), jpegFile());
+    await waitFor(() => expect(FakeXHR.instances).toHaveLength(1));
+    expect(FakeXHR.instances[0].sentForm?.get('category')).toBe('press');
+  });
+
+  it('forwards onStaged straight through to PhotoField, with the real staged bytes', async () => {
+    const onChange = vi.fn();
+    const onStaged = vi.fn<(staged: StagedPhoto | null) => void>();
+    const user = userEvent.setup();
+    render(
+      <Field
+        id="f-img"
+        spec={{ label: 'Photo', kind: 'image', category: 'food' }}
+        value={null}
+        onChange={onChange}
+        onStaged={onStaged}
+        problems={[]}
+      />,
+    );
+    await user.upload(screen.getByLabelText('Photo'), jpegFile());
+    await waitFor(() => expect(FakeXHR.instances).toHaveLength(1));
+    FakeXHR.instances[0].respond(200, { path: 'assets-source/food/abc123abc123.jpg', contentPath: '/food/abc123abc123.webp' });
+
+    await waitFor(() => expect(onChange).toHaveBeenCalledWith('/food/abc123abc123.webp'));
+    await waitFor(() =>
+      expect(onStaged).toHaveBeenCalledWith(
+        expect.objectContaining({ path: 'assets-source/food/abc123abc123.jpg', encoding: 'base64' }),
+      ),
+    );
   });
 });

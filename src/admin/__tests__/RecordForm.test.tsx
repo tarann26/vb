@@ -68,11 +68,16 @@ const STORY_FIXTURE_FIELDS: FieldsOf<StoryFixture> = {
 
 describe('RecordForm: renders one record, prefilled', () => {
   it('renders a labeled, valued input for every field the descriptor declares', () => {
-    render(<RecordForm fields={DISH_FIELDS} index={0} value={dish()} onChange={vi.fn()} problems={[]} />);
+    const { container } = render(<RecordForm fields={DISH_FIELDS} index={0} value={dish()} onChange={vi.fn()} problems={[]} />);
     expect(screen.getByLabelText(DISH_FIELDS.id.label)).toHaveValue('bruschetta');
     expect(screen.getByLabelText(DISH_FIELDS.name.label)).toHaveValue('Bruschetta');
     expect(screen.getByLabelText(DISH_FIELDS.description.label)).toHaveValue('Toast, tomato, basil.');
-    expect(screen.getByLabelText(DISH_FIELDS.image.label)).toHaveValue('/food/bruschetta.webp');
+    // `image` renders PhotoField (Task 9), a file input -- a real browser
+    // (and jsdom) never reports a `.value` for `type="file"` beyond an
+    // empty string, so the record's own current value is only observable
+    // through PhotoField's own preview <img>, not `toHaveValue`.
+    expect(screen.getByLabelText(DISH_FIELDS.image.label)).toHaveAttribute('type', 'file');
+    expect(container.querySelector('img')).toHaveAttribute('src', '/food/bruschetta.webp');
   });
 
   it('reports the whole record on a change, with only the edited field updated', async () => {

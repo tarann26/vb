@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import PhotoField, { type StagedPhoto } from './PhotoField';
 import type { FieldSpec } from './fields';
 import type { ValidationProblem } from '../content/validate';
 
@@ -12,6 +13,17 @@ export interface FieldProps<V> {
   // to do that narrowing. Field has no idea what `field` string shape
   // validateContent emits, and doesn't need to.
   problems: ValidationProblem[];
+  // Only ever read for `spec.kind === 'image'` -- forwarded straight to
+  // PhotoField's own `onStaged` prop (see the early return below). Present
+  // on every FieldProps, not just the image branch's, because RecordForm
+  // (this component's one real caller) has no way to know at the call site
+  // whether `spec` is the image kind for a generic `K` -- it passes this
+  // through unconditionally, and every other kind below simply never reads
+  // it. Absence here (`undefined`) reaches PhotoField as "no collector",
+  // which -- per this task's own brief -- must never happen for a REAL
+  // image field; RecordForm.tsx's own comment is where that guarantee
+  // actually lives.
+  onStaged?: (staged: StagedPhoto | null) => void;
 }
 
 // Exported, not module-private: ScheduleField.tsx (Task 7) renders the same
@@ -98,7 +110,38 @@ function TagsInput({
 // Field.test.tsx asserts each of the nine actually renders an
 // accessible control, so a tenth kind reaching here without a case added
 // below fails a test, not silently.
-function Field<V>({ id, spec, value, onChange, problems }: FieldProps<V>) {
+function Field<V>({ id, spec, value, onChange, problems, onStaged }: FieldProps<V>) {
+  // Rendered directly, bypassing this function's own label/help/error shell
+  // below entirely -- PhotoField already renders its own label, help text,
+  // upload status and error region (it has to: a plain <input> can't show
+  // upload progress or a Retry button), so wrapping it in the SAME shell
+  // every other kind gets would double up every one of those, not merely
+  // look redundant. The exact "sibling component instead of a tenth kind"
+  // shape RecordForm.tsx's own comment already uses for `publishAt`/
+  // ScheduleField, just decided here instead because `image` genuinely is
+  // one of Kind<V>'s members (unlike `publishAt`, which has no FieldSpec
+  // kind of its own at all).
+  //
+  // `spec as ...` mirrors the 'select' case's own cast just below: TS can't
+  // carry the `spec.kind === 'image'` narrowing through to `spec.category`
+  // when V is an unresolved generic, for the identical reason that case's
+  // own comment already documents.
+  if (spec.kind === 'image') {
+    const { category } = spec as Extract<FieldSpec<V>, { kind: 'image' }>;
+    return (
+      <PhotoField
+        id={id}
+        label={spec.label}
+        help={spec.help}
+        category={category}
+        value={(value as string | null) ?? null}
+        onChange={(next) => onChange(next as V)}
+        onStaged={onStaged}
+        problems={problems}
+      />
+    );
+  }
+
   const helpId = spec.help ? `${id}-help` : undefined;
   const errorId = problems.length > 0 ? `${id}-error` : undefined;
   const describedBy = [helpId, errorId].filter((part): part is string => Boolean(part)).join(' ') || undefined;
@@ -205,12 +248,8 @@ function Field<V>({ id, spec, value, onChange, problems }: FieldProps<V>) {
       );
       break;
     case 'text':
-    case 'image':
     default:
-      // 'image' renders the same plain text input as 'text' for now --
-      // src/admin/PhotoField.tsx (Task 5) is the actual upload widget this
-      // kind becomes later; until then it's a path/URL like any other
-      // string field.
+      // 'image' is handled by the early return above, never reaches here.
       input = (
         <input
           id={id}

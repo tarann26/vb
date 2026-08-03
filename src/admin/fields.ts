@@ -27,6 +27,7 @@ import type {
   GalleryImage,
   Hours,
 } from '../content/types';
+import type { UploadCategory } from '../shared/upload-categories';
 
 // `kind` is a function of the field's *value type*, not a fixed union
 // attached to the field's name. That is what makes a value-type change
@@ -53,9 +54,19 @@ type Kind<V> =
 // readonly V[]`, so a bogus entry or a missing `options` is a compile error,
 // and the non-'select' branch has no `options` property to accidentally
 // attach one to.
+// Task 9's own addition: PhotoField.tsx's `category` prop is required (it
+// has no default worth guessing -- an upload with the wrong category commits
+// to the wrong assets-source/ subfolder), and nothing before this task ever
+// gave Field.tsx a value to hand it. A THIRD branch, not a `category?:
+// UploadCategory` bolted onto the plain (non-select) branch above, for the
+// identical excess-property-checking reason this file's own header comment
+// gives for splitting out the 'select' branch in the first place: a bare
+// optional field would let `kind: 'image'` compile with no `category` at
+// all, silently reproducing the exact gap this change exists to close.
 export type FieldSpec<V = unknown> =
-  | { label: string; kind: Exclude<Kind<V>, 'select'>; help?: string }
-  | { label: string; kind: Extract<Kind<V>, 'select'>; options: readonly V[]; help?: string };
+  | { label: string; kind: Exclude<Kind<V>, 'select' | 'image'>; help?: string }
+  | { label: string; kind: Extract<Kind<V>, 'select'>; options: readonly V[]; help?: string }
+  | { label: string; kind: Extract<Kind<V>, 'image'>; category: UploadCategory; help?: string };
 
 // `Required<T>` makes an optional content field (e.g. `publishAt`) required
 // *in the descriptor* -- the dashboard still needs a label and a kind for a
@@ -73,7 +84,11 @@ export const DISH_FIELDS: FieldsOf<Dish> = {
   },
   name: { label: 'Name', kind: 'text' },
   description: { label: 'Description', kind: 'textarea' },
-  image: { label: 'Photo', kind: 'image' },
+  // 'food', not a dish-specific folder: assets-source/food/ is the one
+  // subfolder every real dish photo in this repo already lives under
+  // (src/content/dishes.json's own `image` paths), and UPLOAD_CATEGORIES
+  // (src/shared/upload-categories.ts) has no finer-grained dish category.
+  image: { label: 'Photo', kind: 'image', category: 'food' },
   // types.ts is explicit that `tags` is authored on every dish but not
   // rendered by any component today. Say the same thing here: an editing
   // tool that doesn't must not let the owner assume this field is visible
@@ -99,7 +114,13 @@ export const DRINK_FIELDS: FieldsOf<Drink> = {
   name: { label: 'Name', kind: 'text' },
   description: { label: 'Description', kind: 'textarea' },
   category: { label: 'Category', kind: 'select', options: ['mocktail', 'cocktail', 'wine'] },
-  image: { label: 'Photo', kind: 'image', help: 'Optional -- leave empty for no photo.' },
+  // 'mocktails' is the one bar-drink folder UPLOAD_CATEGORIES actually has
+  // (src/shared/upload-categories.ts) -- there is no separate 'cocktails' or
+  // 'wine' subfolder, so every drink photo (mocktail, cocktail or wine
+  // alike) lands here regardless of the `category` field above; confirmed
+  // against the real, committed drinks.json, where the one drink with a
+  // photo today stores it at /mocktails/piccante.webp.
+  image: { label: 'Photo', kind: 'image', category: 'mocktails', help: 'Optional -- leave empty for no photo.' },
   publishAt: {
     label: 'Publish on',
     kind: 'date',
@@ -118,7 +139,9 @@ export const ARTICLE_FIELDS: FieldsOf<Article> = {
   date: { label: 'Published on', kind: 'date' },
   excerpt: { label: 'Excerpt', kind: 'textarea' },
   url: { label: 'Link', kind: 'text', help: "The article's full web address, or leave empty if it has none." },
-  image: { label: 'Photo', kind: 'image' },
+  // 'press' -- matches where every real press.json `image` value lives on
+  // disk today (public/press/*.webp).
+  image: { label: 'Photo', kind: 'image', category: 'press' },
   publishAt: {
     label: 'Publish on',
     kind: 'date',
@@ -146,13 +169,42 @@ export const SECTION_FIELDS: FieldsOf<Section> = {
 export const MENU_FIELDS: FieldsOf<MenuFile> = {
   id: { label: 'ID', kind: 'text', help: 'A short identifier used only to tell downloadable menus apart.' },
   label: { label: 'Label', kind: 'text' },
+  // `kind: 'text'` here is never actually rendered -- AdminApp.tsx's own
+  // menus section replaces this one field with PdfField directly (the same
+  // "sibling component instead of a tenth kind" swap RecordForm.tsx already
+  // makes for `publishAt`/ScheduleField), because PdfField's own `name` prop
+  // has to be derived from the record's CURRENT `file` value (so a
+  // same-name replacement really does commit to the same path -- see
+  // worker/upload.ts's own `menuAssetPath`), not a single unchanging value a
+  // descriptor field could hold the way `image`'s `category` does above.
+  // Kept here only so FieldsOf<MenuFile> stays total over every real key.
   file: { label: 'PDF file', kind: 'text' },
 };
 
 export const GALLERY_IMAGE_FIELDS: FieldsOf<GalleryImage> = {
-  src: { label: 'Photo', kind: 'image' },
+  // `category` below is never actually consulted -- GalleryList.tsx renders
+  // `src` directly through PhotoField with its own explicit category
+  // ('atmosphere' or 'our_story') per list, bypassing Field.tsx's generic
+  // 'image' dispatch entirely. It has to: this ONE descriptor is shared by
+  // BOTH the atmosphere and ourStory lists (Galleries, src/content/types.ts),
+  // which need two DIFFERENT categories -- one unchanging field value here
+  // cannot express that, which is exactly why a dashboard-wide `image` kind
+  // wiring does not, by itself, cover galleries the way it covers
+  // dishes/drinks/press (each of which only ever needs one category).
+  // heroCollage isn't `GalleryImage[]` at all (`{ src, className }`, no
+  // `alt`) and is handled separately again, also outside this descriptor.
+  src: { label: 'Photo', kind: 'image', category: 'atmosphere' },
   alt: { label: 'Alt text', kind: 'text', help: 'Describes the photo for screen readers and search engines.' },
 };
+
+// story.json's own heading -- the one FieldSpec story.json needs.
+// `paragraphs` (a `string[]` prose list, not a single scalar) has no
+// FieldSpec kind that fits it: 'tags' renders one comma-joined line, which
+// would flatten six real paragraphs into a single unreadable row and offer
+// no per-paragraph add/remove/reorder or per-paragraph validation message.
+// StoryForm.tsx handles `paragraphs` itself, the same way GalleryList.tsx
+// handles its own arrays outside FieldsOf/RecordForm entirely.
+export const STORY_HEADING_FIELD: FieldSpec<string> = { label: 'Heading', kind: 'text' };
 
 export const HOURS_FIELDS: FieldsOf<Hours> = {
   days: { label: 'Days', kind: 'tags', help: 'Two-letter day codes, e.g. Mo, Tu, We.' },

@@ -17,7 +17,9 @@ import {
   HOURS_FIELDS,
   COPY_FIELDS,
   SITE_FIELDS,
+  STORY_HEADING_FIELD,
 } from '../fields';
+import { UPLOAD_CATEGORIES } from '../../shared/upload-categories';
 
 // Every FieldsOf<T> descriptor already gets its completeness and shape
 // checked by tsc -b at every build -- that is this whole task's point, and
@@ -77,6 +79,51 @@ describe('DISH_FIELDS.category-equivalent controlled vocabularies carry their op
 // diner sees. This is the one field.help string this suite pins by
 // content, not just presence -- everything else only needs a label and a
 // known kind (checked generically above).
+// Task 9: every real, dashboard-rendered `image`-kind field must carry a
+// `category` that is actually a member of UPLOAD_CATEGORIES (the same list
+// worker/upload.ts enforces server-side) -- checkSpecs above only proves
+// `kind` is a KNOWN kind, never that an 'image' field's `category` is a REAL
+// one. Confirmed directly: `checkSpecs` alone stays green if
+// `DISH_FIELDS.image.category` were quietly changed to `'nonexistent'`
+// (still a string, still compiles as a literal type error only tsc -b would
+// catch -- but this runtime check is what catches the SAME mistake made
+// through an `as UploadCategory` cast, which tsc cannot).
+function imageCategory(spec: { kind: string; category?: string }): string {
+  if (spec.kind !== 'image' || spec.category === undefined) throw new Error('not an image-kind spec');
+  return spec.category;
+}
+
+describe("every real 'image'-kind descriptor carries a category the Worker actually accepts, and the RIGHT one", () => {
+  it('DISH_FIELDS.image is category "food" -- matches every real dishes.json image path', () => {
+    expect(DISH_FIELDS.image.kind).toBe('image');
+    expect(imageCategory(DISH_FIELDS.image)).toBe('food');
+  });
+
+  it('DRINK_FIELDS.image is category "mocktails" -- the one bar-drink folder that exists', () => {
+    expect(DRINK_FIELDS.image.kind).toBe('image');
+    expect(imageCategory(DRINK_FIELDS.image)).toBe('mocktails');
+  });
+
+  it('ARTICLE_FIELDS.image is category "press"', () => {
+    expect(ARTICLE_FIELDS.image.kind).toBe('image');
+    expect(imageCategory(ARTICLE_FIELDS.image)).toBe('press');
+  });
+
+  it.each([DISH_FIELDS.image, DRINK_FIELDS.image, ARTICLE_FIELDS.image])(
+    'category is a real, known upload category',
+    (spec) => {
+      expect(UPLOAD_CATEGORIES).toContain(imageCategory(spec));
+    },
+  );
+});
+
+describe("STORY_HEADING_FIELD: story.json's one FieldSpec (paragraphs is bespoke, in StoryForm.tsx)", () => {
+  it('is a plain, non-blank-labelled text field', () => {
+    expect(STORY_HEADING_FIELD.kind).toBe('text');
+    expect(STORY_HEADING_FIELD.label.trim().length).toBeGreaterThan(0);
+  });
+});
+
 describe('the two field.help strings task-2-brief.md calls out by name', () => {
   it('DISH_FIELDS.tags warns that tags are not rendered on the site yet', () => {
     expect(DISH_FIELDS.tags.help).toMatch(/not (yet )?(shown|rendered|visible)/i);
