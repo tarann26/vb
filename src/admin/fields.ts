@@ -367,8 +367,12 @@ export const COPY_FIELDS: FieldsOf<CopyLeafShape> = {
 
 // SiteContent's `hours` field (Hours[]) is deliberately absent below -- it's
 // an array of objects, not a single value any FieldSpec kind can describe;
-// each row is edited through HOURS_FIELDS instead, the same split
-// CopyLeafShape makes for Copy.nav.links.
+// each row is edited through HOURS_FIELDS instead. This is not the same
+// split CopyLeafShape makes for Copy.nav.links: HOURS_FIELDS is a real,
+// used dashboard-facing descriptor, while nav.links has no counterpart anywhere
+// in src/admin/ -- there is no NAV_LINKS_FIELDS, and no other path edits a
+// nav link's label either. That is a real, recorded gap (the edit mode
+// plan's own D10 miss), not a parallel design choice to hours.
 interface SiteLeafShape {
   name: string;
   tagline: string;

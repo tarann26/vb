@@ -41,6 +41,13 @@ const Hero: React.FC = () => {
  return (
   <section className="min-h-screen bg-white relative flex items-center justify-center overflow-hidden">
     {/* brick background */}
+    {/* The one image anywhere in RENDERED_FILES with no content leaf behind
+        it: this src is a hardcoded literal, never read from galleries,
+        dishes, drinks or press, so there is no path an editing overlay
+        could point at here. Deliberately left out of the seven renderImage
+        call sites -- wrapping it would offer an edit affordance for a path
+        that cannot exist. See the edit mode plan's own corrected coverage
+        rule for the same call. */}
     <img
       src="/hero/brick.webp"
       alt=""

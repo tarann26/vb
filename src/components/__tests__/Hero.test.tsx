@@ -135,7 +135,36 @@ describe('Hero', () => {
       );
     }
 
-    it('still opens WhatsApp when navigator.sendBeacon throws', () => {
+    // Review finding: the two tests below used to assert only
+    // `openSpy.toHaveBeenCalledWith(...)` -- true regardless of what the
+    // beacon code does, since window.open is the handler's first statement
+    // and nothing after it can ever un-call something that already ran.
+    // Deleting Hero.tsx's try/catch, or its `?.`, left both tests green.
+    //
+    // React does not let a thrown event handler crash the click: in a dev
+    // build, `invokeGuardedCallbackDev` re-dispatches the handler through a
+    // throwaway DOM node so the browser's own uncaught-exception reporting
+    // produces a proper stack trace, rather than rethrowing synchronously
+    // out of `fireEvent.click` itself (confirmed directly -- a `try/catch`
+    // wrapped around `fireEvent.click` never observes the throw). jsdom
+    // reports that the same way a real browser would: as an `error` event
+    // dispatched on `window`, which nothing in a passing run of this file
+    // should ever produce. Tracking that event is what lets these two
+    // tests tell "the beacon's failure was contained" apart from "the
+    // beacon's failure merely didn't stop window.open, but leaked past
+    // openReservationWhatsApp anyway" -- the second of which is not what
+    // "never lets a broken beacon affect the click" (Hero.tsx's own
+    // comment) promises.
+    function trackUncaughtErrors(): { events: ErrorEvent[]; stop: () => void } {
+      const events: ErrorEvent[] = [];
+      const onError = (event: ErrorEvent) => {
+        events.push(event);
+      };
+      window.addEventListener('error', onError);
+      return { events, stop: () => window.removeEventListener('error', onError) };
+    }
+
+    it('still opens WhatsApp when navigator.sendBeacon throws, and the throw never escapes as an uncaught error', () => {
       const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);
       Object.defineProperty(window.navigator, 'sendBeacon', {
         value: vi.fn(() => {
@@ -143,15 +172,25 @@ describe('Hero', () => {
         }),
         configurable: true,
       });
+      const uncaught = trackUncaughtErrors();
 
       const { getByRole } = renderHero();
       fireEvent.click(getByRole('button', { name: copy.hero.reserveButton }));
+      uncaught.stop();
 
       expect(openSpy).toHaveBeenCalledWith(
         `https://wa.me/${site.whatsapp.number}?text=${encodeURIComponent(site.whatsapp.prefilledMessage)}`,
         '_blank',
         'noopener',
       );
+      // Confirmed directly: deleting Hero.tsx's try/catch around the
+      // beacon call (leaving `navigator.sendBeacon?.('/api/wa');` bare)
+      // leaves the assertion above green -- window.open already ran -- but
+      // turns this one red, with jsdom reporting the escaped
+      // `Error: beacon failed` as an uncaught `window` error event. That is
+      // the one thing distinguishing "contained" from "merely didn't stop
+      // window.open" that the assertion above cannot see on its own.
+      expect(uncaught.events).toEqual([]);
     });
 
     // jsdom has no navigator.sendBeacon at all by default -- a test that
@@ -164,15 +203,40 @@ describe('Hero', () => {
       delete (window.navigator as { sendBeacon?: unknown }).sendBeacon;
       expect(window.navigator.sendBeacon).toBeUndefined();
       const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);
+      const uncaught = trackUncaughtErrors();
 
       const { getByRole } = renderHero();
       fireEvent.click(getByRole('button', { name: copy.hero.reserveButton }));
+      uncaught.stop();
 
       expect(openSpy).toHaveBeenCalledWith(
         `https://wa.me/${site.whatsapp.number}?text=${encodeURIComponent(site.whatsapp.prefilledMessage)}`,
         '_blank',
         'noopener',
       );
+      // Kept for the same reason as the test above, but honestly: with
+      // sendBeacon genuinely undefined, `navigator.sendBeacon?.(...)` and a
+      // bare `navigator.sendBeacon(...)` wrapped in the try/catch produce
+      // an IDENTICAL outcome -- neither one throws anywhere an observer can
+      // see, because `?.` short-circuits before any call is attempted at
+      // all. Confirmed directly, twice: deleting just the `?.` (try/catch
+      // left in place) leaves this event array empty, because the
+      // resulting TypeError is still caught by the same catch that
+      // protects the *other* test above; deleting the try/catch too
+      // (nothing left but `navigator.sendBeacon?.('/api/wa');`) ALSO
+      // leaves it empty, because `?.` never attempts the call in the first
+      // place when sendBeacon is undefined -- there is nothing for a
+      // missing catch to fail to catch. A bare `catch {}` with no binding
+      // discards the error it catches entirely, so nothing distinguishes
+      // "never threw" from "threw and was silently absorbed" from outside
+      // the function. This assertion is real (it would catch a REAL
+      // regression -- sendBeacon undefined suddenly throwing past this
+      // handler) but it is not, and cannot be, a test that specifically
+      // kills a deleted `?.` while the try/catch survives it -- that
+      // mutation has no externally observable effect at all under this
+      // precondition, and no test written against this component's public
+      // behavior can prove otherwise.
+      expect(uncaught.events).toEqual([]);
     });
 
     // fireEvent.click, not userEvent.click: user-event deliberately spreads

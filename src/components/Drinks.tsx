@@ -1,6 +1,6 @@
 import React from 'react';
 import { Download } from 'lucide-react';
-import { useContent } from '../content/ContentContext';
+import { useContent, type EditableTextPath } from '../content/ContentContext';
 import type { Drink } from '../content';
 
 const hasImage = (drink: Drink): drink is Drink & { image: string } => drink.image !== null;
@@ -15,7 +15,7 @@ const Drinks: React.FC = () => {
   // build-time values -- exactly the two-surfaces-disagree bug this plan
   // calls out by name, since a dashboard edit to any of the three would
   // never reach this component while a static import elsewhere would.
-  const CATEGORY_ORDER: { key: Drink['category']; heading: string; path: string }[] = [
+  const CATEGORY_ORDER: { key: Drink['category']; heading: string; path: EditableTextPath }[] = [
     { key: 'mocktail', heading: copy.drinks.mocktails, path: 'drinks.mocktails' },
     { key: 'cocktail', heading: copy.drinks.cocktails, path: 'drinks.cocktails' },
     { key: 'wine', heading: copy.drinks.wine, path: 'drinks.wine' },
