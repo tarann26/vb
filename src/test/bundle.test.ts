@@ -26,10 +26,24 @@ describe('nothing outside src/admin imports the heic module', () => {
       .filter(Boolean);
   }
 
+  // Matches a from-style import, a bare side-effect-only import (valid ES
+  // syntax with no from keyword at all, and still a real edge a bundler
+  // follows), a re-export, and a dynamic import -- anchored on a
+  // from/import keyword immediately before the quoted specifier, not
+  // "admin/heic anywhere inside any quotes in the file": a first,
+  // unanchored version of this regex (matching the substring in any
+  // quoted string at all) matched this very test's own name a few lines
+  // below -- `it('...imports admin/heic', ...)` is prose in quotes, not
+  // an import, and quote characters are common enough in ordinary comment
+  // prose (contractions like "doesn't") that an unanchored version isn't
+  // reliably scoped to actual code. Confirmed by running it and watching
+  // this file flag itself as an offender.
+  const IMPORTS_HEIC = /(?:from|import)\s*\(?\s*['"][^'"]*admin\/heic['"]/;
+
   it('no .ts/.tsx file outside src/admin/ imports admin/heic', () => {
     const offenders = gitLsFiles('src')
       .filter((f) => !f.startsWith('src/admin/') && /\.tsx?$/.test(f))
-      .filter((f) => /from ['"].*admin\/heic['"]/.test(readFileSync(f, 'utf8')));
+      .filter((f) => IMPORTS_HEIC.test(readFileSync(f, 'utf8')));
 
     expect(offenders).toEqual([]);
   });

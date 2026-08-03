@@ -1,0 +1,83 @@
+<!doctype html>
+<!--
+  Manual, non-automated proof that heic-to's real WASM decoder genuinely
+  converts a real HEIC file to a real JPEG in a real browser -- the one
+  claim Task 9 (src/admin/heic.ts, "HEIC conversion in her browser") makes
+  that nothing in `npm run test` can verify.
+
+  Why this can't be a vitest test: heic-to unconditionally does
+  `new Worker(URL.createObjectURL(...))` inside its own dist bundle, with
+  no `typeof Worker !== 'undefined'` guard, and jsdom (this repo's test
+  environment) does not implement Worker at all -- confirmed directly:
+  calling the real, installed heic-to from a plain Node script throws
+  `ReferenceError: Worker is not defined` at that exact call site. Even a
+  generic Node Worker polyfill (`web-worker` on npm, tried in an isolated
+  scratch directory, never added to this repo) hits a second wall
+  (`TypeError [ERR_INVALID_URL_SCHEME]`, since it doesn't understand the
+  blob: URL heic-to constructs its worker from), and past that, the
+  decode step needs a real Canvas 2D context, which jsdom's own <canvas>
+  returns null for without the native `canvas` npm package. Three
+  independent browser-only requirements -- not one fixable gap -- so
+  src/admin/__tests__/heic.test.ts mocks heic-to's `heicTo` export
+  entirely and only tests convertHeic's own routing/wrapping logic. This
+  page is what actually exercises the decoder.
+
+  rainbow-451x461.heic (in this same directory) is a real,
+  libheif-encoded HEIC file downloaded from strukturag/libheif's own test
+  suite (tests/data/rainbow-451x461.heic on GitHub, libheif is
+  LGPL-3.0-licensed; this is a small test-data fixture, not library code,
+  used here only for local, non-shipped manual verification) -- not a
+  hand-built synthetic ftyp box like the ones in heic.test.ts. Confirmed
+  by hex dump before use: a real `ftyp` box, major brand `heic`,
+  compatible brand `mif1`.
+
+  How to run:
+    1. From the repo root: npx http-server . -p 8934
+       (serves node_modules too, which the import below needs -- most
+       static file servers do this by default; http-server does)
+    2. Open http://127.0.0.1:8934/scripts/verify-heic-conversion/
+    3. Read the result on the page (and in the console). Expect something
+       like: SUCCESS size=7672 type=image/jpeg magicJPEG=true
+    4. Stop the server (Ctrl-C).
+
+  Imports heic-to from node_modules directly (not a copy checked into
+  this directory) so it always exercises whatever version is actually
+  installed -- see package.json for the pinned version.
+-->
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>heic-to manual verification</title>
+  </head>
+  <body>
+    <p>Converting a real HEIC file to JPEG with the real, installed heic-to...</p>
+    <div id="result">pending</div>
+    <script type="module">
+      import { heicTo } from '../../node_modules/heic-to/dist/heic-to.js';
+
+      const resultEl = document.getElementById('result');
+
+      function report(message) {
+        document.title = message;
+        resultEl.textContent = message;
+        console.log(message);
+      }
+
+      (async () => {
+        try {
+          const res = await fetch('./rainbow-451x461.heic');
+          if (!res.ok) throw new Error(`could not fetch fixture: HTTP ${res.status}`);
+          const blob = await res.blob();
+
+          const jpeg = await heicTo({ blob, type: 'image/jpeg', quality: 0.8 });
+          const bytes = new Uint8Array(await jpeg.arrayBuffer());
+          const magicJPEG = bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+
+          report(`SUCCESS size=${jpeg.size} type=${jpeg.type} magicJPEG=${magicJPEG}`);
+        } catch (err) {
+          report(`FAILED ${err && err.stack ? err.stack : err}`);
+        }
+      })();
+    </script>
+  </body>
+</html>

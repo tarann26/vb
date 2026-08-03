@@ -56,7 +56,7 @@ describe('convertHeic', () => {
     expect(heicToMock).not.toHaveBeenCalled();
   });
 
-  it('converts a heic file to jpeg and renames it', async () => {
+  it("wraps heicTo's resolved blob into a renamed .jpg File", async () => {
     heicToMock.mockResolvedValue(new Blob([CONVERTED_JPEG_BYTES], { type: 'image/jpeg' }));
 
     const out = await convertHeic(new File([HEIC_BYTES], 'IMG_1234.HEIC'));
@@ -79,7 +79,7 @@ describe('convertHeic', () => {
     expect(call.type).toBe('image/jpeg');
   });
 
-  it('detects by content, so a renamed heic is still converted', async () => {
+  it('routes a renamed heic to heicTo regardless of its .jpg name', async () => {
     heicToMock.mockResolvedValue(new Blob([CONVERTED_JPEG_BYTES], { type: 'image/jpeg' }));
 
     const out = await convertHeic(new File([HEIC_BYTES], 'holiday.jpg'));
