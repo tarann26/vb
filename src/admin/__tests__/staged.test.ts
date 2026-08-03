@@ -67,12 +67,21 @@ describe('useStagedFiles: the one collector every staging screen shares', () => 
     expect(Object.prototype.hasOwnProperty.call(result.current.files, 'dishes.json:negroni:image')).toBe(false);
   });
 
-  it('staging null under a key that was never staged is a harmless no-op', () => {
+  // `toEqual({})` alone cannot fail on the defect this guards against: it
+  // would stay green even if `stage`'s null-branch replaced `files` with a
+  // BRAND NEW empty object on every call, which is exactly what
+  // staged.ts's own comment says NOT to do ("no need to trigger a
+  // re-render for it"). `toBe` on the SAME reference is what actually
+  // proves the no-op -- every consumer of `files` (every section on the
+  // page) re-renders on identity change, so a needless new object here
+  // would re-render the whole dashboard on a pick that changed nothing.
+  it('staging null under a key that was never staged is a harmless no-op -- the SAME files object, not a new empty one', () => {
     const { result } = renderHook(() => useStagedFiles());
+    const before = result.current.files;
     act(() => {
       result.current.stage('dishes.json:negroni:image', null);
     });
-    expect(result.current.files).toEqual({});
+    expect(result.current.files).toBe(before);
   });
 
   it('restaging the same key overwrites its own previous value, not the whole map', () => {

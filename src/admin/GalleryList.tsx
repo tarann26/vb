@@ -9,10 +9,13 @@
 // different row's data still renders correctly).
 //
 // `src` reuses PhotoField directly, not Field.tsx's generic 'image' dispatch
-// -- GALLERY_IMAGE_FIELDS.src's own comment (fields.ts) explains why:
-// atmosphere and ourStory share ONE descriptor but need TWO different
-// upload categories, which one FieldSpec value can't express. This
-// component supplies the real category itself, per list.
+// -- fields.ts's own GALLERY_IMAGE_FIELDS comment explains why: atmosphere
+// and ourStory share ONE descriptor but need TWO different upload
+// categories, which one FieldSpec value can't express (which is also why
+// that descriptor has no `src` entry of its own at all, only `alt` -- a
+// wrong-category `image`-kind `src` field sitting there unused was a real
+// landmine, see its own comment). This component supplies the real
+// category itself, per list.
 import Field from './Field';
 import PhotoField from './PhotoField';
 import { GALLERY_IMAGE_FIELDS } from './fields';
@@ -168,7 +171,27 @@ function GalleryImageList({ prefix, heading, sectionHeading, addLabel, category,
                 // exactly what validateGalleries' own "needs an image
                 // source" message would catch.
                 onChange={(next) => patchAt(index, { src: next ?? '' })}
-                onStaged={(staged) => stage(`galleries.json:${prefix}:${index}:src`, fromStagedPhoto(staged))}
+                // Keyed on `item.src` (the row's OWN current value, read at
+                // render time -- stable across a reorder, which only
+                // permutes ARRAY POSITION, never the row's own `src`), never
+                // `index`. `index` looked equivalent (both `onStaged(null)`
+                // and the eventual `onStaged(staged)` for one upload fire
+                // against the same render, so the KEY never changes mid-
+                // upload) but is not: a reorder BETWEEN two uploads on two
+                // different rows moves the record to a new index while the
+                // collector key stays behind, so a photo staged before a
+                // reorder gets silently evicted by a LATER pick on a
+                // DIFFERENT row that now happens to render at the old index
+                // -- confirmed directly (review finding) end to end through
+                // the real AdminApp: stage on row 1, move it to row 2, stage
+                // on the row now at position 1, and the FIRST photo's bytes
+                // vanish from the collector while its record still points at
+                // the new contentPath. `|| `new-${index}`` only matters for
+                // a freshly-added, still-blank row (`src: ''`), where
+                // multiple blank rows would otherwise collide on the same
+                // empty-string key; falling back to index there is safe
+                // because a blank row has nothing staged on it yet to lose.
+                onStaged={(staged) => stage(`galleries.json:${prefix}:${item.src || `new-${index}`}:src`, fromStagedPhoto(staged))}
                 problems={rowProblems.filter((p) => itemOf(prefix, p.field)?.sub === 'src')}
               />
               <Field
@@ -219,6 +242,22 @@ function HeroCollageList({ items, onChange, problems, stage }: HeroCollageListPr
   return (
     <div className="mb-8">
       <h3 className="mb-3 font-['Montserrat'] text-base text-[#222]">Hero collage</h3>
+      {/* Review finding (Task 9): each entry's own "Layout position" (its
+          className, read-only below) pins its actual place in the grid --
+          moving an entry with BOTH a row and a column position already set
+          (most of the real, committed entries) up or down this list
+          re-orders the underlying data but changes nothing a visitor sees,
+          since that position travels with the entry, not with its spot in
+          this list. Kept -- not removed -- because it is NOT universally a
+          no-op: an entry missing one of the two (there are real ones today)
+          still falls back to the browser's own grid auto-placement, which
+          DOES read the order data is written in. Said here rather than
+          silently, so a reorder that visibly does nothing isn't mistaken
+          for one that didn't register. */}
+      <p className="mb-3 text-xs text-gray-500">
+        Reordering here only changes what a visitor sees for a photo whose layout position doesn't already set BOTH
+        a row and a column — most of these already do, so moving them will not change how the homepage looks.
+      </p>
       {banner.length > 0 && (
         <div
           role="alert"
@@ -269,7 +308,14 @@ function HeroCollageList({ items, onChange, problems, stage }: HeroCollageListPr
                 category="hero"
                 value={item.src}
                 onChange={(next) => onChange(items.map((row, i) => (i === index ? { ...row, src: next ?? '' } : row)))}
-                onStaged={(staged) => stage(`galleries.json:heroCollage:${index}:src`, fromStagedPhoto(staged))}
+                // Keyed on `item.src`, not `index` -- identical reasoning to
+                // GalleryImageList's own `src` field just above (see that
+                // comment for the reorder-eviction defect this avoids; a
+                // real, committed heroCollage entry always has a non-empty
+                // `src`, so the `new-${index}` fallback is only there for
+                // symmetry with GalleryImageList, not a state this list can
+                // actually reach).
+                onStaged={(staged) => stage(`galleries.json:heroCollage:${item.src || `new-${index}`}:src`, fromStagedPhoto(staged))}
                 problems={rowProblems.filter((p) => itemOf(prefix, p.field)?.sub === 'src')}
               />
               <Field

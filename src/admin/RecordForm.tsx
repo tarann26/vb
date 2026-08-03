@@ -44,6 +44,24 @@ export interface RecordFormProps<T> {
   // is generic over every record type, including ones with no image field
   // at all, and cannot tell the two apart at compile time).
   onStaged?: (fieldKey: string, staged: StagedPhoto | null) => void;
+  // Review finding (Task 9): every DOM id this component generates was
+  // `field-${key}-${index}` alone, with no per-FILE namespace -- Dishes'
+  // own first record and Drinks' own first record both produce
+  // `id="field-image-0"`, `id="field-name-0"`, etc., since `index` alone
+  // repeats across every ArraySection on the page. Harmless while every
+  // kind rendered a plain `<input>` (a `<label for>` resolving to the WRONG
+  // section's equivalent-looking text box didn't visibly break anything),
+  // genuinely harmful now that `image` renders a real, clickable file-picker
+  // label (PhotoField): confirmed directly that clicking "Photo" under
+  // Drinks focused the *Dishes* input instead, uploaded into the wrong
+  // assets-source/ category, and wrote the result into the wrong record --
+  // `document.getElementById`, which is what `<label for>` resolves
+  // against, isn't scoped by container and always finds the FIRST matching
+  // id in the whole document. `scope` (each ArraySection's own `file`, minus
+  // the ".json") is what makes the id unique per file again; optional so a
+  // caller with no risk of a sibling on the same page (HoursField,
+  // SectionList) needn't supply one.
+  scope?: string;
 }
 
 // `[N].key` for an N other than the index this instance renders -- a
@@ -80,7 +98,7 @@ function omitKey<T>(value: T, key: keyof T): T {
   return clone as T;
 }
 
-function RecordForm<T extends object>({ fields, index, value, onChange, problems, onStaged }: RecordFormProps<T>) {
+function RecordForm<T extends object>({ fields, index, value, onChange, problems, onStaged, scope }: RecordFormProps<T>) {
   const keys = Object.keys(fields) as (keyof T)[];
 
   // Every problem actually matched to a rendered field, tracked by
@@ -102,7 +120,8 @@ function RecordForm<T extends object>({ fields, index, value, onChange, problems
     return true;
   });
 
-  const idFor = (key: string) => (index === undefined ? `field-${key}` : `field-${key}-${index}`);
+  const prefix = scope ? `${scope}-field` : 'field';
+  const idFor = (key: string) => (index === undefined ? `${prefix}-${key}` : `${prefix}-${key}-${index}`);
 
   function renderField<K extends keyof T>(key: K, fieldProblems: ValidationProblem[]): React.ReactNode {
     const spec = fields[key];

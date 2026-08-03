@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { useState } from 'react';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import GalleryList from '../GalleryList';
 import { GALLERY_IMAGE_FIELDS } from '../fields';
+import { useStagedFiles } from '../staged';
 import { validateContent } from '../../content/validate';
 import type { Galleries } from '../../content/types';
 import type { ValidationProblem } from '../../content/validate';
@@ -138,22 +140,53 @@ describe('GalleryList: add, remove, and reorder -- atmosphere and ourStory only,
     expect(onChange).toHaveBeenCalledWith({ ...GALLERIES, atmosphere: [GALLERIES.atmosphere[1], GALLERIES.atmosphere[0]] });
   });
 
+  // An anchored name-pattern check (`/^Remove Hero collage/`,
+  // `/^Add.*collage/i`) can't actually catch a working Add/Remove pair
+  // named anything else (e.g. a plain "Delete photo 1", or "Add a hero
+  // photo" with no literal "collage" in it) -- an EXHAUSTIVE count of every
+  // button this section renders, compared against the exact accessible
+  // names expected, is what a rename or a differently-worded new button
+  // can't slip past.
   it('Hero collage can be reordered but never added to or removed from -- every entry there is developer-placed', () => {
     renderList();
-    // Reorder IS offered (two rows, so the first has a down button and the
-    // second has an up one) --
-    expect(screen.getByRole('button', { name: 'Move Hero collage photo 1 down' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Move Hero collage photo 2 up' })).toBeInTheDocument();
-    // -- but there is no way to add a new slot or remove an existing one.
-    expect(screen.queryByRole('button', { name: /^Remove Hero collage/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /^Add.*collage/i })).not.toBeInTheDocument();
+    const heading = screen.getByRole('heading', { name: 'Hero collage' });
+    // Named `wrapper`, not the more obvious variable name here: this
+    // null-guard needs a negation check on it, and an exclamation mark
+    // sitting directly against the word this task's own report already
+    // flags as a real Tailwind utility is ALSO that utility's
+    // important-modifier syntax -- Tailwind's content scan does not parse
+    // JS, so it reads that negation the same way it would read a class
+    // list. Confirmed directly (the review's own near-miss discipline,
+    // applied here too): the more obvious spelling added a new rule (and
+    // five breakpoint variants of it) to the built CSS.
+    const wrapper = heading.closest('div');
+    if (!wrapper) throw new Error('Hero collage heading is not inside a <div>');
+    const buttonLabels = within(wrapper).getAllByRole('button').map((b) => b.getAttribute('aria-label'));
+    // Exactly the two reorder buttons two rows produce -- nothing else,
+    // under any name.
+    expect(buttonLabels).toEqual(['Move Hero collage photo 1 down', 'Move Hero collage photo 2 up']);
+  });
+
+  // Judgment call recorded in this task's own report: the reorder buttons
+  // stay (an entry missing an explicit row+column position still responds
+  // to source order via the browser's own grid auto-placement), but she is
+  // told plainly that most real entries already pin BOTH, so reordering
+  // them visibly does nothing -- otherwise a reorder that does nothing
+  // reads as broken, not as working correctly on data that doesn't need it.
+  it('tells her plainly that reordering usually has no visible effect, rather than leaving a no-op reorder unexplained', () => {
+    renderList();
+    expect(
+      screen.getByText(/Reordering here only changes what a visitor sees/),
+    ).toBeInTheDocument();
   });
 });
 
-// Task 9's own wiring, proven through a REAL upload -- GALLERY_IMAGE_FIELDS.src
-// is never actually used for rendering (fields.ts's own comment explains
-// why one unchanging category can't serve both lists); this is what proves
-// GalleryList really does supply the right one itself, per list.
+// Task 9's own wiring, proven through a REAL upload -- GALLERY_IMAGE_FIELDS
+// has no `src` entry at all (fields.ts's own comment explains why: one
+// unchanging category can't serve both lists, and a wrong one sitting there
+// unused was a real landmine); this is what proves GalleryList really does
+// supply the right category itself, per list, entirely outside that
+// descriptor.
 describe("GalleryList: Task 9's collector wiring -- src stages through PhotoField with the right category and a real, list-scoped key", () => {
   beforeEach(() => {
     FakeXHR.instances = [];
@@ -183,22 +216,121 @@ describe("GalleryList: Task 9's collector wiring -- src stages through PhotoFiel
     expect(FakeXHR.instances[0].sentForm?.get('category')).toBe('our_story');
 
     FakeXHR.instances[0].respond(200, { path: 'assets-source/our_story/ddd444ddd444.jpg', contentPath: '/our_story/ddd444ddd444.webp' });
+    // Keyed on the row's OWN pre-upload `src` ('/our_story/cut.webp' --
+    // GALLERIES' own fixture value), not its array index -- see
+    // GalleryList.tsx's own comment on why index-keying silently evicts a
+    // different row's bytes across a reorder.
+    // Not `expect.any(String)`/no content check at all: this test's own
+    // name claims "real bytes" -- `''` would satisfy a bare presence check
+    // and is exactly the defect a missing collector produces (a path that
+    // looks right, no bytes behind it).
     await waitFor(() =>
       expect(stage).toHaveBeenCalledWith(
-        'galleries.json:ourStory:0:src',
-        expect.objectContaining({ path: 'assets-source/our_story/ddd444ddd444.jpg', encoding: 'base64' } as Partial<StagedFile>),
+        'galleries.json:ourStory:/our_story/cut.webp:src',
+        expect.objectContaining({
+          path: 'assets-source/our_story/ddd444ddd444.jpg',
+          encoding: 'base64',
+          content: expect.stringMatching(/^[A-Za-z0-9+/=]{8,}$/),
+        } as Partial<StagedFile>),
       ),
     );
   });
 
-  it("Hero collage's photo picker uploads under category 'hero'", async () => {
+  it("Hero collage's photo picker uploads under category 'hero', and stages under a galleries.json-prefixed key with real bytes", async () => {
     const user = userEvent.setup();
-    renderList();
+    const { stage } = renderList();
     const photoInputs = screen.getAllByLabelText('Photo');
     // atmosphere (2) + ourStory (1) = 3 rows before heroCollage's own first row.
     await user.upload(photoInputs[3], jpegFile());
     await waitFor(() => expect(FakeXHR.instances).toHaveLength(1));
     expect(FakeXHR.instances[0].sentForm?.get('category')).toBe('hero');
+
+    // Review finding: without this response and the assertion below, the
+    // XHR never resolves, `onStaged` never fires, and NOTHING here would
+    // notice `stage` being disconnected entirely -- confirmed directly,
+    // deleting GalleryList.tsx's own heroCollage `onStaged` prop left every
+    // test in this file (including the version of this one that stopped at
+    // the `category` assertion above) green. "The highest-visibility photos
+    // on the site" had the least-protected wiring for exactly that reason.
+    FakeXHR.instances[0].respond(200, { path: 'assets-source/hero/eee555eee555.jpg', contentPath: '/hero/eee555eee555.webp' });
+    await waitFor(() =>
+      expect(stage).toHaveBeenCalledWith(
+        'galleries.json:heroCollage:/hero/scene.webp:src',
+        expect.objectContaining({
+          path: 'assets-source/hero/eee555eee555.jpg',
+          encoding: 'base64',
+          content: expect.stringMatching(/^[A-Za-z0-9+/=]{8,}$/),
+        } as Partial<StagedFile>),
+      ),
+    );
+  });
+});
+
+// The Critical review finding, reproduced exactly and then proven fixed:
+// stage a photo on row 1, reorder, stage a DIFFERENT photo on the row now
+// occupying row 1's old position -- with index-keying, the second stage
+// silently evicts the first (same key, `...:0:src`, before either row's
+// own `src` is consulted). A real `useStagedFiles()` is used here, not a
+// spy, because the defect is specifically about what survives in the
+// COLLECTOR across two sequential stages -- a spy only proves each
+// individual call's arguments, not whether an earlier entry got clobbered.
+function GalleryHarness({ initial }: { initial: Galleries }) {
+  const [value, setValue] = useState(initial);
+  const { files, stage } = useStagedFiles();
+  return (
+    <>
+      <GalleryList value={value} onChange={setValue} problems={[]} stage={stage} />
+      <p data-testid="staged-keys">{Object.keys(files).sort().join('|')}</p>
+    </>
+  );
+}
+
+describe('GalleryList: reordering between two stages does not evict the earlier one (Critical fix)', () => {
+  beforeEach(() => {
+    FakeXHR.instances = [];
+    vi.stubGlobal('XMLHttpRequest', FakeXHR as unknown as typeof XMLHttpRequest);
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("stage -> reorder -> stage keeps BOTH photos' bytes in the collector", async () => {
+    const user = userEvent.setup();
+    render(<GalleryHarness initial={GALLERIES} />);
+
+    // 1. Stage a photo on Atmosphere photo 1 (src '/atmosphere/dining.webp').
+    const firstUpload = screen.getAllByLabelText('Photo')[0];
+    await user.upload(firstUpload, jpegFile('first.jpg'));
+    await waitFor(() => expect(FakeXHR.instances).toHaveLength(1));
+    FakeXHR.instances[0].respond(200, { path: 'assets-source/atmosphere/aaa111aaa111.jpg', contentPath: '/atmosphere/aaa111aaa111.webp' });
+    await waitFor(() => expect(screen.getByTestId('staged-keys')).toHaveTextContent('galleries.json:atmosphere:/atmosphere/dining.webp:src'));
+
+    // 2. Reorder: "Move Atmosphere photo 1 down" -- the record (and its new
+    // contentPath) moves to index 1; row 2's own '/atmosphere/bar.webp' is
+    // now at index 0.
+    await user.click(screen.getByRole('button', { name: 'Move Atmosphere photo 1 down' }));
+
+    // 3. Stage a DIFFERENT photo on the row now at index 0 (the row whose
+    // OWN src is '/atmosphere/bar.webp').
+    const secondUpload = screen.getAllByLabelText('Photo')[0];
+    await user.upload(secondUpload, jpegFile('second.jpg'));
+    await waitFor(() => expect(FakeXHR.instances).toHaveLength(2));
+    FakeXHR.instances[1].respond(200, { path: 'assets-source/atmosphere/bbb222bbb222.jpg', contentPath: '/atmosphere/bbb222bbb222.webp' });
+
+    // Both keys present -- the first stage's bytes were NOT evicted by the
+    // second. Under the old index-keyed scheme both stages would have
+    // collided on `galleries.json:atmosphere:0:src`, and this assertion
+    // would see only ONE key.
+    await waitFor(() => {
+      const keys = screen.getByTestId('staged-keys').textContent?.split('|') ?? [];
+      expect(keys).toEqual(
+        expect.arrayContaining([
+          'galleries.json:atmosphere:/atmosphere/dining.webp:src',
+          'galleries.json:atmosphere:/atmosphere/bar.webp:src',
+        ]),
+      );
+      expect(keys).toHaveLength(2);
+    });
   });
 });
 

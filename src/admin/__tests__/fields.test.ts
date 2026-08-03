@@ -188,6 +188,20 @@ describe('exactly the expected fields are kind: readonly or kind: select -- noth
     expect(keysWithKind(GALLERY_IMAGE_FIELDS, 'select')).toEqual([]);
   });
 
+  // Review finding: GALLERY_IMAGE_FIELDS used to also declare `src`, an
+  // `image`-kind FieldSpec with a category that is only ever right for
+  // HALF of what shares this descriptor (GalleryList.tsx's atmosphere and
+  // ourStory lists) -- a landmine for any future caller that rendered it
+  // through Field.tsx's ordinary dispatch instead of GalleryList's own
+  // per-list category. `alt` is the only key this descriptor is meant to
+  // have; this is the runtime half of the compile-time guarantee (`Pick<
+  // GalleryImage, 'alt'>` in fields.ts, not the full `GalleryImage`) --
+  // `Object.keys` is what actually observes the object has no OTHER own
+  // key at runtime, not just that `src` fails to type-check if read.
+  it('GALLERY_IMAGE_FIELDS declares ONLY alt -- no image-kind `src` landmine', () => {
+    expect(Object.keys(GALLERY_IMAGE_FIELDS)).toEqual(['alt']);
+  });
+
   it('HOURS_FIELDS has no readonly or select fields', () => {
     expect(keysWithKind(HOURS_FIELDS, 'readonly')).toEqual([]);
     expect(keysWithKind(HOURS_FIELDS, 'select')).toEqual([]);

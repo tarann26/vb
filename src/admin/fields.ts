@@ -181,19 +181,28 @@ export const MENU_FIELDS: FieldsOf<MenuFile> = {
   file: { label: 'PDF file', kind: 'text' },
 };
 
-export const GALLERY_IMAGE_FIELDS: FieldsOf<GalleryImage> = {
-  // `category` below is never actually consulted -- GalleryList.tsx renders
-  // `src` directly through PhotoField with its own explicit category
-  // ('atmosphere' or 'our_story') per list, bypassing Field.tsx's generic
-  // 'image' dispatch entirely. It has to: this ONE descriptor is shared by
-  // BOTH the atmosphere and ourStory lists (Galleries, src/content/types.ts),
-  // which need two DIFFERENT categories -- one unchanging field value here
-  // cannot express that, which is exactly why a dashboard-wide `image` kind
-  // wiring does not, by itself, cover galleries the way it covers
-  // dishes/drinks/press (each of which only ever needs one category).
-  // heroCollage isn't `GalleryImage[]` at all (`{ src, className }`, no
-  // `alt`) and is handled separately again, also outside this descriptor.
-  src: { label: 'Photo', kind: 'image', category: 'atmosphere' },
+// Review finding (Task 9): an earlier version of this descriptor was
+// `FieldsOf<GalleryImage>` in full, including a `src: { kind: 'image',
+// category: 'atmosphere' }` entry -- a REAL image-kind FieldSpec, with a
+// category that is WRONG for half of what this descriptor is shared by
+// (GalleryList.tsx renders `src` directly through PhotoField with its own
+// per-list category, 'atmosphere' or 'our_story', never reading this field
+// at all). That made it a landmine: nothing stops a future caller from
+// rendering `GALLERY_IMAGE_FIELDS.src` through `Field`'s ordinary generic
+// dispatch the way every OTHER `image`-kind descriptor here is meant to be
+// used -- and it is also the one `image`-kind descriptor
+// fields.test.ts's own category sweep does not check (that sweep only
+// covers DISH_FIELDS/DRINK_FIELDS/ARTICLE_FIELDS.image, the fields Field.tsx
+// actually dispatches on), so a wrong category sitting there could reach
+// production with nothing to catch it: every `ourStory` photo uploaded
+// through that path would land in `assets-source/atmosphere/` instead.
+//
+// Fixed by not declaring `src` here at all -- `Pick<GalleryImage, 'alt'>`,
+// not the full `GalleryImage`, is this descriptor's real type. `alt` is the
+// only field GalleryList.tsx actually reads off it; `src` is handled
+// entirely outside FieldsOf/Field.tsx, the same way MENU_FIELDS.file's own
+// comment (above) documents for an unrelated reason.
+export const GALLERY_IMAGE_FIELDS: FieldsOf<Pick<GalleryImage, 'alt'>> = {
   alt: { label: 'Alt text', kind: 'text', help: 'Describes the photo for screen readers and search engines.' },
 };
 

@@ -21,6 +21,12 @@ export interface RecordListProps<T extends { id: string }> {
   // `onStaged` is: most `RecordList` instances (were there ever a record
   // type with no image-kind field) would have nothing to forward.
   onStaged?: (key: string, staged: StagedPhoto | null) => void;
+  // Forwarded straight to every RecordForm's own `scope` prop -- see that
+  // file's comment (review finding, Task 9) for why a per-file namespace on
+  // generated DOM ids is what keeps two ArraySections' same-index records
+  // from producing duplicate ids (and, via `<label for>`, misdirecting a
+  // click into the wrong section entirely).
+  scope?: string;
   // Every record type this list can hold names itself differently
   // (Dish.name, Drink.name, Article.title) -- there is no field common to
   // all of them for RecordList to read a display name from on its own, so
@@ -107,6 +113,7 @@ function RecordList<T extends { id: string }>({
   itemLabel,
   problems,
   onStaged,
+  scope,
 }: RecordListProps<T>) {
   // Swaps the item at `index` with its neighbour at `otherIndex` and hands
   // the resulting id ORDER back to the caller -- RecordList never reorders
@@ -191,6 +198,7 @@ function RecordList<T extends { id: string }>({
                 onChange={(next) => onChange(index, next)}
                 problems={problems}
                 onStaged={onStaged ? (fieldKey, staged) => onStaged(`${item.id}:${fieldKey}`, staged) : undefined}
+                scope={scope}
               />
             </li>
           );

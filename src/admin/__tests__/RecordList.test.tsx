@@ -320,10 +320,23 @@ describe("RecordList: Task 9's collector wiring -- a staged photo reaches onStag
     // The collector: the ACTUAL bytes, under a real assets-source/ path --
     // not just "onChange happened", which alone would be exactly the "worse
     // than the text box" defect the brief warns a missing collector causes.
+    // `expect.any(String)` would pass on `content: ''` -- and an EMPTY
+    // string is exactly the defect this assertion exists to catch (the
+    // bytes silently dropped while the path/encoding still look right).
+    // Confirmed directly (review finding): mutating PhotoField.tsx's own
+    // `content: bytesToBase64(bytes)` to `content: ''` left a
+    // string-typed assertion here green. A real base64 shape -- not the
+    // exact encoded value, which duplicates base64.test.ts's own coverage
+    // of `bytesToBase64` -- is what a caller of this collector actually
+    // needs to trust: non-empty, and shaped like base64.
     await waitFor(() =>
       expect(onStaged).toHaveBeenCalledWith(
         'spritz:image',
-        expect.objectContaining({ path: 'assets-source/food/abc123abc123.jpg', encoding: 'base64', content: expect.any(String) }),
+        expect.objectContaining({
+          path: 'assets-source/food/abc123abc123.jpg',
+          encoding: 'base64',
+          content: expect.stringMatching(/^[A-Za-z0-9+/=]{8,}$/),
+        }),
       ),
     );
   });

@@ -54,11 +54,17 @@ describe('StoryForm: add, remove, and reorder paragraphs', () => {
     expect(onChange).toHaveBeenCalledWith({ ...STORY, paragraphs: [STORY.paragraphs[1], STORY.paragraphs[0]] });
   });
 
-  it('"Add a paragraph" appends a blank paragraph that fails validation until filled in', async () => {
+  // Proven against the REAL validator, not just asserted by name: an
+  // earlier version of this test's own title claimed "fails validation
+  // until filled in" without ever calling validateContent, which could
+  // stay true even if validateStory's blank check regressed.
+  it('"Add a paragraph" appends a blank paragraph, which the real validator flags until she fills it in', async () => {
     const user = userEvent.setup();
     const { onChange } = renderForm();
     await user.click(screen.getByRole('button', { name: 'Add a paragraph' }));
-    expect(onChange).toHaveBeenCalledWith({ ...STORY, paragraphs: [...STORY.paragraphs, ''] });
+    const next = { ...STORY, paragraphs: [...STORY.paragraphs, ''] };
+    expect(onChange).toHaveBeenCalledWith(next);
+    expect(validateContent('story.json', next)).toEqual([{ field: 'paragraphs[2]', message: 'paragraph 3 is blank' }]);
   });
 
   it('"Remove paragraph 1" drops only that paragraph, leaving the other intact', async () => {

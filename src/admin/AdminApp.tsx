@@ -8,6 +8,7 @@ import SectionList from './SectionList';
 import HoursField from './HoursField';
 import GalleryList from './GalleryList';
 import StoryForm from './StoryForm';
+import SectionErrorBoundary from './SectionErrorBoundary';
 import Field from './Field';
 import PdfField from './PdfField';
 import { ARTICLE_FIELDS, DISH_FIELDS, DRINK_FIELDS, MENU_FIELDS, COPY_FIELDS } from './fields';
@@ -75,42 +76,71 @@ const AdminApp: React.FC = () => {
         <p className="mb-8 font-['Montserrat'] text-sm text-gray-500">
           {stagedFileCountMessage(Object.keys(stagedFiles).length)}
         </p>
-        <ArraySection<Dish>
-          file="dishes.json"
-          load={() => fetchContent('dishes.json')}
-          heading="Dishes"
-          noun="dish"
-          fields={DISH_FIELDS}
-          itemLabel={(dish) => dish.name || 'Untitled dish'}
-          makeBlank={blankDish}
-          stage={stage}
-        />
-        <ArraySection<Drink>
-          file="drinks.json"
-          load={() => fetchContent('drinks.json')}
-          heading="Drinks"
-          noun="drink"
-          fields={DRINK_FIELDS}
-          itemLabel={(drink) => drink.name || 'Untitled drink'}
-          makeBlank={blankDrink}
-          stage={stage}
-        />
-        <ArraySection<Article>
-          file="press.json"
-          load={() => fetchContent('press.json')}
-          heading="Press"
-          noun="article"
-          fields={ARTICLE_FIELDS}
-          itemLabel={(article) => article.title || 'Untitled article'}
-          makeBlank={blankArticle}
-          stage={stage}
-        />
-        <SectionsSection />
-        <HoursSection />
-        <MenusSection stage={stage} />
-        <GallerySection stage={stage} />
-        <StorySection />
-        <CopySection />
+        {/* Review finding (Task 9): every section below reads a whole
+            content file through fetchContent's own unchecked cast
+            (src/admin/content.ts's own header comment) with no runtime
+            guard -- a malformed galleries.json/story.json/menus.json throws
+            mid-render, and main.tsx's ErrorBoundary is the ONLY one in this
+            app, wrapping the whole SPA, not just AdminApp. Without a
+            boundary HERE, per section, that throw would unmount every
+            OTHER section too (Dishes, Drinks, Press, Sections, Hours
+            included), and reloading would fail identically against the
+            same bad file. One boundary per section is what limits one bad
+            file to costing one section. */}
+        <SectionErrorBoundary name="Dishes">
+          <ArraySection<Dish>
+            file="dishes.json"
+            load={() => fetchContent('dishes.json')}
+            heading="Dishes"
+            noun="dish"
+            fields={DISH_FIELDS}
+            itemLabel={(dish) => dish.name || 'Untitled dish'}
+            makeBlank={blankDish}
+            stage={stage}
+          />
+        </SectionErrorBoundary>
+        <SectionErrorBoundary name="Drinks">
+          <ArraySection<Drink>
+            file="drinks.json"
+            load={() => fetchContent('drinks.json')}
+            heading="Drinks"
+            noun="drink"
+            fields={DRINK_FIELDS}
+            itemLabel={(drink) => drink.name || 'Untitled drink'}
+            makeBlank={blankDrink}
+            stage={stage}
+          />
+        </SectionErrorBoundary>
+        <SectionErrorBoundary name="Press">
+          <ArraySection<Article>
+            file="press.json"
+            load={() => fetchContent('press.json')}
+            heading="Press"
+            noun="article"
+            fields={ARTICLE_FIELDS}
+            itemLabel={(article) => article.title || 'Untitled article'}
+            makeBlank={blankArticle}
+            stage={stage}
+          />
+        </SectionErrorBoundary>
+        <SectionErrorBoundary name="Homepage sections">
+          <SectionsSection />
+        </SectionErrorBoundary>
+        <SectionErrorBoundary name="Opening hours">
+          <HoursSection />
+        </SectionErrorBoundary>
+        <SectionErrorBoundary name="Menus">
+          <MenusSection stage={stage} />
+        </SectionErrorBoundary>
+        <SectionErrorBoundary name="Galleries">
+          <GallerySection stage={stage} />
+        </SectionErrorBoundary>
+        <SectionErrorBoundary name="Our Story">
+          <StorySection />
+        </SectionErrorBoundary>
+        <SectionErrorBoundary name="Page copy">
+          <CopySection />
+        </SectionErrorBoundary>
       </div>
     </div>
   );
@@ -255,6 +285,14 @@ function ArraySection<Item extends { id: string }>({
         itemLabel={itemLabel}
         problems={problems}
         onStaged={(key, staged) => stage(`${file}:${key}`, fromStagedPhoto(staged))}
+        // Review finding (Task 9): without this, Dishes' and Drinks' own
+        // first record both render `id="field-image-0"` (RecordForm.tsx's
+        // `idFor` had no per-file namespace) -- confirmed to actually
+        // misdirect a real click (a `<label for>` in one section focusing
+        // the WRONG section's input, since id resolution isn't scoped by
+        // container). `file` minus its ".json" is already unique per
+        // ArraySection on this page.
+        scope={file.replace('.json', '')}
       />
     </section>
   );

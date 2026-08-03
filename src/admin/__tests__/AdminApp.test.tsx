@@ -267,6 +267,64 @@ describe('AdminApp: Add, Remove and Reorder, exercised through the real componen
 // own test file (props supplied by hand) nor useValidation.test.tsx's
 // SectionsHarness (built for RecordList, before SectionList existed) proves
 // the actual fetch -> SectionsSection -> SectionList wiring this task adds.
+// Review finding (Task 9): RecordForm's own `idFor` had no per-file
+// namespace, so Dishes' and Drinks' own first record BOTH produced
+// `id="field-image-0"`, `id="field-name-0"`, etc. -- confirmed by the review
+// to be more than cosmetic: clicking the "Photo" label under Drinks, in a
+// real browser, focuses the DISH's own file input instead (`<label for>`
+// resolves via `document.getElementById`, which isn't scoped by container
+// and always returns the FIRST match in the whole document). Fixed by
+// threading an optional `scope` prop (each ArraySection's own `file`, minus
+// ".json") from AdminApp through RecordList into RecordForm's own `idFor`.
+describe("AdminApp: no duplicate DOM ids across sibling sections -- a label click reaches its OWN section's input", () => {
+  it('every id on the fully-rendered page is unique -- confirmed by counting every id, not just spot-checking one', async () => {
+    stubFetch();
+    render(<AdminApp />);
+    await screen.findByDisplayValue('Dish A');
+    await screen.findByDisplayValue('Drink X');
+    await screen.findByDisplayValue('Article P');
+
+    const ids = Array.from(document.querySelectorAll('[id]')).map((el) => el.id);
+    const counts = new Map<string, number>();
+    ids.forEach((id) => counts.set(id, (counts.get(id) ?? 0) + 1));
+    const duplicated = Array.from(counts.entries()).filter(([, count]) => count > 1);
+    expect(duplicated).toEqual([]);
+  });
+
+  it('Dishes\' and Drinks\' own Photo fields have DIFFERENT ids, namespaced by file', async () => {
+    stubFetch();
+    render(<AdminApp />);
+    const dSection = await dishesSection();
+    await within(dSection).findByDisplayValue('Dish A');
+    const drSection = await sectionByHeading('Drinks');
+    await within(drSection).findByDisplayValue('Drink X');
+
+    const dishPhotoInput = within(dSection).getAllByLabelText(DISH_FIELDS.image.label)[0];
+    const drinkPhotoInput = drSection.querySelector('input[type="file"]') as HTMLInputElement;
+    expect(dishPhotoInput.id).toBe('dishes-field-image-0');
+    expect(drinkPhotoInput.id).toBe('drinks-field-image-0');
+    expect(dishPhotoInput.id).not.toBe(drinkPhotoInput.id);
+  });
+
+  it('clicking the "Photo" label under Drinks focuses the DRINK\'s own input, never the dish\'s', async () => {
+    stubFetch();
+    const user = userEvent.setup();
+    render(<AdminApp />);
+    const dSection = await dishesSection();
+    await within(dSection).findByDisplayValue('Dish A');
+    const drSection = await sectionByHeading('Drinks');
+    await within(drSection).findByDisplayValue('Drink X');
+
+    const dishPhotoInput = within(dSection).getAllByLabelText(DISH_FIELDS.image.label)[0];
+    const drinkPhotoLabel = within(drSection).getAllByText('Photo')[0];
+    await user.click(drinkPhotoLabel);
+
+    const drinkPhotoInput = drSection.querySelector('input[type="file"]') as HTMLInputElement;
+    expect(document.activeElement).toBe(drinkPhotoInput);
+    expect(document.activeElement).not.toBe(dishPhotoInput);
+  });
+});
+
 describe('AdminApp: the real "Homepage sections" screen', () => {
   it('fetches sections.json and renders all seven, in the order the file gave them', async () => {
     stubFetch();
@@ -417,6 +475,56 @@ describe('AdminApp: the new prose, gallery, menus and copy screens all render, f
   });
 });
 
+// Important review finding (Task 9): every section here reads a whole
+// content file through fetchContent's own unchecked
+// `JSON.parse(...) as ContentTypeMap[K]` with no runtime guard --
+// confirmed directly that a malformed galleries.json, story.json or
+// menus.json throws mid-render and, absent a boundary here, takes down the
+// ENTIRE admin page (main.tsx's ErrorBoundary is the only one in this app,
+// wrapping the whole SPA). Each section is now wrapped in its own
+// SectionErrorBoundary; this proves ONE bad file costs ONE section, not the
+// whole page.
+describe('AdminApp: a malformed content file costs one section, not the whole dashboard', () => {
+  it('a galleries.json missing every list still lets Dishes/Drinks/Press render normally, with only Galleries showing a fallback', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url === '/api/wa') return WA_RESPONSE();
+        if (url.includes('dishes.json')) return contentResponse(DISHES, 'sha-dishes');
+        if (url.includes('drinks.json')) return contentResponse(DRINKS, 'sha-drinks');
+        if (url.includes('press.json')) return contentResponse(PRESS, 'sha-press');
+        if (url.includes('sections.json')) return contentResponse(SECTIONS, 'sha-sections');
+        if (url.includes('site.json')) return contentResponse(SITE, 'sha-site');
+        // Malformed: none of the three lists GalleryList.tsx's own
+        // `.map`/`.length` calls assume exist -- the exact shape a
+        // hand-edited or half-written galleries.json could reach.
+        if (url.includes('galleries.json')) return contentResponse({}, 'sha-galleries');
+        if (url.includes('menus.json')) return contentResponse(MENUS, 'sha-menus');
+        if (url.includes('story.json')) return contentResponse(STORY, 'sha-story');
+        if (url.includes('copy.json')) return contentResponse(COPY, 'sha-copy');
+        throw new Error(`unexpected fetch to ${url}`);
+      }),
+    );
+
+    render(<AdminApp />);
+
+    // The rest of the dashboard is unaffected -- proven by reaching real,
+    // interactive content in sections that have NOTHING to do with
+    // galleries.json.
+    await screen.findByDisplayValue('Dish A');
+    expect(screen.getByDisplayValue('Drink X')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('Article P')).toBeInTheDocument();
+    const menusSection = await sectionByHeading('Menus');
+    expect(within(menusSection).getByDisplayValue('Food Menu')).toBeInTheDocument();
+
+    // Galleries itself shows a named, recognizable fallback instead of
+    // silently vanishing or crashing the page.
+    expect(await screen.findByText(/Could not show Galleries/)).toHaveAttribute('role', 'alert');
+    expect(screen.queryByRole('heading', { name: 'Galleries' })).not.toBeInTheDocument();
+  });
+});
+
 // The two "risky" wirings, proven end-to-end through the REAL, fully
 // assembled AdminApp -- not RecordList/GalleryList in isolation, which only
 // prove their OWN link in the chain. This is what the brief calls "verify
@@ -450,17 +558,13 @@ describe("AdminApp: Task 9's wiring, proven end-to-end -- staged photos across D
 
     const drSection = await sectionByHeading('Drinks');
     await within(drSection).findByDisplayValue('Drink X');
-    // Not `getAllByLabelText('Photo')`: Dishes' and Drinks' own first record
-    // both render RecordForm's `idFor` output "field-image-0" (RecordForm.tsx
-    // has no per-SECTION namespace, only a per-INDEX one) -- a real,
-    // pre-existing duplicate-id defect across every field this dashboard
-    // renders, not new to this test (see this task's own report). A plain
-    // CSS query scoped to THIS section's own DOM subtree sidesteps it
-    // (unlike `for`/id label resolution, which is not scoped by the
-    // enclosing element at all and can silently resolve to a DIFFERENT
-    // section's element with the same id).
-    const drinkPhotoInput = drSection.querySelector('input[type="file"]') as HTMLInputElement;
-    expect(drinkPhotoInput).toBeInTheDocument();
+    // `getAllByLabelText` is safe here now that RecordForm's `idFor` takes
+    // a per-file `scope` (see the "no duplicate DOM ids" describe block
+    // below, and AdminApp.tsx's own comment on why) -- Dishes' and Drinks'
+    // own first record no longer share `id="field-image-0"`, so this
+    // resolves to the DRINK's own input, not whichever section happens to
+    // render first in the document.
+    const drinkPhotoInput = within(drSection).getAllByLabelText('Photo')[0];
     await user.upload(drinkPhotoInput, jpegFile('drink.jpg'));
     await waitFor(() => expect(FakeXHR.instances).toHaveLength(2));
     FakeXHR.instances[1].respond(200, { path: 'assets-source/mocktails/bbb222bbb222.jpg', contentPath: '/mocktails/bbb222bbb222.webp' });
