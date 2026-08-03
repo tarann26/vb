@@ -4,123 +4,131 @@
 
 **Goal:** Build `/edit/manage` — the screen where the restaurant owner adds a dish, replaces a photo, swaps the menu PDF, reorders a section, schedules something for next week, and presses Publish, then finds out whether it worked.
 
-**Architecture:** A lazy-loaded admin route that never enters the public bundle. Forms are rendered from per-type field descriptors typed `Record<keyof T, FieldSpec>`, so `tsc` fails if a content type gains a field the form doesn't cover. Every write goes through the Worker built in Plan 3: validate, commit, poll. No new backend.
+**Architecture:** A lazy-loaded admin route that never enters the main bundle. Forms render from per-type field descriptors whose `kind` is constrained by the field's own value type, so `tsc` fails if a content type gains a field, loses one, or changes shape. The dashboard reads current content **from `main` through the Worker**, not from the bundled snapshot, and publishes with a conditional write so a second device cannot be silently overwritten.
 
 **Tech Stack:** React 18, React Router 7, TypeScript strict, Vitest, Testing Library. No form library, no state library, no new runtime dependency.
 
 ## Global Constraints
 
 - **Branch `repair/phase-a`. Never push. Never touch `main`.** The site is live.
-- **`npx tsc -b --noEmit`, never `npx tsc --noEmit`.** The root `tsconfig.json` is solution-style with `"files": []`, so the plain form checks nothing and exits 0 on any codebase. It produced two false "typecheck clean" reports during Plan 2.
-- **Admin code must never reach the public bundle.** This is the constraint most likely to be broken silently, because a single static import does it. See "The bundle guard is currently inert" below — fixing it is Task 1's job, before anything is built on top.
-- **The rendered homepage stays byte-identical at 53473 bytes**, pinned by `src/test/homepage-bytes.test.tsx` (measure with `TextEncoder`; JS `.length` reads 53454 and is not the invariant). Adding a route to `AppRoutes` must not change what renders at `/`.
-- **A test that cannot fail is a defect, not coverage.** Nineteen have been caught on this project — three in briefs the orchestrator wrote, one created by a fix, one inert in both states. For every behaviour you claim, break it and confirm *that named assertion* fires.
-- **A test must be invariant under any legitimate content edit.** `test:deploy` is `vitest run` and the deploy command runs it, so a test coupled to today's content blocks the owner's future edits. Eleven such tests were found at the end of Plan 2.
-- **Tailwind's content scanner reads `./src/**/*.{js,ts,jsx,tsx}` including comments.** Three separate tasks have moved a bundle hash by writing a utility-class name in a comment. If a hash shifts without a class change, check that first.
+- **`npx tsc -b --noEmit`, never `npx tsc --noEmit`.** The root `tsconfig.json` is solution-style with `"files": []`, so the plain form checks nothing and exits 0 on any codebase.
+- **Admin code must never reach the main bundle.** One static import does it. Task 1 fixes the guard before anything exists to leak.
+- **The rendered homepage stays byte-identical at 53473 bytes**, pinned by `src/test/homepage-bytes.test.tsx` (`TextEncoder`; JS `.length` reads 53454 and is not the invariant).
+- **A test that cannot fail is a defect, not coverage.** Nineteen have been caught on this project — three in briefs the orchestrator wrote, one created by a fix, one inert in both states. **This plan's own first draft specified three more**, all caught in review. Trace every assertion: given the implementation, would it pass if the feature were absent?
+- **A test must be invariant under any legitimate content edit.** `test:deploy` is `vitest run` and the deploy command runs it, so a content-coupled test blocks her future edits.
+- **Tailwind's content scanner reads `./src/**/*.{js,ts,jsx,tsx}` including comments.** Three tasks have moved a bundle hash by writing a utility-class name in a comment.
 - Six components are parked and unrendered (`AdminReservations`, `ReservationForm`, `ReservationPage`, `ChefGallery`, `NewsPress`, `SignatureMocktails`). A test fails if any is deleted.
 - Commit messages in the style of `git log --oneline -5`. Never mention AI or any assistant; no co-author trailers.
 
 ## What Plan 3 built that this consumes
 
-| Endpoint | Contract |
+| Endpoint | Contract (verified against the source) |
 |---|---|
-| `POST /api/login` | `{ password }` → 204 + `vb_session` cookie (httpOnly, Secure, SameSite=Strict, 7 days). 401 wrong, 429 rate-limited, 500 if unconfigured. |
-| `POST /api/publish` | `{ files: [{ path, content, encoding }] }` → `{ sha }`. **422 with `{ problems: [{ field, message }] }` if any file is invalid — nothing is committed.** 401 unauthenticated. 502 on a conflict. |
-| `POST /api/upload` | multipart `category` + `file` → `{ path }`. Rejects >25MB, unknown formats, HEIC, unknown categories. |
-| `GET /api/build-status?sha=` | `{ state: 'queued'\|'building'\|'live'\|'failed', deploymentUrl, commitUrl }`. Authenticated. |
-| `GET /api/wa` | `{ ..., lowerBound: true }`. Authenticated. |
-| `build-info.json` | `{ sha, builtAt }`, served `no-store`. Written only on a **successful** build. |
+| `POST /api/login` | `{ password }` → 204 + `vb_session` cookie (httpOnly, Secure, SameSite=Strict, 7 days). 401 / 429 / 500-if-unconfigured. |
+| `POST /api/publish` | `{ files: [{ path, content, encoding }] }` → `{ sha }`. **422 `{ problems: [{ field, message }] }` if any file is invalid — nothing committed.** 401. 502 on conflict (Task 10 changes this to 409). |
+| `POST /api/upload` | multipart `category` + `file` → **`{ sha, path }`** — note `sha`: every upload is already its own commit today. Task 5 changes that. |
+| `GET /api/build-status?sha=` | `{ state: 'queued'\|'building'\|'live'\|'failed', deploymentUrl, commitUrl }`. Authenticated. Returns `queued` when no deployment matches the sha. |
+| `GET /api/wa` | `{ …, lowerBound: true }`. Authenticated. |
+| `build-info.json` | `{ sha, builtAt }`, `no-store`, written **only on a successful build**. |
 
-`validateContent` in `src/content/validate.ts` is the same function the Worker calls. **Import it and validate in the browser too**, so she sees "this dish needs a name" as she types rather than after pressing Publish. The Worker remains the authority; the client copy is for latency, not trust.
+`validateContent(file, data)` in `src/content/validate.ts` is the same function the Worker calls, imports no JSON, and is browser-safe. **It validates a whole file, not one record** — `validateDishes` requires an array, ordering rules are file-scoped, and retired-name rules are cross-file. Task 6 depends on that.
 
-## Three things the last review left for this plan
+## Corrections this plan carries, from its own review
 
-**1. The bundle guard is currently inert.** `src/test/bundle.test.ts`'s HEIC check is `skipIf(!existsSync('dist/assets'))`, and `npm run test:deploy` runs *before* `npm run build`, so it is the one skipped test on every run. And nothing outside `src/admin/` imports the module yet, so it passes either way, for the wrong reason. **This plan is the first real caller.** Task 1 makes both halves real before any admin code exists to leak.
+Three things an earlier draft asserted that are false. They are recorded because each was believed twice.
 
-**2. Upload returns the wrong path for content JSON.** `POST /api/upload` returns `assets-source/food/<hash>.jpg`. What `dishes.json` needs is `/food/<hash>.webp` — the derivative `npm run images` generates. Getting this wrong is a broken image *and* a failed deploy, because the content guards catch a dangling image reference at `test:deploy` time. Task 4 fixes this at the source rather than in the UI.
-
-**3. PDF replacement has no endpoint at all.** The menus live at `public/menus/*.pdf`; `commitFiles`' allowlist permits only `src/content/*.json` and `assets-source/<cat>/<file>`; and `/api/upload` rejects PDFs at format detection. Task 5 extends the Worker.
-
-## Two decisions this plan makes, stated up front
-
-**`site.seo.*`, `site.name` and `site.tagline` stay developer-owned.** `src/test/head.test.ts` keeps `index.html`'s hardcoded `<title>` and meta tags in sync with `site.json`, so editing those fields in the dashboard fails the deploy until someone hand-edits `index.html` too. The alternative — deriving the head at build time — is a real improvement and a separate piece of work touching a live file. The dashboard shows these fields **read-only with a one-line explanation**. A restaurant renames itself approximately never; a broken deploy every time she opens the settings screen is the worse trade.
-
-**The WhatsApp number is shown as an estimate.** It is capped, origin-checked and built on eventually-consistent storage, and `GET /api/wa` returns `lowerBound: true` for exactly this reason. Label it "at least N" — implying precision it does not have would be worse than the estimate.
+1. **"No test can catch the non-breaking space" is wrong.** `copy.footer.followLabel` is `Follow\xa0Us:`; `Footer` renders it on the homepage; jsdom serialises U+00A0 as `&nbsp;` (6 bytes) where a space is 1. Losing it reads **53468**, not 53473 — and Plan 2's ledger records commit `424835c`, the NBSP defect itself, measuring exactly 53468. The byte test catches it; what it cannot do is say *why*. Task 2 adds the rule that names it.
+2. **`Record<keyof T, FieldSpec>` does not catch a type change.** `Dish.tags` going `string[]` → `string` leaves `kind: 'tags'` legal. Task 2 closes this by making `kind` depend on the value type.
+3. **`keyof Copy` yields ten objects, not leaf strings.** The descriptor pattern does not reach `copy.json` or `site.json` as written. Task 2 handles those explicitly.
 
 ---
 
-### Task 1: The admin route, and making the bundle guard real
+### Task 1: The admin route, and a bundle guard that actually runs
 
 **Files:**
-- Create: `src/admin/AdminApp.tsx`, `src/admin/Login.tsx`, `src/admin/session.ts`, `src/admin/__tests__/session.test.ts`
-- Modify: `src/App.tsx`, `src/test/bundle.test.ts`
+- Create: `src/admin/AdminApp.tsx`, `src/admin/Login.tsx`, `src/admin/session.ts`, `src/admin/__tests__/session.test.ts`, `src/test/bundle.post-build.test.ts`
+- Modify: `src/App.tsx`, `src/test/bundle.test.ts`, `src/test/smoke.test.ts`, `src/test/hosting.test.ts`, `package.json`, `docs/cloudflare-cutover.md`, `public/robots.txt`
 
 **Interfaces:**
-- Produces: `<AdminApp />` mounted at `/edit/manage/*`; `useSession()` returning `{ status: 'checking' | 'out' | 'in', logIn, logOut }`.
-- Consumes: `POST /api/login`.
+- Produces: `src/admin/AdminApp.tsx` with a **default export** (`React.lazy` requires it — an earlier draft contradicted itself here); `useSession()` → `{ status: 'checking' | 'out' | 'in', logIn, logOut }`.
 
-**Do the guard first.** Everything else in this plan is built behind it, and a leak found later is a leak that has already shipped.
+- [ ] **Step 1: Keep the shipped regex; make the one legitimate exception explicit**
 
-- [ ] **Step 1: Make the two bundle checks real, and prove both fail**
+`src/test/bundle.test.ts:41` already has a good anchor. An earlier draft proposed replacing it with `/from ['"]…/`, which is **strictly weaker** — it misses `lazy(() => import('./admin/AdminApp'))`, `await import(…)`, `import X from'…'` with no space, and a prettier-wrapped `from\n  '…'`. The last is what any formatter produces for a long import list.
 
-`src/test/bundle.test.ts` currently has an import-graph test (works) and a `dist/` grep that is skipped on every run because `test:deploy` precedes the build.
-
-Keep the grep but stop pretending it runs in the gate: rename it so its name says it only runs post-build, and add a separate npm script that runs it after `npm run build`. Then extend the **import-graph** test — the one that does run — to cover `src/admin/` as a whole, not just `admin/heic`:
+Widening the shipped regex from `admin/heic` to `admin/` flags `src/App.tsx`, because Step 3's own `lazy()` matches it. Do **not** solve that by deleting dynamic-import detection — that is the detection that would catch a future `await import('../admin/publish')` inside a public component. Name the exception instead:
 
 ```ts
+const IMPORTS_ADMIN = /(?:from|import)\s*\(?\s*['"][^'"]*admin\/[^'"]+['"]/;
+
+// src/App.tsx's lazy route is the ONE legitimate reference: React.lazy's dynamic
+// import is what puts admin code in its own chunk. Listed explicitly so a SECOND
+// file gaining any admin import -- static or dynamic -- fails here.
+const ALLOWED = ['src/App.tsx'];
+
 it('nothing outside src/admin imports admin code', () => {
   const offenders = gitLsFiles('src')
     .filter((f) => !f.startsWith('src/admin/') && /\.tsx?$/.test(f))
-    .filter((f) => /from ['"][^'"]*admin\/[^'"]+['"]|^\s*import\s+['"][^'"]*admin\/[^'"]+['"]/m.test(read(f)));
-  expect(offenders).toEqual([]);
+    .filter((f) => IMPORTS_ADMIN.test(readFileSync(f, 'utf8')));
+  expect(offenders).toEqual(ALLOWED);
+});
+
+it('App.tsx references admin code only through React.lazy', () => {
+  const app = readFileSync('src/App.tsx', 'utf8');
+  expect(app).toMatch(/lazy\(\s*\(\)\s*=>\s*import\(['"]\.\/admin\/AdminApp['"]\)\s*\)/);
+  expect(app).not.toMatch(/(?:from|import)\s+['"][^'"]*admin\/[^'"]+['"]/);
 });
 ```
 
-Note the second alternative: a bare side-effect import (`import '../admin/x';`) has no `from`. An earlier version of this check missed that, and the widened form then matched the test file itself — exclude the test's own path deliberately, with a comment saying why.
+`gitLsFiles` already exists at `bundle.test.ts:23`, scoped inside the `describe` — hoist it to module scope.
 
-**Verify both:** add a static `import { AdminApp } from './admin/AdminApp'` to `src/App.tsx`, confirm the import-graph test goes red; build and confirm the post-build check goes red too; remove.
+**Do not add a self-exclusion.** Neither regex self-matches; that instruction in the earlier draft described a stale problem from Plan 3 Task 9, and this repo's own precedent is against it (Plan 3's ledger on `secrets.test.ts`: the reviewer removed the self-exclusion and it still passed).
 
-- [ ] **Step 2: Write the failing route test**
+**Verify all six forms**, not one: static default, static named, bare side-effect, `import type`, `export * from`, and dynamic `import()`.
+
+- [ ] **Step 2: Make the post-build check run on the deploy path, and fix the test it breaks**
+
+Move the `dist/` grep into `src/test/bundle.post-build.test.ts` and add `"test:bundle": "vitest run src/test/bundle.post-build.test.ts"`. Append ` && npm run test:bundle` to the `build` script.
+
+**`src/test/smoke.test.ts:6` asserts `pkg.scripts.build` by exact string equality.** Appending to `build` turns it red, and `test:deploy` runs on every deploy — so shipping the script change alone fails every deployment. That is verbatim the Critical from Plan 3's whole-plan review, where completing the runbook broke the build forever. **Update that assertion in the same commit.**
+
+Also update `docs/cloudflare-cutover.md`'s `**Build command:**` line and the ordering assertion in `src/test/hosting.test.ts`, and note in the runbook that a human must re-paste it into the Pages dashboard — nothing in this repository can verify that.
+
+- [ ] **Step 3: The lazy route**
 
 ```tsx
-it('does not render admin code at /', () => {
-  render(<MemoryRouter initialEntries={['/']}><AppRoutes /></MemoryRouter>);
-  expect(screen.queryByLabelText(/password/i)).toBeNull();
-});
+const AdminApp = lazy(() => import('./admin/AdminApp'));
+<Route path="/edit/manage/*" element={<Suspense fallback={null}><AdminApp /></Suspense>} />
+```
 
+Add `Disallow: /edit/` to `public/robots.txt` — conventional prefix form. Not a security control; the login is.
+
+- [ ] **Step 4: One route test, not two**
+
+```tsx
 it('renders the login form at /edit/manage', async () => {
   render(<MemoryRouter initialEntries={['/edit/manage']}><AppRoutes /></MemoryRouter>);
   expect(await screen.findByLabelText(/password/i)).toBeInTheDocument();
 });
 ```
 
-The second needs `findBy`, not `getBy` — the route is lazy, so it resolves asynchronously.
+`findBy`, not `getBy` — the route is lazy.
 
-- [ ] **Step 3: Add the lazy route**
+Do **not** add "does not render admin code at `/`". At `/`, `AppRoutes` renders `HomePage`, which has no password field whether `AdminApp` is lazy, static, or inlined. No mutation of the feature turns it red. A route test cannot observe a bundler's decision; Steps 1 and 2 are what do. Say that in a comment where the test would have gone.
 
-```tsx
-const AdminApp = lazy(() => import('./admin/AdminApp'));
-// ...
-<Route path="/edit/manage/*" element={<Suspense fallback={null}><AdminApp /></Suspense>} />
-```
+- [ ] **Step 5: Session state without storing anything**
 
-`lazy` is what keeps the admin chunk out of the main bundle. A static import here defeats the whole task.
+The cookie is `httpOnly`, so JS cannot read it. Probe instead: call `GET /api/wa` and treat 401 as logged out.
 
-Add `/edit/*` to `public/robots.txt` as `Disallow`. It is not a security control — the login is — but there is no reason for it in an index.
+Do **not** store a logged-in flag in `localStorage` — it goes stale the moment the 7-day token expires and she gets a dashboard that 401s on every action. (This is about the *session*. Drafts are different and are Task 10 Step 4.)
 
-- [ ] **Step 4: Session state without storing anything**
+- [ ] **Step 6: The login form**
 
-The session cookie is `httpOnly`, so JavaScript cannot read it. `useSession` therefore cannot check "am I logged in" by inspecting a cookie. Probe instead: call an authenticated endpoint (`GET /api/wa`) and treat 401 as logged out.
+One password field, one button. 401 → "That password didn't work." 429 → "Too many attempts. Try again in 15 minutes." 500 → "Login isn't set up yet — ask your developer." Never echo the password.
 
-Do **not** store a "logged in" flag in `localStorage`. It would go stale the moment the 7-day token expires, and she would see a dashboard that 401s on every action.
+- [ ] **Step 7: Verify and commit**
 
-- [ ] **Step 5: The login form**
-
-One password field, one button. On 401 show "That password didn't work." On 429 show "Too many attempts. Try again in 15 minutes." On 500 show "Login isn't set up yet — ask your developer." Never echo the password.
-
-- [ ] **Step 6: Verify and commit**
-
-Homepage still 53473 bytes and the rendered DOM byte-identical. Report the main-chunk hash and the new lazy chunk separately — the main chunk must not grow.
+Homepage 53473 and the DOM byte-identical. Report the main-chunk hash and the new lazy chunk separately. The invariant is **"the main chunk contains no admin module"** — `lazy` + `Suspense` legitimately adds a few bytes to the main chunk, so "must not grow" is not literally achievable.
 
 ```bash
 git add -A
@@ -133,226 +141,301 @@ git commit -m "feat(admin): add the lazy-loaded dashboard route behind a passwor
 
 **Files:**
 - Create: `src/admin/fields.ts`, `src/admin/__tests__/fields.test.ts`
+- Modify: `src/content/validate.ts`, `src/content/__tests__/validate.test.ts`
 
 **Interfaces:**
-- Produces: `type FieldSpec = { label: string; kind: 'text' | 'textarea' | 'image' | 'select' | 'date' | 'tags' | 'readonly'; options?: readonly string[]; help?: string }`, and one `Record<keyof T, FieldSpec>` per editable type.
-- Consumes: the types in `src/content/types.ts`.
+- Produces: `FieldSpec<V>`, `FieldsOf<T>`, and `DISH_FIELDS`, `DRINK_FIELDS`, `ARTICLE_FIELDS`, `SECTION_FIELDS`, `MENU_FIELDS`, `GALLERY_IMAGE_FIELDS`, `HOURS_FIELDS`, plus explicit leaf maps for `copy.json` and `site.json`.
 
-The spec says forms are "generated from the existing TypeScript types, not hand-built per content type", because that is "what makes Phase C's sections editable the day they exist."
+The spec wants forms "generated from the existing TypeScript types… what makes Phase C's sections editable the day they exist." Types don't exist at runtime, so nothing literally reads them. A descriptor whose completeness *and shape* the compiler enforces delivers that intent with no codegen and no new dependency — the pattern this repo already relies on in `shape.test.ts:226` and `guards.ts:85`.
 
-TypeScript types do not exist at runtime, so nothing can literally read them. What delivers the spec's intent without a codegen step or a new dependency is a descriptor typed `Record<keyof T, FieldSpec>`: **add a field to `Dish` and `tsc` fails until the form covers it.** This repo already relies on that exact pattern three times — `DISH_KEYS`, `DRINK_KEYS` and `ARTICLE_KEYS` in `src/content/__tests__/shape.test.ts`, and `SECTION_ID_SET` in `src/content/guards.ts`.
+Zod was considered and rejected: the content layer already exists as nine hand-written interfaces, five throwing guards and `validateContent`'s nine rules, all of which are the authority. Switching means re-deriving every owner-facing guard message and adding a runtime dependency to the Worker.
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: Make `kind` depend on the value type**
 
 ```ts
-it('fails to compile if a type gains a field', () => {
-  // Compile-time, not runtime: this test documents the guarantee and the
-  // typecheck enforces it. The falsifiability check is in Step 3.
-  expect(Object.keys(DISH_FIELDS).sort()).toEqual(
-    (['id', 'name', 'description', 'image', 'tags', 'publishAt'] as string[]).sort(),
-  );
-});
+type Kind<V> =
+  [V] extends [string] ? 'text' | 'textarea' | 'image' | 'select' | 'date' | 'readonly' :
+  [V] extends [string | null] ? 'text' | 'image' | 'readonly' :
+  [V] extends [string[]] ? 'tags' :
+  [V] extends [boolean] ? 'toggle' :
+  [V] extends [number] ? 'number' : never;
 
-it('marks tags as not visible to a diner', () => {
-  expect(DISH_FIELDS.tags.help).toMatch(/not shown|not visible/i);
-});
+export type FieldSpec<V = unknown> = { label: string; kind: Kind<V>; options?: readonly string[]; help?: string };
+export type FieldsOf<T> = { [K in keyof Required<T>]: FieldSpec<Required<T>[K]> };
 ```
 
-- [ ] **Step 2: Write the descriptors**
+`Required<T>` makes optional fields (`publishAt`) required in the descriptor. Note `Section.enabled` is `boolean` and `SiteContent.copyrightYear` is `number` — both kinds an earlier draft's union omitted.
 
-`Dish`, `Drink`, `Article`, `Section`, `MenuFile`, `GalleryImage`, `Hours`, and the `Copy` leaves.
+**Declare each descriptor as a directly-annotated object literal.** Excess-property checking — which is what catches a *removed* field — only fires on a fresh literal in an annotated position. Built by spread or assigned through an intermediate variable, a removal goes silent.
 
-Two the descriptors must get right, both from earlier reviews:
+- [ ] **Step 2: A test the compiler actually enforces**
 
-- **`Dish.tags`** carries a comment in `types.ts` saying it is authored but deliberately not rendered, and that any editing tool "must not treat `tags` as visible to a diner today." Give it `help` text saying so. She will otherwise reasonably assume editing it changes the page.
-- **`press.readArticle`** in `copy.json` drives **both** the homepage teaser and `/blogs`. Its `help` must say so — one field, two surfaces.
+Do **not** write `expect(Object.keys(DISH_FIELDS).sort()).toEqual([…])`. Mutating `FieldsOf<Dish>` to `Record<string, FieldSpec>` destroys the guarantee and leaves that assertion green. It is also redundant: `shape.test.ts:226` already makes "adding a field to `Dish` fails `tsc`" true today.
 
-`site.seo.*`, `site.name`, `site.tagline` get `kind: 'readonly'` with the explanation from this plan's header.
+```ts
+// @ts-expect-error a descriptor missing a key of Dish must not compile. If the
+// FieldsOf<Dish> annotation is ever removed, this directive becomes unused and
+// `tsc -b` fails -- which is the point.
+const _incomplete: FieldsOf<Dish> = { id: DISH_FIELDS.id };
+```
 
-- [ ] **Step 3: Prove the compiler guarantee is real**
+- [ ] **Step 3: Write the descriptors**
 
-Add a field to `Dish` in `src/content/types.ts`, run `npx tsc -b --noEmit`, confirm it fails naming `fields.ts`, remove it. A descriptor that drifts silently is the whole thing this design exists to prevent, so verify it rather than asserting it.
+Two the `help` text must get right:
 
-- [ ] **Step 4: Commit**
+- **`Dish.tags`** — `types.ts` says it is authored but deliberately not rendered, and that any editing tool "must not treat `tags` as visible to a diner today." Say so, or she will assume editing it changes the page.
+- **`press.readArticle`** in `copy.json` drives **both** the homepage teaser and `/blogs`. One field, two surfaces.
+
+- [ ] **Step 4: `copy.json` and `site.json` need explicit leaf maps**
+
+`keyof Copy` is ten *objects*; `keyof SiteContent` gives `address`, `seo`, `hours` as single objects. `FieldsOf` is meaningless on both — and they are where `press.readArticle` and `footer.followLabel` live.
+
+Write a flat map keyed by dotted path (`'footer.followLabel'`), and a test asserting every leaf string in the real `copy.json` has an entry. That test is content-coupled by design and legitimate: `copy.json`'s *shape* is developer-owned even though its *values* are hers.
+
+- [ ] **Step 5: `site.seo.*`, `site.name`, `site.tagline` — refuse server-side, not just in the UI**
+
+`src/test/head.test.ts` pins nine strings in `index.html` against `site.json`. If she edits `site.name`, the deploy fails — and because the bad value is on `main`, **every subsequent publish of anything also fails** until a developer hand-edits `index.html`. Same poisoned-`main` shape as Plan 3's `publishAt` finding.
+
+A read-only input is one attribute away from being editable by a future contributor. Add the rule to `validateContent`: if `site.json`'s `name`, `tagline` or any `seo.*` differs from the committed value, return "Changing this needs your developer — it's written into a file the site is built from."
+
+What she loses is real: `site.seo.description` is the share-preview text that appears every time someone sends the restaurant over WhatsApp. **Record the successor work**: a `transformIndexHtml` Vite plugin substituting tokens from `site.json`, after which `head.test.ts` asserts against built `dist/index.html`. Roughly 30 lines, and it unlocks the most commercially useful strings on the site.
+
+- [ ] **Step 6: The non-breaking space rule**
+
+`copy.footer.followLabel` must contain U+00A0. Add to `validateContent`, and add a content-rule test:
+
+```ts
+expect(copy.footer.followLabel).not.toMatch(/ /);   // U+0020, not U+00A0
+```
+
+Invariant under any legitimate rewording — it constrains the separator, not the words.
+
+Do **not** add it to `assertCopy`. A throwing guard white-pages the live site if any path reaches `npm run build` without `test:deploy` (Plan 2's I4).
+
+- [ ] **Step 7: Verify and commit**
+
+Add a field to `Dish`, run `npx tsc -b --noEmit`, confirm it fails **naming `src/admin/fields.ts`** — not just failing somewhere, since `shape.test.ts` would also fail. Remove it. Then change `Dish.tags` to `string`, confirm the descriptor fails to compile, revert.
 
 ```bash
 git add -A
-git commit -m "feat(admin): describe every editable field in a compiler-checked map"
+git commit -m "feat(admin): describe every editable field in a type-checked map"
 ```
 
 ---
 
-### Task 3: The form, the list, and validation as she types
+### Task 3: Read what is actually on `main`
 
 **Files:**
-- Create: `src/admin/Field.tsx`, `src/admin/RecordForm.tsx`, `src/admin/RecordList.tsx`, `src/admin/__tests__/RecordForm.test.tsx`, `src/admin/__tests__/RecordList.test.tsx`
-- Modify: `src/admin/AdminApp.tsx`
+- Modify: `worker/index.ts`, `worker/github.ts`, `worker/__tests__/index.test.ts`, `worker/__tests__/github.test.ts`
+- Create: `src/admin/content.ts`, `src/admin/__tests__/content.test.ts`
 
 **Interfaces:**
-- Produces: `<RecordForm fields={…} value={…} onChange={…} problems={…} />`, `<RecordList items={…} onReorder={…} onAdd={…} onRemove={…} />`.
-- Consumes: `validateContent` from `src/content/validate.ts`; `FieldSpec` from Task 2.
+- Produces: `GET /api/content?path=src/content/<name>.json` → `{ content, sha }`, authenticated; `POST /api/publish` files accept an optional `baseSha`.
+- Consumes: `getFileContent` in `worker/github.ts` — it exists, for the cron's `reconcileScheduleFromSource`, and is on no route.
+
+**Without this task the dashboard silently destroys edits.** The only content available in the browser is the build-time bundle. She publishes at 14:00; Cloudflare rebuilds over 1–2 minutes; she reloads or opens her phone before it lands and gets the **previous** `dishes.json`; she edits a different dish and publishes the whole array — without the 14:00 edit. `base_tree` is set, the ref fast-forwards cleanly, **200 OK, green "live", the earlier edit gone.**
+
+The existing 502 does not save her: `updateBranchHead` 422s only on a non-fast-forward, i.e. only if the branch moved inside one request. Two devices ten minutes apart never collide.
+
+`guards.ts:110-117` already anticipates this for `sections.json` — "a dashboard write that drops one silently deletes that section from the homepage." Nothing covers the other eight files.
 
 - [ ] **Step 1: Write the failing tests**
 
-```tsx
-it('shows the problem next to the field it names', () => {
-  render(<RecordForm fields={DISH_FIELDS} value={{ ...validDish, name: '' }}
-    problems={[{ field: '[0].name', message: 'A dish needs a name.' }]} onChange={noop} />);
-  const input = screen.getByLabelText(DISH_FIELDS.name.label);
-  expect(input).toHaveAccessibleDescription('A dish needs a name.');
+```ts
+it('refuses a publish whose baseSha is stale', async () => {
+  const res = await handle(publish([{ path: 'src/content/dishes.json', content: '[]',
+                                      encoding: 'utf-8', baseSha: 'old-sha' }]));
+  expect(res.status).toBe(409);
+  expect(stub.calls.some((c) => c.method === 'PATCH')).toBe(false);   // nothing written
 });
 
-it('reorders without losing the item', async () => {
-  const onReorder = vi.fn();
-  render(<RecordList items={[a, b, c]} fields={DISH_FIELDS} onReorder={onReorder} … />);
-  await userEvent.click(screen.getAllByRole('button', { name: /move down/i })[0]);
-  expect(onReorder).toHaveBeenCalledWith(['b', 'a', 'c']);
+it('publishes when baseSha matches', async () => { … expect(res.status).toBe(200); });
+it('publishes when baseSha is absent, for callers that do not track it', async () => { … });
+it('requires a session token to read content', async () => {
+  expect((await handle(get('/api/content?path=src/content/dishes.json'))).status).toBe(401);
 });
+it('refuses a content path outside src/content', async () => { … 400 … });
 ```
 
-Associate the message with the input via `aria-describedby` and assert `toHaveAccessibleDescription` — asserting the text merely *appears somewhere* passes even when it is attached to the wrong field, which for a 38-item drinks list is the difference between useful and useless.
+- [ ] **Step 2: Implement**
 
-- [ ] **Step 2: Reorder with buttons, not drag**
+`getFileContent` gains the blob `sha` in its return — GitHub's Contents API already sends it. `GET /api/content` reuses the same path allowlist shape as `commitFiles`; do not write a second one.
 
-Up and down buttons. Drag-to-reorder is Plan 6's problem and it is the expensive one; a list of 38 drinks reorders fine with buttons, and buttons work on her phone.
+- [ ] **Step 3: Load from the route, never from the bundle**
 
-- [ ] **Step 3: Validate as she types, using the real validator**
+`src/admin/content.ts` fetches each editable file and keeps its `sha`. The admin bundle must not import `src/content/index.ts` — that is the stale snapshot, and importing it also drags all nine JSON files into the admin chunk.
 
-`validateContent` is the same function the Worker runs. Import it. Debounce, and show problems inline.
-
-Say plainly in a comment that this is a **latency optimisation, not a trust boundary** — the Worker re-validates and is the authority. A future contributor who deletes the server-side check because "the client already validates" is the failure this comment exists to prevent.
-
-- [ ] **Step 4: Never let a save lose unrelated data**
-
-She edits one dish; the publish sends the whole file. Round-trip every field, including ones no form renders (`tags`, and anything a later type gains before its descriptor does).
-
-Test it: load a record with an unknown extra key, edit one field, and assert the extra key survives.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add -A
-git commit -m "feat(admin): render records from field descriptors with inline validation"
-```
-
----
-
-### Task 4: Photos
-
-**Files:**
-- Create: `src/admin/PhotoField.tsx`, `src/admin/__tests__/PhotoField.test.tsx`, `src/shared/derivative-path.ts`, `src/shared/__tests__/derivative-path.test.ts`
-- Modify: `worker/upload.ts`, `worker/__tests__/upload.test.ts`
-
-**Interfaces:**
-- Produces: `derivativePath(sourcePath: string): string` — `assets-source/food/abc.jpg` → `/food/abc.webp`; `POST /api/upload` response gains `contentPath`.
-- Consumes: `convertHeic` from `src/admin/heic.ts`.
-
-- [ ] **Step 1: Put the derivation next to the rule it mirrors**
-
-The upload response returns the **source** path. Content JSON needs the **derivative** path. `scripts/paths.mjs` owns that naming rule, but it is a Node module the Worker cannot import.
-
-Extract the rule into `src/shared/derivative-path.ts` — the same move `src/shared/image-format.ts` made for the same reason — and have **the Worker** return `contentPath` alongside `path`. Deriving it in the UI would put the rule in a third place; a mismatch there is a broken image *and* a failed deploy.
-
-Test against real cases from `scripts/paths.mjs`: the per-directory width rules do not affect the path, but the extension always becomes `.webp` and the leading `assets-source/` becomes a leading `/`.
-
-- [ ] **Step 2: Wire HEIC conversion — and keep it out of the public bundle**
-
-```ts
-const converted = await convertHeic(file);   // dynamic import inside
-```
-
-**Keep the dynamic import.** `convertHeic` already uses one, and Task 1 made the import-graph test real — but a `dist/` grep alone would not catch a regression here, because the WASM only appears once something imports it. This is the first real caller, so this is where it can first go wrong.
-
-- [ ] **Step 3: Show her what is happening**
-
-Converting a HEIC takes seconds on a phone. Show progress. On rejection, show the Worker's message, which already names the reason ("This photo is HEIC…", "This upload is 26.30MB; the limit is 25MB").
-
-- [ ] **Step 4: Batch uploads into one commit**
-
-Uploading twelve photos as twelve commits makes Cloudflare cancel superseded builds, which `GET /api/build-status` now correctly reports as `failed` — so she would see most of her successful uploads marked failed, retry, and double the build burn against a 500/month quota.
-
-Collect uploads and send them with the publish. `commitFiles` already takes N files.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add -A
-git commit -m "feat(admin): upload photos, convert heic, and return the path content needs"
-```
-
----
-
-### Task 5: The menu PDFs
-
-**Files:**
-- Modify: `worker/github.ts`, `worker/upload.ts`, `worker/__tests__/github.test.ts`, `worker/__tests__/upload.test.ts`
-- Create: `src/admin/PdfField.tsx`, `src/admin/__tests__/PdfField.test.tsx`
-
-**Interfaces:**
-- Produces: a third allowed path shape, `public/menus/<name>.pdf`.
-- Consumes: `commitFiles`.
-
-The printed menu is the thing she will most want to replace and the one the current Worker cannot accept at all.
-
-- [ ] **Step 1: Extend the allowlist deliberately, and test the boundary**
-
-`commitFiles`' path allowlist is the only thing between a malformed request and a rewritten `.github/workflows/`. A whole-branch review threw 54 hostile paths at it and none escaped. **Do not loosen the existing shapes.** Add a third, equally tight:
-
-```ts
-/^public\/menus\/[a-z0-9-]+\.pdf$/
-```
-
-Re-run the traversal cases with the new shape in place — `public/menus/../../package.json`, `public/menus/%2e%2e/x.pdf`, `public/../public/menus/x.pdf`, and a nested `public/menus/a/b.pdf` — and confirm each is still rejected.
-
-- [ ] **Step 2: Accept PDFs at upload, only for this path**
-
-`detectFormat` returns `null` for a PDF, which is correct for photos. Add a separate, explicit check for the menu route: `%PDF-` magic bytes, and the same 25MB ceiling.
-
-A PDF must **not** become acceptable to the photo route, and an image must not become acceptable to the menu route. Test both directions.
-
-- [ ] **Step 3: Keep `menus.json` and the file in step**
-
-`src/content/menus.json` holds the label and the `file` path. Replacing the PDF under the same name needs no JSON change; uploading under a new name does. Send both in one publish, so a rename cannot half-land.
+Add a test asserting no file under `src/admin/` imports `../content` or `../content/index`.
 
 - [ ] **Step 4: Commit**
 
 ```bash
 git add -A
-git commit -m "feat(admin): let the owner replace the printed menu pdfs"
+git commit -m "feat(worker): serve current content and refuse a publish from a stale copy"
 ```
 
 ---
 
-### Task 6: Hours, sections, and scheduling
+### Task 4: The form and its problem messages
+
+**Files:**
+- Create: `src/admin/Field.tsx`, `src/admin/RecordForm.tsx`, `src/admin/problems.ts`, and their tests
+
+**Interfaces:**
+- Produces: `<RecordForm fields={…} index={…} value={…} onChange={…} problems={…} />`; `problemsFor(problems, index, key): ValidationProblem[]`.
+
+- [ ] **Step 1: Map `field` strings to inputs — all four shapes**
+
+`validateContent` emits four: `[i].key` (dishes/drinks/press), bare `key` (story, site), `key[i].sub` (`hours[0]`, `atmosphere[0].src`, `paragraphs[1]`), and `''` for file-level problems (`'press.json: articles must be sorted newest first'`).
+
+Suffix-matching misattributes `[1].name` to a form showing index 0 — for a 38-drink list that is the difference between useful and useless.
+
+```ts
+// exact match on the index this form is rendering, never a suffix
+const matches = (p: ValidationProblem) => p.field === `[${index}].${key}`;
+```
+
+For a non-array file: `p.field === key || p.field.startsWith(`${key}[`)`.
+
+**Problems with `field === ''`, and any whose prefix matches no rendered field, render in a form-level banner.** Test that an unmatched field still appears somewhere on screen — silently dropping a problem is worse than showing it in the wrong place.
+
+- [ ] **Step 2: Associate the message with the input**
+
+```tsx
+expect(screen.getByLabelText(DISH_FIELDS.name.label))
+  .toHaveAccessibleDescription('A dish needs a name.');
+```
+
+`aria-describedby`. Asserting the text merely appears somewhere passes when it is attached to the wrong field.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add -A
+git commit -m "feat(admin): render a record's fields with its own validation messages"
+```
+
+---
+
+### Task 5: Lists, and photos in one commit
+
+**Files:**
+- Create: `src/admin/RecordList.tsx`, `src/admin/PhotoField.tsx`, `src/shared/derivative-path.ts`, and their tests
+- Modify: `worker/upload.ts`, `worker/index.ts`, and their tests
+
+**Interfaces:**
+- Produces: `<RecordList items fields onReorder onAdd onRemove />` where `onReorder(ids: string[])`; `derivativePath(sourcePath: string): string`; `POST /api/upload?stage=1`.
+
+- [ ] **Step 1: Up/down buttons, named per item**
+
+The spec's Risks section already *mandates* buttons: *"On phones she gets tap-to-select with plus, minus and arrow buttons instead."* This is not a deferral of drag; it is the required touch interaction.
+
+Name buttons per item ("Move Negroni down"), and omit them at the ends — 38 identically-named buttons is the same failure as an unassociated error message.
+
+- [ ] **Step 2: `derivativePath`, linked to the rule it mirrors**
+
+Upload returns `assets-source/food/<hash>.jpg`; `dishes.json` needs `/food/<hash>.webp`. `scripts/paths.mjs`'s `outputPathFor` owns that rule and is a `.mjs` the Worker cannot import.
+
+Do not hand-copy cases. `scripts/paths.mjs` is plain ESM and Vitest runs on Node, so import **both** and assert equivalence over every real file:
+
+```ts
+expect(derivativePath(src)).toBe('/' + relative('public', outputPathFor(src)));
+```
+
+- [ ] **Step 3: Stop `/api/upload` from committing on its own**
+
+`worker/upload.ts:295` calls `commitFiles(env, [file], …)` — **every upload is already a commit.** Twelve photos means twelve commits, Cloudflare cancels eleven superseded builds, and `mapDeploymentState` correctly reports `canceled → failed`, so she sees eleven failures for eleven photos that all landed.
+
+Add `?stage=1`: run every existing check — Content-Length, post-read size, `detectFormat`, HEIC rejection, `looksComplete`, `uploadPath` — and return `{ path, contentPath }` **without calling `commitFiles`**. The browser keeps the bytes and sends them in the same `POST /api/publish` array.
+
+**State the arithmetic and cap the UI at 8 photos per publish:** base64 inflates 4/3×, so 8 × 5MB ≈ 53MB of request body, and `commitFiles`' own comment caps a publish at ~45 files (N+5 subrequests against the 50 limit).
+
+Add a Worker test that a `.json` path labelled `base64` is **still refused** — that validation exemption is the exact hole Plan 3's review found and closed.
+
+- [ ] **Step 4: HEIC, keeping the dynamic import**
+
+```ts
+const converted = await convertHeic(file);
+```
+
+Task 1 made the import-graph test real, and it is the one that catches a regression here — a `dist/` grep alone cannot, because the WASM only appears once something imports it. This is the first real caller.
+
+`fetch` **cannot report upload progress**; only `XMLHttpRequest.upload.onprogress` can. Give the request a 120-second timeout and a Retry button — the path is content-addressed, so a retry is idempotent.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add -A
+git commit -m "feat(admin): reorder lists and stage photos into a single publish"
+```
+
+---
+
+### Task 6: Validate as she types, and never lose a field
+
+**Files:**
+- Create: `src/admin/useValidation.ts`, `src/admin/__tests__/useValidation.test.ts`
+- Modify: `src/admin/AdminApp.tsx`
+
+- [ ] **Step 1: Validate the whole file, not the record**
+
+`validateContent('dishes.json', oneDish)` returns `[{ field: '', message: 'expected a list of dishes' }]` — `validateDishes` requires an array, and ordering and retired-name rules are file-scoped by construction.
+
+The dashboard holds the whole file in memory. Every debounce tick validates the whole file and distributes problems by index via Task 4's `problemsFor`.
+
+- [ ] **Step 2: Say why the client copy exists**
+
+A comment: this is a **latency optimisation, not a trust boundary**. The Worker re-validates and is the authority. Plan 3's ledger records exactly this deletion being attempted — "the client already validates" — and caught.
+
+- [ ] **Step 3: Round-trip every field, including ones no form renders**
+
+She edits one dish; the publish sends the whole file. `tags` is authored on all fifteen dishes and rendered by nothing.
+
+```ts
+const withExtra = { ...validDish, futureField: 'x' } as Dish & { futureField: string };
+// edit one field, then:
+expect(published[0]).toHaveProperty('futureField', 'x');
+```
+
+The explicit widening is required — `value` typed as `Dish` will not admit an unknown key in a literal.
+
+**This is the most valuable test in the plan.** Without it, editing one dish deletes `tags` from fifteen.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add -A
+git commit -m "feat(admin): validate the whole file as she types without dropping fields"
+```
+
+---
+
+### Task 7: Hours, sections, and scheduling
 
 **Files:**
 - Create: `src/admin/HoursField.tsx`, `src/admin/SectionList.tsx`, `src/admin/ScheduleField.tsx`, and their tests
-- Modify: `src/admin/AdminApp.tsx`
-
-**Interfaces:**
-- Consumes: `assertHours`, `assertSections` from `src/content/guards.ts`; `Section` from `types.ts`.
 
 - [ ] **Step 1: Hours**
 
-`site.json`'s `hours` is an array of `{ days: DayCode[], opens, closes }`. One value drives both the footer and the structured data Google reads, which is the point of it living in one place.
+Two things the guards already know:
+- `assertHours` takes a **typed** parameter, not `unknown`.
+- A closing time **past midnight is valid** — `src/content/hours.ts:55-63` calls it "a correct literal reading of the two clock times, not a bug." The restaurant has a bar. **Do not add "closes must be after opens";** Plan 2's final review had to remove a test asserting exactly that because it blocked a legitimate edit.
 
-Two things the guards already know and the form must not fight:
-- `assertHours` takes a **typed** parameter, not `unknown`. Feed it the right shape.
-- A closing time **past midnight** is valid and documented in `src/content/hours.ts` as "a correct literal reading of the two clock times, not a bug" — a real shape this repo has had before. The restaurant has a bar. Do not add a "closes must be after opens" rule; a previous test asserted exactly that and had to be removed because it blocked a legitimate edit.
+- [ ] **Step 2: Sections — three rules, not two**
 
-- [ ] **Step 2: Sections — reorder and toggle**
+`assertSections` rejects a disabled `hero`, rejects a `publishAt` key, **and requires every `SectionId` to appear exactly once** (`guards.ts:150-153`). That third rule is the one a reorder/remove UI can actually break, and an earlier draft missed it.
 
-`sections.json` is the homepage's ordered list. She reorders and toggles.
+D6: *"Nothing is ever deleted, only disabled."* So the section list offers reorder and toggle — **no Remove button at all**.
 
-`assertSections` **rejects a disabled hero** and rejects a `publishAt` key on any section. Surface both as form-level rules rather than letting the publish 422 — she should not be able to build a state the server will refuse.
+Show human names, not `SectionId`s: `atmosphere` renders "Atmosfera" and lives at `#gallery`. The ids deliberately differ from the anchors and neither is her vocabulary.
 
-Show the seven sections by a human name, not by `SectionId`. `atmosphere` renders as "Atmosfera" and lives at `#gallery`; the ids deliberately differ from the anchors and neither is her vocabulary.
+- [ ] **Step 3: Scheduling, and clearing a date**
 
-- [ ] **Step 3: Scheduling**
+`<input type="date">` produces `YYYY-MM-DD` and sidesteps the DD-MM ambiguity that a text field invites.
 
-`publishAt` is an optional ISO `YYYY-MM-DD` on `Dish`, `Drink` and `Article`. Use a native `<input type="date">` — it produces `YYYY-MM-DD` and sidesteps the DD-MM-versus-MM-DD ambiguity that a text field invites. A malformed date is now caught by `validateContent`, but the right fix is not letting her type one.
+**An emptied date input yields `''`, and `validatePublishAt` → `isPublished` throws on it → 422.** Clearing the field must **delete the key**, not write an empty string. Test: set a date, clear it, assert the published JSON has no `publishAt` key.
 
-State plainly next to the control that publishing happens on an **hourly** check, not at midnight — the cron's cadence is the granularity, and nobody should promise otherwise.
+State next to the control that publishing happens on an **hourly** check, not at midnight.
 
 - [ ] **Step 4: Commit**
 
@@ -363,53 +446,115 @@ git commit -m "feat(admin): edit hours, reorder sections, and schedule content"
 
 ---
 
-### Task 7: Publish, and finding out whether it worked
+### Task 8: The menu PDFs
 
 **Files:**
-- Create: `src/admin/publish.ts`, `src/admin/PublishBar.tsx`, `src/admin/__tests__/publish.test.ts`
-- Modify: `src/admin/AdminApp.tsx`
+- Modify: `worker/github.ts`, `worker/upload.ts`, and their tests
+- Create: `src/admin/PdfField.tsx`, `src/admin/__tests__/PdfField.test.tsx`
 
-**Interfaces:**
-- Consumes: `POST /api/publish`, `GET /api/build-status`, `build-info.json`.
+- [ ] **Step 1: A third path shape, equally tight**
+
+`commitFiles`' allowlist is the only thing between a malformed request and a rewritten `.github/workflows/`. A whole-branch review threw 54 hostile paths at it and none escaped. Do not loosen the existing two:
+
+```ts
+/^public\/menus\/[a-z0-9-]+\.pdf$/
+```
+
+Re-run the traversal cases with it in place — `public/menus/../../package.json`, `public/menus/%2e%2e/x.pdf`, `public/../public/menus/x.pdf`, `public/menus/a/b.pdf`. Add the new shape to `DisallowedPathError`'s message, which enumerates only two.
+
+- [ ] **Step 2: `category=menu`, specified**
+
+`uploadPath` is content-addressed, which is **wrong here** — Step 3 wants "replacing the PDF under the same name needs no JSON change", so the path must be stable and named.
+
+On the `category=menu` branch only: no `detectFormat`; require `%PDF-` at bytes 0–4 **and `%%EOF` within the last 1KB** (the direct analogue of the JPEG `FF D9` check `looksComplete` already does — note `looksComplete`'s `default: return true` accepts a truncated PDF today); the same 25MB ceiling; and a required `name` matching `/^[a-z0-9-]+$/`, rejected with "A menu name can only use lowercase letters, numbers and hyphens."
+
+Path is `public/menus/<name>.pdf`. Test both directions: `category=menu` with image bytes is refused, and an image category with PDF bytes is refused by `detectFormat` returning `null`.
+
+- [ ] **Step 3: Keep `menus.json` and the file in step**
+
+Replacing under the same name needs no JSON change; a new name does. Send both in one publish so a rename cannot half-land.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add -A
+git commit -m "feat(admin): let the owner replace the printed menu pdfs"
+```
+
+---
+
+### Task 9: Story, galleries, and the rest of the prose
+
+**Files:**
+- Create: `src/admin/StoryForm.tsx`, `src/admin/GalleryList.tsx`, and their tests
+
+D10 makes prose editable and the spec's Plan-4 row says "list add/remove/reorder". An earlier draft had no task for either, though `validateContent` has rules for both.
+
+- [ ] **Step 1: `story.json`** — heading plus a paragraph list. The no-trailing-ellipsis rule lives in `validateContent`; surface it inline rather than at publish.
+
+- [ ] **Step 2: `galleries.json`** — `atmosphere`, `ourStory` and `heroCollage`, each a list of `{ src, alt }` (plus `className` on the collage). Add, remove, reorder, and edit alt text. Reuse `PhotoField` for `src`.
+
+**Leave `heroCollage`'s `className` alone.** It is a Tailwind grid-placement string and Plan 6 owns it. Render it read-only with a note.
+
+- [ ] **Step 3: `copy.json`'s leaves** — the flat dotted-path map from Task 2 Step 4, rendered as a plain list of labelled inputs grouped by section. `footer.followLabel` renders its U+00A0 visibly (a marker, not a raw space) so she can see it exists.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add -A
+git commit -m "feat(admin): edit the story, the galleries and the page copy"
+```
+
+---
+
+### Task 10: Publish, and finding out whether it worked
+
+**Files:**
+- Create: `src/admin/publish.ts`, `src/admin/PublishBar.tsx`, `src/admin/drafts.ts`, and their tests
+- Modify: `worker/github.ts`, `worker/index.ts`, and their tests
 
 The spec: *"Step 5 exists because of step 4. Once a bad edit cannot break the site, the new failure mode is that her work silently evaporates. She must be told."*
 
-- [ ] **Step 1: Accumulate, then send once**
+- [ ] **Step 1: One request, one commit**
 
-Edits mark unsaved. Publish sends every changed file plus every pending upload in **one** request, which becomes one commit.
+Every changed file plus every staged photo, in one `POST /api/publish`.
 
-- [ ] **Step 2: Poll, and say something true at every stage**
+- [ ] **Step 2: 409, not a parsed error string**
 
-Poll `GET /api/build-status?sha=` and stop on `live` or `failed`. Back off — a 90-second build polled every second is 90 requests for one publish.
+Today both "someone else published" and "GitHub returned 5xx" arrive as `json(502, { message })`, so the dashboard would have to match on literal text with nothing pinning it — a reword on either side silently degrades the conflict case.
 
-| State | What she sees |
-|---|---|
-| `queued` / `building` | "Publishing… this usually takes a minute or two." |
-| `live` | "Your changes are live." |
-| `failed` | "Something went wrong publishing. Your site hasn't changed." + the commit link. |
+`export class PublishConflictError extends Error {}` in `worker/github.ts`, thrown by `updateBranchHead` on 422; `handlePublish` maps it to **409**. Same status Task 3's `baseSha` mismatch uses. Branch on status, never on message text.
 
-- [ ] **Step 3: Translate the developer sentences**
+- [ ] **Step 3: Poll with a timeout, and confirm with `build-info.json`**
 
-Plan 3's Worker returns accurate but developer-facing errors. Own the translation here:
+`GET /api/build-status` returns `queued` when **no deployment matches the sha** — honest for the first seconds, but if GitHub never notifies Cloudflare or Pages is wired to another branch, it returns `queued` forever and "stop on live or failed" never fires. That is Plan 3 Task 8's limbo in a new shape.
+
+Back off. After **10 minutes** without `live`/`failed`: "This is taking longer than it should. Here's the commit — send this link to your developer."
+
+`deploy: success` is not "the CDN is serving it". Once `live`, fetch `/build-info.json` (it is `no-store` for exactly this) and confirm `sha` matches before saying "Your changes are live." If it does not match within 60 more seconds: "Published, but the site hasn't picked it up yet."
+
+Note `GET /api/build-status` is authenticated — handle a 401 mid-poll, not only on publish.
+
+- [ ] **Step 4: Drafts survive the tab**
+
+In-memory state does not survive a reload, a tab crash, or iOS evicting a backgrounded tab.
+
+On every change, write dirty files to `localStorage` under `vb:draft:v1` with a timestamp. On load, if a draft exists, show "You have unsaved changes from &lt;relative time&gt;" with Restore and Discard — **never auto-apply**. Clear on a 200 from `/api/publish`. Add a `beforeunload` handler while dirty.
+
+This is site content, not a secret, and is deliberately separate from the session, which is still never stored (Task 1 Step 5).
+
+- [ ] **Step 5: Translate the developer sentences**
 
 | From the Worker | What she reads |
 |---|---|
 | 422 `{ problems }` | each message inline, next to its field |
-| 502 "someone else published while you were editing" | "Someone else published while you were editing. Reload to get their changes, then try again." |
-| 502 "GitHub returned 5xx" | "Couldn't reach the server that stores your changes. Nothing was lost — try again in a minute." |
+| 409 | "Someone else published while you were editing. Reload to get their changes, then try again." |
+| 502 GitHub 5xx | "Couldn't reach the server that stores your changes. Nothing was lost — try again in a minute." |
 | 401 | "You've been signed out. Log in and your changes will still be here." |
 
-**The 401 case matters most.** The session lasts seven days and can expire mid-edit. Losing an afternoon's work to a silent 401 is the worst outcome this screen can produce — keep the unsaved state in memory across the re-login.
+The 401 case matters most: the session lasts seven days and can expire mid-edit. Keep unsaved state across the re-login **and** in the draft store, so a reload during the re-login does not lose it either.
 
-- [ ] **Step 4: The non-breaking space control point**
-
-`copy.footer.followLabel` is `Follow Us:`. The non-breaking space stops the label wrapping at ≤280px, and its loss was ruled Critical during Plan 2 — found only by measuring in a browser. **No test can catch it**, which is why the handoff assigned the control point here.
-
-Add a rule to `validateContent` in `src/content/validate.ts`: that field must contain U+00A0. Then surface it in the form as a field that renders the character visibly (a marker, not a raw space) so she can see it exists.
-
-Server-side, because the client is not the authority — and because a paste from a plain-text editor is how it would actually be lost.
-
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add -A
@@ -420,23 +565,28 @@ git commit -m "feat(admin): publish in one commit and report what happened"
 
 ## Definition of done
 
-- [ ] `npm run test` green; `npm run test:deploy` green; `npx tsc -b --noEmit` clean; `npm run build` exit 0; `npx eslint .` clean. Record the count.
-- [ ] **Nothing under `src/admin/` reaches the main bundle**, proven by an import-graph test that fails on a static import and a post-build check that actually runs.
+- [ ] `npm run test`, `npm run test:deploy`, `npx tsc -b --noEmit`, `npm run build`, `npx eslint .` all clean. Record the count.
+- [ ] **Nothing under `src/admin/` reaches the main bundle**, proven by an import-graph test that fails on all six import forms and a post-build check that runs on the deploy path.
+- [ ] `smoke.test.ts`'s build-script assertion was updated in the same commit that changed the script.
 - [ ] The homepage is 53473 bytes and the rendered DOM byte-identical.
-- [ ] Adding a field to `Dish` fails `tsc` until the descriptor covers it.
-- [ ] A publish with one invalid file shows the problem next to its field and commits nothing.
-- [ ] A photo upload returns the path `dishes.json` needs, not the source path.
-- [ ] A HEIC uploads successfully from a phone-sized file, and its WASM is absent from the main bundle.
-- [ ] A menu PDF can be replaced; `commitFiles` still rejects every traversal case with the third path shape in place.
-- [ ] A past-midnight closing time is accepted.
-- [ ] A disabled hero cannot be built in the form.
-- [ ] `copy.footer.followLabel` without U+00A0 is refused by the server with a readable message.
-- [ ] A 401 mid-publish does not lose unsaved work.
+- [ ] Adding a field to `Dish` fails `tsc -b` **with an error naming `src/admin/fields.ts`**; changing `tags` to `string` fails the descriptor.
+- [ ] A publish from a stale `baseSha` returns 409 and writes nothing.
+- [ ] The dashboard reads content from `GET /api/content`, and no file under `src/admin/` imports `src/content/index.ts`.
+- [ ] A problem whose field matches no rendered input still appears on screen.
+- [ ] Editing one dish preserves `tags` on all fifteen and an unknown extra key.
+- [ ] Twelve photos publish as **one** commit.
+- [ ] A menu PDF can be replaced; `commitFiles` still rejects every traversal case with the third shape in place; a truncated PDF is refused.
+- [ ] A past-midnight closing time is accepted; a cleared date removes the `publishAt` key.
+- [ ] The section list has no Remove, and cannot build a state `assertSections` refuses.
+- [ ] `copy.footer.followLabel` without U+00A0 is refused server-side and by a content-rule test.
+- [ ] A reload mid-edit offers to restore the draft.
+- [ ] A publish that never reaches `live` gives up after 10 minutes with the commit link.
 - [ ] The WhatsApp figure is labelled an estimate.
 
 ## Handed to later plans
 
-- **Plan 5 (Edit mode)** reuses `RecordForm`, `PhotoField` and `publish.ts` against the real page. It must wrap the public components rather than reimplement them — a second copy of the rendering drifts from the real one and defeats the purpose (D3).
-- **Plan 6 (Collage)** replaces `RecordList`'s buttons with drag for the hero grid only. **Read the Plan 3 ledger's note on the Tailwind defect first:** seven grid utilities in `galleries.json` are absent from the shipped CSS and seven more ship only because test files spell them out, so the collage is already laid out differently from what the JSON says. That must be fixed deliberately — it changes the live homepage — before drag is built on top.
-- **Plan 7 (Section templates)** adds template types to the descriptors in Task 2. Every type here is a flat record; `Page { slug, name, inNav, sections: Section[] }` will be the first nested list-of-records, so do not assume flatness in the form machinery.
+- **Plan 5 (Edit mode)** reuses `RecordForm`, `PhotoField`, `content.ts` and `publish.ts` against the real page, wrapping the public components rather than reimplementing them (D3).
+- **Plan 6 (Collage)** adds 2-D drag placement for `galleries.heroCollage`'s `className` grid strings. It does **not** replace `RecordList`, whose up/down buttons are the mandated touch interaction per the spec's Risks section. **Read the Plan 3 ledger's Tailwind note first:** seven grid utilities in `galleries.json` are absent from the shipped CSS and seven more ship only because test files spell them out, so the collage is already laid out differently from what the JSON says. Fixing that changes the live homepage and must be deliberate.
+- **Plan 7 (Section templates)** adds template types to Task 2's descriptors. Every type here is a flat record; `Page { slug, name, inNav, sections: Section[] }` is the first nested list-of-records — do not assume flatness in the form machinery.
+- **Deriving `index.html`'s head from `site.json`** (Task 2 Step 5) is ~30 lines and unlocks the share-preview text, which is currently developer-owned.
 - **Session revocation** still does not exist: rotating the password leaves outstanding 7-day tokens valid unless `TOKEN_SECRET` is rotated too.
