@@ -13,6 +13,7 @@ import {
   refreshBaseShas,
   requestPublish,
   trackPublish,
+  MAX_STAGED_PHOTOS_PER_PUBLISH,
   type BuildState,
   type ContentRegistry,
   type PublishProgress,
@@ -30,6 +31,19 @@ import type { ValidationProblem } from '../content/validate';
 // until she has actually clicked Restore.
 export interface DraftBannerProps {
   draft: DraftMap;
+  // Review finding: a restored draft can reference a photo/PDF `contentPath`
+  // that was staged (uploaded, validated, given a real path) but never
+  // actually published, because the tab was lost first -- the bytes for
+  // that upload only ever lived in memory (staged.ts), never in
+  // localStorage (drafts.ts's own comment on why). Publishing that restored
+  // reference would commit JSON pointing at a blob that was never written,
+  // reported as a success -- carried requirement 3's failure mode, reached
+  // through the draft door. This can't be resolved automatically (a
+  // restored path is indistinguishable from one that published
+  // successfully in an earlier session), so this is a plain count, shown as
+  // its own warning line, telling her honestly that some picked files need
+  // re-picking rather than staying silent about it.
+  staleStagedCount: number;
   onRestore: () => void;
   onDiscard: () => void;
 }
@@ -37,12 +51,19 @@ export interface DraftBannerProps {
 const BANNER_BUTTON_CLASSNAME =
   "rounded px-4 py-2 font-['Montserrat'] text-sm uppercase tracking-wide transition";
 
-export function DraftBanner({ draft, onRestore, onDiscard }: DraftBannerProps) {
+export function DraftBanner({ draft, staleStagedCount, onRestore, onDiscard }: DraftBannerProps) {
   const savedAt = mostRecentSavedAt(draft);
   const relative = savedAt === null ? 'a little while ago' : formatRelativeTime(savedAt);
   return (
     <div role="alert" className="mx-auto mb-8 max-w-3xl rounded border border-amber-300 bg-amber-50 p-4">
       <p className="mb-3 font-['Montserrat'] text-sm text-[#222]">{`You have unsaved changes from ${relative}.`}</p>
+      {staleStagedCount > 0 && (
+        <p className="mb-3 font-['Montserrat'] text-sm text-[#222]">
+          {staleStagedCount === 1
+            ? "A photo or PDF you picked in that session wasn't saved and will need to be picked again."
+            : `${staleStagedCount} photos or PDFs you picked in that session weren't saved and will need to be picked again.`}
+        </p>
+      )}
       <div className="flex gap-3">
         <button
           type="button"
@@ -203,21 +224,41 @@ const PublishBar: React.FC<PublishBarProps> = ({ registry, stagedFiles, onUnauth
   const stagedCount = Object.keys(stagedFiles.files).length;
   const isDirty = dirtyFiles.length > 0 || stagedCount > 0;
   const busy = BUSY_PHASES.has(state.phase);
+  // Same ceiling buildPublishRequest itself refuses at -- checked here too
+  // so the button is disabled (with an explanatory line, PublishStatus's
+  // own 'too-many-staged-files' case) BEFORE she ever clicks Publish, not
+  // only after a refused attempt.
+  const tooManyStaged = stagedCount > MAX_STAGED_PHOTOS_PER_PUBLISH;
 
   // Step 4: every dirty content file, written to localStorage with a
   // timestamp, on every change -- `registry.version` is the one plain
   // number that actually changes when a register() call lands (see
   // publish.ts's own comment on why `getEntries()` itself can't be a
-  // dependency). Deliberately keyed on `registry.version` alone, not
-  // `stagedFiles.files` too: the draft store is scoped to content JSON only
-  // (drafts.ts's own comment on why staged photo/PDF bytes are left out),
-  // so a staged-file-only change has nothing new to persist here.
+  // dependency). The content itself is still keyed on the registry alone
+  // (the draft store is scoped to content JSON -- drafts.ts's own comment
+  // on why staged photo/PDF bytes are left out) -- `stagedCount` is passed
+  // through only so a LATER reload's restore banner can warn her that many
+  // staged files existed and were lost (see DraftBanner's own comment), not
+  // because the staged files themselves are persisted here.
+  //
+  // Review finding: an empty registry must NEVER reach the `clearDraft()`
+  // branch -- an empty registry means "nothing has loaded yet", not "she
+  // has nothing unpublished". Reachable directly off the Restore path: she
+  // clicks Restore, PublishBar mounts (registry still empty -- no section
+  // has resolved its GET /api/content yet), and if this effect's first run
+  // landed before any section's fetch settled, `dirtyDraftMap({})` is `{}`
+  // and the old branch deleted the very draft she just asked to restore,
+  // permanently, before a single field re-rendered with it. A content-load
+  // failure right after (a flaky network, a stray 401 on the read route)
+  // then leaves nothing to recover from -- no banner, no draft, no edit.
   useEffect(() => {
-    const map = dirtyDraftMap(registry.getEntries());
-    if (Object.keys(map).length > 0) saveDraft(map);
+    const entries = registry.getEntries();
+    if (Object.keys(entries).length === 0) return; // nothing has loaded yet -- never clear on this alone
+    const map = dirtyDraftMap(entries);
+    if (Object.keys(map).length > 0) saveDraft(map, stagedCount);
     else clearDraft();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [registry.version]);
+  }, [registry.version, stagedCount]);
 
   // Step 4's beforeunload handler, active only while something would
   // actually be lost.
@@ -236,16 +277,27 @@ const PublishBar: React.FC<PublishBarProps> = ({ registry, stagedFiles, onUnauth
 
   async function handlePublish() {
     // Step 1's carried requirement 2: TagsInput commits its typed buffer
-    // only when it loses focus. A click on THIS button already moves focus
-    // away from whatever was focused before the click handler runs (the
-    // browser's own default), so this line is a no-op on that path -- but a
-    // keyboard submit from inside a wrapping form does not move focus away
-    // first, and this is what still flushes the buffer in that case, before
-    // anything below reads it.
+    // only when it loses focus. Unconditional, not skipped for the mouse
+    // path on the assumption a click already moved focus away -- a review
+    // finding corrected an earlier version of this comment that claimed
+    // exactly that as "the browser's own default": true in Chromium and
+    // Firefox, but Safari has never focused a plain `<button>` on click by
+    // default, so a click there leaves the previously focused field's
+    // buffer just as un-flushed as a keyboard submit would. This line is
+    // what makes BOTH paths safe, not a backstop for only the keyboard one.
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
 
     const entries = registry.getEntries();
     const plan = buildPublishRequest(entries, stagedFiles.files);
+    // Refused before a single byte left the browser -- MAX_STAGED_PHOTOS_
+    // PER_PUBLISH (PhotoField.tsx), enforced here per the review finding
+    // that nothing previously imported it. Unreachable through the ordinary
+    // UI (the button is already disabled by `tooManyStaged` below, and the
+    // same reactive check renders the plain-language explanation live,
+    // updating the instant she removes enough staged files to clear it
+    // again) -- this is only the defensive backstop, the same posture the
+    // `plan.files.length === 0` check just below already takes.
+    if (!plan.ok) return;
     if (plan.files.length === 0) return; // nothing to send -- the button is disabled for this case; defensive only.
 
     setState({ phase: 'publishing' });
@@ -320,15 +372,22 @@ const PublishBar: React.FC<PublishBarProps> = ({ registry, stagedFiles, onUnauth
           {/* type="submit", not a plain onClick handler -- see PublishBarProps'
               own `children` comment for why the form this button submits
               needs to be the one wrapping every content section, not just
-              this bar's own markup. A click already moves focus away from
-              whatever was focused before this handler runs regardless (the
-              browser's own default); it's the KEYBOARD path (Enter, from a text
-              field elsewhere on this page) this wiring exists for. */}
-          <button type="submit" disabled={!isDirty || busy} className={PUBLISH_BUTTON_CLASSNAME}>
+              this bar's own markup. Not ONLY for a click: it's the KEYBOARD
+              path (Enter, from a text field elsewhere on this page) this
+              wiring exists for -- handlePublish's own un-focus line is what
+              makes a plain click safe too, since not every browser moves
+              focus to a clicked button by default (Safari doesn't). */}
+          <button type="submit" disabled={!isDirty || busy || tooManyStaged} className={PUBLISH_BUTTON_CLASSNAME}>
             {busy ? 'Publishing…' : 'Publish'}
           </button>
         </div>
-        <PublishStatus state={state} />
+        {tooManyStaged ? (
+          <p role="alert" className="mt-3 font-['Montserrat'] text-sm text-red-600">
+            {`You have ${stagedCount} photos or PDFs staged; only ${MAX_STAGED_PHOTOS_PER_PUBLISH} can publish at once. Remove some before publishing.`}
+          </p>
+        ) : (
+          <PublishStatus state={state} />
+        )}
       </div>
       {children}
     </form>

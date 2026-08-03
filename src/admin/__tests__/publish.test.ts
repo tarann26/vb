@@ -16,7 +16,6 @@ import {
   POLL_MAX_INTERVAL_MS,
   POLL_MIN_INTERVAL_MS,
   POLL_TIMEOUT_MS,
-  type BuildStatusOutcome,
   type ContentEntries,
   type PollDeps,
   type PublishProgress,
@@ -63,12 +62,23 @@ describe('isDirty / dirtyContentFiles', () => {
   });
 });
 
+// buildPublishRequest returns a discriminated union ({ok: true, ...} | {ok:
+// false, reason: 'too-many-staged-files', ...}) so a caller (and this test
+// file) is FORCED to handle the refusal case, not just the happy path --
+// this helper unwraps the ok:true branch for every test below that expects
+// the request to actually be built, failing loudly (not silently narrowing
+// to `undefined`) if a refusal ever slips through unexpectedly.
+function expectOk(plan: ReturnType<typeof buildPublishRequest>) {
+  if (!plan.ok) throw new Error(`expected buildPublishRequest to succeed, got a refusal: ${plan.reason}`);
+  return plan;
+}
+
 describe('buildPublishRequest', () => {
   it('a dirty content file is sent as utf-8 JSON with its baseSha attached', () => {
     const entries: ContentEntries = {
       'dishes.json': { data: [{ id: 'a', name: 'Edited' }], initial: [{ id: 'a', name: '' }], sha: 'dishes-sha-1' },
     };
-    const plan = buildPublishRequest(entries, {});
+    const plan = expectOk(buildPublishRequest(entries, {}));
     expect(plan.files).toEqual([
       {
         path: 'src/content/dishes.json',
@@ -88,7 +98,7 @@ describe('buildPublishRequest', () => {
     const entries: ContentEntries = {
       'site.json': { data: { hours: [] }, initial: { hours: [{ opens: '10:00' }] }, sha: 'site-sha' },
     };
-    const plan = buildPublishRequest(entries, {});
+    const plan = expectOk(buildPublishRequest(entries, {}));
     expect(plan.files[0].baseSha).toBe('site-sha');
   });
 
@@ -96,7 +106,7 @@ describe('buildPublishRequest', () => {
     const entries: ContentEntries = {
       'dishes.json': { data: [{ id: 'a' }], initial: [{ id: 'a' }], sha: 'sha' },
     };
-    const plan = buildPublishRequest(entries, {});
+    const plan = expectOk(buildPublishRequest(entries, {}));
     expect(plan.files).toEqual([]);
     expect(plan.contentSnapshots).toEqual({});
   });
@@ -105,7 +115,7 @@ describe('buildPublishRequest', () => {
     const staged: Record<string, StagedFile> = {
       'dishes.json:a:image': { path: 'assets-source/food/aaa.jpg', content: REAL_BASE64_JPEG, encoding: 'base64' },
     };
-    const plan = buildPublishRequest({}, staged);
+    const plan = expectOk(buildPublishRequest({}, staged));
     expect(plan.files).toEqual([{ path: 'assets-source/food/aaa.jpg', content: REAL_BASE64_JPEG, encoding: 'base64' }]);
     expect(plan.stagedKeys).toEqual(['dishes.json:a:image']);
   });
@@ -129,7 +139,7 @@ describe('buildPublishRequest', () => {
     const staged: Record<string, StagedFile> = {
       'menus.json:food:file': { path: 'public/menus/food-menu.pdf', content: REAL_BASE64_JPEG, encoding: 'base64' },
     };
-    const plan = buildPublishRequest(entries, staged);
+    const plan = expectOk(buildPublishRequest(entries, staged));
 
     expect(plan.files.some((f) => f.path === 'src/content/menus.json')).toBe(false);
     const pdfEntry = plan.files.find((f) => f.path === 'public/menus/food-menu.pdf');
@@ -142,19 +152,41 @@ describe('buildPublishRequest', () => {
     expect(pdfEntry!.content.length).toBeGreaterThan(0);
   });
 
-  it('twelve staged photos all land in ONE request, none dropped', () => {
+  // Review finding: MAX_STAGED_PHOTOS_PER_PUBLISH (PhotoField.tsx, = 8)
+  // exists specifically so a publish assembler imports it -- nothing did,
+  // until this fix. 8 staged photos at up to 5MB each, base64-inflated
+  // (4/3, RFC 4648), is already ~53MB of request body; a build that instead
+  // let an arbitrary count through (this test used to assert TWELVE landed
+  // in one request, before the cap was enforced) would fail as an opaque
+  // network error on a real phone, indistinguishable from a genuine outage
+  // and impossible to act on by retrying.
+  function stagedPhotos(count: number): Record<string, StagedFile> {
     const staged: Record<string, StagedFile> = {};
-    for (let i = 0; i < 12; i++) {
+    for (let i = 0; i < count; i++) {
       staged[`dishes.json:dish-${i}:image`] = {
         path: `assets-source/food/photo-${i}.jpg`,
         content: REAL_BASE64_JPEG,
         encoding: 'base64',
       };
     }
-    const plan = buildPublishRequest({}, staged);
-    expect(plan.files).toHaveLength(12);
+    return staged;
+  }
+
+  it('exactly the cap (8) succeeds -- every one lands in ONE request, none dropped', () => {
+    const plan = expectOk(buildPublishRequest({}, stagedPhotos(8)));
+    expect(plan.files).toHaveLength(8);
     expect(plan.files.every((f) => isRealBase64(f.content))).toBe(true);
-    expect(new Set(plan.files.map((f) => f.path)).size).toBe(12);
+    expect(new Set(plan.files.map((f) => f.path)).size).toBe(8);
+  });
+
+  it('one over the cap (9) is refused, not silently truncated or sent oversized', () => {
+    const plan = buildPublishRequest({}, stagedPhotos(9));
+    expect(plan).toEqual({ ok: false, reason: 'too-many-staged-files', stagedCount: 9, limit: 8 });
+  });
+
+  it('twelve -- the number this suite used to assert succeeded -- is refused the same way', () => {
+    const plan = buildPublishRequest({}, stagedPhotos(12));
+    expect(plan.ok).toBe(false);
   });
 
   it('dirty content files and staged files combine in one request', () => {
@@ -164,7 +196,7 @@ describe('buildPublishRequest', () => {
     const staged: Record<string, StagedFile> = {
       'dishes.json:a:image': { path: 'assets-source/food/x.jpg', content: REAL_BASE64_JPEG, encoding: 'base64' },
     };
-    const plan = buildPublishRequest(entries, staged);
+    const plan = expectOk(buildPublishRequest(entries, staged));
     expect(plan.files).toHaveLength(2);
     expect(plan.files.some((f) => f.path === 'src/content/dishes.json')).toBe(true);
     expect(plan.files.some((f) => f.path === 'assets-source/food/x.jpg')).toBe(true);
@@ -502,12 +534,10 @@ describe('trackPublish', () => {
 
   it('queued, then building, then live with a matching build-info sha -> live', async () => {
     const clock = fakeClock();
-    const states: BuildStatusOutcome['kind'][] = [];
     let call = 0;
     const deps: PollDeps = {
       fetchBuildStatus: async () => {
         call += 1;
-        states.push('ok');
         if (call === 1) return { kind: 'ok', result: { state: 'queued', deploymentUrl: null, commitUrl: 'https://c/1' } };
         if (call === 2) return { kind: 'ok', result: { state: 'building', deploymentUrl: null, commitUrl: 'https://c/1' } };
         return { kind: 'ok', result: { state: 'live', deploymentUrl: 'https://live', commitUrl: 'https://c/1' } };

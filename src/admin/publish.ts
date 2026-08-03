@@ -12,6 +12,7 @@ import { CONTENT_FILES, fetchContent, type ContentFileName } from './content';
 import type { StagedFile } from './staged';
 import type { ValidationProblem } from '../content/validate';
 import type { DraftMap } from './drafts';
+import { MAX_STAGED_PHOTOS_PER_PUBLISH } from './PhotoField';
 
 // ---------------------------------------------------------------------------
 // The content registry: one entry per content file that has ever loaded on
@@ -149,7 +150,7 @@ export interface PublishFilePayload {
   baseSha?: string;
 }
 
-export interface PublishRequestPlan {
+export interface PublishRequestFiles {
   files: PublishFilePayload[];
   // Exactly the content files included above, each with the precise `data`
   // value that was serialized into `files` -- handed to markPublished after
@@ -163,7 +164,31 @@ export interface PublishRequestPlan {
   stagedKeys: string[];
 }
 
+// Review finding: PhotoField.tsx's own MAX_STAGED_PHOTOS_PER_PUBLISH exists
+// specifically so "whatever DOES assemble a publish" (that component's own
+// words, naming this module) imports ONE shared number rather than a
+// second, independently-chosen one -- and nothing here ever did, until this
+// fix. The arithmetic that constant's own comment already worked out still
+// holds: 8 staged photos at up to MAX_STAGED_PHOTO_BYTES (5MB) each, once
+// base64-inflated (4/3, RFC 4648), is already ~53MB of request body: real
+// phones on real connections can fail an upload of that size in ways that
+// surface as nothing more specific than requestPublish's own generic
+// network-error sentence, which would then repeat identically on every
+// retry -- a dead end, not a transient failure. Refusing BEFORE the request
+// is ever built, with a plain reason, is what turns that dead end into
+// something she can act on ("remove some, publish in two batches").
+export { MAX_STAGED_PHOTOS_PER_PUBLISH };
+
+export type PublishRequestPlan =
+  | ({ ok: true } & PublishRequestFiles)
+  | { ok: false; reason: 'too-many-staged-files'; stagedCount: number; limit: number };
+
 export function buildPublishRequest(entries: ContentEntries, staged: Record<string, StagedFile>): PublishRequestPlan {
+  const stagedKeys = Object.keys(staged);
+  if (stagedKeys.length > MAX_STAGED_PHOTOS_PER_PUBLISH) {
+    return { ok: false, reason: 'too-many-staged-files', stagedCount: stagedKeys.length, limit: MAX_STAGED_PHOTOS_PER_PUBLISH };
+  }
+
   const dirty = dirtyContentFiles(entries);
 
   const contentFiles: PublishFilePayload[] = dirty.map((file) => {
@@ -176,7 +201,6 @@ export function buildPublishRequest(entries: ContentEntries, staged: Record<stri
     };
   });
 
-  const stagedKeys = Object.keys(staged);
   const stagedPayload: PublishFilePayload[] = stagedKeys.map((key) => {
     const file = staged[key];
     return { path: file.path, content: file.content, encoding: file.encoding };
@@ -186,7 +210,7 @@ export function buildPublishRequest(entries: ContentEntries, staged: Record<stri
     Record<ContentFileName, unknown>
   >;
 
-  return { files: [...contentFiles, ...stagedPayload], contentSnapshots, stagedKeys };
+  return { ok: true, files: [...contentFiles, ...stagedPayload], contentSnapshots, stagedKeys };
 }
 
 // The draft map (drafts.ts) is scoped to content JSON only -- see that

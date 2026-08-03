@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useSession } from './session';
 import Login from './Login';
 import { fetchContent } from './content';
@@ -20,7 +20,7 @@ import type { StagedFile } from './staged';
 import { useContentRegistry } from './publish';
 import type { ContentRegistry } from './publish';
 import PublishBar, { DraftBanner } from './PublishBar';
-import { loadDraft, clearDraft } from './drafts';
+import { loadDraft, loadDraftStagedCount, clearDraft } from './drafts';
 import type { DraftMap } from './drafts';
 import type { Article, Copy, Dish, Drink, Galleries, MenuFile, Section, SiteContent, StoryContent } from '../content/types';
 import type { ValidationProblem } from '../content/validate';
@@ -80,17 +80,72 @@ const AdminApp: React.FC = () => {
   const registry = useContentRegistry();
   const stagedFilesApi = { files: stagedFiles, stage };
 
-  // Task 10 Step 4: checked ONCE, synchronously, on first render (a lazy
-  // useState initializer, not an effect) -- localStorage.getItem is
-  // synchronous, so there is no "checking" gap the way useSession's own
-  // server probe has one. `pendingDraft` is the decision she hasn't made
-  // yet; `restoreDraft` is populated ONLY once she clicks Restore, and is
-  // what registerLoaded above actually seeds each section's data with.
-  // "Never auto-apply" (the brief's own words) is enforced structurally
-  // below, not just by convention: no section, and no PublishBar, is
-  // rendered at all while `pendingDraft` is non-null.
-  const [pendingDraft, setPendingDraft] = useState<DraftMap | null>(() => loadDraft());
+  // Task 10 Step 4: `pendingDraft` is the decision she hasn't made yet;
+  // `restoreDraft` is populated ONLY once she clicks Restore, and is what
+  // registerLoaded above actually seeds each section's data with. "Never
+  // auto-apply" (the brief's own words) is enforced structurally below, not
+  // just by convention: no section, and no PublishBar, is rendered at all
+  // while `pendingDraft` is non-null.
+  const [pendingDraft, setPendingDraft] = useState<DraftMap | null>(null);
+  // How many staged (uploaded, not yet published) photos/PDFs existed the
+  // last time this draft was saved -- read alongside `pendingDraft`, from
+  // its own sibling localStorage key (drafts.ts's own comment on why it's
+  // separate), purely to tell her honestly that they were lost, not to
+  // attempt restoring them (their bytes only ever lived in memory).
+  const [pendingStagedCount, setPendingStagedCount] = useState(0);
   const [restoreDraft, setRestoreDraft] = useState<DraftMap | null>(null);
+  // Review finding: PublishBar's own "You've been signed out..." sentence
+  // lives inside PublishBar, which unmounts the INSTANT `logOut` flips
+  // `status` to 'out' -- in the same render, before a single paint could
+  // ever show it. Held here instead, one level up, where it survives that
+  // unmount, and handed to <Login> below. Cleared the moment she's back
+  // 'in' (the same render-time transition check already re-arms
+  // `pendingDraft`), so it never lingers into a later, unrelated logout.
+  const [signOutNotice, setSignOutNotice] = useState<string | null>(null);
+
+  // Review finding (post-Task-10, Critical): re-checks localStorage on
+  // EVERY fresh transition into 'in' -- not just the page's first mount --
+  // by comparing this render's `status` against the value the PREVIOUS
+  // render saw. `logOut` (called by PublishBar's own `onUnauthenticated`, a
+  // 401 on the publish itself or mid-poll) never unmounts AdminApp; it only
+  // swaps the returned JSX from the dashboard to <Login>, so a lazy
+  // `useState` initializer -- which runs exactly once, on this component's
+  // very first mount -- never re-fires on a SECOND login within the same
+  // page load. Without this, a 401 mid-edit is fatal: her edit sits
+  // correctly un-cleared in the registry (survives the logout, since
+  // `registry` itself is never destroyed) and in localStorage (PublishBar's
+  // own persistence effect never ran a clearing pass for it) right up until
+  // she logs back in -- at which point every section remounts, re-fetches,
+  // and `registerLoaded` overwrites the registry with the clean SERVER
+  // value (there is no `restoreDraft` override, because the banner was
+  // never shown), which makes the file read clean, which is what PublishBar's
+  // own persistence effect sees on the NEXT registry change and answers
+  // with `clearDraft()` -- silently deleting the very thing "your changes
+  // will still be here" just promised was safe.
+  //
+  // Written as a conditional `setState` call DURING RENDER (comparing
+  // against a ref of the last-seen status), not inside a `useEffect` --
+  // deliberately. An effect-based version (`useEffect(() => { if (status
+  // === 'in') setPendingDraft(loadDraft()); }, [status])`) loses a real
+  // race: on the render where `status` flips to 'in', React commits the
+  // FULL dashboard first (pendingDraft is still stale-null at render time),
+  // and only after that commit does it run effects -- by which point every
+  // section's own fetch-effect has ALREADY started, and child effects run
+  // before a parent's, so nothing guarantees the corrective re-render (and
+  // the unmount it causes) beats an already-resolving fetch's `.then()`
+  // back into the registry. Adjusting state DURING render is React's own
+  // documented escape from exactly this: seeing `setPendingDraft` called
+  // mid-render, React discards this render immediately and re-renders
+  // synchronously with the new state BEFORE committing anything to the DOM
+  // or starting a single effect -- so the sections' fetch-effects never
+  // start at all when a draft needs offering again.
+  const previousStatusRef = useRef(status);
+  if (previousStatusRef.current !== 'in' && status === 'in') {
+    setPendingDraft(loadDraft());
+    setPendingStagedCount(loadDraftStagedCount());
+    setSignOutNotice(null);
+  }
+  previousStatusRef.current = status;
 
   if (status === 'checking') {
     // src/App.tsx's <Suspense fallback={null}> already covers the moment
@@ -102,7 +157,7 @@ const AdminApp: React.FC = () => {
   }
 
   if (status === 'out') {
-    return <Login onLogin={logIn} />;
+    return <Login onLogin={logIn} notice={signOutNotice ?? undefined} />;
   }
 
   // status === 'in'.
@@ -113,6 +168,7 @@ const AdminApp: React.FC = () => {
         {pendingDraft ? (
           <DraftBanner
             draft={pendingDraft}
+            staleStagedCount={pendingStagedCount}
             onRestore={() => {
               setRestoreDraft(pendingDraft);
               setPendingDraft(null);
@@ -123,7 +179,19 @@ const AdminApp: React.FC = () => {
             }}
           />
         ) : (
-          <PublishBar registry={registry} stagedFiles={stagedFilesApi} onUnauthenticated={logOut}>
+          <PublishBar
+            registry={registry}
+            stagedFiles={stagedFilesApi}
+            onUnauthenticated={() => {
+              // Set BEFORE logOut -- both are plain setState calls in the
+              // same synchronous handler, batched into the one re-render
+              // that flips `status`, so <Login>'s very first paint already
+              // has the notice; there is no intermediate frame where the
+              // dashboard is gone and the notice isn't there yet.
+              setSignOutNotice("You've been signed out. Log in and your changes will still be here.");
+              logOut();
+            }}
+          >
             {/* Review finding (Task 9): every section below reads a whole
                 content file through fetchContent's own unchecked cast
                 (src/admin/content.ts's own header comment) with no runtime

@@ -2,6 +2,19 @@ import React, { useState } from 'react';
 
 interface LoginProps {
   onLogin: () => void;
+  // Review finding: PublishBar's own "You've been signed out. Log in and
+  // your changes will still be here." lives inside PublishBar itself -- but
+  // `onUnauthenticated` (this callback's own trigger) calls `logOut`, which
+  // flips AdminApp's status to 'out' and unmounts PublishBar (and every
+  // section) IMMEDIATELY, in the same render. That message was being set
+  // into React state and thrown away before a single paint could ever show
+  // it to her -- reproduced directly (AdminApp.test.tsx's own "does not
+  // destroy the draft on re-login" test never actually saw that text on
+  // screen until this prop existed). AdminApp now holds the notice itself
+  // (survives the unmount, since it lives one level up) and hands it here
+  // to render inside the one screen she's actually looking at when it
+  // matters.
+  notice?: string;
 }
 
 // One message per status this route can actually return (worker/index.ts's
@@ -23,7 +36,7 @@ function messageFor(status: number): string {
   }
 }
 
-const Login: React.FC<LoginProps> = ({ onLogin }) => {
+const Login: React.FC<LoginProps> = ({ onLogin, notice }) => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -65,6 +78,12 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
         aria-label="Admin login"
       >
         <h1 className="mb-6 font-['Parisienne'] text-3xl text-[#222]">Via Bianca</h1>
+
+        {notice && (
+          <p role="status" className="mb-4 rounded border border-amber-300 bg-amber-50 p-3 text-sm text-[#222]">
+            {notice}
+          </p>
+        )}
 
         <label
           htmlFor="admin-password"

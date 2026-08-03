@@ -27,6 +27,27 @@ import type { ContentFileName } from './content';
 
 export const DRAFT_STORAGE_KEY = 'vb:draft:v1';
 
+// A SEPARATE key, not a field inside DRAFT_STORAGE_KEY's own JSON -- see
+// saveDraft/loadDraftStagedCount below for why. Review finding: a restored
+// draft can reference a photo/PDF `contentPath` that was staged (uploaded,
+// validated, and handed a real path by `?stage=1` -- worker/upload.ts) but
+// never actually committed, because the tab was lost before Publish ran.
+// The BYTES for that upload lived only in staged.ts's in-memory map, never
+// in localStorage (drafts.ts's own header comment already explains why:
+// base64 photo bytes routinely exceed a browser's practical localStorage
+// quota) -- so after a reload, Restore can bring the REFERENCE back
+// (dishes.json's `image` field, say) with no way to bring the referenced
+// FILE back. Publishing that restored reference commits JSON pointing at a
+// blob that was never written -- a broken image on the live site, reported
+// as a success, exactly the silent failure Task 10's own carried
+// requirement 3 exists to prevent, reached through the draft door instead
+// of a missing `stage()` call. This key does not attempt to reconcile which
+// SPECIFIC field is dangling (the draft's own JSON is indistinguishable
+// from a path that published successfully in an earlier session); it
+// records only a COUNT, so the restore banner can at least say honestly
+// that some number of picked files were lost and need re-picking.
+export const DRAFT_STAGED_COUNT_KEY = 'vb:draft:v1:staged-count';
+
 export interface DraftEntry {
   data: unknown;
   // Date.now() at the moment this file was last written into the draft --
@@ -97,27 +118,72 @@ export function loadDraft(storage: Storage = window.localStorage): DraftMap | nu
 // last file included in a successful publish) leaves loadDraft() reading
 // back null next time, not a technically-non-null-but-empty map a caller
 // would have to special-case anyway.
-export function saveDraft(map: DraftMap, storage: Storage = window.localStorage): void {
+// `stagedCount` -- how many photo/PDF uploads were staged (picked,
+// uploaded, validated, NOT yet published) at the moment this save happened
+// -- is written to DRAFT_STAGED_COUNT_KEY, a key of its own, not folded
+// into the same JSON value as `map`. Deliberate: `map`'s own shape is
+// parsed by iterating its entries and keeping only the ones that pass
+// isDraftEntry (loadDraft's own per-entry defensive filter, so one
+// malformed file never costs every other file) -- a sibling `stagedCount`
+// field living inside that SAME object would either have to be excluded
+// from that iteration by name (a growing list of "reserved" keys
+// loadDraft's parser has to know about) or would itself need to look
+// enough like a DraftEntry to survive the filter, neither of which is
+// worth the coupling for one integer that has nothing to do with per-file
+// parsing at all.
+export function saveDraft(map: DraftMap, stagedCount: number = 0, storage: Storage = window.localStorage): void {
   try {
     if (Object.keys(map).length === 0) {
       storage.removeItem(DRAFT_STORAGE_KEY);
-      return;
+    } else {
+      storage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(map));
     }
-    storage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(map));
   } catch {
     // Best effort -- see this function's own comment above.
+  }
+  try {
+    if (stagedCount > 0) {
+      storage.setItem(DRAFT_STAGED_COUNT_KEY, String(Math.floor(stagedCount)));
+    } else {
+      storage.removeItem(DRAFT_STAGED_COUNT_KEY);
+    }
+  } catch {
+    // Best effort, same as above -- worst case the banner's own "N files
+    // were lost" note is simply absent, never a crash.
+  }
+}
+
+// Never throws -- same posture as loadDraft. Malformed or missing data
+// (never written, corrupted by hand, a negative or non-numeric string) all
+// read as 0 -- "nothing to warn about" is the safe default for a value that
+// only ever adds one extra sentence to a banner, never gates anything.
+export function loadDraftStagedCount(storage: Storage = window.localStorage): number {
+  try {
+    const raw = storage.getItem(DRAFT_STAGED_COUNT_KEY);
+    if (raw === null) return 0;
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 0;
+  } catch {
+    return 0;
   }
 }
 
 // Called on a 200 from POST /api/publish (Step 4's own instruction) and
-// when she chooses Discard on the restore banner. Same best-effort posture
-// as saveDraft: a failed removeItem leaves a stale draft sitting in
-// localStorage, which is merely a spurious "you have unsaved changes" banner
-// on her NEXT visit -- annoying, not destructive -- rather than something
-// worth crashing this call site over.
+// when she chooses Discard on the restore banner. Clears BOTH keys -- a
+// successful publish or an explicit Discard means there is nothing left to
+// warn about either. Same best-effort posture as saveDraft: a failed
+// removeItem leaves a stale draft (or a stale staged-count note) sitting in
+// localStorage, which is merely a spurious banner on her NEXT visit --
+// annoying, not destructive -- rather than something worth crashing this
+// call site over.
 export function clearDraft(storage: Storage = window.localStorage): void {
   try {
     storage.removeItem(DRAFT_STORAGE_KEY);
+  } catch {
+    // Best effort, same as saveDraft.
+  }
+  try {
+    storage.removeItem(DRAFT_STAGED_COUNT_KEY);
   } catch {
     // Best effort, same as saveDraft.
   }

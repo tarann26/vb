@@ -1,19 +1,29 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import {
+  DRAFT_STAGED_COUNT_KEY,
   DRAFT_STORAGE_KEY,
   clearDraft,
   formatRelativeTime,
   loadDraft,
+  loadDraftStagedCount,
   mostRecentSavedAt,
   saveDraft,
   type DraftMap,
 } from '../drafts';
 
-// jsdom (this repo's one Vitest environment -- see vitest.config.ts's own
-// comment) provides a real, in-memory `localStorage`, so these tests use it
-// directly rather than a hand-built fake, EXCEPT for the two tests that
-// specifically need a Storage that throws (a real, reachable state -- Safari
-// private browsing rejects every write).
+// Review finding: this comment previously claimed jsdom supplies a working
+// `localStorage` -- wrong. Under this exact toolchain (Node 25, Vitest
+// 2.1.9, jsdom 25.0.1), `window.localStorage` resolves to NODE's own
+// native, unflagged `localStorage` global (backed by a file
+// `--localstorage-file` selects), not jsdom's real implementation -- and
+// with no valid file configured, every method on Node's version is
+// `undefined`. src/test/setup.ts polyfills it with a plain in-memory
+// `Storage`, feature-detected the same way that file's other jsdom-gap
+// polyfills are; see that file's own comment for the full story. These
+// tests use `window.localStorage` directly (that polyfill), EXCEPT for the
+// two tests that specifically need a Storage that throws (a real, reachable
+// state regardless of which implementation is running -- Safari private
+// browsing rejects every write).
 afterEach(() => {
   window.localStorage.clear();
 });
@@ -78,6 +88,52 @@ describe('clearDraft', () => {
   it('is a harmless no-op when nothing was ever saved', () => {
     expect(() => clearDraft()).not.toThrow();
     expect(loadDraft()).toBeNull();
+  });
+
+  it('also clears the sibling staged-count key', () => {
+    saveDraft({ 'dishes.json': DISHES_ENTRY }, 3);
+    expect(loadDraftStagedCount()).toBe(3);
+    clearDraft();
+    expect(loadDraftStagedCount()).toBe(0);
+    expect(window.localStorage.getItem(DRAFT_STAGED_COUNT_KEY)).toBeNull();
+  });
+});
+
+describe('saveDraft / loadDraftStagedCount: the staged-file-loss note', () => {
+  it('round-trips a positive count', () => {
+    saveDraft({ 'dishes.json': DISHES_ENTRY }, 5);
+    expect(loadDraftStagedCount()).toBe(5);
+  });
+
+  it('defaults to 0 when saveDraft is called with no count at all', () => {
+    saveDraft({ 'dishes.json': DISHES_ENTRY });
+    expect(loadDraftStagedCount()).toBe(0);
+  });
+
+  it('a count of 0 removes the key rather than writing "0"', () => {
+    saveDraft({ 'dishes.json': DISHES_ENTRY }, 3);
+    saveDraft({ 'dishes.json': DISHES_ENTRY }, 0);
+    expect(window.localStorage.getItem(DRAFT_STAGED_COUNT_KEY)).toBeNull();
+    expect(loadDraftStagedCount()).toBe(0);
+  });
+
+  it('nothing ever saved -> 0', () => {
+    expect(loadDraftStagedCount()).toBe(0);
+  });
+
+  it('a corrupted value (non-numeric, negative) never throws and reads as 0', () => {
+    window.localStorage.setItem(DRAFT_STAGED_COUNT_KEY, 'not a number');
+    expect(loadDraftStagedCount()).toBe(0);
+    window.localStorage.setItem(DRAFT_STAGED_COUNT_KEY, '-4');
+    expect(loadDraftStagedCount()).toBe(0);
+  });
+
+  it('is written under its OWN key, not inside DRAFT_STORAGE_KEY\'s JSON', () => {
+    saveDraft({ 'dishes.json': DISHES_ENTRY }, 2);
+    const rawDraft = JSON.parse(window.localStorage.getItem(DRAFT_STORAGE_KEY)!);
+    expect(rawDraft).toEqual({ 'dishes.json': DISHES_ENTRY });
+    expect(rawDraft.stagedCount).toBeUndefined();
+    expect(window.localStorage.getItem(DRAFT_STAGED_COUNT_KEY)).toBe('2');
   });
 });
 
@@ -148,7 +204,12 @@ describe('loadDraft / saveDraft: a Storage that throws never crashes the caller'
   });
 
   it('saveDraft swallows the failure rather than throwing', () => {
-    expect(() => saveDraft({ 'dishes.json': DISHES_ENTRY }, THROWING_STORAGE)).not.toThrow();
+    expect(() => saveDraft({ 'dishes.json': DISHES_ENTRY }, 0, THROWING_STORAGE)).not.toThrow();
+  });
+
+  it('loadDraftStagedCount returns 0 rather than throwing', () => {
+    expect(() => loadDraftStagedCount(THROWING_STORAGE)).not.toThrow();
+    expect(loadDraftStagedCount(THROWING_STORAGE)).toBe(0);
   });
 
   it('clearDraft swallows the failure rather than throwing', () => {

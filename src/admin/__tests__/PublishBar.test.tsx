@@ -154,7 +154,19 @@ describe('PublishBar: assembling the request', () => {
     expect(body.files[0].baseSha).toBe('sha-original');
   });
 
-  it('a click on the Publish button also blurs first (the ordinary path stays safe too)', async () => {
+  // Review finding: this test's own original name/comment claimed a click
+  // "already blurs" the previously focused field as a browser default,
+  // offered as proof the click path needs no help from handlePublish's own
+  // explicit un-focus line. That claim was never actually true universally
+  // -- Safari has never focused a plain `<button>` on click by default, so
+  // a click there leaves a field's typed buffer just as un-flushed as a
+  // keyboard submit would -- and `fireEvent.click` here reproduces exactly
+  // that non-focusing behavior (jsdom does not simulate a real click's
+  // focus side effects either), which is WHY this test can prove anything
+  // at all: if the explicit `.blur()` line in handlePublish were the one
+  // this suite's other test already covers and this path genuinely needed
+  // no help, deleting that line would leave this test green. It does not.
+  it('a click on the Publish button flushes the same way a keyboard submit does -- not because the click itself already blurred it', async () => {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars -- both params exist only to keep the mock's call-tuple type two elements wide, matched against below
     const fetchImpl = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => jsonResponse(200, { sha: 'commit-1' }));
     vi.stubGlobal('fetch', fetchImpl);
@@ -384,6 +396,25 @@ describe('PublishBar: draft persistence and beforeunload', () => {
     expect(JSON.parse(raw!)['dishes.json'].data).toEqual([{ id: 'a', name: 'Edited' }]);
   });
 
+  // Review finding (Important): reachable directly off the Restore path --
+  // she clicks Restore, PublishBar mounts with an EMPTY registry (no
+  // section has resolved its GET /api/content yet), and the persistence
+  // effect's first run must not read that emptiness as "nothing to
+  // publish" and delete the very draft she just asked to restore. A
+  // content-load failure right after (a flaky network, a stray 401 on the
+  // read route) would otherwise leave nothing to recover from at all.
+  it('mounting with an EMPTY registry never clears a pre-existing draft', () => {
+    window.localStorage.setItem(
+      DRAFT_STORAGE_KEY,
+      JSON.stringify({ 'dishes.json': { data: [{ id: 'a', name: 'Restored' }], savedAt: 1 } }),
+    );
+    render(<Harness />); // captured!.registry starts empty -- nothing registered yet
+    expect(window.localStorage.getItem(DRAFT_STORAGE_KEY)).not.toBeNull();
+    expect(JSON.parse(window.localStorage.getItem(DRAFT_STORAGE_KEY)!)['dishes.json'].data).toEqual([
+      { id: 'a', name: 'Restored' },
+    ]);
+  });
+
   it('warns on beforeunload while dirty, not while clean', () => {
     render(<Harness />);
     const clean = new Event('beforeunload', { cancelable: true });
@@ -404,15 +435,47 @@ describe('DraftBanner', () => {
     render(
       <DraftBanner
         draft={{ 'dishes.json': { data: [], savedAt: Date.now() - 65_000 } }}
+        staleStagedCount={0}
         onRestore={onRestore}
         onDiscard={onDiscard}
       />,
     );
     expect(screen.getByRole('alert')).toHaveTextContent('You have unsaved changes from 1 minute ago.');
+    // Nothing to warn about -- no second line about lost staged files.
+    expect(screen.queryByText(/picked/i)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Restore' }));
     expect(onRestore).toHaveBeenCalledTimes(1);
     expect(onDiscard).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Discard' }));
     expect(onDiscard).toHaveBeenCalledTimes(1);
+  });
+
+  // Review finding: a restored draft can reference a photo/PDF that was
+  // staged but never published (the bytes only ever lived in memory) --
+  // publishing that reference would commit JSON pointing at a blob that was
+  // never written. Since the exact field can't be identified after the
+  // fact, the banner names a COUNT instead of staying silent about it.
+  it('one lost staged file -- singular wording', () => {
+    render(
+      <DraftBanner
+        draft={{ 'dishes.json': { data: [], savedAt: Date.now() } }}
+        staleStagedCount={1}
+        onRestore={vi.fn()}
+        onDiscard={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("A photo or PDF you picked in that session wasn't saved and will need to be picked again.")).toBeInTheDocument();
+  });
+
+  it('several lost staged files -- plural wording with the count', () => {
+    render(
+      <DraftBanner
+        draft={{ 'dishes.json': { data: [], savedAt: Date.now() } }}
+        staleStagedCount={3}
+        onRestore={vi.fn()}
+        onDiscard={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("3 photos or PDFs you picked in that session weren't saved and will need to be picked again.")).toBeInTheDocument();
   });
 });

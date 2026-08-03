@@ -31,6 +31,24 @@ describe('Login', () => {
     expect(screen.getAllByRole('button')).toHaveLength(1);
   });
 
+  it('with no notice prop, shows nothing extra', () => {
+    render(<Login onLogin={vi.fn()} />);
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+
+  // Review finding: PublishBar's own "You've been signed out..." sentence
+  // lives inside PublishBar, which unmounts the instant a 401 flips status
+  // to 'out' -- so AdminApp holds the notice one level up and hands it here,
+  // where it actually survives to be shown. Covered directly (not just
+  // through the fuller AdminApp integration test) so a future change to
+  // Login's own rendering can't silently drop this without a local test
+  // catching it.
+  it('a notice renders as its own status region, not as the error styling', () => {
+    render(<Login onLogin={vi.fn()} notice="You've been signed out. Log in and your changes will still be here." />);
+    const notice = screen.getByRole('status');
+    expect(notice).toHaveTextContent("You've been signed out. Log in and your changes will still be here.");
+  });
+
   it('calls onLogin and never surfaces an error on a 204', async () => {
     stubFetchOnce(204);
     const onLogin = vi.fn();

@@ -690,3 +690,78 @@ describe('AdminApp: Task 10 -- a reload mid-edit offers to restore the draft', (
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 });
+
+// Review finding (Critical): a 401 mid-edit -- the session's own 7-day
+// token expiring, or Publish itself catching a stale cookie -- must not
+// destroy the very edit "your changes will still be here" just promised was
+// safe. Reproduced end to end: edit a dish, the edit is dirty and persisted,
+// Publish answers 401, she logs back in on the SAME page (AdminApp itself
+// never unmounts -- logOut only swaps the returned JSX to <Login>) -- and
+// without re-arming the draft check on this SECOND transition into 'in',
+// every section silently remounts with the clean server value and
+// PublishBar's own persistence effect deletes the very draft that was still
+// sitting there, un-cleared, the whole time.
+describe('AdminApp: Task 10 review fix -- a 401 mid-edit does not destroy the draft on re-login', () => {
+  function stubFetchWithLoginAndPublish() {
+    let publishCalls = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url === '/api/wa') return WA_RESPONSE();
+        if (url === '/api/login') return new Response(null, { status: 204 });
+        if (url === '/api/publish') {
+          publishCalls += 1;
+          return new Response(JSON.stringify({ message: 'Not authenticated.' }), {
+            status: 401,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        if (url.includes('dishes.json')) return contentResponse(DISHES, 'sha-dishes');
+        if (url.includes('drinks.json')) return contentResponse(DRINKS, 'sha-drinks');
+        if (url.includes('press.json')) return contentResponse(PRESS, 'sha-press');
+        if (url.includes('sections.json')) return contentResponse(SECTIONS, 'sha-sections');
+        if (url.includes('site.json')) return contentResponse(SITE, 'sha-site');
+        if (url.includes('galleries.json')) return contentResponse(GALLERIES, 'sha-galleries');
+        if (url.includes('menus.json')) return contentResponse(MENUS, 'sha-menus');
+        if (url.includes('story.json')) return contentResponse(STORY, 'sha-story');
+        if (url.includes('copy.json')) return contentResponse(COPY, 'sha-copy');
+        throw new Error(`AdminApp.test.tsx: unexpected fetch to ${url}`);
+      }),
+    );
+    return () => publishCalls;
+  }
+
+  it('edit -> Publish -> 401 -> log back in on the same page -> the draft is offered, not silently gone', async () => {
+    const getPublishCalls = stubFetchWithLoginAndPublish();
+    const user = userEvent.setup();
+    render(<AdminApp />);
+
+    const dishNameInput = await screen.findByDisplayValue('Dish A');
+    await user.clear(dishNameInput);
+    await user.type(dishNameInput, 'Dish A Edited');
+    // The edit is real and persisted before she ever clicks Publish.
+    await waitFor(() => expect(window.localStorage.getItem(DRAFT_STORAGE_KEY)).not.toBeNull());
+
+    await user.click(screen.getByRole('button', { name: 'Publish' }));
+    expect(await screen.findByText("You've been signed out. Log in and your changes will still be here.")).toBeInTheDocument();
+    expect(getPublishCalls()).toBe(1);
+
+    // Still logged out at this exact moment -- the draft must already have
+    // survived the 401 itself (handlePublish never clears it on this path).
+    expect(window.localStorage.getItem(DRAFT_STORAGE_KEY)).not.toBeNull();
+
+    // Log back in, on the SAME page -- no reload.
+    await user.type(screen.getByLabelText(/password/i), 'whatever-the-real-password-is');
+    await user.click(screen.getByRole('button', { name: /log in/i }));
+
+    // The banner, not the bare dashboard with the server's clean value --
+    // and NOT silently deleted out from under her.
+    expect(await screen.findByRole('alert')).toHaveTextContent(/you have unsaved changes/i);
+    expect(window.localStorage.getItem(DRAFT_STORAGE_KEY)).not.toBeNull();
+    expect(screen.queryByDisplayValue('Dish A Edited')).not.toBeInTheDocument(); // still gated -- never auto-applied
+
+    await user.click(screen.getByRole('button', { name: 'Restore' }));
+    expect(await screen.findByDisplayValue('Dish A Edited')).toBeInTheDocument();
+  });
+});
