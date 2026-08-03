@@ -491,6 +491,15 @@ git commit -m "feat(admin): let the owner replace the printed menu pdfs"
 
 **Files:**
 - Create: `src/admin/StoryForm.tsx`, `src/admin/GalleryList.tsx`, and their tests
+- Modify: `src/admin/Field.tsx`, `src/admin/fields.ts`, `src/admin/RecordForm.tsx`, `src/admin/AdminApp.tsx`
+
+**Wire the `image` kind — Task 5 built `PhotoField` and deliberately did not connect it, and no other task claimed it.** Today `Field.tsx` falls `'image'` through to the plain text case, so "Photo" on a dish, a drink and a press article is a box she must type `/food/abc123abc123.webp` into by hand, while a working picker sits unused.
+
+Two things block a one-line wiring, both real:
+- `PhotoFieldProps.category` is required and no `FieldSpec` carries one. Give the `image` specs a `category`.
+- `onStaged` is optional, and rendering `PhotoField` without a collector is **worse than the text box**: it writes `contentPath` into the record while dropping the bytes, so the publish commits JSON pointing at a derivative whose source was never committed, and the photo 404s on the live site. Thread the collector from `AdminApp` down through `RecordList` → `RecordForm` → `Field` before rendering it.
+
+Note Task 9's own `GALLERY_FIELDS.src` is a *different* descriptor from the `image` kind on dishes/drinks/press — reusing `PhotoField` there does not cover these.
 
 D10 makes prose editable and the spec's Plan-4 row says "list add/remove/reorder". An earlier draft had no task for either, though `validateContent` has rules for both.
 
