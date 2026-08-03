@@ -1,49 +1,101 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 
-// Creating the real KV namespace requires Cloudflare account access nobody
-// running this codebase's tests has -- an agent cannot create it, and a
-// plausible-looking invented id would look correct in review and fail only
-// at deploy time, silently, on whichever human runs `wrangler deploy`. This
-// pins wrangler.toml's KV id to an obviously-fake placeholder so a deploy
-// attempted before the real namespace exists fails a fast, readable test
-// (this one, via `npm run test:deploy`) instead of the Worker failing at
-// runtime with an unbound KV binding. docs/cloudflare-cutover.md tells the
-// human doing the cutover to run `wrangler kv namespace create` and paste
-// the real id here, which is the one and only thing that should ever make
-// this test fail.
+// Whole-branch review, Critical 1: the previous version of this file pinned
+// wrangler.toml's KV id, CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_PAGES_PROJECT
+// to their exact PLACEHOLDER-* strings via `.toBe(...)`. That test could
+// never distinguish "setup not done yet" from "setup done" -- both replace
+// the placeholder with something that isn't the placeholder, and exact
+// equality rejects both identically. Completing docs/cloudflare-cutover.md's
+// own instructions (paste the real KV id, account id, Pages project name)
+// therefore turned this test red forever, on every future push, since the
+// Pages build command runs `npm run test:deploy` before `npm run build` --
+// the very gate this test suite exists to keep green broke itself the
+// instant the setup it was guarding was ever finished.
+//
+// Fixed with a shape check instead of exact equality: still accepts the
+// placeholder (so an as-yet-uncompleted setup stays green, same as before),
+// but ALSO accepts a well-formed real value. An invented or half-pasted
+// value (empty string, a truncated id, "PLACEHOLDER-partially-edited") still
+// fails -- it's neither the placeholder nor shaped like the real thing --
+// which keeps this file's original purpose (catch a plausible-looking fake
+// value before it reaches deploy time) intact.
+
+const KV_ID_PLACEHOLDER = 'PLACEHOLDER-NOT-A-REAL-NAMESPACE-ID';
+const ACCOUNT_ID_PLACEHOLDER = 'PLACEHOLDER-NOT-A-REAL-ACCOUNT-ID';
+const PAGES_PROJECT_PLACEHOLDER = 'PLACEHOLDER-NOT-A-REAL-PAGES-PROJECT-NAME';
+
+// Cloudflare KV namespace ids and account ids are both 32-character hex
+// strings using only 0-9 and a-f (a UUID with the dashes stripped) --
+// exactly what `wrangler kv namespace create` prints and what the
+// dashboard's account-id sidebar shows. Real hex, not merely 32 characters
+// of anything: a half-pasted or mistyped value is overwhelmingly unlikely to
+// happen to be valid hex at exactly that length.
+const HEX32 = /^[0-9a-f]{32}$/;
+
+function isValidHexIdOrPlaceholder(value: string, placeholder: string): boolean {
+  return value === placeholder || HEX32.test(value);
+}
+
+// Cloudflare Pages project names: lower-case letters, digits and hyphens,
+// starting with a letter and ending with a letter or digit, at least 4
+// characters long. Loose enough to accept any real slug (e.g.
+// "via-bianca-admin"), tight enough to still reject a bare "abc" or a
+// half-edited "PLACEHOLDER-partially-edited" -- the latter fails structurally
+// (it starts with an uppercase letter) rather than needing a special-cased
+// string comparison against the placeholder text.
+const PAGES_PROJECT_SHAPE = /^[a-z][a-z0-9-]{2,61}[a-z0-9]$/;
+
+function isValidPagesProjectOrPlaceholder(value: string): boolean {
+  return value === PAGES_PROJECT_PLACEHOLDER || PAGES_PROJECT_SHAPE.test(value);
+}
+
 describe('wrangler.toml KV namespace', () => {
-  it('still carries the unset placeholder id, not a real namespace id', () => {
+  it('carries either the unset placeholder id or a well-formed real namespace id', () => {
     const toml = readFileSync('wrangler.toml', 'utf8');
     const match = toml.match(/^id\s*=\s*"([^"]+)"/m);
     expect(match).not.toBeNull();
-    expect(match![1]).toBe('PLACEHOLDER-NOT-A-REAL-NAMESPACE-ID');
+    expect(isValidHexIdOrPlaceholder(match![1], KV_ID_PLACEHOLDER)).toBe(true);
+  });
+
+  // The shape check itself, pinned directly against sample values rather
+  // than only indirectly through whatever wrangler.toml happens to hold
+  // today. A mutation that widened HEX32 to accept anything (or dropped the
+  // placeholder branch) would still pass the test above, since the real
+  // wrangler.toml committed here still carries the literal placeholder --
+  // this is what actually proves both "a real id passes" and "junk still
+  // fails".
+  it('accepts a real 32-hex id and the placeholder, rejects an invented or half-pasted value', () => {
+    expect(isValidHexIdOrPlaceholder('a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4', KV_ID_PLACEHOLDER)).toBe(true);
+    expect(isValidHexIdOrPlaceholder(KV_ID_PLACEHOLDER, KV_ID_PLACEHOLDER)).toBe(true);
+    expect(isValidHexIdOrPlaceholder('abc', KV_ID_PLACEHOLDER)).toBe(false);
+    expect(isValidHexIdOrPlaceholder('', KV_ID_PLACEHOLDER)).toBe(false);
+    expect(isValidHexIdOrPlaceholder('PLACEHOLDER-partially-edited', KV_ID_PLACEHOLDER)).toBe(false);
   });
 });
 
-// Same pattern, same reason (Task 8 of the worker plan): the Cloudflare
-// account id and Pages project name that GET /api/build-status needs
-// (worker/status.ts's PagesEnv) cannot be looked up by an agent -- that
-// requires Cloudflare account access. A plausible-looking invented value
-// would look correct in review and fail only at deploy time, silently,
-// with build-status querying an account or project that doesn't exist.
-// This pins both to obviously-fake placeholders so a deploy attempted
-// before a human fills them in fails a fast, readable test (via
-// `npm run test:deploy`) instead. docs/cloudflare-cutover.md tells the
-// human doing the cutover where to find the real values and paste them in.
 describe('wrangler.toml Cloudflare Pages identifiers', () => {
-  it('still carries the unset placeholder account id, not a real Cloudflare account id', () => {
+  it('carries either the unset placeholder account id or a well-formed real Cloudflare account id', () => {
     const toml = readFileSync('wrangler.toml', 'utf8');
     const match = toml.match(/^CLOUDFLARE_ACCOUNT_ID\s*=\s*"([^"]+)"/m);
     expect(match).not.toBeNull();
-    expect(match![1]).toBe('PLACEHOLDER-NOT-A-REAL-ACCOUNT-ID');
+    expect(isValidHexIdOrPlaceholder(match![1], ACCOUNT_ID_PLACEHOLDER)).toBe(true);
   });
 
-  it('still carries the unset placeholder project name, not a real Pages project name', () => {
+  it('carries either the unset placeholder project name or a well-formed real Pages project name', () => {
     const toml = readFileSync('wrangler.toml', 'utf8');
     const match = toml.match(/^CLOUDFLARE_PAGES_PROJECT\s*=\s*"([^"]+)"/m);
     expect(match).not.toBeNull();
-    expect(match![1]).toBe('PLACEHOLDER-NOT-A-REAL-PAGES-PROJECT-NAME');
+    expect(isValidPagesProjectOrPlaceholder(match![1])).toBe(true);
+  });
+
+  // Same reasoning as the KV id's own discriminating test above.
+  it('accepts a real project name and the placeholder, rejects an invented or half-pasted value', () => {
+    expect(isValidPagesProjectOrPlaceholder('via-bianca-admin')).toBe(true);
+    expect(isValidPagesProjectOrPlaceholder(PAGES_PROJECT_PLACEHOLDER)).toBe(true);
+    expect(isValidPagesProjectOrPlaceholder('abc')).toBe(false);
+    expect(isValidPagesProjectOrPlaceholder('')).toBe(false);
+    expect(isValidPagesProjectOrPlaceholder('PLACEHOLDER-partially-edited')).toBe(false);
   });
 });
 

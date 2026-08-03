@@ -19,9 +19,13 @@ GITHUB_BRANCH = "main"   # the branch Cloudflare Pages builds from
 # up without Cloudflare account access. A human must read the real account
 # id and Pages project name from the dashboard and paste them in here before
 # this Worker is deployed (see docs/cloudflare-cutover.md). src/test/wrangler-config.test.ts
-# asserts both are still exactly these placeholders, so deploying before
-# that step fails a test instead of build-status silently querying a
-# nonexistent account/project.
+# accepts either these exact placeholders or a well-formed real value (a
+# 32-character hex account id; a project name that isn't the placeholder) --
+# NOT exact-equality to the placeholder alone, which would mean completing
+# this step (replacing the placeholder with the real value the runbook asks
+# for) fails the test forever, on every push, the same way leaving it
+# unset does not. An invented or half-pasted value still fails, guarding
+# against build-status silently querying a nonexistent account/project.
 CLOUDFLARE_ACCOUNT_ID = "PLACEHOLDER-NOT-A-REAL-ACCOUNT-ID"
 CLOUDFLARE_PAGES_PROJECT = "PLACEHOLDER-NOT-A-REAL-PAGES-PROJECT-NAME"
 
@@ -42,7 +46,11 @@ binding = "KV"
 # it requires Cloudflare account access. A human must run
 # `wrangler kv namespace create via-bianca-admin-kv` and paste the real id
 # here before this Worker is deployed (see docs/cloudflare-cutover.md).
-# src/test/wrangler-config.test.ts asserts this string is still exactly this
-# placeholder, so deploying before that step fails a test instead of the
+# src/test/wrangler-config.test.ts accepts either this exact placeholder or a
+# well-formed real id (32 lowercase hex characters, what that command
+# actually prints) -- NOT exact-equality to the placeholder alone, which
+# would mean completing this step (replacing the placeholder with the real
+# id) fails the test forever, on every push, exactly like never doing it at
+# all. An invented or half-pasted value still fails, guarding against the
 # Worker failing at runtime with an unbound KV.
 id = "PLACEHOLDER-NOT-A-REAL-NAMESPACE-ID"
