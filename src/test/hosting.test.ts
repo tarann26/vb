@@ -145,6 +145,18 @@ describe('documented cloudflare build command', () => {
   // comment on why nothing in this repository can check it) -- only that
   // the documented command this repository asks a human to copy in cannot
   // silently drift into describing the unsafe order.
+  // Plan 4 Task 1 added `npm run test:bundle` (src/test/bundle.post-build.test.ts,
+  // the dist/assets/ admin-code grep) as the LAST step of `npm run build`
+  // itself -- package.json's own `build` script, pinned by exact string
+  // equality in src/test/smoke.test.ts -- not as a new entry appended to
+  // *this* documented outer command. That's why the regex and assertions
+  // below are unchanged by that task: this test only ever looked at the
+  // three-command outer sequence (`images`, `test:deploy`, `build`), and
+  // nothing about that sequence's own ordering moved. What test:bundle
+  // actually depends on -- running after `vite build` has produced a real
+  // `dist/` for it to grep, not before -- is guaranteed by where it sits
+  // inside the `build` script's own literal string, which is what makes it
+  // redundant to re-check here too.
   it('runs `npm run test:deploy` before `npm run build`', () => {
     const doc = readFileSync('docs/cloudflare-cutover.md', 'utf8');
     const match = doc.match(/\*\*Build command:\*\*\s*`([^`]+)`/);

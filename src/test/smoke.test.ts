@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 describe('toolchain', () => {
   it('build script type-checks before bundling', () => {
     const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
-    expect(pkg.scripts.build).toBe('npm run images && tsc -b && vite build');
+    expect(pkg.scripts.build).toBe('npm run images && tsc -b && vite build && npm run test:bundle');
   });
 
   it('package is not named after the starter template', () => {

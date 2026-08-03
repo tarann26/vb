@@ -1,4 +1,4 @@
-import { Fragment, type ReactNode } from 'react';
+import { Fragment, lazy, Suspense, type ReactNode } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Navbar from './components/NavBar';
 import Hero from './components/Hero';
@@ -13,6 +13,14 @@ import BlogsPage from './components/BlogsPage';
 import SeoHead from './components/SeoHead';
 import NotFound from './components/NotFound';
 import { sections, type SectionId } from './content';
+
+// The only reference to admin code anywhere outside src/admin/ itself, and
+// it must stay that way -- src/test/bundle.test.ts fails the build the
+// moment a second one appears, static or dynamic. React.lazy's own dynamic
+// import is what keeps everything reachable from AdminApp out of the chunk
+// every visitor downloads; a plain top-level import here would put it back
+// in, unconditionally, for every single page load.
+const AdminApp = lazy(() => import('./admin/AdminApp'));
 
 // Typed as `Record<SectionId, ...>` so tsc enforces exhaustiveness: adding a
 // SectionId without adding a matching case here is a build failure, not a
@@ -47,6 +55,14 @@ export function AppRoutes() {
     <Routes>
       <Route path="/" element={<HomePage />} />
       <Route path="/blogs" element={<BlogsPage />} />
+      <Route
+        path="/edit/manage/*"
+        element={
+          <Suspense fallback={null}>
+            <AdminApp />
+          </Suspense>
+        }
+      />
       <Route path="*" element={<NotFound />} />
     </Routes>
   );

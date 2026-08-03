@@ -29,13 +29,22 @@ matching.
 
 - **Build command:** `npm run images && npm run test:deploy && npm run build`
   Yes, `npm run images` runs twice — once here, once again inside `npm run build` (which runs
-  `npm run images && tsc -b && vite build`). That costs about six seconds. It is not a mistake:
-  `npm run test:deploy` runs the test suite, and Task 2 of the migration plan made `public/`
-  derivatives untracked, so on a fresh clone (exactly what Cloudflare builds from) they do not
-  exist until `npm run images` has run at least once. Run the test gate before those derivatives
-  exist and the asset and OG-image tests fail — not because anything is broken, but because
-  nothing has generated the images they check for yet. Run `npm run images` here first and the
-  gate tests what it's supposed to: a real build, gated by tests that see the real output.
+  `npm run images && tsc -b && vite build && npm run test:bundle`). That costs about six seconds.
+  It is not a mistake: `npm run test:deploy` runs the test suite, and Task 2 of the migration plan
+  made `public/` derivatives untracked, so on a fresh clone (exactly what Cloudflare builds from)
+  they do not exist until `npm run images` has run at least once. Run the test gate before those
+  derivatives exist and the asset and OG-image tests fail — not because anything is broken, but
+  because nothing has generated the images they check for yet. Run `npm run images` here first and
+  the gate tests what it's supposed to: a real build, gated by tests that see the real output.
+
+  `npm run test:bundle` (Plan 4 Task 1) is the last step of `npm run build` itself, not a separate
+  entry in the command above — it runs `src/test/bundle.post-build.test.ts`, which greps the just-built
+  `dist/assets/` for the admin-only libheif WASM marker, after `vite build` has produced a real
+  `dist/` for it to inspect. Because it's nested inside `npm run build` rather than appended to the
+  outer command this bullet documents, the text you paste into the dashboard's Build command field
+  does not need to change for this — but if that field was ever hand-typed as something other than
+  a literal `npm run build` call, re-verify it with Step 13 below rather than assuming this update
+  reached it. Nothing in this repository can read what the dashboard actually holds.
 - **Output directory:** `dist`
 - **Node version:** read it from `.nvmrc` at the repo root rather than typing a number into the
   dashboard from memory — Cloudflare Pages picks up `.nvmrc` automatically. If the dashboard asks

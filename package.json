@@ -5,10 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "npm run images && tsc -b && vite build",
+    "build": "npm run images && tsc -b && vite build && npm run test:bundle",
     "lint": "eslint .",
     "test": "vitest run",
     "test:deploy": "vitest run --exclude scripts/__tests__/images.derivatives.test.mjs",
+    "test:bundle": "vitest run src/test/bundle.post-build.test.ts",
     "test:watch": "vitest",
     "preview": "vite preview",
     "images": "node scripts/images.mjs"
