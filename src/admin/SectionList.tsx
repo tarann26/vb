@@ -96,7 +96,24 @@ function SectionList({ items, onChange, onReorder, problems }: SectionListProps)
 
       <ul>
         {items.map((section, index) => {
-          const { name, anchor } = SECTION_NAMES[section.id];
+          // `section.id` is typed `SectionId` (a total, closed union), but
+          // that type comes from `fetchContent`'s own blind `JSON.parse(...)
+          // as ContentTypeMap[K]` (src/admin/content.ts) -- an unchecked
+          // cast, unlike every other content type's eventual guard. A
+          // malformed or unrecognised id sitting in sections.json (a typo,
+          // a hand-edited file, a future SectionId this dashboard build
+          // predates) reaches THIS component still typed `SectionId` even
+          // though it structurally is not one, and `SECTION_NAMES` -- a
+          // `Record<SectionId, ...>`, total over the type but not over
+          // whatever actually arrived -- would otherwise throw trying to
+          // destructure `undefined`. Confirmed directly: without this
+          // fallback, one bad id crashes past the top-level error boundary
+          // in main.tsx and takes down the ENTIRE admin page (dishes,
+          // drinks, press included), not just this section -- she cannot
+          // even reach the screen that would let her fix it. The fallback
+          // shows the raw id itself (still legible, if not pretty) rather
+          // than rendering nothing or crashing.
+          const { name, anchor } = SECTION_NAMES[section.id] ?? { name: section.id, anchor: null };
           const isFirst = index === 0;
           const isLast = index === items.length - 1;
           const isHero = section.id === 'hero';

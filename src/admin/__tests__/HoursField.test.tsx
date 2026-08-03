@@ -163,4 +163,22 @@ describe('HoursField: a malformed row\'s own message attaches to that row only',
       'a stale problem for a row no longer here',
     );
   });
+
+  // The EXACT boundary, not just "some index past the end". `hours[5]`
+  // above and `>` (a plausible off-by-one typo for the real `>=`) agree --
+  // both are well past two rows. `hours[2]` against a two-row array
+  // (indices 0 and 1) is the one value that distinguishes them: `>=`
+  // correctly treats index 2 as past the end (banner); `>` would not, and
+  // since index 2 also matches no rendered row's own `hoursIndexOf(p.field)
+  // === index` check, the problem would be silently dropped entirely --
+  // neither attached to a row nor banked in the banner. Same shape as
+  // RecordList's own Task 5 empty-list fixture gap: a test named for a
+  // boundary that never actually reaches it.
+  it('a problem naming the row index EXACTLY one past the end still surfaces (off-by-one boundary)', () => {
+    const problems: ValidationProblem[] = [{ field: 'hours[2]', message: 'exactly one past the last of two rows' }];
+    render(<HoursField value={TWO_ROWS} onChange={vi.fn()} problems={problems} />);
+    expect(screen.getByRole('alert', { name: 'Problems with opening hours' })).toHaveTextContent(
+      'exactly one past the last of two rows',
+    );
+  });
 });

@@ -47,6 +47,42 @@ describe('SectionList: human names, not SectionIds', () => {
   });
 });
 
+// Review finding: `fetchContent` (src/admin/content.ts) does a blind
+// `JSON.parse(...) as ContentTypeMap[K]` -- no runtime guard, unlike every
+// other content type this dashboard eventually reaches one for. A malformed
+// or unrecognised id in the real sections.json still arrives here typed
+// `SectionId` even though it structurally is not one. Before the fix,
+// `SECTION_NAMES[section.id]` threw trying to destructure `undefined`,
+// uncaught by anything closer than main.tsx's top-level error boundary --
+// which takes down the ENTIRE admin page (dishes, drinks, press included),
+// not just this section.
+describe('SectionList: an unrecognised section id does not crash the page', () => {
+  it('renders the raw id as a fallback label instead of throwing', () => {
+    const withBadId: Section[] = [
+      ...ALL_SEVEN,
+      // Cast, deliberately -- this is exactly what a widened, unvalidated
+      // JSON.parse result can hand this component despite the SectionId
+      // type claiming otherwise (see this describe block's own comment).
+      { id: 'sponsorship' as SectionId, enabled: true },
+    ];
+    expect(() => renderList({ items: withBadId })).not.toThrow();
+    expect(screen.getByText('sponsorship')).toBeInTheDocument();
+  });
+
+  it('the fallback has no anchor -- an unrecognised section cannot be assumed to be in the nav', () => {
+    const withBadId: Section[] = [{ id: 'sponsorship' as SectionId, enabled: true }];
+    renderList({ items: withBadId });
+    expect(screen.getByText('not in the navigation menu')).toBeInTheDocument();
+  });
+
+  it('a genuinely valid seven-section list never falls back -- no raw id is rendered anywhere', () => {
+    renderList();
+    ['hero', 'ourStory', 'atmosphere', 'food', 'drinks', 'press', 'visit'].forEach((id) => {
+      expect(screen.queryByText(id)).not.toBeInTheDocument();
+    });
+  });
+});
+
 describe('SectionList: hero cannot be toggled off, structurally -- not merely refused after the click', () => {
   it("hero's own checkbox is disabled", () => {
     renderList();

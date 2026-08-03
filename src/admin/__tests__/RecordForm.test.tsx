@@ -255,6 +255,18 @@ describe('RecordForm: publishAt renders as ScheduleField, and clearing it delete
     // Every other field survives untouched -- this is a targeted delete of
     // one key, not a reconstruction of the record.
     expect(published).toEqual({ id: record.id, name: record.name, description: record.description, image: record.image, tags: record.tags });
+    // omitKey (RecordForm.tsx) must return a CLONE, never delete from the
+    // object it was given -- `record` is the live object sitting in the
+    // caller's own React state (AdminApp.tsx's `value`), so an in-place
+    // delete would corrupt that state before `setState` ever runs, a bug
+    // that would present as "the dashboard shows the old value until I
+    // click something else." MUTATION CHECKED: changing RecordForm.tsx's
+    // `omitKey` to `delete (value as Record<string, unknown>)[String(key)];
+    // return value;` (delete from the original, no spread) leaves every
+    // assertion above this one green -- `published` is still correct,
+    // since `published` and the mutated `record` are now the SAME object --
+    // only this assertion, on the ORIGINAL `record` binding, catches it.
+    expect(record).toHaveProperty('publishAt', '2026-09-01');
   });
 
   // Proves the `String(key) === 'publishAt'` branch is scoped by KEY NAME,
