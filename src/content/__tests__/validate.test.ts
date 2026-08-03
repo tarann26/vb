@@ -451,6 +451,59 @@ describe('validateContent: structural rules on the remaining files', () => {
   });
 });
 
+// Plan 5 Task 6: "anything the tools can produce must pass the deploy gate."
+// Three content-quality rules already lived ONLY in a test against the
+// PUBLIC page (PlaceGallery.test.tsx, OurStory.test.tsx, FoodGallery.test.tsx)
+// -- true for every dashboard write that happens to render through those
+// components today, but not enforced on the write path itself, so nothing
+// stopped a bad value from reaching a commit through any OTHER caller. Moved
+// server-side here, before a publish ever lands. The other two rows of the
+// plan's own disagreement table are deliberately NOT rebuilt: asset
+// existence (assets.test.ts) has no filesystem to check from inside
+// validateContent, and is already handled at the write path a different way
+// -- scrubStagedReferences (src/admin/publish.ts) strips a leaf that names a
+// staged-but-uncommitted file out of what a draft ever persists, already
+// covered by src/admin/__tests__/publish.test.ts's own dirtyDraftMap suite
+// -- and the developer-owned site.* fields (head.test.ts) are already
+// refused here (validateSiteDeveloperOwnedFields, above) and must stay that
+// way, not be loosened.
+describe('validateContent: Task 6 -- content-quality rules the dashboard already enforced, now refused server-side too', () => {
+  it('an atmosphere image alt text like "Place 3" is refused by validateContent (PlaceGallery.test.tsx\'s own rule)', () => {
+    const bad: Galleries = { ...validGalleries, atmosphere: [{ ...validGalleries.atmosphere[0], alt: 'Place 3' }] };
+    const problems = validateContent('galleries.json', bad);
+    expect(messages(problems)).toMatch(/placeholder/i);
+  });
+
+  it('an ourStory image alt text like "Slide 2" is refused by validateContent (OurStory.test.tsx\'s own rule)', () => {
+    const bad: Galleries = { ...validGalleries, ourStory: [{ ...validGalleries.ourStory[0], alt: 'Slide 2' }] };
+    const problems = validateContent('galleries.json', bad);
+    expect(messages(problems)).toMatch(/placeholder/i);
+  });
+
+  // Both prefixes the real pattern names (FoodGallery.test.tsx's own
+  // `/^(Idk|Pizza)\d+$/`) -- checking only one would stay green under a
+  // mutation that narrowed the pattern to just that one prefix.
+  it('a dish name that looks like a placeholder ("Idk3" or "Pizza7") is refused by validateContent (FoodGallery.test.tsx\'s own rule)', () => {
+    expect(messages(validateContent('dishes.json', [{ ...validDish, name: 'Idk3' }]))).toMatch(/placeholder/i);
+    expect(messages(validateContent('dishes.json', [{ ...validDish, name: 'Pizza7' }]))).toMatch(/placeholder/i);
+  });
+
+  // 'margherita.Jpg' (mixed case), not 'MARGHERITA.JPG' -- the real pattern's
+  // own literal 'JPG' alternate already matches an all-caps extension with
+  // no `i` flag at all, which would leave a dropped-`i`-flag mutation
+  // undetected (confirmed directly while writing this test). A mixed-case
+  // extension matches neither of the pattern's two literal spellings, so
+  // it depends on the `i` flag alone.
+  it('a dish name ending in .jpg (any case) is refused by validateContent (FoodGallery.test.tsx\'s own rule)', () => {
+    expect(messages(validateContent('dishes.json', [{ ...validDish, name: 'margherita.jpg' }]))).toMatch(/filename/i);
+    expect(messages(validateContent('dishes.json', [{ ...validDish, name: 'margherita.Jpg' }]))).toMatch(/filename/i);
+  });
+
+  it('a dish name ending in .png is refused by validateContent (FoodGallery.test.tsx\'s own rule)', () => {
+    expect(messages(validateContent('dishes.json', [{ ...validDish, name: 'margherita.png' }]))).toMatch(/filename/i);
+  });
+});
+
 // Step 6: copy.footer.followLabel must keep a non-breaking space (U+00A0)
 // between its two words. validCopy above already carries the real one
 // ('Follow Us:'), so "accepts valid copy" earlier in this file is

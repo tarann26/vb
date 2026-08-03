@@ -93,11 +93,35 @@ function validatePublishAt(publishAt: unknown, index: number): ValidationProblem
 // ---------------------------------------------------------------------------
 // dishes.json
 
+// Task 6: the dashboard's own FoodGallery.test.tsx already refused these two
+// shapes -- a placeholder name a template or a rushed first pass leaves
+// behind ("Idk3", "Pizza7"), and a filename typed into the name field
+// instead of a real one -- but only there, client-side, in a test that
+// exercises the PUBLIC page, not the write path. `validateContent` itself
+// had no rule for either, so nothing stopped either shape reaching a commit
+// through any OTHER caller of the write path (a future admin tool, a
+// scripted import) that never renders through FoodGallery at all. Checked
+// against the TRIMMED name, matching every other pattern check in this
+// file (validateFollowLabelSpacing's own NBSP check is deliberately the one
+// exception, for the reason stated there).
+const PLACEHOLDER_DISH_NAME_PATTERN = /^(Idk|Pizza)\d+$/;
+const FILENAME_DISH_NAME_PATTERN = /\.(jpg|JPG|png)$/i;
+
 function validateDish(raw: unknown, index: number): ValidationProblem[] {
   const dish = asRecord(raw);
   const problems: ValidationProblem[] = [];
   if (isBlank(dish.id)) problems.push(problem(`[${index}].id`, `dish at position ${index} needs an id`));
-  if (isBlank(dish.name)) problems.push(problem(`[${index}].name`, 'this dish needs a name'));
+  if (isBlank(dish.name)) {
+    problems.push(problem(`[${index}].name`, 'this dish needs a name'));
+  } else {
+    const name = (dish.name as string).trim();
+    if (PLACEHOLDER_DISH_NAME_PATTERN.test(name)) {
+      problems.push(problem(`[${index}].name`, `"${dish.name}" looks like a placeholder name -- give this dish its real name`));
+    }
+    if (FILENAME_DISH_NAME_PATTERN.test(name)) {
+      problems.push(problem(`[${index}].name`, `"${dish.name}" looks like a filename, not a dish name`));
+    }
+  }
   if (isBlank(dish.description)) {
     problems.push(problem(`[${index}].description`, `"${String(dish.name ?? 'this dish')}" needs a description`));
   }
@@ -290,7 +314,16 @@ function validateSite(data: unknown): ValidationProblem[] {
 // ---------------------------------------------------------------------------
 // galleries.json
 
-function validateGalleryImages(raw: unknown, field: string): ValidationProblem[] {
+// Task 6: PlaceGallery.test.tsx and OurStory.test.tsx already refuse a
+// positional placeholder alt text ("Place 3", "Slide 2") client-side, in a
+// test against the PUBLIC page -- not in validateContent, so nothing stopped
+// either shape reaching a commit through any write path that doesn't render
+// through those two components. One pattern per LIST, not one shared
+// pattern: "Place" names atmosphere's own placeholder, "Slide" names
+// ourStory's, and the two lists' real, committed alt text never share a
+// word with either, so a caller passes the pattern that matches the field
+// it's validating rather than this function guessing from the field name.
+function validateGalleryImages(raw: unknown, field: string, placeholderPattern: RegExp): ValidationProblem[] {
   if (!Array.isArray(raw) || raw.length === 0) {
     return [problem(field, `${field} needs at least one image`)];
   }
@@ -298,7 +331,13 @@ function validateGalleryImages(raw: unknown, field: string): ValidationProblem[]
     const image = asRecord(entry);
     const problems: ValidationProblem[] = [];
     if (isBlank(image.src)) problems.push(problem(`${field}[${i}].src`, `${field}[${i}] needs an image source`));
-    if (isBlank(image.alt)) problems.push(problem(`${field}[${i}].alt`, `${field}[${i}] needs alt text`));
+    if (isBlank(image.alt)) {
+      problems.push(problem(`${field}[${i}].alt`, `${field}[${i}] needs alt text`));
+    } else if (placeholderPattern.test((image.alt as string).trim())) {
+      problems.push(
+        problem(`${field}[${i}].alt`, `"${image.alt}" is a placeholder -- ${field}[${i}] needs real, descriptive alt text`),
+      );
+    }
     return problems;
   });
 }
@@ -306,8 +345,8 @@ function validateGalleryImages(raw: unknown, field: string): ValidationProblem[]
 function validateGalleries(data: unknown): ValidationProblem[] {
   const galleries = asRecord(data);
   const problems: ValidationProblem[] = [
-    ...validateGalleryImages(galleries.atmosphere, 'atmosphere'),
-    ...validateGalleryImages(galleries.ourStory, 'ourStory'),
+    ...validateGalleryImages(galleries.atmosphere, 'atmosphere', /^Place \d+$/),
+    ...validateGalleryImages(galleries.ourStory, 'ourStory', /^Slide \d+$/),
   ];
   if (!Array.isArray(galleries.heroCollage) || galleries.heroCollage.length === 0) {
     problems.push(problem('heroCollage', 'heroCollage needs at least one image'));
