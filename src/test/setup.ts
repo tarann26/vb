@@ -76,6 +76,50 @@ if (typeof URL !== 'undefined' && !URL.createObjectURL) {
   URL.revokeObjectURL = () => {};
 }
 
+// Node 22+ ships its own native, unflagged `localStorage` global backed by a
+// file `--localstorage-file` selects -- with no valid file configured (the
+// default for a plain `vitest run`), every method on it is `undefined`
+// rather than a working Storage. Confirmed directly under this exact
+// toolchain (Vitest 2.1.9, jsdom 25.0.1, Node 25): `typeof window
+// .localStorage.setItem` reads "undefined", with a "`--localstorage-file`
+// was provided without a valid path" warning printed the moment anything
+// touches it -- Node's own global is shadowing jsdom's real implementation
+// here, not jsdom lacking one (jsdom itself implements localStorage fully).
+// src/admin/drafts.ts (Task 10) is the first real caller of localStorage in
+// this codebase; a plain in-memory Storage stand-in is enough for its tests
+// -- persistence across an actual page load is exactly what a unit test
+// can't exercise regardless of which implementation backs it -- the same
+// "fake but internally consistent" posture as this file's own
+// URL.createObjectURL stand-in above.
+if (typeof window !== 'undefined' && typeof window.localStorage?.setItem !== 'function') {
+  class MemoryStorage implements Storage {
+    private store = new Map<string, string>();
+    get length(): number {
+      return this.store.size;
+    }
+    clear(): void {
+      this.store.clear();
+    }
+    getItem(key: string): string | null {
+      return this.store.has(key) ? this.store.get(key)! : null;
+    }
+    key(index: number): string | null {
+      return Array.from(this.store.keys())[index] ?? null;
+    }
+    removeItem(key: string): void {
+      this.store.delete(key);
+    }
+    setItem(key: string, value: string): void {
+      this.store.set(key, String(value));
+    }
+  }
+  Object.defineProperty(window, 'localStorage', {
+    value: new MemoryStorage(),
+    writable: true,
+    configurable: true,
+  });
+}
+
 if (typeof Blob !== 'undefined' && !Blob.prototype.stream) {
   // No FileReader.readAsStream equivalent to delegate to -- built from the
   // .arrayBuffer() polyfill above instead, which is defined by the time

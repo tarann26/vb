@@ -25,6 +25,7 @@ import galleriesJson from '../../content/galleries.json';
 import menusJson from '../../content/menus.json';
 import storyJson from '../../content/story.json';
 import copyJson from '../../content/copy.json';
+import { DRAFT_STORAGE_KEY } from '../drafts';
 
 function dish(id: string, name: string): Dish {
   return { id, name, description: `${name}, described.`, image: `/food/${id}.webp`, tags: [] };
@@ -112,6 +113,13 @@ function stubFetch(dishesResponse: Promise<Response> | Response = contentRespons
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  // Task 10: PublishBar persists dirty content to localStorage on every
+  // change (drafts.ts). Left uncleared, a dirty registration from one test
+  // (staging a photo, editing a dish) would surface as an UNRELATED "you
+  // have unsaved changes" restore banner at the very top of the next test's
+  // render -- blocking every section (and PublishBar itself) from mounting
+  // at all, since AdminApp deliberately never auto-restores.
+  window.localStorage.clear();
 });
 
 describe('AdminApp: fetches each content file once logged in, loading state first', () => {
@@ -546,15 +554,19 @@ describe("AdminApp: Task 9's wiring, proven end-to-end -- staged photos across D
 
     const dSection = await dishesSection();
     await within(dSection).findByDisplayValue('Dish A');
-    // Nothing staged yet -- checked only once the page has actually
-    // finished its initial (async) render, not in the "checking session"
-    // gap right after `render`, where nothing meaningful is on screen yet.
-    expect(screen.getByText(/nothing you change below is saved anywhere\.$/)).toBeInTheDocument();
+    // Nothing staged or edited yet -- checked only once the page has
+    // actually finished its initial (async) render, not in the "checking
+    // session" gap right after `render`, where nothing meaningful is on
+    // screen yet.
+    expect(screen.getByText('No changes to publish yet.')).toBeInTheDocument();
     const dishPhotoInput = within(dSection).getAllByLabelText(DISH_FIELDS.image.label)[0];
     await user.upload(dishPhotoInput, jpegFile('dish.jpg'));
     await waitFor(() => expect(FakeXHR.instances).toHaveLength(1));
     FakeXHR.instances[0].respond(200, { path: 'assets-source/food/aaa111aaa111.jpg', contentPath: '/food/aaa111aaa111.webp' });
-    await screen.findByText(/1 file is staged and waiting for it\.$/);
+    // Staging the photo both stages its bytes AND writes the dish's own
+    // `image` field to the new contentPath -- one edited section, one
+    // staged file.
+    await screen.findByText('1 section edited, 1 file staged — ready to publish.');
 
     const drSection = await sectionByHeading('Drinks');
     await within(drSection).findByDisplayValue('Drink X');
@@ -569,11 +581,12 @@ describe("AdminApp: Task 9's wiring, proven end-to-end -- staged photos across D
     await waitFor(() => expect(FakeXHR.instances).toHaveLength(2));
     FakeXHR.instances[1].respond(200, { path: 'assets-source/mocktails/bbb222bbb222.jpg', contentPath: '/mocktails/bbb222bbb222.webp' });
 
-    // Two, not one -- the drink's own staged photo did not overwrite the
-    // dish's. If AdminApp's ArraySection instances shared one KEY (rather
-    // than each prefixing with its own `file` name and item id), the second
-    // stage would collide with the first and the count would stay at 1.
-    await screen.findByText(/2 files are staged and waiting for it\.$/);
+    // Two of each, not one -- the drink's own staged photo did not overwrite
+    // the dish's. If AdminApp's ArraySection instances shared one KEY
+    // (rather than each prefixing with its own `file` name and item id), the
+    // second stage would collide with the first and the count would stay at
+    // one.
+    await screen.findByText('2 sections edited, 2 files staged — ready to publish.');
   });
 });
 
@@ -615,8 +628,65 @@ describe("AdminApp: Task 9's wiring -- replacing a menu PDF under the SAME name 
     // menus.json's OWN `file` field is unchanged (same name -> same path,
     // by design -- worker/upload.ts's own menuAssetPath), which is exactly
     // the shape that makes the collector the ONLY place proof this actually
-    // happened can live.
-    await screen.findByText(/1 file is staged and waiting for it\.$/);
+    // happened can live -- no "section edited" in the summary at all, only
+    // the staged file (Task 10's own carried requirement 3).
+    await screen.findByText('1 file staged — ready to publish.');
     expect(within(section).getByDisplayValue('Food Menu')).toBeInTheDocument();
+  });
+});
+
+describe('AdminApp: Task 10 -- a reload mid-edit offers to restore the draft', () => {
+  const DRAFT = {
+    'dishes.json': { data: [dish('a', 'Dish A (restored)'), dish('b', 'Dish B')], savedAt: Date.now() },
+  };
+
+  it('a draft already in localStorage shows the banner, and blocks every section from mounting until she decides', async () => {
+    window.localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(DRAFT));
+    stubFetch();
+    render(<AdminApp />);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/you have unsaved changes from/i);
+    // Never auto-apply: nothing below the banner has mounted at all yet --
+    // not even the PLAIN, unmodified server data, let alone the draft.
+    expect(screen.queryByRole('heading', { name: 'Dishes' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Publish' })).not.toBeInTheDocument();
+  });
+
+  it('Restore seeds the section with the DRAFT value, not the freshly-fetched server value', async () => {
+    window.localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(DRAFT));
+    stubFetch();
+    const user = userEvent.setup();
+    render(<AdminApp />);
+
+    await user.click(await screen.findByRole('button', { name: 'Restore' }));
+
+    expect(await screen.findByDisplayValue('Dish A (restored)')).toBeInTheDocument();
+    expect(screen.queryByDisplayValue('Dish A')).not.toBeInTheDocument();
+    // The registry's OWN baseline still tracks the server's real sha/value
+    // (registerLoaded's own contract) -- proven indirectly: the restored
+    // record reads as an unsaved change ready to publish, not as already
+    // clean.
+    expect(screen.getByText(/section.* edited/)).toBeInTheDocument();
+  });
+
+  it('Discard clears the draft and loads the real, unmodified server value', async () => {
+    window.localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(DRAFT));
+    stubFetch();
+    const user = userEvent.setup();
+    render(<AdminApp />);
+
+    await user.click(await screen.findByRole('button', { name: 'Discard' }));
+
+    expect(await screen.findByDisplayValue('Dish A')).toBeInTheDocument();
+    expect(screen.queryByDisplayValue('Dish A (restored)')).not.toBeInTheDocument();
+    expect(window.localStorage.getItem(DRAFT_STORAGE_KEY)).toBeNull();
+    expect(screen.getByText('No changes to publish yet.')).toBeInTheDocument();
+  });
+
+  it('no draft in localStorage -- the dashboard renders normally, banner absent', async () => {
+    stubFetch();
+    render(<AdminApp />);
+    await screen.findByDisplayValue('Dish A');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 });

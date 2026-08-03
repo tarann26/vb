@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { commitFiles, getFileContent, DisallowedPathError, type GitHubEnv } from '../github';
+import { commitFiles, getFileContent, DisallowedPathError, PublishConflictError, type GitHubEnv } from '../github';
 import {
   BASE_COMMIT_SHA,
   BASE_TREE_SHA,
@@ -110,6 +110,31 @@ describe('commitFiles', () => {
     await expect(
       commitFiles(envWith(failingStub), [utf8('src/content/dishes.json', 'b')], 'm'),
     ).rejects.toThrow(/someone else published/i);
+  });
+
+  // worker/index.ts's handlePublish maps this specific failure to 409 by
+  // checking `error instanceof PublishConflictError`, deliberately never by
+  // matching the message text above (a reword of either sentence must not
+  // silently turn a real conflict into a generic 502). A version of
+  // updateBranchHead that throws a plain `Error` with the identical message
+  // still passes the test above but fails this one -- that gap is exactly
+  // why this is its own assertion, not folded into it.
+  it('the concurrent-edit rejection is a PublishConflictError, not a generic Error', async () => {
+    const failingStub = makeGitHubStub({ failOn: '/git/refs/heads/main', failStatus: 422 });
+    await expect(
+      commitFiles(envWith(failingStub), [utf8('src/content/dishes.json', 'b')], 'm'),
+    ).rejects.toBeInstanceOf(PublishConflictError);
+  });
+
+  // The generic 5xx path (no concurrent edit, GitHub is just down) must NOT
+  // also become a PublishConflictError -- that would make handlePublish
+  // answer 409 ("someone else published") for a plain outage, telling her
+  // to reload and try again when nothing of hers was ever at risk.
+  it('a plain 5xx ref-update failure is NOT a PublishConflictError', async () => {
+    const failingStub = makeGitHubStub({ failOn: '/git/refs/heads/main', failStatus: 500 });
+    const result = commitFiles(envWith(failingStub), [utf8('src/content/dishes.json', 'b')], 'm');
+    await expect(result).rejects.toThrow();
+    await expect(result).rejects.not.toBeInstanceOf(PublishConflictError);
   });
 
   // Security review reproduction (Important 1): a 200 OK response that is

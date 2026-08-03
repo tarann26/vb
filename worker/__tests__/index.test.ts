@@ -528,6 +528,43 @@ describe('worker entry point', () => {
       expect(stub.calls.some((c) => c.method === 'PATCH')).toBe(true);
     });
 
+    // Task 10, Step 2: a concurrent-edit ref update (GitHub's own 422 on the
+    // PATCH /git/refs/heads/{branch} call -- the branch moved between this
+    // request's own read and its write, e.g. a second publish landed in the
+    // gap) must answer 409, the SAME status the baseSha check above already
+    // uses, not the generic 502 every other commitFiles failure gets. Before
+    // github.ts's PublishConflictError existed, this fell straight into the
+    // catch-all `json(502, { message })` below -- indistinguishable, by
+    // status alone, from GitHub simply being down.
+    it('a concurrent-edit ref update (422 from GitHub) is 409, not 502', async () => {
+      stub = makeGitHubStub({ failOn: '/git/refs/heads/main', failStatus: 422 });
+      vi.stubGlobal('fetch', stub.fetch);
+      const cookie = await sessionCookie();
+      const response = await worker.fetch(
+        publishRequest({ files: [utf8('src/content/site.json', JSON.stringify(VALID_SITE))] }, cookie),
+        env,
+      );
+      expect(response.status).toBe(409);
+    });
+
+    // The contrasting case: a plain GitHub outage on the exact same call
+    // (PATCH /git/refs/heads/{branch}) must stay 502, not be swept into the
+    // same 409 a real conflict gets -- "someone else published, reload and
+    // try again" is actively misleading for an outage nothing of hers was
+    // ever at risk from. Proves the Worker branches on PublishConflictError
+    // specifically, not on "commitFiles threw during the ref update" in
+    // general.
+    it('a plain 5xx on the same ref-update call stays 502, not 409', async () => {
+      stub = makeGitHubStub({ failOn: '/git/refs/heads/main', failStatus: 500 });
+      vi.stubGlobal('fetch', stub.fetch);
+      const cookie = await sessionCookie();
+      const response = await worker.fetch(
+        publishRequest({ files: [utf8('src/content/site.json', JSON.stringify(VALID_SITE))] }, cookie),
+        env,
+      );
+      expect(response.status).toBe(502);
+    });
+
     // Plan 4 Task 3: the conditional write. Without this, a dashboard reload
     // (or a second device) that publishes from a copy of dishes.json older
     // than what's actually on `main` succeeds silently -- `base_tree` is

@@ -17,8 +17,36 @@ import { replaceAt, useValidation } from './useValidation';
 import { problemsFor, arrayIndexOf } from './problems';
 import { useStagedFiles, fromStagedPhoto, fromStagedMenuPdf } from './staged';
 import type { StagedFile } from './staged';
+import { useContentRegistry } from './publish';
+import type { ContentRegistry } from './publish';
+import PublishBar, { DraftBanner } from './PublishBar';
+import { loadDraft, clearDraft } from './drafts';
+import type { DraftMap } from './drafts';
 import type { Article, Copy, Dish, Drink, Galleries, MenuFile, Section, SiteContent, StoryContent } from '../content/types';
 import type { ValidationProblem } from '../content/validate';
+
+// The registry's own `initial` must always be the value GET /api/content
+// most recently returned -- never the restored draft -- so a restored file
+// correctly reads as dirty (it genuinely IS unpublished) rather than being
+// mistaken for the committed baseline itself. Registers the server value
+// FIRST (pinning `initial`), then, only if a draft exists for this file,
+// re-registers with the draft's own `data` on top of it -- `register`'s own
+// contract (publish.ts) is that `initial` is set once, on the first call,
+// and never moves after -- so two calls in this exact order is what makes
+// both true at once. Returns whichever value the caller's own local state
+// should actually hold.
+function registerLoaded<K extends ContentFileName>(
+  registry: ContentRegistry,
+  file: K,
+  loaded: LoadedContent<ContentTypeMap[K]>,
+  restoreDraft: DraftMap | null,
+): ContentTypeMap[K] {
+  registry.register(file, loaded.data, loaded.sha);
+  const draftEntry = restoreDraft?.[file];
+  if (draftEntry === undefined) return loaded.data;
+  registry.register(file, draftEntry.data, loaded.sha);
+  return draftEntry.data as ContentTypeMap[K];
+}
 
 // Default export, deliberately: React.lazy (src/App.tsx) requires one --
 // there is no lazy() form that takes a named export.
@@ -35,7 +63,7 @@ import type { ValidationProblem } from '../content/validate';
 // the menu PDFs, and story/galleries/copy.json are later tasks' screens, not
 // this one's.
 const AdminApp: React.FC = () => {
-  const { status, logIn } = useSession();
+  const { status, logIn, logOut } = useSession();
   // The one collector every screen below that renders a PhotoField or a
   // PdfField shares -- see src/admin/staged.ts's own header comment for why
   // ONE shared instance, not one per section, is what makes "she stages
@@ -45,6 +73,24 @@ const AdminApp: React.FC = () => {
   // `useSession()` already is -- React's own rule that hooks can't run
   // conditionally, not a new constraint this task introduces.
   const { files: stagedFiles, stage } = useStagedFiles();
+  // publish.ts's own registry: the one place every section's current
+  // data/sha is visible at once, which is what makes a single POST
+  // /api/publish across all nine content files possible at all -- see that
+  // module's own header comment.
+  const registry = useContentRegistry();
+  const stagedFilesApi = { files: stagedFiles, stage };
+
+  // Task 10 Step 4: checked ONCE, synchronously, on first render (a lazy
+  // useState initializer, not an effect) -- localStorage.getItem is
+  // synchronous, so there is no "checking" gap the way useSession's own
+  // server probe has one. `pendingDraft` is the decision she hasn't made
+  // yet; `restoreDraft` is populated ONLY once she clicks Restore, and is
+  // what registerLoaded above actually seeds each section's data with.
+  // "Never auto-apply" (the brief's own words) is enforced structurally
+  // below, not just by convention: no section, and no PublishBar, is
+  // rendered at all while `pendingDraft` is non-null.
+  const [pendingDraft, setPendingDraft] = useState<DraftMap | null>(() => loadDraft());
+  const [restoreDraft, setRestoreDraft] = useState<DraftMap | null>(null);
 
   if (status === 'checking') {
     // src/App.tsx's <Suspense fallback={null}> already covers the moment
@@ -63,98 +109,99 @@ const AdminApp: React.FC = () => {
   return (
     <div className="min-h-screen bg-[#f7f5f0] px-4 py-10">
       <div className="mx-auto max-w-3xl">
-        <h1 className="mb-2 font-['Parisienne'] text-3xl text-[#222]">Via Bianca</h1>
-        {/* Publish (Task 10) doesn't exist yet -- nothing typed below this
-            line leaves the browser. Said plainly, not left to be discovered
-            the hard way by an owner who assumes a form that validates as
-            she types must also be one that saves. The staged-file count
-            keeps that honest in the other direction too: a photo she picks
-            genuinely uploads (PhotoField's own "Uploaded" status already
-            says so) and genuinely sits in this collector, waiting -- this
-            is what tells her that much is real, without overclaiming that
-            publishing itself works yet. */}
-        <p className="mb-8 font-['Montserrat'] text-sm text-gray-500">
-          {stagedFileCountMessage(Object.keys(stagedFiles).length)}
-        </p>
-        {/* Review finding (Task 9): every section below reads a whole
-            content file through fetchContent's own unchecked cast
-            (src/admin/content.ts's own header comment) with no runtime
-            guard -- a malformed galleries.json/story.json/menus.json throws
-            mid-render, and main.tsx's ErrorBoundary is the ONLY one in this
-            app, wrapping the whole SPA, not just AdminApp. Without a
-            boundary HERE, per section, that throw would unmount every
-            OTHER section too (Dishes, Drinks, Press, Sections, Hours
-            included), and reloading would fail identically against the
-            same bad file. One boundary per section is what limits one bad
-            file to costing one section. */}
-        <SectionErrorBoundary name="Dishes">
-          <ArraySection<Dish>
-            file="dishes.json"
-            load={() => fetchContent('dishes.json')}
-            heading="Dishes"
-            noun="dish"
-            fields={DISH_FIELDS}
-            itemLabel={(dish) => dish.name || 'Untitled dish'}
-            makeBlank={blankDish}
-            stage={stage}
+        <h1 className="mb-2 font-['Parisienne'] text-3xl text-[#222]">Via Bianca Dashboard</h1>
+        {pendingDraft ? (
+          <DraftBanner
+            draft={pendingDraft}
+            onRestore={() => {
+              setRestoreDraft(pendingDraft);
+              setPendingDraft(null);
+            }}
+            onDiscard={() => {
+              clearDraft();
+              setPendingDraft(null);
+            }}
           />
-        </SectionErrorBoundary>
-        <SectionErrorBoundary name="Drinks">
-          <ArraySection<Drink>
-            file="drinks.json"
-            load={() => fetchContent('drinks.json')}
-            heading="Drinks"
-            noun="drink"
-            fields={DRINK_FIELDS}
-            itemLabel={(drink) => drink.name || 'Untitled drink'}
-            makeBlank={blankDrink}
-            stage={stage}
-          />
-        </SectionErrorBoundary>
-        <SectionErrorBoundary name="Press">
-          <ArraySection<Article>
-            file="press.json"
-            load={() => fetchContent('press.json')}
-            heading="Press"
-            noun="article"
-            fields={ARTICLE_FIELDS}
-            itemLabel={(article) => article.title || 'Untitled article'}
-            makeBlank={blankArticle}
-            stage={stage}
-          />
-        </SectionErrorBoundary>
-        <SectionErrorBoundary name="Homepage sections">
-          <SectionsSection />
-        </SectionErrorBoundary>
-        <SectionErrorBoundary name="Opening hours">
-          <HoursSection />
-        </SectionErrorBoundary>
-        <SectionErrorBoundary name="Menus">
-          <MenusSection stage={stage} />
-        </SectionErrorBoundary>
-        <SectionErrorBoundary name="Galleries">
-          <GallerySection stage={stage} />
-        </SectionErrorBoundary>
-        <SectionErrorBoundary name="Our Story">
-          <StorySection />
-        </SectionErrorBoundary>
-        <SectionErrorBoundary name="Page copy">
-          <CopySection />
-        </SectionErrorBoundary>
+        ) : (
+          <PublishBar registry={registry} stagedFiles={stagedFilesApi} onUnauthenticated={logOut}>
+            {/* Review finding (Task 9): every section below reads a whole
+                content file through fetchContent's own unchecked cast
+                (src/admin/content.ts's own header comment) with no runtime
+                guard -- a malformed galleries.json/story.json/menus.json
+                throws mid-render, and main.tsx's ErrorBoundary is the ONLY
+                one in this app, wrapping the whole SPA, not just AdminApp.
+                Without a boundary HERE, per section, that throw would
+                unmount every OTHER section too (Dishes, Drinks, Press,
+                Sections, Hours included), and reloading would fail
+                identically against the same bad file. One boundary per
+                section is what limits one bad file to costing one
+                section. */}
+            <SectionErrorBoundary name="Dishes">
+              <ArraySection<Dish>
+                file="dishes.json"
+                load={() => fetchContent('dishes.json')}
+                heading="Dishes"
+                noun="dish"
+                fields={DISH_FIELDS}
+                itemLabel={(dish) => dish.name || 'Untitled dish'}
+                makeBlank={blankDish}
+                stage={stage}
+                registry={registry}
+                restoreDraft={restoreDraft}
+              />
+            </SectionErrorBoundary>
+            <SectionErrorBoundary name="Drinks">
+              <ArraySection<Drink>
+                file="drinks.json"
+                load={() => fetchContent('drinks.json')}
+                heading="Drinks"
+                noun="drink"
+                fields={DRINK_FIELDS}
+                itemLabel={(drink) => drink.name || 'Untitled drink'}
+                makeBlank={blankDrink}
+                stage={stage}
+                registry={registry}
+                restoreDraft={restoreDraft}
+              />
+            </SectionErrorBoundary>
+            <SectionErrorBoundary name="Press">
+              <ArraySection<Article>
+                file="press.json"
+                load={() => fetchContent('press.json')}
+                heading="Press"
+                noun="article"
+                fields={ARTICLE_FIELDS}
+                itemLabel={(article) => article.title || 'Untitled article'}
+                makeBlank={blankArticle}
+                stage={stage}
+                registry={registry}
+                restoreDraft={restoreDraft}
+              />
+            </SectionErrorBoundary>
+            <SectionErrorBoundary name="Homepage sections">
+              <SectionsSection registry={registry} restoreDraft={restoreDraft} />
+            </SectionErrorBoundary>
+            <SectionErrorBoundary name="Opening hours">
+              <HoursSection registry={registry} restoreDraft={restoreDraft} />
+            </SectionErrorBoundary>
+            <SectionErrorBoundary name="Menus">
+              <MenusSection stage={stage} registry={registry} restoreDraft={restoreDraft} />
+            </SectionErrorBoundary>
+            <SectionErrorBoundary name="Galleries">
+              <GallerySection stage={stage} registry={registry} restoreDraft={restoreDraft} />
+            </SectionErrorBoundary>
+            <SectionErrorBoundary name="Our Story">
+              <StorySection registry={registry} restoreDraft={restoreDraft} />
+            </SectionErrorBoundary>
+            <SectionErrorBoundary name="Page copy">
+              <CopySection registry={registry} restoreDraft={restoreDraft} />
+            </SectionErrorBoundary>
+          </PublishBar>
+        )}
       </div>
     </div>
   );
 };
-
-// Zero staged files is the common case (nothing picked yet, or a session
-// that never touches a photo/PDF at all) and reads better as the plain,
-// unconditional first sentence than as "0 files staged."
-function stagedFileCountMessage(count: number): string {
-  const base = "Publishing isn't built yet — nothing you change below is saved anywhere.";
-  if (count === 0) return base;
-  const noun = count === 1 ? 'file is' : 'files are';
-  return `${base} ${count} ${noun} staged and waiting for it.`;
-}
 
 type LoadState<Item> =
   | { status: 'loading' }
@@ -188,6 +235,16 @@ interface ArraySectionProps<Item extends { id: string }> {
   // finishing the key RecordForm/RecordList's own comments describe as
   // building "up".
   stage: (key: string, file: StagedFile | null) => void;
+  // publish.ts's shared content registry (Task 10) -- registered on load and
+  // on every commit, so a Publish click sees this file's current data/sha
+  // regardless of which OTHER section she edited most recently.
+  registry: ContentRegistry;
+  // Non-null only in the one render where she just clicked Restore on the
+  // unsaved-changes banner (AdminApp's own `restoreDraft` state) -- see
+  // registerLoaded's own comment above for exactly how this overrides the
+  // freshly-fetched server value without corrupting the registry's own
+  // `initial`.
+  restoreDraft: DraftMap | null;
 }
 
 // The one generic screen every array-shaped, id-keyed content file needs:
@@ -207,6 +264,8 @@ function ArraySection<Item extends { id: string }>({
   itemLabel,
   makeBlank,
   stage,
+  registry,
+  restoreDraft,
 }: ArraySectionProps<Item>) {
   const [state, setState] = useState<LoadState<Item>>({ status: 'loading' });
 
@@ -214,7 +273,15 @@ function ArraySection<Item extends { id: string }>({
     let cancelled = false;
     load()
       .then((loaded) => {
-        if (!cancelled) setState({ status: 'loaded', data: loaded.data, sha: loaded.sha });
+        if (!cancelled) {
+          const data = registerLoaded(
+            registry,
+            file,
+            loaded as unknown as LoadedContent<ContentTypeMap[ContentFileName]>,
+            restoreDraft,
+          );
+          setState({ status: 'loaded', data: data as unknown as Item[], sha: loaded.sha });
+        }
       })
       .catch((error: unknown) => {
         if (!cancelled) {
@@ -227,7 +294,13 @@ function ArraySection<Item extends { id: string }>({
     // `load` is a fresh closure every render (each call site passes an
     // inline arrow) -- keying on `file` instead, which is stable for the
     // lifetime of one section, is what keeps this effect from re-fetching
-    // on every unrelated re-render.
+    // on every unrelated re-render. `registry`/`restoreDraft` deliberately
+    // excluded too: `registry` is a stable object for the page's whole
+    // lifetime (useContentRegistry's own useCallback/useRef), and
+    // `restoreDraft` must only ever be consulted at the MOMENT this fetch
+    // resolves -- re-running this effect if she clicks Restore AFTER this
+    // section has already loaded would re-fetch and re-apply the draft a
+    // second time, not simply update in place.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [file]);
 
@@ -257,9 +330,11 @@ function ArraySection<Item extends { id: string }>({
   }
 
   const items = state.data;
+  const sha = (state as { status: 'loaded'; sha: string }).sha;
 
   function commit(next: Item[]) {
-    setState({ status: 'loaded', data: next, sha: (state as { status: 'loaded'; sha: string }).sha });
+    registry.register(file, next, sha);
+    setState({ status: 'loaded', data: next, sha });
   }
 
   return (
@@ -311,14 +386,17 @@ type SectionsLoadState =
 // either one), which would let this screen build a state assertSections
 // refuses -- see SectionList.tsx's own header for why reorder/toggle alone
 // cannot.
-function SectionsSection() {
+function SectionsSection({ registry, restoreDraft }: { registry: ContentRegistry; restoreDraft: DraftMap | null }) {
   const [state, setState] = useState<SectionsLoadState>({ status: 'loading' });
 
   useEffect(() => {
     let cancelled = false;
     fetchContent('sections.json')
       .then((loaded) => {
-        if (!cancelled) setState({ status: 'loaded', data: loaded.data, sha: loaded.sha });
+        if (!cancelled) {
+          const data = registerLoaded(registry, 'sections.json', loaded, restoreDraft);
+          setState({ status: 'loaded', data, sha: loaded.sha });
+        }
       })
       .catch((error: unknown) => {
         if (!cancelled) {
@@ -328,6 +406,7 @@ function SectionsSection() {
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const data = state.status === 'loaded' ? state.data : undefined;
@@ -345,8 +424,10 @@ function SectionsSection() {
   }
 
   const items = state.data;
+  const sha = (state as { status: 'loaded'; sha: string }).sha;
   function commit(next: Section[]) {
-    setState({ status: 'loaded', data: next, sha: (state as { status: 'loaded'; sha: string }).sha });
+    registry.register('sections.json', next, sha);
+    setState({ status: 'loaded', data: next, sha });
   }
 
   return (
@@ -384,14 +465,22 @@ type HoursLoadState =
 // ...data, hours: next }` preserves every other field exactly, the same
 // spread-not-reconstruct guarantee `replaceAt`'s own header comment
 // describes for a whole-array update.
-function HoursSection() {
+function HoursSection({ registry, restoreDraft }: { registry: ContentRegistry; restoreDraft: DraftMap | null }) {
   const [state, setState] = useState<HoursLoadState>({ status: 'loading' });
 
   useEffect(() => {
     let cancelled = false;
     fetchContent('site.json')
       .then((loaded) => {
-        if (!cancelled) setState({ status: 'loaded', data: loaded.data, initial: loaded.data, sha: loaded.sha });
+        if (!cancelled) {
+          // registerLoaded's own `data` return is what the REGISTRY (and
+          // therefore a publish) sees; `initial` here is a SEPARATE, local
+          // concept -- the developer-owned-fields comparison base just
+          // below -- which must stay the server's own value regardless of a
+          // restored draft (see this section's own comment on `initial`).
+          const data = registerLoaded(registry, 'site.json', loaded, restoreDraft);
+          setState({ status: 'loaded', data, initial: loaded.data, sha: loaded.sha });
+        }
       })
       .catch((error: unknown) => {
         if (!cancelled) {
@@ -401,6 +490,7 @@ function HoursSection() {
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const data = state.status === 'loaded' ? state.data : undefined;
@@ -432,9 +522,11 @@ function HoursSection() {
       <h2 className="mb-4 font-['Montserrat'] text-lg uppercase tracking-wide text-[#222]">Opening hours</h2>
       <HoursField
         value={state.data.hours}
-        onChange={(next) =>
-          setState({ status: 'loaded', data: { ...state.data, hours: next }, initial: state.initial, sha: state.sha })
-        }
+        onChange={(next) => {
+          const nextData = { ...state.data, hours: next };
+          registry.register('site.json', nextData, state.sha);
+          setState({ status: 'loaded', data: nextData, initial: state.initial, sha: state.sha });
+        }}
         problems={problems}
       />
     </section>
@@ -481,14 +573,25 @@ function menuNameFor(menu: MenuFile): string {
   return match ? match[1] : menu.id;
 }
 
-function MenusSection({ stage }: { stage: (key: string, file: StagedFile | null) => void }) {
+function MenusSection({
+  stage,
+  registry,
+  restoreDraft,
+}: {
+  stage: (key: string, file: StagedFile | null) => void;
+  registry: ContentRegistry;
+  restoreDraft: DraftMap | null;
+}) {
   const [state, setState] = useState<MenusLoadState>({ status: 'loading' });
 
   useEffect(() => {
     let cancelled = false;
     fetchContent('menus.json')
       .then((loaded) => {
-        if (!cancelled) setState({ status: 'loaded', data: loaded.data, sha: loaded.sha });
+        if (!cancelled) {
+          const data = registerLoaded(registry, 'menus.json', loaded, restoreDraft);
+          setState({ status: 'loaded', data, sha: loaded.sha });
+        }
       })
       .catch((error: unknown) => {
         if (!cancelled) {
@@ -498,6 +601,7 @@ function MenusSection({ stage }: { stage: (key: string, file: StagedFile | null)
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const data = state.status === 'loaded' ? state.data : undefined;
@@ -515,8 +619,10 @@ function MenusSection({ stage }: { stage: (key: string, file: StagedFile | null)
   }
 
   const items = state.data;
+  const sha = (state as { status: 'loaded'; sha: string }).sha;
   function commit(next: MenuFile[]) {
-    setState({ status: 'loaded', data: next, sha: (state as { status: 'loaded'; sha: string }).sha });
+    registry.register('menus.json', next, sha);
+    setState({ status: 'loaded', data: next, sha });
   }
 
   // The bare, whole-file message (validateMenus' "the site needs at least
@@ -589,14 +695,25 @@ type GalleriesLoadState =
   | { status: 'error'; message: string }
   | { status: 'loaded'; data: Galleries; sha: string };
 
-function GallerySection({ stage }: { stage: (key: string, file: StagedFile | null) => void }) {
+function GallerySection({
+  stage,
+  registry,
+  restoreDraft,
+}: {
+  stage: (key: string, file: StagedFile | null) => void;
+  registry: ContentRegistry;
+  restoreDraft: DraftMap | null;
+}) {
   const [state, setState] = useState<GalleriesLoadState>({ status: 'loading' });
 
   useEffect(() => {
     let cancelled = false;
     fetchContent('galleries.json')
       .then((loaded) => {
-        if (!cancelled) setState({ status: 'loaded', data: loaded.data, sha: loaded.sha });
+        if (!cancelled) {
+          const data = registerLoaded(registry, 'galleries.json', loaded, restoreDraft);
+          setState({ status: 'loaded', data, sha: loaded.sha });
+        }
       })
       .catch((error: unknown) => {
         if (!cancelled) {
@@ -606,6 +723,7 @@ function GallerySection({ stage }: { stage: (key: string, file: StagedFile | nul
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const data = state.status === 'loaded' ? state.data : undefined;
@@ -627,7 +745,10 @@ function GallerySection({ stage }: { stage: (key: string, file: StagedFile | nul
       <h2 className="mb-4 font-['Montserrat'] text-lg uppercase tracking-wide text-[#222]">Galleries</h2>
       <GalleryList
         value={state.data}
-        onChange={(next) => setState({ status: 'loaded', data: next, sha: state.sha })}
+        onChange={(next) => {
+          registry.register('galleries.json', next, state.sha);
+          setState({ status: 'loaded', data: next, sha: state.sha });
+        }}
         problems={problems}
         stage={stage}
       />
@@ -643,14 +764,17 @@ type StoryLoadState =
   | { status: 'error'; message: string }
   | { status: 'loaded'; data: StoryContent; sha: string };
 
-function StorySection() {
+function StorySection({ registry, restoreDraft }: { registry: ContentRegistry; restoreDraft: DraftMap | null }) {
   const [state, setState] = useState<StoryLoadState>({ status: 'loading' });
 
   useEffect(() => {
     let cancelled = false;
     fetchContent('story.json')
       .then((loaded) => {
-        if (!cancelled) setState({ status: 'loaded', data: loaded.data, sha: loaded.sha });
+        if (!cancelled) {
+          const data = registerLoaded(registry, 'story.json', loaded, restoreDraft);
+          setState({ status: 'loaded', data, sha: loaded.sha });
+        }
       })
       .catch((error: unknown) => {
         if (!cancelled) {
@@ -660,6 +784,7 @@ function StorySection() {
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const data = state.status === 'loaded' ? state.data : undefined;
@@ -681,7 +806,10 @@ function StorySection() {
       <h2 className="mb-4 font-['Montserrat'] text-lg uppercase tracking-wide text-[#222]">Our Story</h2>
       <StoryForm
         value={state.data}
-        onChange={(next) => setState({ status: 'loaded', data: next, sha: state.sha })}
+        onChange={(next) => {
+          registry.register('story.json', next, state.sha);
+          setState({ status: 'loaded', data: next, sha: state.sha });
+        }}
         problems={problems}
       />
     </section>
@@ -799,14 +927,17 @@ type CopyLoadState =
   | { status: 'error'; message: string }
   | { status: 'loaded'; data: Copy; sha: string };
 
-function CopySection() {
+function CopySection({ registry, restoreDraft }: { registry: ContentRegistry; restoreDraft: DraftMap | null }) {
   const [state, setState] = useState<CopyLoadState>({ status: 'loading' });
 
   useEffect(() => {
     let cancelled = false;
     fetchContent('copy.json')
       .then((loaded) => {
-        if (!cancelled) setState({ status: 'loaded', data: loaded.data, sha: loaded.sha });
+        if (!cancelled) {
+          const data = registerLoaded(registry, 'copy.json', loaded, restoreDraft);
+          setState({ status: 'loaded', data, sha: loaded.sha });
+        }
       })
       .catch((error: unknown) => {
         if (!cancelled) {
@@ -816,6 +947,7 @@ function CopySection() {
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const data = state.status === 'loaded' ? state.data : undefined;
@@ -832,8 +964,10 @@ function CopySection() {
     );
   }
 
+  const sha = (state as { status: 'loaded'; sha: string }).sha;
   function commit(next: Copy) {
-    setState({ status: 'loaded', data: next, sha: (state as { status: 'loaded'; sha: string }).sha });
+    registry.register('copy.json', next, sha);
+    setState({ status: 'loaded', data: next, sha });
   }
 
   // Every leaf problem actually rendered below, tracked by reference so the

@@ -11,7 +11,7 @@
 // `crypto`, none of which tsconfig.node.json's ES2023-only `lib` declares.
 import { verifyPassword, signToken, verifyToken, parseCookie } from './auth';
 import { checkLoginRate, recordLoginFailure, clearLoginFailures, checkRate, recordHit } from './ratelimit';
-import { commitFiles, getFileContent, isContentPath, DisallowedPathError, type CommitFile, type FileContent, type GitHubEnv } from './github';
+import { commitFiles, getFileContent, isContentPath, DisallowedPathError, PublishConflictError, type CommitFile, type FileContent, type GitHubEnv } from './github';
 import { validateContent, type ValidationProblem } from '../src/content/validate';
 import { handleUpload } from './upload';
 import { handleBuildStatus, type PagesEnv } from './status';
@@ -661,6 +661,16 @@ async function handlePublish(request: Request, env: Env): Promise<Response> {
     // would misdirect diagnosis toward "GitHub is broken".
     if (error instanceof DisallowedPathError) {
       return json(400, { message: error.message });
+    }
+    // A non-fast-forward ref update: the branch moved between this
+    // request's own getBranchHeadSha read and its updateBranchHead write --
+    // a second publish landed in the gap. Same 409 step 3's baseSha
+    // mismatch above already answers with, so the dashboard can branch on
+    // STATUS alone for "someone else published", never on message text (see
+    // github.ts's own PublishConflictError comment for why that distinction
+    // matters).
+    if (error instanceof PublishConflictError) {
+      return json(409, { message: error.message });
     }
     return json(502, { message: error instanceof Error ? error.message : 'Publish failed.' });
   }

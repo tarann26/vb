@@ -90,6 +90,20 @@ const MENU_PATH = /^public\/menus\/[a-z0-9-]{1,64}\.pdf$/;
 // actually "the request named a path outside the allowlist".
 export class DisallowedPathError extends Error {}
 
+// Distinguishable from a generic Error so a caller (worker/index.ts's
+// handlePublish) can map a concurrent-edit ref update to 409 -- the same
+// status Task 3's `baseSha` mismatch already uses -- rather than the 502
+// every other commitFiles failure gets. Before this class existed, "someone
+// else published while you were editing" and "GitHub returned a 5xx" both
+// fell through to the identical `json(502, { message })`, so a caller could
+// only tell them apart by matching on the message TEXT itself, with nothing
+// pinning that string -- a reword on either side would silently degrade the
+// conflict case into a generic, unrecoverable-sounding error. Thrown by
+// updateBranchHead below on a 422 (GitHub's own non-fast-forward signal),
+// never by any other step in commitFiles -- every other failure in this
+// module is a genuine "could not talk to GitHub" case, not a conflict.
+export class PublishConflictError extends Error {}
+
 // Exported so `GET /api/content` (worker/index.ts's handleGetContent, Task
 // 3) can restrict *reads* to exactly the same path shape assertAllowedPath
 // below already restricts *writes* to -- built on the same CONTENT_PATH
@@ -367,7 +381,7 @@ async function updateBranchHead(env: GitHubEnv, commitSha: string): Promise<void
   });
   if (!res.ok) {
     if (res.status === 422) {
-      throw new Error('someone else published while you were editing -- reload and try again');
+      throw new PublishConflictError('someone else published while you were editing -- reload and try again');
     }
     throw new Error(`could not update ${env.GITHUB_BRANCH} (GitHub returned ${res.status})${await describeFailure(res)}`);
   }

@@ -153,9 +153,20 @@ describe('dist/assets/ keeps the libheif WASM decoder out of every EAGERLY-loade
 describe('dist/assets/ keeps admin code out of the entry chunk', () => {
   // Source file each marker's own presence test (and the shared leak check
   // below) exists to catch a leak of.
+  //
+  // Task 10 re-points the AdminApp.tsx marker: its old value, "Publishing
+  // isn't built yet", was the very placeholder note this task replaces with
+  // a real Publish button, so it stopped existing in AdminApp.tsx's own
+  // source entirely. The dashboard's own <h1> ("Via Bianca Dashboard", not
+  // the bare "Via Bianca" several PUBLIC components also render -- see
+  // src/components/ErrorBoundary.tsx and ReservationPage.tsx, both
+  // legitimately part of the entry chunk, which is exactly why the bare
+  // phrase would be a false-positive marker here) is the new one: unique to
+  // this file, confirmed by a direct search of src/ for the word
+  // "Dashboard" turning up nowhere else at the time this was written.
   const ADMIN_MARKERS: Record<string, string> = {
     'Login.tsx': 'Admin login', // the login form's own aria-label
-    'AdminApp.tsx': "Publishing isn't built yet", // the logged-in dashboard's own note
+    'AdminApp.tsx': 'Via Bianca Dashboard', // the logged-in dashboard's own heading
   };
 
   function assetsContaining(marker: string): string[] {
