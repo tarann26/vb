@@ -176,7 +176,21 @@ describe('dist/assets/ keeps admin code out of the entry chunk', () => {
     // entry chunk would put every public component's own markers there too
     // (they are already expected there, unconditionally), so only text
     // unique to EditMode.tsx itself proves anything.
-    'EditMode.tsx': 'Loading live content…',
+    //
+    // Post-review Fix 7 (minor): re-pointed from `'Loading live content…'`
+    // (the loading banner) to a substring of SIGN_OUT_NOTICE (error-path
+    // copy). Both are unique to this file, so either COULD serve, but the
+    // loading banner is ordinary status text -- exactly the kind of copy a
+    // routine wording pass tweaks without a second thought -- while
+    // SIGN_OUT_NOTICE is a carefully-worded sentence Fix 1's review already
+    // rewrote once specifically to stop it promising something untrue; a
+    // sentence that has already been through that scrutiny is far less
+    // likely to be casually re-worded again than a loading spinner's label.
+    // Confirmed unique via a direct search of src/ for this exact substring
+    // turning up nowhere else (in particular, not colliding with
+    // PublishBar.tsx's own, differently-worded "You've been signed out..."
+    // sentence, which shares only the opening clause).
+    'EditMode.tsx': "whatever hasn't will load now",
   };
 
   function assetsContaining(marker: string): string[] {

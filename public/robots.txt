@@ -1,5 +1,5 @@
 User-agent: *
 Allow: /
-Disallow: /edit/
+Disallow: /edit
 
 Sitemap: https://viabiancadelhi.com/sitemap.xml

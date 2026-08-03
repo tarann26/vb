@@ -16,7 +16,7 @@
 // independent of App.tsx entirely, which is simpler to reason about than
 // relying on that ordering. The seven components are the same ones
 // SECTION_COMPONENTS (App.tsx) uses, imported the same way.
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Navbar from '../components/NavBar';
 import Hero from '../components/Hero';
 import OurStory from '../components/OurStory';
@@ -34,14 +34,17 @@ import type { ContentFileName, ContentTypeMap } from './content';
 import { useContentRegistry } from './publish';
 import type { ContentEntries } from './publish';
 import SectionErrorBoundary from './SectionErrorBoundary';
-// '../content/types', never '../content/ContentContext' or '../content' --
+// '../content/context', never '../content/ContentContext' or '../content' --
 // src/admin/__tests__/content.test.ts only whitelists types/validate/guards/
-// publish as safe src/content/ imports for src/admin/ (none of the four
-// import any JSON); ContentContext.ts imports src/content/index.ts (the
-// build-time snapshot) to build its defaultBundle, so it is NOT on that
-// list, and ContentProvider/ContentBundle were moved to types.ts for
-// exactly this reason -- see that module's own comment.
-import { ContentProvider } from '../content/types';
+// publish/context as safe src/content/ imports for src/admin/ (none of the
+// five import any JSON, and none has a transitive path to
+// src/content/index.ts, the build-time snapshot); ContentContext.ts imports
+// that snapshot to build its defaultBundle, so it is NOT on that list.
+// ContentProvider lives in ./context, not ./types (post-review Fix 5 -- see
+// that module's own comment): ./types is type-only and erases entirely at
+// compile time, which is no longer true of anything holding a real
+// `createContext` call.
+import { ContentProvider } from '../content/context';
 import type {
   ContentBundle,
   SectionId,
@@ -71,6 +74,36 @@ const SECTION_LABELS: Record<SectionId, string> = {
   press: 'Press',
   visit: 'Visit',
 };
+
+// Post-review Fix 2 (Important): a real, separate component, not an inline
+// `.filter().map()` sitting directly in EditMode's own JSX. `bundle.sections`
+// is `fetchContent`'s unchecked `JSON.parse(...) as` cast (content.ts's own
+// header comment names this exact risk) with no runtime shape check --
+// `sections.json` parsing to `{}` instead of an array makes `.filter` throw
+// "bundle.sections.filter is not a function". Where that throw happens is
+// what determines whether it costs one section or the whole page: a plain
+// expression written inline inside EditMode's `return` still evaluates as
+// part of EditMode's OWN render function body (JSX children are built
+// before React ever sees the element tree, regardless of how they're
+// visually nested in the wrapping `<SectionErrorBoundary>` below), so it
+// throws OUTSIDE every boundary and would unmount the whole page -- the
+// exact defect this fix closes. A genuinely separate component's OWN
+// function body is what React calls while rendering a CHILD of whatever
+// boundary wraps it, which is what actually makes the boundary able to
+// catch it. Confirmed directly: reverting this to an inline expression
+// reproduces `document.body.textContent === ''` against a real malformed
+// sections.json (src/admin/__tests__/EditMode.test.tsx's own test for it).
+const DynamicSections: React.FC<{ sections: Section[] }> = ({ sections }) => (
+  <>
+    {sections
+      .filter((section) => section.enabled)
+      .map((section) => (
+        <SectionErrorBoundary key={section.id} name={SECTION_LABELS[section.id]}>
+          {SECTION_COMPONENTS[section.id]()}
+        </SectionErrorBoundary>
+      ))}
+  </>
+);
 
 // Neutral, empty starting values -- NOT the real build-time snapshot (this
 // file may not import that, see above), just structurally-valid content so
@@ -167,8 +200,17 @@ function isUnauthorized(error: unknown): boolean {
   return error instanceof Error && /\(status 401\)/.test(error.message);
 }
 
+// Post-review Fix 1: the old wording ("the live page will still be showing
+// exactly what it was") is a promise this component cannot always keep -- a
+// file that hadn't loaded yet when the 401 hit (or every file, if the
+// session was already dead before the first fetch ever went out) is NOT
+// showing what it was; it is still blank, and logging back in is what makes
+// it start loading for the first time. What IS always true, and is the
+// actual guarantee the per-file registry guard below provides: nothing that
+// had already loaded is ever re-fetched or overwritten, and nothing that
+// hadn't gets left blank forever.
 const SIGN_OUT_NOTICE =
-  "You've been signed out. Log in and the live page will still be showing exactly what it was.";
+  "You've been signed out. Log in and whatever has already loaded will stay exactly as it was — whatever hasn't will load now.";
 
 // Default export, deliberately: React.lazy (src/App.tsx) requires one.
 const EditMode: React.FC = () => {
@@ -177,32 +219,51 @@ const EditMode: React.FC = () => {
   const [fileErrors, setFileErrors] = useState<Partial<Record<ContentFileName, string>>>({});
   const [signOutNotice, setSignOutNotice] = useState<string | null>(null);
 
-  // Fires the nine fetches exactly once, on the FIRST transition into 'in' --
-  // never again, including a LATER out->in cycle caused by a 401 below. This
-  // is the whole fix for Step 3: nothing here is gated on `status` staying
-  // 'in', so a mid-session 401 (which flips `status` to 'out' to show the
-  // login overlay) never tears down or re-fetches anything this effect
-  // already loaded. `startedRef`/`previousStatusRef` mirror AdminApp.tsx's
-  // own `previousStatusRef` pattern for the identical reason: a plain
-  // `[status === 'in']` dependency would re-run this whole effect (and
-  // therefore re-fetch every file) on every re-login, exactly the clobber
-  // Plan 4's Critical was about.
-  const startedRef = useRef(false);
-  const previousStatusRef = useRef(status);
+  // Post-review Fix 1 (Critical): on every transition into 'in' -- the
+  // first load AND any later out->in cycle caused by a 401 below -- refetch
+  // only the files that have NO registry entry yet. "Never clobber, but do
+  // fill what is empty": a file that already loaded (and, from Task 3
+  // onward, may hold her edits) has a registry entry the instant `.then`
+  // below calls `registry.register` for it, so it is never touched again by
+  // a later run of this same effect -- Plan 4's clobber does not return. A
+  // file that never loaded -- because the session was already dead before
+  // its own fetch ever went out, or because IT was the one that 401'd --
+  // has no entry, so the next 'in' transition retries exactly that file,
+  // instead of leaving it blank forever (the bug this fix replaces: a
+  // boolean `startedRef` that fired the whole batch once and never again,
+  // so a 401 on any of the nine permanently stranded every file that had
+  // not yet resolved).
+  //
+  // No `previousStatusRef`/`wasIn` guard is needed here (Fix 7): with
+  // `[status]` as the only dependency, this effect already only re-runs
+  // when `status` actually changes, so `status === 'in'` inside the effect
+  // body already implies the previous render's status was something else --
+  // there is no way to reach this point on a render where 'in' merely
+  // continued.
   useEffect(() => {
-    const wasIn = previousStatusRef.current === 'in';
-    previousStatusRef.current = status;
-    if (status !== 'in' || wasIn) return;
+    if (status !== 'in') return;
     setSignOutNotice(null);
-    if (startedRef.current) return;
-    startedRef.current = true;
+    const entries = registry.getEntries();
     CONTENT_FILES.forEach((file) => {
+      // Already loaded (or holds her edits, once Task 3 adds editing) --
+      // never re-fetched, never overwritten.
+      if (entries[file] !== undefined) return;
       fetchContent(file)
         .then((loaded) => {
           // registry.register, not updateData: this is the load path (see
           // ContentRegistry's own comment on the two), and the only one this
           // task ever calls -- there is no edit yet to write back.
           registry.register(file, loaded.data, loaded.sha);
+          // A file that errored on an EARLIER attempt (its own message is
+          // still sitting in fileErrors) but has now loaded successfully on
+          // this retry must not keep showing that stale error banner over
+          // content that is, right now, actually on screen.
+          setFileErrors((prev) => {
+            if (!(file in prev)) return prev;
+            const next = { ...prev };
+            delete next[file];
+            return next;
+          });
         })
         .catch((error: unknown) => {
           if (isUnauthorized(error)) {
@@ -236,7 +297,6 @@ const EditMode: React.FC = () => {
     (file) => entries[file] !== undefined || fileErrors[file] !== undefined,
   ).length;
   const stillLoading = loadedOrErroredCount < CONTENT_FILES.length;
-  const enabledSections = bundle.sections.filter((section: Section) => section.enabled);
 
   // Capture phase, on the root that wraps the real page and nothing else
   // (never the login overlay below, which must stay clickable). React
@@ -279,16 +339,19 @@ const EditMode: React.FC = () => {
         )}
         <div className="min-h-screen">
           <SectionErrorBoundary name="SEO">
-            <SeoHead />
+            {/* Post-review Fix 6: /edit never emits structured data or a
+                canonical link, logged in or out -- see SeoHead.tsx's own
+                comment on why. The boundary stays: `site.seo.url` is still
+                read unconditionally before that decision, so a malformed
+                site.json still throws here exactly as before. */}
+            <SeoHead emitMetadata={false} />
           </SectionErrorBoundary>
           <SectionErrorBoundary name="Navigation">
             <Navbar />
           </SectionErrorBoundary>
-          {enabledSections.map((section: Section) => (
-            <SectionErrorBoundary key={section.id} name={SECTION_LABELS[section.id]}>
-              {SECTION_COMPONENTS[section.id]()}
-            </SectionErrorBoundary>
-          ))}
+          <SectionErrorBoundary name="Sections">
+            <DynamicSections sections={bundle.sections} />
+          </SectionErrorBoundary>
           <SectionErrorBoundary name="Footer">
             <Footer />
           </SectionErrorBoundary>

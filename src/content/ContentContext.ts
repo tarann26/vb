@@ -1,6 +1,7 @@
 import { createElement, useContext } from 'react';
 import { site, galleries, dishes, drinks, press, story, menus, copy, sections } from './index';
-import { ContentReactContext, ContentProvider, type ContentBundle, type EditableTextPath, type EditableImagePath } from './types';
+import type { ContentBundle, EditableTextPath, EditableImagePath } from './types';
+import { ContentReactContext, ContentProvider } from './context';
 
 // .ts, not .tsx: eslint's react-refresh/only-export-components rule (which
 // warns on a file that exports both components and non-component values,
@@ -23,10 +24,11 @@ import { ContentReactContext, ContentProvider, type ContentBundle, type Editable
 // because every literal already in use here is a value the narrower union
 // will still contain.
 //
-// ContentBundle, ContentReactContext and ContentProvider itself now live in
-// ./types (Plan 5 Task 2 -- see that module's own comment on why), and are
-// simply re-exported here unchanged so every existing caller of this module
-// (all twelve migrated public components, plus
+// ContentBundle now lives in ./types, ContentReactContext and
+// ContentProvider in ./context (Plan 5 Task 2, corrected by the post-review
+// Fix 5 -- see each module's own comment on why), and are simply re-exported
+// here unchanged so every existing caller of this module (all twelve
+// migrated public components, plus
 // src/content/__tests__/ContentContext.test.tsx and
 // src/admin/__tests__/editable-paths.test.tsx) keeps working without a
 // single import path changing.

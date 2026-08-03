@@ -124,17 +124,26 @@ function dotsNeeded(filePath: string): number {
   return filePath.split('/').length - 2;
 }
 
-// The four modules under src/content/ that are legitimate to import from
-// src/admin/ -- none of them import any JSON, and `types` erases entirely
-// at compile time. Anything else reachable via `content/<subpath>` is NOT
-// safe, and a first version of this check (`content(?:/index)?`, matching
-// only the bare barrel and an explicit `/index`) missed that: it let
-// `import dishes from '../content/dishes.json'` -- a DIRECT import of the
-// JSON itself, arguably the most likely form of this mistake, since a later
-// task wanting one file's real shape reaches for exactly this -- straight
-// through. Confirmed directly: that version left this exact line green
-// across all 21 tests in this file's previous revision.
-const SAFE_CONTENT_SUBMODULES = ['types', 'validate', 'guards', 'publish'];
+// The five modules under src/content/ that are legitimate to import from
+// src/admin/ -- none of them import any JSON, and none has a transitive path
+// to src/content/index.ts, the build-time snapshot. `types`, `validate` and
+// `guards` erase entirely at compile time (every export is a type or a pure
+// function with no react/JSON dependency). `context` (post-review Fix 5) is
+// the one exception to "erases entirely": it holds a real runtime
+// `createContext` call from `react` -- safe to whitelist by name here
+// anyway because it is react-only and imports no JSON, which is the actual
+// property this whitelist exists to guard (see EditMode.tsx's own comment on
+// why `../content/types` stopped being safe to whitelist blindly the moment
+// it held that same call, before this fix moved it out). Anything else
+// reachable via `content/<subpath>` is NOT safe, and a first version of this
+// check (`content(?:/index)?`, matching only the bare barrel and an explicit
+// `/index`) missed that: it let `import dishes from '../content/dishes.json'`
+// -- a DIRECT import of the JSON itself, arguably the most likely form of
+// this mistake, since a later task wanting one file's real shape reaches for
+// exactly this -- straight through. Confirmed directly: that version left
+// this exact line green across all 21 tests in this file's previous
+// revision.
+const SAFE_CONTENT_SUBMODULES = ['types', 'validate', 'guards', 'publish', 'context'];
 
 function importsContentSnapshot(source: string, filePath: string): boolean {
   const dots = dotsNeeded(filePath);
@@ -248,10 +257,16 @@ describe('importsContentSnapshot catches every import form, at the right depth',
     expect(importsContentSnapshot(`import type { Dish } from '../content/types';`, AT_DEPTH_1)).toBe(false);
   });
 
-  it('does not match the validate/guards/publish modules, which import no JSON', () => {
+  it('does not match the validate/guards/publish/context modules, which import no JSON', () => {
     expect(importsContentSnapshot(`import { validateContent } from '../content/validate';`, AT_DEPTH_1)).toBe(false);
     expect(importsContentSnapshot(`import { assertSections } from '../content/guards';`, AT_DEPTH_1)).toBe(false);
     expect(importsContentSnapshot(`import { isPublished } from '../content/publish';`, AT_DEPTH_1)).toBe(false);
+    // Post-review Fix 5: `context` holds a real runtime `createContext` call
+    // (unlike the other three, which erase entirely), but it still imports
+    // no JSON and has no path to src/content/index.ts -- the actual property
+    // this whitelist exists to guard, per SAFE_CONTENT_SUBMODULES's own
+    // comment above.
+    expect(importsContentSnapshot(`import { ContentProvider } from '../content/context';`, AT_DEPTH_1)).toBe(false);
   });
 
   // The direct-JSON-import fix must not overreach into flagging the four

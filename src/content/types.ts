@@ -1,4 +1,4 @@
-import { createContext, type ImgHTMLAttributes, type ReactNode } from 'react';
+import type { ImgHTMLAttributes, ReactNode } from 'react';
 
 // Two-letter schema.org day codes, in week order. A plain `string` here would
 // let a typo (e.g. "Xx") through both the type checker and the JSON import
@@ -144,19 +144,28 @@ export interface Copy {
   notFound: { heading: string; back: string };
 }
 
-// Plan 5 Task 2: the raw React Context and its ContentBundle type live here,
-// not in src/content/ContentContext.ts (where Task 1 originally put them),
-// because src/admin/__tests__/content.test.ts's SAFE_CONTENT_SUBMODULES
-// whitelists only `types`, `validate`, `guards` and `publish` as imports
-// src/admin/ may reach into src/content/ for -- the four modules that,
-// unlike ContentContext.ts, import no JSON. EditMode.tsx (src/admin/) needs
-// to mount the SAME Context object every public component's useContent()
-// reads via ContentContext.ts, with no transitive path to the build-time
-// snapshot (src/content/index.ts) -- confirmed directly: an import of
-// '../content/ContentContext' from src/admin/EditMode.tsx trips that guard,
-// while '../content/types' does not. ContentContext.ts re-exports both names
-// unchanged below, so every existing caller (12 public components, three
-// test files) is unaffected.
+// Plan 5 Task 2: ContentBundle lives here, not in src/content/ContentContext.ts
+// (where Task 1 originally put it), because src/admin/__tests__/content.test.ts's
+// SAFE_CONTENT_SUBMODULES whitelists only `types`, `validate`, `guards`,
+// `publish` and `context` as imports src/admin/ may reach into src/content/
+// for -- the modules that, unlike ContentContext.ts, import no JSON.
+// EditMode.tsx (src/admin/) needs this type, with no transitive path to the
+// build-time snapshot (src/content/index.ts) -- confirmed directly: an
+// import of '../content/ContentContext' from src/admin/EditMode.tsx trips
+// that guard, while '../content/types' does not.
+//
+// The raw React Context object and ContentProvider themselves live in
+// ./context, NOT here (post-review Fix 5; see that module's own header
+// comment for why) -- this module holds only types, and every reference to
+// `react` below (`ReactNode`, `ImgHTMLAttributes`) is `import type`, which
+// erases entirely at compile time. That is what makes this module safe for
+// src/admin/ to import without dragging any runtime react (let alone the
+// build-time content snapshot) into the lazy-loaded admin chunk -- or, via
+// worker/index.ts -> ../src/content/validate -> ./guards -> ./types, into
+// the Cloudflare Worker, which must never bundle react at all (see
+// worker/__tests__/bundle.test.ts). ContentContext.ts re-exports
+// ContentBundle unchanged below, so every existing caller (12 public
+// components, three test files) is unaffected.
 export type EditableTextPath = string;
 export type EditableImagePath = string;
 
@@ -175,10 +184,3 @@ export interface ContentBundle {
   // default: (_, p) => createElement('img', p) -- see ContentContext.ts's defaultBundle.
   renderImage(path: EditableImagePath, props: ImgHTMLAttributes<HTMLImageElement>): ReactNode;
 }
-
-// null when no provider is mounted -- useContent() (ContentContext.ts) is
-// what turns that into defaultBundle; this module has no static import into
-// src/content/index.ts to build a default from, deliberately (see the
-// comment above).
-export const ContentReactContext = createContext<ContentBundle | null>(null);
-export const ContentProvider = ContentReactContext.Provider;
