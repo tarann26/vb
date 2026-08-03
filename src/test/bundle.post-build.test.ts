@@ -84,8 +84,13 @@ describe('dist/assets/ excludes the libheif WASM decoder', () => {
 // aria-label, which is silent on a leak of AdminApp.tsx itself if it ever
 // reaches the entry chunk by some path that doesn't also render Login (e.g.
 // a future static import of AdminApp directly, bypassing the lazy route).
-// AdminApp.tsx's own placeholder text is the second marker, so that leak is
-// caught here too, independent of Login's.
+// AdminApp.tsx's own text is the second marker, so that leak is caught here
+// too, independent of Login's. Re-pointed by Task 6 (Plan 4) from the
+// logged-in placeholder's "Dashboard coming soon." to the publish-not-built
+// note that replaced it -- still text unique to AdminApp.tsx, not shared
+// with any other admin file, which is what this marker needs to keep
+// meaning "AdminApp.tsx specifically leaked" rather than "some admin file
+// did."
 //
 // This does NOT, on its own, close every gap a single marker leaves: a
 // no-space static import of src/admin/session.ts alongside an otherwise
@@ -106,7 +111,7 @@ describe('dist/assets/ keeps admin code out of the entry chunk', () => {
   // below) exists to catch a leak of.
   const ADMIN_MARKERS: Record<string, string> = {
     'Login.tsx': 'Admin login', // the login form's own aria-label
-    'AdminApp.tsx': 'Dashboard coming soon.', // the placeholder dashboard's own text
+    'AdminApp.tsx': "Publishing isn't built yet", // the logged-in dashboard's own note
   };
 
   function assetsContaining(marker: string): string[] {
