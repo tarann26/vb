@@ -23,6 +23,15 @@ import { useContent } from './content/ContentContext';
 // in, unconditionally, for every single page load.
 const AdminApp = lazy(() => import('./admin/AdminApp'));
 
+// The real homepage rendered with live content instead of the build-time
+// snapshot (Plan 5 Task 2) -- a second, independent lazy chunk, same
+// reasoning as AdminApp above. React Router 7 ranks routes by specificity
+// regardless of declaration order, so this and '/edit/manage/*' below never
+// need to worry about which is listed first; in practice they do not even
+// overlap, since a bare `path="/edit"` Route matches only the exact
+// '/edit' path, never a deeper one.
+const EditMode = lazy(() => import('./admin/EditMode'));
+
 // Typed as `Record<SectionId, ...>` so tsc enforces exhaustiveness: adding a
 // SectionId without adding a matching case here is a build failure, not a
 // section that silently stops rendering.
@@ -57,6 +66,14 @@ export function AppRoutes() {
     <Routes>
       <Route path="/" element={<HomePage />} />
       <Route path="/blogs" element={<BlogsPage />} />
+      <Route
+        path="/edit"
+        element={
+          <Suspense fallback={null}>
+            <EditMode />
+          </Suspense>
+        }
+      />
       <Route
         path="/edit/manage/*"
         element={

@@ -1,3 +1,5 @@
+import { createContext, type ImgHTMLAttributes, type ReactNode } from 'react';
+
 // Two-letter schema.org day codes, in week order. A plain `string` here would
 // let a typo (e.g. "Xx") through both the type checker and the JSON import
 // widening; see the runtime guard around `assertHours` in src/content/guards.ts
@@ -141,3 +143,42 @@ export interface Copy {
   blogsPage: { title: string; subtitle: string; heading: string; intro: string; back: string; previous: string; next: string };
   notFound: { heading: string; back: string };
 }
+
+// Plan 5 Task 2: the raw React Context and its ContentBundle type live here,
+// not in src/content/ContentContext.ts (where Task 1 originally put them),
+// because src/admin/__tests__/content.test.ts's SAFE_CONTENT_SUBMODULES
+// whitelists only `types`, `validate`, `guards` and `publish` as imports
+// src/admin/ may reach into src/content/ for -- the four modules that,
+// unlike ContentContext.ts, import no JSON. EditMode.tsx (src/admin/) needs
+// to mount the SAME Context object every public component's useContent()
+// reads via ContentContext.ts, with no transitive path to the build-time
+// snapshot (src/content/index.ts) -- confirmed directly: an import of
+// '../content/ContentContext' from src/admin/EditMode.tsx trips that guard,
+// while '../content/types' does not. ContentContext.ts re-exports both names
+// unchanged below, so every existing caller (12 public components, three
+// test files) is unaffected.
+export type EditableTextPath = string;
+export type EditableImagePath = string;
+
+export interface ContentBundle {
+  site: SiteContent;
+  galleries: Galleries;
+  dishes: Dish[];
+  drinks: Drink[];
+  press: Article[];
+  story: StoryContent;
+  menus: MenuFile[];
+  copy: Copy;
+  sections: Section[];
+  // default: (_, v) => v -- see ContentContext.ts's defaultBundle.
+  renderText(path: EditableTextPath, value: string): ReactNode;
+  // default: (_, p) => createElement('img', p) -- see ContentContext.ts's defaultBundle.
+  renderImage(path: EditableImagePath, props: ImgHTMLAttributes<HTMLImageElement>): ReactNode;
+}
+
+// null when no provider is mounted -- useContent() (ContentContext.ts) is
+// what turns that into defaultBundle; this module has no static import into
+// src/content/index.ts to build a default from, deliberately (see the
+// comment above).
+export const ContentReactContext = createContext<ContentBundle | null>(null);
+export const ContentProvider = ContentReactContext.Provider;

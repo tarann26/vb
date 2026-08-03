@@ -1,16 +1,6 @@
-import { createContext, createElement, useContext, type ImgHTMLAttributes, type ReactNode } from 'react';
+import { createElement, useContext } from 'react';
 import { site, galleries, dishes, drinks, press, story, menus, copy, sections } from './index';
-import type {
-  SiteContent,
-  Galleries,
-  Dish,
-  Drink,
-  Article,
-  StoryContent,
-  MenuFile,
-  Copy,
-  Section,
-} from './types';
+import { ContentReactContext, ContentProvider, type ContentBundle, type EditableTextPath, type EditableImagePath } from './types';
 
 // .ts, not .tsx: eslint's react-refresh/only-export-components rule (which
 // warns on a file that exports both components and non-component values,
@@ -32,24 +22,16 @@ import type {
 // `content.renderText('a.b', …)` / `content.renderImage(path, …)` call site,
 // because every literal already in use here is a value the narrower union
 // will still contain.
-export type EditableTextPath = string;
-export type EditableImagePath = string;
-
-export interface ContentBundle {
-  site: SiteContent;
-  galleries: Galleries;
-  dishes: Dish[];
-  drinks: Drink[];
-  press: Article[];
-  story: StoryContent;
-  menus: MenuFile[];
-  copy: Copy;
-  sections: Section[];
-  // default: (_, v) => v -- see defaultBundle below.
-  renderText(path: EditableTextPath, value: string): ReactNode;
-  // default: (_, p) => createElement('img', p) -- see defaultBundle below.
-  renderImage(path: EditableImagePath, props: ImgHTMLAttributes<HTMLImageElement>): ReactNode;
-}
+//
+// ContentBundle, ContentReactContext and ContentProvider itself now live in
+// ./types (Plan 5 Task 2 -- see that module's own comment on why), and are
+// simply re-exported here unchanged so every existing caller of this module
+// (all twelve migrated public components, plus
+// src/content/__tests__/ContentContext.test.tsx and
+// src/admin/__tests__/editable-paths.test.tsx) keeps working without a
+// single import path changing.
+export type { EditableTextPath, EditableImagePath, ContentBundle };
+export { ContentProvider };
 
 // The bundle every rendered component falls back to when no provider is
 // mounted -- the same static, build-time-validated exports src/content/
@@ -76,14 +58,6 @@ export const defaultBundle: ContentBundle = {
   renderImage: (_path, props) => createElement('img', props),
 };
 
-const ContentContext = createContext<ContentBundle | null>(null);
-
-// Exported as the raw Provider, not a wrapping component, so callers pass
-// `value` directly: <ContentProvider value={bundle}>…</ContentProvider>.
-// Task 2 mounts this at /edit with live, fetched content and real render
-// functions; nothing in this task mounts it at all.
-export const ContentProvider = ContentContext.Provider;
-
 export function useContent(): ContentBundle {
-  return useContext(ContentContext) ?? defaultBundle;
+  return useContext(ContentReactContext) ?? defaultBundle;
 }

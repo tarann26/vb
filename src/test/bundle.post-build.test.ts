@@ -167,6 +167,16 @@ describe('dist/assets/ keeps admin code out of the entry chunk', () => {
   const ADMIN_MARKERS: Record<string, string> = {
     'Login.tsx': 'Admin login', // the login form's own aria-label
     'AdminApp.tsx': 'Via Bianca Dashboard', // the logged-in dashboard's own heading
+    // Plan 5 Task 2's own text, not shared with any other file -- confirmed
+    // by a direct search of src/ for this exact sentence turning up nowhere
+    // else at the time this was written. Unlike the two markers above,
+    // EditMode.tsx renders the REAL public components alongside this text
+    // (Hero, Navbar, Footer, ...), which is exactly the leak this marker
+    // needs to catch: a regression that put EditMode.tsx's own JSX in the
+    // entry chunk would put every public component's own markers there too
+    // (they are already expected there, unconditionally), so only text
+    // unique to EditMode.tsx itself proves anything.
+    'EditMode.tsx': 'Loading live content…',
   };
 
   function assetsContaining(marker: string): string[] {
