@@ -14,9 +14,41 @@
 // directly and firing the same focus/blur events a real tap produces is
 // what this component actually listens for.
 import { readFileSync } from 'node:fs';
+import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import EditableText from '../EditableText';
+
+// A real caller (EditMode's buildBundle) re-renders with `value` set to
+// whatever `onCommit` just reported, in the SAME batched update as the
+// `isFocused` flip this component's own blur handler triggers -- React 18
+// batches a native event handler's own setState calls together with any
+// setState an `onCommit`/`onStaged`-style callback triggers synchronously
+// inside it, so by the time the resync effect (`useLayoutEffect` on
+// `[value, isFocused]`) actually runs, `value` already equals what
+// `handleBlur` just wrote to the DOM. A bare `<EditableText value="fixed
+// string" .../>` in a test has no such feedback loop -- `value` never
+// moves, so that SAME effect re-runs on the isFocused flip alone and
+// "corrects" the DOM back to the original, stale prop, which would falsely
+// blame this component for reverting an edit it never actually lost. This
+// harness is what closes that gap for any test that needs to look at DOM
+// state (not just what `onCommit` was called with) after a blur.
+function CommitHarness({
+  path,
+  initial,
+  onCommitSpy,
+}: {
+  path: string;
+  initial: string;
+  onCommitSpy: (path: string, next: string) => void;
+}) {
+  const [value, setValue] = useState(initial);
+  function handleCommit(p: string, next: string) {
+    onCommitSpy(p, next);
+    setValue(next);
+  }
+  return <EditableText path={path} value={value} onCommit={handleCommit} />;
+}
 
 describe('EditableText: uncontrolled, buffered on focus, committed on blur', () => {
   it('renders the initial value as plain text, with no commit until something actually changes', () => {
@@ -212,5 +244,282 @@ describe('EditableText: uncontrolled, buffered on focus, committed on blur', () 
 
       Object.defineProperty(window, 'innerWidth', { value: originalWidth, configurable: true, writable: true });
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Task 3 review Finding C1: "what she sees at /edit is not what will
+// publish." Measured in a real Chromium browser, not reasoned about: caret
+// at the end of a real field, Enter, type a second line -- the DOM shows two
+// lines (a `<br>` the browser inserted); the committed value silently runs
+// them together with no space; and after blur the `<br>` was STILL there,
+// because `.textContent` (used both to commit and to decide whether the DOM
+// needed correcting) could not see it. These tests build real DOM state
+// directly (real child nodes, a real `paste` event) rather than only ever
+// writing `el.textContent`, since a test that only ever sets `textContent`
+// can never produce the DOM shape (a `<br>`, a pasted element) this defect
+// depends on -- the exact gap the review named.
+describe('Task 3 review Finding C1: the DOM never permanently diverges from the committed value', () => {
+  // Mutation this guards: leaving `aria-multiline="true"` and Enter's
+  // default browser action alone -- confirmed red by reverting handleKeyDown
+  // to not intercept 'Enter' at all: fireEvent.keyDown's own return value
+  // (`element.dispatchEvent`'s per-spec result) is `true` -- not cancelled --
+  // the instant nothing calls `preventDefault()`.
+  it('Enter is blocked outright -- this field has no multi-line support', () => {
+    const onCommit = vi.fn();
+    render(<EditableText path="drinks.intro" value="Montalcino." onCommit={onCommit} />);
+    const el = screen.getByText('Montalcino.');
+    fireEvent.focus(el);
+    const notCancelled = fireEvent.keyDown(el, { key: 'Enter' });
+    expect(notCancelled).toBe(false); // false === preventDefault() was called
+    expect(onCommit).not.toHaveBeenCalled();
+  });
+
+  // The review's own exact repro, built as real DOM child nodes (a `<br>`
+  // contributes nothing to `.textContent`, exactly like Enter's default
+  // action would have produced before it was blocked above) -- proving the
+  // BLUR-TIME resync is what closes this, independent of whatever put the
+  // structure there in the first place (Enter is blocked now, but a future
+  // regression, a browser quirk, or an extension could still leave DOM
+  // structure `.textContent` can't see).
+  //
+  // Mutation this guards: reverting handleBlur's unconditional
+  // `ref.current.textContent = displayTextFor(next)` back to the old
+  // conditional write (skip when `ref.current.textContent === value`) --
+  // confirmed red: `.textContent` of the DOM built below is already exactly
+  // the string that gets committed, so the old guard's `!==` check is false
+  // and the DOM is never corrected, leaving the `<br>` elements in place
+  // after blur.
+  it('a <br> present in the DOM (Enter\'s own default action, were it not blocked) is stripped by blur, and the committed value matches what is left on screen', () => {
+    const onCommit = vi.fn();
+    render(<CommitHarness path="drinks.intro" initial="Montalcino." onCommitSpy={onCommit} />);
+    const el = screen.getByText('Montalcino.');
+    fireEvent.focus(el);
+    el.replaceChildren(
+      document.createTextNode('Montalcino.'),
+      document.createElement('br'),
+      document.createTextNode('Open till late.'),
+      document.createElement('br'),
+    );
+    fireEvent.blur(el);
+
+    expect(onCommit).toHaveBeenCalledWith('drinks.intro', 'Montalcino.Open till late.');
+    expect(el.querySelector('br')).toBeNull();
+    expect(el.textContent).toBe('Montalcino.Open till late.');
+  });
+
+  // The review's other exact repro: a real browser's default paste action
+  // leaves the clipboard's own HTML in the DOM (bold, slanted, a foreign
+  // color) while `.textContent` -- and therefore what gets committed -- was
+  // always plain. Built here as the real DOM state a paste would have left
+  // behind, proving blur alone (independent of the paste handler below)
+  // already guarantees the DOM she's looking at matches what was committed.
+  it('rich formatting present in the DOM (a real browser\'s own default paste action, were it not intercepted) is stripped to plain text by blur', () => {
+    const onCommit = vi.fn();
+    render(<CommitHarness path="press.intro" initial="Come" onCommitSpy={onCommit} />);
+    const el = screen.getByText('Come');
+    fireEvent.focus(el);
+    const bold = document.createElement('b');
+    bold.style.color = 'red';
+    // `<i>`, not assigned to a variable literally named after the CSS
+    // style it renders -- Tailwind's content scanner has no JS parser
+    // behind it and tokenizes an identifier the same way it tokenizes a
+    // className string (tailwind.config.js's own `blocklist` comment
+    // documents the identical hazard for `.blur()`); that word is also a
+    // real, no-argument Tailwind utility.
+    const slanted = document.createElement('i');
+    slanted.textContent = 'Visit';
+    bold.appendChild(slanted);
+    el.replaceChildren(document.createTextNode('Come '), bold);
+    fireEvent.blur(el);
+
+    expect(onCommit).toHaveBeenCalledWith('press.intro', 'Come Visit');
+    expect(el.querySelector('b, i')).toBeNull();
+    expect(el.textContent).toBe('Come Visit');
+  });
+
+  // This project's own contentEditable typing limits apply here too (see
+  // this file's own header comment): jsdom implements no default paste
+  // insertion at all, so this cannot prove what a real browser's own paste
+  // action would leave behind (the two tests above already cover that via
+  // direct DOM construction) -- it proves this component's OWN paste
+  // handler, which is what stops that from ever happening on a real browser
+  // in the first place: only `text/plain` is ever read off the clipboard and
+  // inserted, through the Selection/Range API, so no rich markup reaches the
+  // DOM even before blur.
+  //
+  // Mutation this guards: deleting the `onPaste` handler entirely --
+  // confirmed red: jsdom's own default action for a `paste` event is a
+  // no-op (it implements no clipboard-to-DOM insertion of its own), so
+  // without a handler nothing is inserted at all and `el.textContent` stays
+  // 'Come Visit' rather than becoming 'Come Visit!'.
+  it('pasting inserts plain text only, read from text/plain -- never the clipboard\'s own HTML', () => {
+    const onCommit = vi.fn();
+    render(<EditableText path="press.intro" value="Come Visit" onCommit={onCommit} />);
+    const el = screen.getByText('Come Visit');
+    fireEvent.focus(el);
+
+    const textNode = el.firstChild!;
+    const range = document.createRange();
+    range.setStart(textNode, textNode.textContent!.length);
+    range.collapse(true);
+    const selection = window.getSelection()!;
+    selection.removeAllRanges();
+    selection.addRange(range);
+
+    const clipboardData = {
+      getData: (type: string) => (type === 'text/plain' ? '!' : '<b>!</b>'),
+    };
+    fireEvent.paste(el, { clipboardData });
+
+    expect(el.querySelector('b')).toBeNull();
+    expect(el.textContent).toBe('Come Visit!');
+    fireEvent.blur(el);
+    expect(onCommit).toHaveBeenCalledWith('press.intro', 'Come Visit!');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Task 3 review Finding C2: an emptied field becomes untappable. Measured in
+// a real Chromium browser: select-all, Delete, tap away -- the now-completely-
+// empty <span> measures {w: 0, h: 0} (`getBoundingClientRect()`), so nothing
+// can tap it again and it is skipped by `elementFromPoint`; only a reload
+// recovers it, and the registry (`useRef`) discards every unpublished edit
+// in the session when that happens. jsdom computes no real layout at all
+// (every element's `getBoundingClientRect()` is always zero, by construction,
+// regardless of CSS), so the real fix -- `min-h-[1em] min-w-[1ch]` on an
+// `inline-block` -- can only be checked at the source level, the same
+// established pattern this file's own "tap, not hover" describe block above
+// already uses for an identical jsdom limitation. The ZWSP placeholder is the
+// other half, and IS directly observable: it guarantees the element never
+// has zero child nodes, which is checkable without any layout engine at all.
+describe('Task 3 review Finding C2: an emptied field stays tappable', () => {
+  // Mutation this guards: removing `inline-block`/`min-h-[1em]`/`min-w-[1ch]`
+  // from the className -- confirmed red against each token individually.
+  it('the className guarantees a minimum box even when the element is empty', () => {
+    const source = readFileSync('src/admin/EditableText.tsx', 'utf8');
+    const match = source.match(/className="([^"]*)"/);
+    expect(match).not.toBeNull();
+    const className = match![1];
+    expect(className).toMatch(/\binline-block\b/);
+    expect(className).toMatch(/\bmin-h-\[1em\]/);
+    expect(className).toMatch(/\bmin-w-\[1ch\]/);
+  });
+
+  // Uses CommitHarness (see its own comment above) because this checks the
+  // FINAL, SETTLED DOM state after blur -- the only state a real browser
+  // ever paints -- which needs `value` to genuinely become `''` the same way
+  // a real EditMode re-render would, not stay pinned to a static test prop.
+  //
+  // Mutation this guards: the resync effect's `const desired =
+  // displayTextFor(value)` reverted to a bare `value` -- confirmed red:
+  // `desired` becomes `''`, already equal to what handleBlur's own write
+  // left in the DOM, so the effect's own `!==` guard declines to install the
+  // placeholder and the span is left with zero child nodes -- the shape a
+  // real browser measures as {w: 0, h: 0}. (handleBlur's OWN
+  // `displayTextFor(next)` write matters independently for Finding C1 --
+  // see that describe block's mutation on the identical line -- but for
+  // C2 specifically, this resync effect is what a real render settles on,
+  // since React 18 batches `onCommit`'s own state update into the SAME pass
+  // as the `isFocused` flip, and only the settled result is ever painted.)
+  it('emptying a field and blurring leaves a non-collapsing placeholder in the DOM, while the committed value is genuinely empty', () => {
+    const onCommit = vi.fn();
+    render(<CommitHarness path="press.heading" initial="Read More" onCommitSpy={onCommit} />);
+    const el = screen.getByText('Read More');
+    fireEvent.focus(el);
+    el.textContent = '';
+    fireEvent.blur(el);
+
+    expect(onCommit).toHaveBeenCalledWith('press.heading', '');
+    expect(el.childNodes.length).toBeGreaterThan(0);
+    expect(el.textContent!.length).toBeGreaterThan(0);
+  });
+
+  // Mutation this guards: the same `desired = displayTextFor(value)` -> bare
+  // `value` change as the test above -- confirmed red: on mount, the span
+  // starts with no children at all, `desired` becomes `''`, already equal to
+  // that empty `.textContent`, so the effect's own `!==` guard never writes
+  // anything and the very first frame she'd ever see is a truly empty span.
+  it('mounting with an already-empty value renders a non-collapsing placeholder, not a truly empty span', () => {
+    render(<EditableText path="press.heading" value="" onCommit={vi.fn()} />);
+    const el = screen.getByRole('textbox');
+    expect(el.childNodes.length).toBeGreaterThan(0);
+  });
+
+  it('focusing an emptied field again allows typing a fresh value, with no leftover placeholder character committed', () => {
+    const onCommit = vi.fn();
+    render(<EditableText path="press.heading" value="" onCommit={onCommit} />);
+    const el = screen.getByRole('textbox');
+    fireEvent.focus(el);
+    el.textContent = 'New Heading';
+    fireEvent.blur(el);
+    expect(onCommit).toHaveBeenCalledWith('press.heading', 'New Heading');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Task 3 review Finding C5: the pre-edit snapshot is unpinned. Real failure
+// named by the review: she edits to "A", blurs, types the original text back
+// and blurs -- if `beforeEditRef` were never refreshed on the SECOND focus,
+// it would still hold the value this component mounted with, so typing the
+// original text back would compare equal to that stale snapshot and never
+// commit -- she cannot undo her own edit.
+describe('Task 3 review Finding C5: a second edit session starts from what was actually committed', () => {
+  // Mutation this guards: deleting `beforeEditRef.current = value;` from
+  // handleFocus -- confirmed red (see inline comment below for the exact
+  // trace).
+  it('editing back to the original value after an intermediate edit still commits, even though it equals the value at mount', () => {
+    const onCommit = vi.fn();
+    const { rerender } = render(<EditableText path="hero.logoName" value="Original" onCommit={onCommit} />);
+    let el = screen.getByText('Original');
+
+    fireEvent.focus(el);
+    el.textContent = 'A';
+    fireEvent.blur(el);
+    expect(onCommit).toHaveBeenNthCalledWith(1, 'hero.logoName', 'A');
+
+    // What a real commit does: the parent re-renders with the newly
+    // committed value as this component's next `value` prop (EditMode's own
+    // buildBundle re-derives `copy`, and therefore this prop, from the
+    // registry once `onCommit` -> registry.updateData bumps its version).
+    rerender(<EditableText path="hero.logoName" value="A" onCommit={onCommit} />);
+    el = screen.getByText('A');
+
+    // Without handleFocus refreshing beforeEditRef here, it would still read
+    // "Original" (its own value at mount, never updated) -- so typing
+    // "Original" back would compare equal to that stale snapshot and
+    // onCommit would never fire a second time.
+    fireEvent.focus(el);
+    el.textContent = 'Original';
+    fireEvent.blur(el);
+    expect(onCommit).toHaveBeenNthCalledWith(2, 'hero.logoName', 'Original');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Minor review finding: the U+00A0-PRESERVING half (copy.footer.followLabel
+// specifically) already had a dedicated test above; the U+00A0-INTRODUCING
+// half -- a real browser silently turning an ordinary trailing space into
+// `&nbsp;` inside contentEditable, on ANY field, not just followLabel -- did
+// not. This cannot be reproduced through simulated typing (jsdom implements
+// no such browser editing quirk -- see this file's own header comment), so
+// it is injected as real DOM state instead, proving this component commits
+// whatever real character is there verbatim regardless of which field it is
+// -- the browser's own quirk is not this component's bug to fix, but it must
+// not make the situation worse by stripping or altering the character
+// either.
+describe('a non-breaking space a real browser introduced (not just one already present in the value) survives verbatim, on an ordinary field', () => {
+  it('a trailing U+00A0 present in the DOM, on a field that never had one in its own value, is committed exactly as-is', () => {
+    const NBSP = '\u00a0';
+    const onCommit = vi.fn();
+    render(<EditableText path="hero.reserveButton" value="Reserve Now" onCommit={onCommit} />);
+    const el = screen.getByText('Reserve Now');
+    fireEvent.focus(el);
+    el.textContent = `Reserve Now${NBSP}`;
+    fireEvent.blur(el);
+
+    expect(onCommit).toHaveBeenCalledWith('hero.reserveButton', `Reserve Now${NBSP}`);
+    const committed = onCommit.mock.calls[0][1] as string;
+    expect(committed.charCodeAt(committed.length - 1)).toBe(0x00a0);
   });
 });

@@ -64,11 +64,22 @@ export const EDITABLE_TEXT_PATHS: readonly string[] = Object.keys(COPY_FIELDS).f
 // share nothing tsc can see, hence the bridge through `unknown` (its own
 // error message, without it, says exactly that: "neither type sufficiently
 // overlaps with the other").
+// Malformed-namespace guard, matching AdminApp.tsx's own `withLeaf` (its own
+// comment cites a prior review finding for the identical shape): `source[namespace]`
+// is trusted to be a real object below ONLY after this check passes.
+// `{ ...null, [leaf]: next }` is not a TypeScript error and does not throw --
+// object-spreading `null`/`undefined` is a silent no-op per the language
+// spec -- so without this guard, a `copy` value whose own namespace was
+// somehow not a plain object would silently REPLACE it with a fresh
+// single-leaf record instead of leaving it alone, the same landmine
+// `withLeaf`'s own comment already documents for the identical reason.
 export function setCopyText(copy: Copy, path: string, next: string): Copy {
   const [namespace, leaf] = path.split('.');
   const source = copy as unknown as Record<string, Record<string, unknown>>;
+  const section = source[namespace];
+  if (section === null || typeof section !== 'object') return copy;
   return {
     ...copy,
-    [namespace]: { ...source[namespace], [leaf]: next },
+    [namespace]: { ...section, [leaf]: next },
   } as unknown as Copy;
 }

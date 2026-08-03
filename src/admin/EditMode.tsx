@@ -177,7 +177,31 @@ function pick<K extends ContentFileName>(
 // instances on the page shares this one closure, and each must write its
 // own leaf back against the SAME snapshot of `copy` every sibling saw,
 // never a stale one captured on an earlier render.
-function buildBundle(entries: ContentEntries, registry: ContentRegistry): ContentBundle {
+//
+// Exported (not module-private) purely so
+// src/admin/__tests__/EditMode.test.tsx can pin Task 3 review Finding C4
+// directly: `commitText` below must call `registry.updateData`, never
+// `registry.register` (see ContentRegistry's own comment on why the second
+// overwrites a sha `markPublished` already refreshed and produces a false
+// conflict on the file's SECOND publish in a session). Every OTHER
+// EditMode.tsx behaviour stays proven black-box, through the rendered page,
+// the same way this file's other tests already do -- this is the one seam
+// that needs a real ContentRegistry double to observe, because Task 3 alone
+// has no way to make `register` and `updateData` produce a different
+// on-screen result to assert against (that only starts being true once
+// Task 5 wires up `markPublished`, i.e. exactly when nothing would be
+// watching if this weren't pinned first).
+//
+// This is the one export from this file that isn't the default component,
+// which is exactly what `react-refresh/only-export-components` warns about
+// (ContentContext.ts's own header comment hits the identical rule, for the
+// identical reason, and works around it by being a plain .ts module with no
+// component of its own at all -- not an option here, since this file's
+// default export genuinely is a component). Disabled deliberately, not
+// silenced blind: `buildBundle` is a pure function with no React state or
+// hooks of its own, so it has nothing for Fast Refresh to lose track of.
+// eslint-disable-next-line react-refresh/only-export-components
+export function buildBundle(entries: ContentEntries, registry: ContentRegistry): ContentBundle {
   const copy = pick(entries, 'copy.json', EMPTY_COPY);
 
   // Undefined until copy.json has actually loaded (registered at least

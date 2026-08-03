@@ -17,12 +17,17 @@ import { ContentReactContext, ContentProvider } from './context';
 // takes eslint from 2 warnings to 0, with byte-identical rendered output.
 //
 // Task 1 keeps both of these as plain string aliases -- distinct names only,
-// not distinct shapes. That is deliberate: Task 3 narrows EditableTextPath to
-// the real EDITABLE_TEXT_PATHS union and Task 4 gives EditableImagePath its
-// real scheme, and neither change needs to touch a single existing
-// `content.renderText('a.b', …)` / `content.renderImage(path, …)` call site,
-// because every literal already in use here is a value the narrower union
-// will still contain.
+// not distinct shapes. Task 3's own review left both this way, deliberately:
+// `EditableTextPath` could be narrowed to the real 31-entry EDITABLE_TEXT_PATHS
+// union (moving CopyLeafShape, fields.ts, into a type-only module would let
+// `keyof` do that with no bundle risk), but every real
+// `content.renderText('a.b', …)` call site already passes one of those exact
+// 31 literals, so the narrower type would catch nothing today that this
+// file's own boundary test (src/admin/__tests__/editable-paths.test.tsx)
+// doesn't already catch at runtime -- and a wider surface of call sites
+// (every migrated public component) would have to type-check against it for
+// no behavioural change. Left as `string` rather than done for its own sake;
+// revisit if a future task needs the compile-time guarantee specifically.
 //
 // ContentBundle now lives in ./types, ContentReactContext and
 // ContentProvider in ./context (Plan 5 Task 2, corrected by the post-review

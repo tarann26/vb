@@ -11,8 +11,9 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { readFileSync } from 'node:fs';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import EditMode from '../EditMode';
+import EditMode, { buildBundle } from '../EditMode';
 import { AppRoutes } from '../../App';
+import type { ContentEntries, ContentRegistry } from '../publish';
 import type { Article, Copy, Dish, Drink, Galleries, MenuFile, Section, SiteContent, StoryContent } from '../../content/types';
 // Real, committed files for galleries/story/menus/copy -- the same choice
 // AdminApp.test.tsx already makes (see that file's own comment): each has
@@ -798,5 +799,53 @@ describe('EditMode: an edit survives a 401 mid-session -- Task 2\'s per-file fet
     // Task 2's own guarantee alongside this one.
     expect(pressCalls).toBe(2);
     expect(await screen.findByText('Loaded After Re-Login')).toBeInTheDocument();
+  });
+});
+
+// Task 3 review Finding C4: this is Plan 4's handover item 1 in a new
+// costume -- "the registry owns the sha; a section must never pass one on
+// an edit" -- and it is the one EditMode.tsx behaviour every other test in
+// this file proves black-box, through the rendered page, that cannot be
+// proven that way here. `register` and `updateData` produce an IDENTICALLY
+// observable registry today (Task 3 alone has no `markPublished` caller yet
+// to make a stale, re-passed sha visibly diverge from a fresh one -- that
+// only arrives with Task 5's publish flow), so no on-screen assertion can
+// tell them apart yet; a stub ContentRegistry, built directly against
+// buildBundle (exported from EditMode.tsx for exactly this), is the only
+// seam that can. Pinned now, ahead of Task 5, per that task's own note: this
+// is what produced the false "Someone else published while you were editing"
+// on a file's SECOND publish in a session, and it only starts biting once
+// something is actually watching the sha `register` would clobber.
+describe('Task 3 review Finding C4: committing a text edit calls registry.updateData, never registry.register', () => {
+  it('editing and blurring an already-loaded copy.json leaf calls updateData exactly once, and never calls register at all', () => {
+    const entries: ContentEntries = {
+      'copy.json': { data: COPY, initial: COPY, sha: 'sha-copy' },
+    };
+    const register = vi.fn();
+    const updateData = vi.fn();
+    const registry: ContentRegistry = {
+      register,
+      updateData,
+      getEntries: () => entries,
+      version: 0,
+      markPublished: vi.fn(),
+    };
+
+    const bundle = buildBundle(entries, registry);
+    render(<>{bundle.renderText('hero.reserveButton', COPY.hero.reserveButton)}</>);
+
+    const field = screen.getByRole('textbox');
+    fireEvent.focus(field);
+    field.textContent = 'A Brand New Label';
+    fireEvent.blur(field);
+
+    expect(updateData).toHaveBeenCalledTimes(1);
+    const [file, nextCopy] = updateData.mock.calls[0] as [string, Copy];
+    expect(file).toBe('copy.json');
+    expect(nextCopy.hero.reserveButton).toBe('A Brand New Label');
+    // Mutation this guards: `commitText` calling
+    // `registry.register('copy.json', setCopyText(copy, path, next), entry.sha)`
+    // instead of `registry.updateData(...)` -- confirmed red.
+    expect(register).not.toHaveBeenCalled();
   });
 });

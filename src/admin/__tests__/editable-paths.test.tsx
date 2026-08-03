@@ -237,6 +237,49 @@ describe('setCopyText (src/admin/editable-paths.ts)', () => {
     setCopyText(REAL_COPY, 'footer.followLabel', 'Something Else');
     expect(JSON.stringify(REAL_COPY)).toBe(before);
   });
+
+  // Task 3 review Finding C3: every test above only ever exercises
+  // 'hero.reserveButton' -- a mutation that hardcodes `namespace = 'hero'`
+  // regardless of `path` (replacing the real `path.split('.')` destructure)
+  // stays green against every one of them, since 'hero' is already the
+  // right answer for all four. This is the one assertion in this describe
+  // block that actually depends on a NON-hero namespace, both for the input
+  // path AND for what gets checked in the OUTPUT -- :235 above already used
+  // a non-hero path ('footer.followLabel') but only ever checked that the
+  // INPUT was untouched, never that the output actually landed in `footer`,
+  // so it stayed green under the identical hardcoded-namespace mutation.
+  //
+  // Mutation this guards: `const [namespace, leaf] = path.split('.')`
+  // replaced with `const [, leaf] = path.split('.'); const namespace =
+  // 'hero';` -- confirmed red: `next.footer.followLabel` stays at its
+  // original committed value (the write silently lands in `next.hero`
+  // instead), and `next.hero` is no longer the same object reference as
+  // `REAL_COPY.hero`.
+  it('writes to the namespace the path actually names, not always "hero" -- proven with a non-hero path, checking the OUTPUT', () => {
+    const NBSP = '\u00a0';
+    const next = setCopyText(REAL_COPY, 'footer.followLabel', `Follow${NBSP}Everyone`);
+    expect(next.footer.followLabel).toBe(`Follow${NBSP}Everyone`);
+    expect(next.footer.hoursHeading).toBe(REAL_COPY.footer.hoursHeading);
+    expect(next.hero).toBe(REAL_COPY.hero);
+  });
+
+  // Minor review finding: setCopyText's near-twin AdminApp.tsx's `withLeaf`
+  // carries this same guard, cited there against a prior review finding for
+  // the identical shape -- `{ ...null, [leaf]: next }` is not a TypeScript
+  // error and does not throw (object-spreading null/undefined is a silent
+  // no-op per the language spec), so without this guard a `copy` value whose
+  // own namespace was somehow not a plain object would silently REPLACE it
+  // with a fresh single-leaf record instead of leaving it alone.
+  //
+  // Mutation this guards: deleting the `if (section === null || typeof
+  // section !== 'object') return copy;` guard -- confirmed red: without it,
+  // `next` is a freshly built object (`{...copy, hero: {reserveButton: 'X'}}`),
+  // never `=== malformed` by reference, so this `toBe` check fails.
+  it('a namespace that is not a real object is left untouched, not silently replaced -- matching AdminApp.tsx\'s withLeaf', () => {
+    const malformed = { ...REAL_COPY, hero: null } as unknown as Copy;
+    const next = setCopyText(malformed, 'hero.reserveButton', 'X');
+    expect(next).toBe(malformed);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -335,12 +378,20 @@ describe('site.name and site.tagline render with no edit affordance, even under 
     // scoped by the <footer> landmark instead.
     const h3 = container.querySelector('footer h3');
     const taglines = [h1.nextElementSibling, h3?.nextElementSibling ?? null];
-    expect(taglines).toHaveLength(2);
     taglines.forEach((tagline) => {
       expect(tagline).not.toBeNull();
       expect(tagline).toHaveTextContent(defaultBundle.site.tagline);
       expect(tagline).not.toHaveAttribute('contenteditable');
       expect(tagline!.closest('[contenteditable="true"]')).toBeNull();
+      // Minor review finding: the h1/site.name sibling test above also
+      // checks `.querySelector`, not just `.closest` -- an ANCESTOR-only
+      // check would stay green if `renderText` wrapped `site.tagline` in
+      // EditableText, since that wraps THIS element itself and would show
+      // up via `.closest`, but so would any editable DESCENDANT this
+      // element might someday contain; `.querySelector` is what a future
+      // regression that nests an editable span inside (rather than wrapping)
+      // this element would still need to trip.
+      expect(tagline!.querySelector('[contenteditable="true"]')).toBeNull();
     });
   });
 });
