@@ -1,17 +1,26 @@
 import React from 'react';
 import { Download } from 'lucide-react';
-import { drinks, menus, copy } from '../content';
+import { useContent } from '../content/ContentContext';
 import type { Drink } from '../content';
 
 const hasImage = (drink: Drink): drink is Drink & { image: string } => drink.image !== null;
 
-const CATEGORY_ORDER: { key: Drink['category']; heading: string }[] = [
-  { key: 'mocktail', heading: copy.drinks.mocktails },
-  { key: 'cocktail', heading: copy.drinks.cocktails },
-  { key: 'wine', heading: copy.drinks.wine },
-];
-
 const Drinks: React.FC = () => {
+  const content = useContent();
+  const { drinks, menus, copy } = content;
+
+  // Built inside the component body, not at module scope: a module-scope
+  // array literal would capture copy.drinks.mocktails/cocktails/wine once,
+  // at import time, and freeze all three category headings at their
+  // build-time values -- exactly the two-surfaces-disagree bug this plan
+  // calls out by name, since a dashboard edit to any of the three would
+  // never reach this component while a static import elsewhere would.
+  const CATEGORY_ORDER: { key: Drink['category']; heading: string; path: string }[] = [
+    { key: 'mocktail', heading: copy.drinks.mocktails, path: 'drinks.mocktails' },
+    { key: 'cocktail', heading: copy.drinks.cocktails, path: 'drinks.cocktails' },
+    { key: 'wine', heading: copy.drinks.wine, path: 'drinks.wine' },
+  ];
+
   return (
     <section id="drinks" className="py-20 bg-[#FFFDF8] relative overflow-hidden">
       {/* Sparkling bubble background */}
@@ -25,21 +34,21 @@ const Drinks: React.FC = () => {
       <div className="max-w-7xl mx-auto px-4 relative">
         <div className="text-center mb-16">
           <h2 className="font-['Montserrat'] text-4xl md:text-5xl font-bold text-[#222] mb-6">
-            {copy.drinks.heading}
+            {content.renderText('drinks.heading', copy.drinks.heading)}
           </h2>
           <p className="font-['Open_Sans'] text-gray-700 max-w-2xl mx-auto leading-relaxed">
-            {copy.drinks.intro}
+            {content.renderText('drinks.intro', copy.drinks.intro)}
           </p>
         </div>
 
-        {CATEGORY_ORDER.map(({ key, heading }) => {
+        {CATEGORY_ORDER.map(({ key, heading, path }) => {
           const items = drinks.filter((drink) => drink.category === key);
           if (items.length === 0) return null;
 
           return (
             <div key={key} className="mb-16 last:mb-0">
               <h3 className="font-['Montserrat'] text-2xl md:text-3xl font-bold text-[#222] mb-8 text-center">
-                {heading}
+                {content.renderText(path, heading)}
               </h3>
 
               {/* Drinks with photography: horizontal scroll of cards */}
@@ -56,12 +65,12 @@ const Drinks: React.FC = () => {
                           >
                             <div className="transform hover:scale-105 transition-all duration-300">
                               <div className="h-80 relative">
-                                <img
-                                  src={drink.image}
-                                  alt={drink.name}
-                                  className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                                  loading="lazy"
-                                />
+                                {content.renderImage(`drinks.${drink.id}.image`, {
+                                  src: drink.image,
+                                  alt: drink.name,
+                                  className: 'w-full h-full object-cover group-hover:scale-110 transition-transform duration-500',
+                                  loading: 'lazy',
+                                })}
                                 <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent"></div>
                               </div>
                               <div className="p-6 text-center">

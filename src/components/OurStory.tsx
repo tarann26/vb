@@ -1,8 +1,10 @@
-import React, { useEffect, useState } from 'react';
-import { story, galleries } from '../content';
+import React, { Fragment, useEffect, useState } from 'react';
+import { useContent } from '../content/ContentContext';
 import { usePrefersReducedMotion } from '../hooks/usePrefersReducedMotion';
 
 const OurStory: React.FC = () => {
+  const content = useContent();
+  const { story, galleries } = content;
   const [currentIndex, setCurrentIndex] = useState(0);
   const reduceMotion = usePrefersReducedMotion();
 
@@ -12,7 +14,7 @@ const OurStory: React.FC = () => {
       setCurrentIndex((prev) => (prev + 1) % galleries.ourStory.length);
     }, 3200); // 3.2 seconds
     return () => clearInterval(interval);
-  }, [reduceMotion]);
+  }, [reduceMotion, galleries.ourStory.length]);
 
   return (
     <section id = "our-story" className="py-20 bg-[#F9F9F9]">
@@ -37,12 +39,13 @@ const OurStory: React.FC = () => {
               style={{ transform: `translateX(-${currentIndex * 100}%)` }}
             >
               {galleries.ourStory.map((image, idx) => (
-                <img
-                  key={idx}
-                  src={image.src}
-                  alt={image.alt}
-                  className="w-full flex-shrink-0 object-cover h-[400px]"
-                />
+                <Fragment key={idx}>
+                  {content.renderImage(`galleries.ourStory.${idx}`, {
+                    src: image.src,
+                    alt: image.alt,
+                    className: 'w-full flex-shrink-0 object-cover h-[400px]',
+                  })}
+                </Fragment>
               ))}
             </div>
             {/* Torn paper effect */}

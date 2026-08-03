@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { site } from '../content';
+import { useContent } from '../content/ContentContext';
 import { toSchemaOpeningHours } from '../content/hours';
 
 // Mounted only by HomePage, which is what makes the canonical below correct.
@@ -18,6 +18,7 @@ import { toSchemaOpeningHours } from '../content/hours';
 // such restriction and so is returned normally. Both depend on the crawler
 // executing JavaScript, which is an accepted tradeoff for this site.
 const SeoHead: React.FC = () => {
+  const { site } = useContent();
   const canonical = site.seo.url;
 
   useEffect(() => {

@@ -1,35 +1,42 @@
 import React from 'react';
 import { ChefHat } from 'lucide-react';
-import { site, galleries, copy } from '../content';
-
-// `window.open` runs first, synchronously, as the very first statement --
-// nothing above it may ever throw or await, so the WhatsApp link opening
-// can never be delayed by (or made to depend on) the beacon below that
-// counts the tap for worker/index.ts's POST /api/wa. A counter that costs
-// her a customer is worse than no counter.
-//
-// The beacon itself is best-effort in two distinct ways, both guarded here:
-// `navigator.sendBeacon` is undefined in some environments (optional
-// chaining no-ops rather than throwing "not a function"), and even where
-// present, a call to it can itself throw -- neither may ever propagate out
-// of this handler. Fire-and-forget, not awaited: this is not `fetch`, so
-// there is nothing to wait on regardless, and awaiting it would reintroduce
-// exactly the delay this function exists to avoid.
-function openReservationWhatsApp(): void {
-  window.open(
-    `https://wa.me/${site.whatsapp.number}?text=${encodeURIComponent(site.whatsapp.prefilledMessage)}`,
-    '_blank',
-    'noopener',
-  );
-  try {
-    navigator.sendBeacon?.('/api/wa');
-  } catch {
-    // Never lets a broken beacon affect the click above -- see this
-    // function's own comment.
-  }
-}
+import { useContent } from '../content/ContentContext';
 
 const Hero: React.FC = () => {
+ const content = useContent();
+ const { site, galleries, copy } = content;
+
+ // `window.open` runs first, synchronously, as the very first statement --
+ // nothing above it may ever throw or await, so the WhatsApp link opening
+ // can never be delayed by (or made to depend on) the beacon below that
+ // counts the tap for worker/index.ts's POST /api/wa. A counter that costs
+ // her a customer is worse than no counter.
+ //
+ // The beacon itself is best-effort in two distinct ways, both guarded here:
+ // `navigator.sendBeacon` is undefined in some environments (optional
+ // chaining no-ops rather than throwing "not a function"), and even where
+ // present, a call to it can itself throw -- neither may ever propagate out
+ // of this handler. Fire-and-forget, not awaited: this is not `fetch`, so
+ // there is nothing to wait on regardless, and awaiting it would reintroduce
+ // exactly the delay this function exists to avoid.
+ //
+ // Defined inside the component body, not at module scope: it reads
+ // `site.whatsapp`, which must come from whatever content this render is
+ // showing (the live provider at /edit, the static default everywhere
+ // else) rather than a module-level import frozen at build time.
+ function openReservationWhatsApp(): void {
+   window.open(
+     `https://wa.me/${site.whatsapp.number}?text=${encodeURIComponent(site.whatsapp.prefilledMessage)}`,
+     '_blank',
+     'noopener',
+   );
+   try {
+     navigator.sendBeacon?.('/api/wa');
+   } catch {
+     // Never lets a broken beacon affect the click above -- see this
+     // function's own comment.
+   }
+ }
 
  return (
   <section className="min-h-screen bg-white relative flex items-center justify-center overflow-hidden">
@@ -43,11 +50,11 @@ const Hero: React.FC = () => {
      <div className="absolute inset-0 grid grid-cols-6 grid-rows-6 gap-1">
       {galleries.heroCollage.map(({ src, className }, i) => (
          <div key={i} className={`${className} relative overflow-hidden`}>
-           <img
-             src={src}
-             alt=""
-             className="w-full h-full object-cover opacity-90 hover:opacity-100 transition-opacity duration-500"
-           />
+           {content.renderImage(`galleries.heroCollage.${i}`, {
+             src,
+             alt: '',
+             className: 'w-full h-full object-cover opacity-90 hover:opacity-100 transition-opacity duration-500',
+           })}
          </div>
        ))}
      </div>
@@ -65,9 +72,9 @@ const Hero: React.FC = () => {
        {/* circular logo */}
        <div aria-hidden="true" className="w-40 h-40 mx-auto mb-8 flex items-center justify-center rounded-full border-4 border-[#6B8B59] bg-white shadow-lg">
          <div className="select-none">
-           <p className="font-['Parisienne'] text-3xl text-[#222]">{copy.hero.logoName}</p>
+           <p className="font-['Parisienne'] text-3xl text-[#222]">{content.renderText('hero.logoName', copy.hero.logoName)}</p>
            <p className="font-['Montserrat'] text-xs uppercase tracking-wider text-[#6B8B59]">
-             {copy.hero.logoTagline}
+             {content.renderText('hero.logoTagline', copy.hero.logoTagline)}
            </p>
          </div>
        </div>
@@ -88,7 +95,7 @@ const Hero: React.FC = () => {
 
        {/* reservation numbers */}
        <div className="mb-8">
-          <p className="font-['Montserrat'] text-xl font-bold tracking-wide uppercase text-[#6B8B59]">{copy.hero.reservationsLabel}</p>
+          <p className="font-['Montserrat'] text-xl font-bold tracking-wide uppercase text-[#6B8B59]">{content.renderText('hero.reservationsLabel', copy.hero.reservationsLabel)}</p>
           {site.phones.map((phone, i) => (
             <p key={i} className="font-['Open_Sans'] text-lg font-semibold text-[#222] whitespace-nowrap">{phone}</p>
           ))}
@@ -100,7 +107,7 @@ const Hero: React.FC = () => {
   onClick={openReservationWhatsApp}
   className="bg-[#6B8B59] hover:bg-[#5a7349] text-white px-8 py-4 rounded-lg font-semibold uppercase tracking-wide shadow-lg hover:shadow-xl transition-all duration-300"
 >
-  {copy.hero.reserveButton}
+  {content.renderText('hero.reserveButton', copy.hero.reserveButton)}
 </button>
 
      </div>

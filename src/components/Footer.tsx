@@ -1,9 +1,11 @@
 import React from 'react';
 import { Instagram, Linkedin, Clock, MapPin, Phone } from 'lucide-react';
-import { site, copy } from '../content';
+import { useContent } from '../content/ContentContext';
 import { formatDayRange, formatTimeRange } from '../content/hours';
 
 const Footer: React.FC = () => {
+  const content = useContent();
+  const { site, copy } = content;
   return (
     <footer className="bg-[#222] text-white py-16">
       <div className="mx-auto max-w-7xl px-4">
@@ -32,7 +34,7 @@ const Footer: React.FC = () => {
               <div className="space-y-2">
                 <div className="flex items-center space-x-3">
                   <Phone className="h-5 w-5 text-[#6B8B59]" />
-                  <p className="font-semibold text-gray-300">{copy.footer.reservationsLabel}</p>
+                  <p className="font-semibold text-gray-300">{content.renderText('footer.reservationsLabel', copy.footer.reservationsLabel)}</p>
                 </div>
                 <div className="ml-8 space-y-1">
                   {site.phones.map((phone) => (
@@ -48,7 +50,7 @@ const Footer: React.FC = () => {
             <div>
               <h4 className="mb-4 flex items-center space-x-2 font-['Montserrat'] text-lg font-semibold">
                 <Clock className="h-5 w-5 text-[#6B8B59]" />
-                <span>{copy.footer.hoursHeading}</span>
+                <span>{content.renderText('footer.hoursHeading', copy.footer.hoursHeading)}</span>
               </h4>
 
               <div className="grid grid-cols-2 gap-4 font-['Open_Sans'] text-sm">
@@ -63,7 +65,7 @@ const Footer: React.FC = () => {
 
             {/* Follow-us links */}
             <div className="flex items-center space-x-4">
-              <span className="font-['Montserrat'] font-semibold">{copy.footer.followLabel}</span>
+              <span className="font-['Montserrat'] font-semibold">{content.renderText('footer.followLabel', copy.footer.followLabel)}</span>
 
               {/* Instagram */}
               <a
@@ -95,7 +97,7 @@ const Footer: React.FC = () => {
         {/* ---------- Copyright ---------- */}
         <div className="mt-12 border-t border-gray-700 pt-8 text-center">
           <p className="font-['Open_Sans'] text-sm text-gray-400">
-            © {site.copyrightYear} {site.name} {site.tagline}{copy.footer.rightsSuffix}
+            © {site.copyrightYear} {site.name} {site.tagline}{content.renderText('footer.rightsSuffix', copy.footer.rightsSuffix)}
           </p>
         </div>
       </div>

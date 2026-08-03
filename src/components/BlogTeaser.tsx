@@ -1,10 +1,12 @@
 import React from 'react';
 import { ExternalLink, Calendar, ArrowRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { press, copy } from '../content';
+import { useContent } from '../content/ContentContext';
 
 const BlogTeaser: React.FC = () => {
   const navigate = useNavigate();
+  const content = useContent();
+  const { press, copy } = content;
 
   const articles = press.slice(0, 3);
 
@@ -13,10 +15,10 @@ const BlogTeaser: React.FC = () => {
       <div className="max-w-7xl mx-auto px-4">
         <div className="text-center mb-16">
           <h2 className="font-['Montserrat'] text-4xl md:text-5xl font-bold text-[#222] mb-6">
-            {copy.press.heading}
+            {content.renderText('press.heading', copy.press.heading)}
           </h2>
           <p className="font-['Open_Sans'] text-gray-700 max-w-2xl mx-auto leading-relaxed">
-            {copy.press.intro}
+            {content.renderText('press.intro', copy.press.intro)}
           </p>
         </div>
 
@@ -29,12 +31,12 @@ const BlogTeaser: React.FC = () => {
             >
               {/* Article Image */}
               <div className="h-48 relative overflow-hidden">
-                <img 
-                  src={article.image}
-                  alt={`${article.publication} article about Via Bianca`}
-                  className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                  loading="lazy"
-                />
+                {content.renderImage(`press.${article.id}.image`, {
+                  src: article.image,
+                  alt: `${article.publication} article about Via Bianca`,
+                  className: 'w-full h-full object-cover group-hover:scale-110 transition-transform duration-500',
+                  loading: 'lazy',
+                })}
                 <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent"></div>
                 
                 {/* Publication Badge */}
@@ -74,7 +76,7 @@ const BlogTeaser: React.FC = () => {
                     className="inline-flex items-center space-x-2 text-[#6B8B59] hover:text-[#5a7349] font-['Montserrat'] font-semibold text-sm uppercase tracking-wide transition-colors duration-300"
                     aria-label={`Read full article: ${article.title}`}
                   >
-                    <span>{copy.press.readArticle}</span>
+                    <span>{content.renderText('press.readArticle', copy.press.readArticle)}</span>
                     <ExternalLink className="w-4 h-4" />
                   </a>
                 )}
@@ -89,7 +91,7 @@ const BlogTeaser: React.FC = () => {
             onClick={() => navigate('/blogs')}
             className="inline-flex items-center space-x-2 bg-[#6B8B59] hover:bg-[#5a7349] text-white font-['Montserrat'] font-semibold px-8 py-4 rounded-lg transform hover:scale-105 hover:shadow-xl transition-all duration-300 uppercase tracking-wide"
           >
-            <span>{copy.press.viewAll}</span>
+            <span>{content.renderText('press.viewAll', copy.press.viewAll)}</span>
             <ArrowRight className="w-5 h-5" />
           </button>
         </div>

@@ -1,12 +1,14 @@
 import React from 'react';
-import { galleries, copy } from '../content';
+import { useContent } from '../content/ContentContext';
 
 const PlaceGallery: React.FC = () => {
+  const content = useContent();
+  const { galleries, copy } = content;
   return (
     <section id="gallery" className="py-20 bg-[#F9F9F9]">
       <div className="max-w-7xl mx-auto px-4">
         <h2 className="font-['Montserrat'] text-4xl md:text-5xl font-bold text-[#222] text-center mb-16">
-          {copy.atmosphere.heading}
+          {content.renderText('atmosphere.heading', copy.atmosphere.heading)}
         </h2>
 
         {/* Horizontal scroll container */}
@@ -19,12 +21,12 @@ const PlaceGallery: React.FC = () => {
                   className="flex-shrink-0 w-64 h-64 rounded-xl overflow-hidden shadow-md transition duration-300"
                 >
                   <div className="w-full h-full transform hover:scale-105 transition duration-300">
-                    <img
-                      src={image.src}
-                      alt={image.alt}
-                      className="w-full h-full object-cover"
-                      loading="lazy"
-                    />
+                    {content.renderImage(`galleries.atmosphere.${index}`, {
+                      src: image.src,
+                      alt: image.alt,
+                      className: 'w-full h-full object-cover',
+                      loading: 'lazy',
+                    })}
                   </div>
                 </div>
               ))}

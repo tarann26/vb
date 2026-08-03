@@ -1,8 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Instagram, Menu, X } from 'lucide-react';
-import { site, copy, sections } from '../content';
+import { useContent } from '../content/ContentContext';
 
 const Navbar: React.FC = () => {
+  const content = useContent();
+  const { site, copy, sections } = content;
   const [showNavbar, setShowNavbar] = useState(true);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const lastScrollY = useRef(0);
@@ -37,7 +39,7 @@ const Navbar: React.FC = () => {
     >
       {/* Logo */}
       <div className="text-3xl font-['Parisienne'] text-[#222]">
-        {copy.nav.wordmark}
+        {content.renderText('nav.wordmark', copy.nav.wordmark)}
       </div>
 
       {/* Links and social */}

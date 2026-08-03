@@ -1,13 +1,15 @@
 import React from 'react';
 import { Navigation } from 'lucide-react';
-import { copy } from '../content';
+import { useContent } from '../content/ContentContext';
 
 const VisitUs: React.FC = () => {
+  const content = useContent();
+  const { copy } = content;
   return (
     <section id= "visit" className="py-20 bg-[#F9F9F9]">
       <div className="max-w-4xl mx-auto px-4">
         <h2 className="font-['Montserrat'] text-4xl md:text-5xl font-bold text-[#222] text-center mb-16">
-          {copy.visit.heading}
+          {content.renderText('visit.heading', copy.visit.heading)}
         </h2>
         
         <div className="bg-white rounded-3xl shadow-2xl overflow-hidden">
@@ -34,7 +36,7 @@ const VisitUs: React.FC = () => {
             >
                 <button className="inline-flex items-center space-x-2 bg-[#6B8B59] hover:bg-[#5a7349] text-white font-['Montserrat'] font-bold px-8 py-4 rounded-lg transform hover:scale-105 hover:shadow-xl transition-all duration-300 uppercase tracking-wide">
                   <Navigation className="w-5 h-5" />
-                  <span>{copy.visit.navigateButton}</span>
+                  <span>{content.renderText('visit.navigateButton', copy.visit.navigateButton)}</span>
                 </button>
             </a>
           </div>

@@ -12,7 +12,8 @@ import Footer from './components/Footer';
 import BlogsPage from './components/BlogsPage';
 import SeoHead from './components/SeoHead';
 import NotFound from './components/NotFound';
-import { sections, type SectionId } from './content';
+import type { SectionId } from './content';
+import { useContent } from './content/ContentContext';
 
 // The only reference to admin code anywhere outside src/admin/ itself, and
 // it must stay that way -- src/test/bundle.test.ts fails the build the
@@ -36,6 +37,7 @@ const SECTION_COMPONENTS: Record<SectionId, () => ReactNode> = {
 };
 
 export function HomePage() {
+  const { sections } = useContent();
   return (
     <div className="min-h-screen">
       <SeoHead />

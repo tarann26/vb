@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { ExternalLink, Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { press, copy } from '../content';
+import { useContent } from '../content/ContentContext';
 
 const BlogsPage: React.FC = () => {
   const navigate = useNavigate();
+  const content = useContent();
+  const { press, copy } = content;
   const [currentPage, setCurrentPage] = useState(1);
   const articlesPerPage = 10;
 
@@ -25,16 +27,16 @@ const BlogsPage: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4 py-6">
           <div className="flex items-center justify-between">
             <div className="text-center flex-1">
-              <h1 className="font-['Parisienne'] text-4xl text-[#222] mb-2">{copy.blogsPage.title}</h1>
+              <h1 className="font-['Parisienne'] text-4xl text-[#222] mb-2">{content.renderText('blogsPage.title', copy.blogsPage.title)}</h1>
               <p className="font-['Montserrat'] text-[#6B8B59] text-sm uppercase tracking-wider">
-                {copy.blogsPage.subtitle}
+                {content.renderText('blogsPage.subtitle', copy.blogsPage.subtitle)}
               </p>
             </div>
             <button
               onClick={() => navigate('/')}
               className="text-[#6B8B59] hover:text-[#222] font-['Montserrat'] text-sm uppercase tracking-wide transition-colors duration-300"
             >
-              {copy.blogsPage.back}
+              {content.renderText('blogsPage.back', copy.blogsPage.back)}
             </button>
           </div>
         </div>
@@ -45,10 +47,10 @@ const BlogsPage: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4">
           <div className="text-center mb-16">
             <h2 className="font-['Montserrat'] text-4xl md:text-5xl font-bold text-[#222] mb-6">
-              {copy.blogsPage.heading}
+              {content.renderText('blogsPage.heading', copy.blogsPage.heading)}
             </h2>
             <p className="font-['Open_Sans'] text-gray-700 max-w-2xl mx-auto leading-relaxed">
-              {copy.blogsPage.intro}
+              {content.renderText('blogsPage.intro', copy.blogsPage.intro)}
             </p>
           </div>
 
@@ -61,12 +63,12 @@ const BlogsPage: React.FC = () => {
               >
                 {/* Article Image */}
                 <div className="h-48 relative overflow-hidden">
-                  <img 
-                    src={article.image}
-                    alt={`${article.publication} article about Via Bianca`}
-                    className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                    loading="lazy"
-                  />
+                  {content.renderImage(`press.${article.id}.image`, {
+                    src: article.image,
+                    alt: `${article.publication} article about Via Bianca`,
+                    className: 'w-full h-full object-cover group-hover:scale-110 transition-transform duration-500',
+                    loading: 'lazy',
+                  })}
                   <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent"></div>
                   
                   {/* Publication Badge */}
@@ -106,7 +108,7 @@ const BlogsPage: React.FC = () => {
                       className="inline-flex items-center space-x-2 text-[#6B8B59] hover:text-[#5a7349] font-['Montserrat'] font-semibold text-sm uppercase tracking-wide transition-colors duration-300"
                       aria-label={`Read full article: ${article.title}`}
                     >
-                      <span>{copy.press.readArticle}</span>
+                      <span>{content.renderText('press.readArticle', copy.press.readArticle)}</span>
                       <ExternalLink className="w-4 h-4" />
                     </a>
                   )}
@@ -124,7 +126,7 @@ const BlogsPage: React.FC = () => {
                 className="flex items-center space-x-2 px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-300"
               >
                 <ChevronLeft className="w-4 h-4" />
-                <span className="font-['Montserrat'] text-sm">{copy.blogsPage.previous}</span>
+                <span className="font-['Montserrat'] text-sm">{content.renderText('blogsPage.previous', copy.blogsPage.previous)}</span>
               </button>
 
               <div className="flex space-x-2">
@@ -148,7 +150,7 @@ const BlogsPage: React.FC = () => {
                 disabled={currentPage === totalPages}
                 className="flex items-center space-x-2 px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-300"
               >
-                <span className="font-['Montserrat'] text-sm">{copy.blogsPage.next}</span>
+                <span className="font-['Montserrat'] text-sm">{content.renderText('blogsPage.next', copy.blogsPage.next)}</span>
                 <ChevronRight className="w-4 h-4" />
               </button>
             </div>
