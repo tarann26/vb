@@ -135,9 +135,9 @@ describe('RecordForm: array-shaped file, exact-index attachment (the brief\'s ow
 
 describe('RecordForm: nothing is ever silently dropped', () => {
   it('renders a file-level problem (field === "") in a form-level banner', () => {
-    const problems: ValidationProblem[] = [{ field: '', message: 'dishes.json: the menu needs at least one dish' }];
+    const problems: ValidationProblem[] = [{ field: '', message: 'the menu needs at least one dish' }];
     render(<RecordForm fields={DISH_FIELDS} index={0} value={dish()} onChange={vi.fn()} problems={problems} />);
-    expect(screen.getByText('dishes.json: the menu needs at least one dish')).toBeInTheDocument();
+    expect(screen.getByText('the menu needs at least one dish')).toBeInTheDocument();
   });
 
   it('renders a problem naming THIS index but a field this descriptor does not declare, in the banner', () => {

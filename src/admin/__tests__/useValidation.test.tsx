@@ -72,7 +72,7 @@ describe('useValidation: validates the WHOLE file, never the one record she is e
       vi.advanceTimersByTime(400);
     });
     expect(result.current).toEqual(validateContent('dishes.json', []));
-    expect(result.current).toEqual([{ field: '', message: 'dishes.json: the menu needs at least one dish' }]);
+    expect(result.current).toEqual([{ field: '', message: 'the menu needs at least one dish' }]);
   });
 
   it('validates the whole array, not the single record it happens to contain -- the exact call validateContent cannot answer', () => {
@@ -81,7 +81,7 @@ describe('useValidation: validates the WHOLE file, never the one record she is e
     // file-shape complaint, not a per-field one.
     const oneDish = REAL_DISHES[0];
     expect(validateContent('dishes.json', oneDish)).toEqual([
-      { field: '', message: 'dishes.json: expected a list of dishes' },
+      { field: '', message: 'expected a list of dishes' },
     ]);
 
     const { result } = renderHook(({ data }: { data: Dish[] }) => useValidation('dishes.json', data), {

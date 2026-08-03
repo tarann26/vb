@@ -64,7 +64,7 @@ describe('problemsFor: array-shaped files ([i].key)', () => {
   });
 
   it('returns nothing for a field-level ("") problem', () => {
-    const problems = [problem('', 'dishes.json: the menu needs at least one dish')];
+    const problems = [problem('', 'the menu needs at least one dish')];
     expect(problemsFor(problems, 0, 'name')).toEqual([]);
   });
 });
@@ -103,7 +103,7 @@ describe('problemsFor: non-array files (bare key, or key[i]/key[i].sub)', () => 
   });
 
   it('returns nothing for a field-level ("") problem', () => {
-    const problems = [problem('', "press.json: articles must be sorted newest first")];
+    const problems = [problem('', "articles must be sorted newest first")];
     expect(problemsFor(problems, undefined, 'heading')).toEqual([]);
   });
 });

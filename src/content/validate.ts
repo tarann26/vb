@@ -111,9 +111,17 @@ function validateDish(raw: unknown, index: number): ValidationProblem[] {
   return problems;
 }
 
+// Minor review finding: this and the three sibling whole-file messages
+// below (validateDrinks, validatePress) used to lead with the raw JSON
+// filename ("dishes.json: the menu needs at least one dish") -- a detail
+// meaningful to a developer reading a diff, not to the owner looking at the
+// Dishes section of her own dashboard, which already tells her what she's
+// editing. Every OTHER validator's own file-level message (galleries.json's
+// "atmosphere needs at least one image", site.json's developer-owned-field
+// refusal) never had this prefix; these four were the odd ones out.
 function validateDishes(data: unknown): ValidationProblem[] {
-  if (!Array.isArray(data)) return [problem('', 'dishes.json: expected a list of dishes')];
-  if (data.length === 0) return [problem('', 'dishes.json: the menu needs at least one dish')];
+  if (!Array.isArray(data)) return [problem('', 'expected a list of dishes')];
+  if (data.length === 0) return [problem('', 'the menu needs at least one dish')];
   return data.flatMap((dish, i) => validateDish(dish, i));
 }
 
@@ -145,8 +153,8 @@ function validateDrink(raw: unknown, index: number): ValidationProblem[] {
 }
 
 function validateDrinks(data: unknown): ValidationProblem[] {
-  if (!Array.isArray(data)) return [problem('', 'drinks.json: expected a list of drinks')];
-  if (data.length === 0) return [problem('', 'drinks.json: the bar list needs at least one drink')];
+  if (!Array.isArray(data)) return [problem('', 'expected a list of drinks')];
+  if (data.length === 0) return [problem('', 'the bar list needs at least one drink')];
   return data.flatMap((drink, i) => validateDrink(drink, i));
 }
 
@@ -170,7 +178,17 @@ function validateArticle(raw: unknown, index: number): ValidationProblem[] {
   if (isBlank(article.date) || Number.isNaN(new Date(article.date as string).getTime())) {
     problems.push(problem(`[${index}].date`, `"${String(article.title ?? 'this article')}" needs a real date`));
   }
-  if (article.url !== null && (typeof article.url !== 'string' || !/^https?:\/\//.test(article.url))) {
+  // Minor review finding: ARTICLE_FIELDS.url's own help text (fields.ts)
+  // promises "leave empty if it has none" -- but Field.tsx's generic `text`
+  // case (shared by every plain text field, nullable or not) always writes
+  // an emptied input back as `''`, never `null`; this rule used to refuse
+  // that, so the one action the field's own help text told her she could
+  // take was the one thing it then rejected. `''` (or all-whitespace) is
+  // now treated exactly like `null` here -- both mean "no link" -- matching
+  // every real consumer already (BlogsPage/BlogTeaser/NewsPress all gate on
+  // `article.url && ...`, where `''` and `null` are equally falsy).
+  const hasNoUrl = article.url === null || (typeof article.url === 'string' && article.url.trim() === '');
+  if (!hasNoUrl && (typeof article.url !== 'string' || !/^https?:\/\//.test(article.url))) {
     problems.push(problem(`[${index}].url`, `"${String(article.title ?? 'this article')}" needs a real destination, or null`));
   }
   problems.push(...validatePublishAt(article.publishAt, index));
@@ -178,8 +196,8 @@ function validateArticle(raw: unknown, index: number): ValidationProblem[] {
 }
 
 function validatePress(data: unknown): ValidationProblem[] {
-  if (!Array.isArray(data)) return [problem('', 'press.json: expected a list of articles')];
-  if (data.length === 0) return [problem('', 'press.json: the press list needs at least one article')];
+  if (!Array.isArray(data)) return [problem('', 'expected a list of articles')];
+  if (data.length === 0) return [problem('', 'the press list needs at least one article')];
   const problems = data.flatMap((article, i) => validateArticle(article, i));
   // Only check ordering once every date has already been confirmed real --
   // an unparseable date would otherwise also read as "out of order",
@@ -188,7 +206,7 @@ function validatePress(data: unknown): ValidationProblem[] {
     const dates = (data as { date: string }[]).map((a) => new Date(a.date).getTime());
     const inOrder = dates.every((date, i) => i === 0 || dates[i - 1] >= date);
     if (!inOrder) {
-      problems.push(problem('', 'press.json: articles must be sorted newest first — reorder before publishing'));
+      problems.push(problem('', 'articles must be sorted newest first — reorder before publishing'));
     }
   }
   return problems;
@@ -310,7 +328,7 @@ function validateGalleries(data: unknown): ValidationProblem[] {
 
 function validateMenus(data: unknown): ValidationProblem[] {
   if (!Array.isArray(data) || data.length === 0) {
-    return [problem('', 'menus.json: the site needs at least one downloadable menu')];
+    return [problem('', 'the site needs at least one downloadable menu')];
   }
   return data.flatMap((raw, i) => {
     const menu = asRecord(raw);

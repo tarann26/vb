@@ -6,7 +6,7 @@
 //   key[i] / key[i].sub -- an array-valued field WITHIN a non-array file
 //                          (hours[0], paragraphs[1], heroCollage[2].src)
 //   ''              -- file-level rules with no single field to blame
-//                       ('press.json: articles must be sorted newest first')
+//                       ('articles must be sorted newest first')
 //
 // Only the first shape needs an index at all -- `index` is defined exactly
 // when this form renders one item of an array-shaped file, and undefined

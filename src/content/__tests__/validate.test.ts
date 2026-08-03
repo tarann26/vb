@@ -321,6 +321,34 @@ describe('validateContent: press rule (moved from press.test.tsx)', () => {
   });
 });
 
+// Minor review finding: ARTICLE_FIELDS.url's own help text (fields.ts)
+// promises "leave empty if it has none" -- but the field this dashboard
+// actually renders (Field.tsx's generic `text` case) writes an emptied
+// input back as `''`, never `null`, and this rule used to refuse that: the
+// one action the field's own help text told her she could take was the one
+// thing publishing then rejected.
+describe("validateContent: an article's url accepts blank the same as null (Minor fix)", () => {
+  it('accepts an EMPTY STRING url -- the one thing an emptied text field can actually produce', () => {
+    const problems = validateContent('press.json', [{ ...olderArticle, url: '' }]);
+    expect(problems).toEqual([]);
+  });
+
+  it('accepts a whitespace-only url the same way', () => {
+    const problems = validateContent('press.json', [{ ...olderArticle, url: '   ' }]);
+    expect(problems).toEqual([]);
+  });
+
+  it('still refuses a non-blank, non-http(s) url', () => {
+    const problems = validateContent('press.json', [{ ...olderArticle, url: 'not-a-url' }]);
+    expect(messages(problems)).toMatch(/real destination/i);
+  });
+
+  it('still accepts a real https url', () => {
+    const problems = validateContent('press.json', [{ ...olderArticle, url: 'https://example.com/piece' }]);
+    expect(problems).toEqual([]);
+  });
+});
+
 describe('validateContent: retired-drink rules (moved from Drinks.test.tsx)', () => {
   it('refuses a retired drink returning by name', () => {
     const problems = validateContent('drinks.json', [{ ...validDrink, name: 'Bicerin' }]);
@@ -490,6 +518,23 @@ describe('validateContent: site.json refuses a change to a developer-owned field
   it('does not refuse strapline, which head.test.ts does not pin into index.html', () => {
     const changed = { ...validSite, strapline: 'A brand new strapline' };
     expect(validateContent('site.json', changed, validSite)).toEqual([]);
+  });
+
+  // I4 review finding: every test above keeps every seo.* key present and
+  // only changes a VALUE, so none of them can tell "union the committed
+  // side's keys too" apart from "only ever check a key the WRITE still
+  // carries" -- narrowing validateSiteDeveloperOwnedFields' own `seoKeys`
+  // union to `Object.keys(proposedSeo)` alone leaves all of them green. A
+  // write that DROPS a key entirely is exactly as much a change as one that
+  // alters its value (that function's own comment says so), and this is the
+  // one test that actually depends on the union reaching the committed
+  // side.
+  it('refuses a DROPPED seo key, not only a changed one', () => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- `locale` is destructured only to OMIT it from the proposed value below
+    const { locale, ...seoWithoutLocale } = validSite.seo;
+    const changed = { ...validSite, seo: seoWithoutLocale };
+    const problems = validateContent('site.json', changed, validSite);
+    expect(messages(problems)).toMatch(/developer/i);
   });
 
   // Code review finding: `asRecord` maps anything that isn't a plain object

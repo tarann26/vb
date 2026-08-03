@@ -6,7 +6,7 @@
 // validateContent (src/content/validate.ts) cannot validate one record.
 // validateDishes/validateDrinks/validatePress all require an array --
 // `validateContent('dishes.json', oneDish)` returns
-// `[{ field: '', message: 'dishes.json: expected a list of dishes' }]`, not
+// `[{ field: '', message: 'expected a list of dishes' }]`, not
 // a per-field answer for that one dish -- and press.json's ordering rule and
 // drinks.json's retired-name rule are file-scoped by construction: neither
 // can be decided from one record in isolation. So the screen that owns a

@@ -91,5 +91,19 @@ export async function fetchContent<K extends ContentFileName>(name: K): Promise<
     throw new Error(`could not load ${name} (status ${response.status})`);
   }
   const body = (await response.json()) as { content: string; sha: string };
-  return { data: JSON.parse(body.content) as ContentTypeMap[K], sha: body.sha };
+  let data: ContentTypeMap[K];
+  try {
+    data = JSON.parse(body.content) as ContentTypeMap[K];
+  } catch {
+    // Minor review finding: a hand-edited content file with a syntax error
+    // used to reach every section's own "Could not load X: <message>" text
+    // as V8's OWN raw parser output ("Expected property name or '}' in
+    // JSON at position 2") -- accurate, but meaningless to a non-technical
+    // owner and gives her nothing to act on. Every other error this
+    // function raises is already a plain sentence a caller can show
+    // directly (see this function's own header comment); this is the one
+    // path that wasn't.
+    throw new Error(`it looks like ${name} was edited incorrectly -- ask your developer to check it`);
+  }
+  return { data, sha: body.sha };
 }

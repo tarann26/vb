@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
 // The artifact-level half of the two-part check described in
@@ -195,5 +195,27 @@ describe('dist/assets/ keeps admin code out of the entry chunk', () => {
       return markers.some((marker) => content.includes(marker));
     });
     expect(leaking).toEqual([]);
+  });
+});
+
+// I5 review finding: Tailwind emits ONE stylesheet for the whole app (this
+// project's own standing WATCH, recorded since Task 1) -- every admin-only
+// utility class ArraySection/RecordForm/PhotoField/GalleryList/etc. use
+// ships to every visitor, whether or not they ever open /edit/manage.
+// Measured across this plan's ten tasks: 27660 -> 30784 bytes (+3124,
+// +11.3%), and a rule-level diff (this project's own only reliable method --
+// see this file's own comment on why a text-marker check like the two above
+// can't be reused for CSS) traced every one of the 45 rules added since
+// Task 1 to a file under src/admin/. The ledger promised a ceiling at Task
+// 9 and never added one; this is that ceiling. Plans 5 and 6 add more admin
+// screens on top of this, so 31000 is a real budget, not a rounded-up
+// snapshot of today's number (30784) -- close enough that the very next
+// admin-only class landing without a matching removal will trip it.
+describe('dist/assets/ keeps the shared stylesheet under a byte ceiling', () => {
+  it.skipIf(!REQUIRED && !existsSync(DIST_ASSETS))('the entry CSS file stays under 31000 bytes', () => {
+    const cssFiles = readdirSync(DIST_ASSETS).filter((n) => /^index-.*\.css$/.test(n));
+    expect(cssFiles.length).toBeGreaterThan(0);
+    const size = statSync(join(DIST_ASSETS, cssFiles[0])).size;
+    expect(size).toBeLessThan(31000);
   });
 });

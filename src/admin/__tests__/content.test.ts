@@ -46,6 +46,29 @@ describe('fetchContent', () => {
     await expect(fetchContent('story.json')).rejects.toThrow(/404/);
   });
 
+  // Minor review finding: a hand-edited content file with a syntax error
+  // used to reach the section's own "Could not load X: <message>" text as
+  // V8's own raw parser output ("Unexpected token..."/"Expected property
+  // name..."), meaningless to a non-technical owner. A plain, actionable
+  // sentence naming the file, not the parser's own wording, is what she
+  // should read instead.
+  it('a malformed content file (real JSON syntax error) throws a plain, actionable message -- not the raw V8 parser text', async () => {
+    stubFetch(
+      async () =>
+        new Response(JSON.stringify({ content: '{ "a": }', sha: 'sha-3' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+    );
+    await expect(fetchContent('galleries.json')).rejects.toThrow(/galleries\.json/);
+    await expect(fetchContent('galleries.json')).rejects.toThrow(/edited incorrectly/i);
+    // The raw V8 wording must NOT reach her -- confirmed the malformed
+    // fixture above actually produces it, so this assertion is proving
+    // something real, not a string that could never have appeared anyway.
+    expect(() => JSON.parse('{ "a": }')).toThrow(/Unexpected token|Expected/);
+    await expect(fetchContent('galleries.json')).rejects.not.toThrow(/Unexpected token|position \d/i);
+  });
+
   // Every real file GET /api/content can serve, from the same list
   // worker/__tests__/github.test.ts's "still accepts the real content
   // file" block pins on the write side -- this is that list's read-side
