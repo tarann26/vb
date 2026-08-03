@@ -501,6 +501,8 @@ Two things block a one-line wiring, both real:
 
 Note Task 9's own `GALLERY_FIELDS.src` is a *different* descriptor from the `image` kind on dishes/drinks/press — reusing `PhotoField` there does not cover these.
 
+**Wire `PdfField` too, for the same reason.** Task 8 built it and, following Task 5's precedent, deliberately left it unconnected — and again no later task claimed it. Add a menus section to `AdminApp` that renders `PdfField` per entry in `menus.json`, so she can actually replace the printed menu. Replacing under the same name needs no JSON change; a new name does, and both must go in one publish so a rename cannot half-land.
+
 D10 makes prose editable and the spec's Plan-4 row says "list add/remove/reorder". An earlier draft had no task for either, though `validateContent` has rules for both.
 
 - [ ] **Step 1: `story.json`** — heading plus a paragraph list. The no-trailing-ellipsis rule lives in `validateContent`; surface it inline rather than at publish.
