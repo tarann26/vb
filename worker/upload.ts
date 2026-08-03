@@ -40,12 +40,18 @@ const CATEGORIES: Set<string> = new Set(UPLOAD_CATEGORIES);
 // own comment just below for why that's wrong for a photo, and why it's
 // exactly backwards for a menu (replacing the PDF under the same name must
 // NOT produce a new path, or every replacement would force a menus.json
-// edit). `/^[a-z0-9-]+$/` matches this repo's real menu ids today (food,
-// drinks) and is intentionally narrower than a filename ever needs to be:
-// nothing about a menu's name is ever an original upload filename the way
-// PhotoField's picked file names are, so there is no space, mixed case, or
-// punctuation a legitimate write here needs to admit.
-const MENU_NAME_PATTERN = /^[a-z0-9-]+$/;
+// edit). `/^[a-z0-9-]{1,64}$/` matches this repo's real menu ids today
+// (food, drinks) and is intentionally narrower than a filename ever needs
+// to be: nothing about a menu's name is ever an original upload filename
+// the way PhotoField's picked file names are, so there is no space, mixed
+// case, or punctuation a legitimate write here needs to admit. The `{1,64}`
+// bound (review finding: neither this nor MENU_PATH capped length before)
+// keeps a pathologically long name from reaching GitHub's own ~255-byte
+// path-component ceiling, where it would otherwise surface as an opaque
+// 502 ("could not build the tree (GitHub returned 422)") instead of this
+// route's own clear message -- matched by MENU_PATH's identical bound
+// (worker/github.ts) so the two stay in sync.
+const MENU_NAME_PATTERN = /^[a-z0-9-]{1,64}$/;
 
 // The canonical extension `uploadPath` writes for each detected format --
 // never the extension the uploaded filename happened to have (see that

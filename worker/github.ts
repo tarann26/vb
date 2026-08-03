@@ -63,18 +63,25 @@ const API = 'https://api.github.com';
 //     assets-source/<category>/<file> checked in the same suite except one
 //     apostrophe'd filename -- see that test's own comment for why that
 //     specific gap is recorded, not fixed. The third shape,
-//     `public/menus/[a-z0-9-]+\.pdf` (Plan 4 Task 8), is narrower still: a
-//     menu PDF's name is always a chosen slug (worker/upload.ts's own
-//     `MENU_NAME_PATTERN`), never an original filename or a hash the way a
-//     photo's is, so there is no space, mixed case, or punctuation a
-//     legitimate write here ever needs to admit.
+//     `public/menus/[a-z0-9-]{1,64}\.pdf` (Plan 4 Task 8), is narrower
+//     still: a menu PDF's name is always a chosen slug (worker/upload.ts's
+//     own `MENU_NAME_PATTERN`), never an original filename or a hash the
+//     way a photo's is, so there is no space, mixed case, or punctuation a
+//     legitimate write here ever needs to admit. The `{1,64}` bound
+//     (review finding) is a length cap CONTENT_PATH and ASSET_PATH do not
+//     share -- deliberately not retrofitted onto either of those two
+//     unchanged shapes, but worth adding here since a menu name is a fresh
+//     surface with no existing behavior to preserve: an unbounded name
+//     would otherwise reach GitHub's own ~255-byte path-component ceiling
+//     and surface as an opaque 502 instead of this route's own clear
+//     rejection message.
 //
 // Together they cover both attack shapes: traversal sequences, and
 // requests that simply name a path outside the three allowed shapes
 // without using `..` at all.
 const CONTENT_PATH = /^src\/content\/[a-z0-9-]+\.json$/;
 const ASSET_PATH = /^assets-source\/[a-z0-9_-]+\/[A-Za-z0-9 ._-]+$/;
-const MENU_PATH = /^public\/menus\/[a-z0-9-]+\.pdf$/;
+const MENU_PATH = /^public\/menus\/[a-z0-9-]{1,64}\.pdf$/;
 
 // Distinguishable from a generic Error so a caller (worker/index.ts's
 // handlePublish) can map a bad *path* to a 400 -- a client-side mistake --

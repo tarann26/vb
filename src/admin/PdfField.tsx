@@ -33,7 +33,7 @@ export interface PdfFieldProps {
   label: string;
   help?: string;
   // The stable file-name stem this PDF commits under (worker/upload.ts's
-  // `MENU_NAME_PATTERN`: lowercase letters, digits, hyphens only) --
+  // `MENU_NAME_PATTERN`: small letters, digits, hyphens only) --
   // supplied by the caller, not derived here, the same way PhotoField.tsx
   // takes `category` as a prop rather than inventing its own category
   // rule. Deliberately not re-validated client-side against that pattern:

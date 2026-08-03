@@ -641,7 +641,51 @@ describe('POST /api/upload', () => {
       },
     );
 
-    it('a missing file is 400 and makes no GitHub call', async () => {
+    // Review finding: MENU_NAME_PATTERN capped nothing before this -- a
+    // 5000-character name matched `/^[a-z0-9-]+$/` just fine, and GitHub's
+    // own ~255-byte path-component ceiling would then answer 422, mapped by
+    // this route's own catch block to an opaque 502 rather than a clear
+    // rejection. `{1,64}` closes that; these two tests pin the boundary
+    // itself, the same "at the cap is not rejected" shape
+    // PhotoField.test.tsx uses for its own size cap.
+    describe('the name length cap (review fix)', () => {
+      it('rejects a name over 64 characters, with the same owner-facing message', async () => {
+        env = freshEnv();
+        const cookie = await sessionCookie();
+        const tooLong = 'a'.repeat(65);
+        const response = await handleUpload(
+          uploadRequest({ category: 'menu', name: tooLong, file: { bytes: PDF_BYTES }, cookie }),
+          env,
+        );
+        expect(response.status).toBe(400);
+        const body = (await response.json()) as { message: string };
+        expect(body.message).toBe('A menu name can only use lowercase letters, numbers and hyphens.');
+        expect(stub.calls).toHaveLength(0);
+      });
+
+      it('a name AT exactly 64 characters is not rejected (the boundary is inclusive)', async () => {
+        env = freshEnv();
+        const cookie = await sessionCookie();
+        const atLimit = 'a'.repeat(64);
+        const response = await handleUpload(
+          uploadRequest({ category: 'menu', name: atLimit, file: { bytes: PDF_BYTES }, cookie, stage: '1' }),
+          env,
+        );
+        expect(response.status).toBe(200);
+        const body = (await response.json()) as { path: string };
+        expect(body.path).toBe(`public/menus/${atLimit}.pdf`);
+      });
+    });
+
+    // Pins the exact message, not just the status -- review finding: the
+    // status-only version of this test stays green even if the
+    // `fileField instanceof Blob` guard is replaced by an empty-bytes
+    // fallback, because an empty array also fails looksCompletePdf and
+    // still answers 400. Without the exact string, that regression would
+    // surface to her as "This PDF looks incomplete or corrupted" for a
+    // submission where she never picked a file at all -- sending her
+    // hunting for a bad file that doesn't exist.
+    it('a missing file is 400 with the exact "No PDF was attached" message, and makes no GitHub call', async () => {
       env = freshEnv();
       const cookie = await sessionCookie();
       const response = await handleUpload(
@@ -649,6 +693,8 @@ describe('POST /api/upload', () => {
         env,
       );
       expect(response.status).toBe(400);
+      const body = (await response.json()) as { message: string };
+      expect(body.message).toBe('No PDF was attached.');
       expect(stub.calls).toHaveLength(0);
     });
 

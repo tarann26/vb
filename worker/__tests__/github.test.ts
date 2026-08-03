@@ -204,10 +204,19 @@ describe('commitFiles', () => {
       'src/content/a\nb.json', // embedded newline
       'src/content/UPPER.json', // uppercase -- not a real content filename shape
       // Plan 4 Task 8's own traversal set, re-run with MENU_PATH in place --
-      // the exact four the task's brief names.
-      'public/menus/../../package.json', // caught by the `..` substring check
-      'public/menus/%2e%2e/x.pdf', // literal percent-encoding, not a real ".." -- caught by MENU_PATH's single-segment shape instead
-      'public/../public/menus/x.pdf', // caught by the `..` substring check
+      // the exact four the task's brief names. All four are caught by
+      // MENU_PATH's own single-segment, ".pdf"-only shape ALONE -- checked
+      // directly (removing the `..` substring check entirely and re-running
+      // just these four still refuses all four) -- so, unlike
+      // `assets-source/food/..` above, none of these four is a case where
+      // the `..` check is what's actually doing the work. An earlier
+      // version of this comment claimed the first and third depended on the
+      // `..` check; that was asserted, not verified, and was wrong the same
+      // way the module's own top comment once was for the `assets-source/`
+      // case above.
+      'public/menus/../../package.json', // fails MENU_PATH's regex outright (extra segments, wrong extension)
+      'public/menus/%2e%2e/x.pdf', // literal percent-encoding, not a real ".." -- also just fails MENU_PATH's regex (extra segment)
+      'public/../public/menus/x.pdf', // fails MENU_PATH's regex outright (does not start "public/menus/")
       'public/menus/a/b.pdf', // an extra path segment -- MENU_PATH allows none
     ])('refuses to write %s', async (path) => {
       await expect(commitFiles(NO_FETCH_ENV, [utf8(path, 'x')], 'm')).rejects.toThrow(/path/i);
@@ -218,6 +227,25 @@ describe('commitFiles', () => {
     // committed under public/menus/ today (see src/content/menus.json).
     it.each(['food-menu.pdf', 'drinks-menu.pdf'])('still accepts the real menu PDF path public/menus/%s', async (name) => {
       await commitFiles(envWith(stub), [{ path: `public/menus/${name}`, content: 'AA', encoding: 'base64' }], 'm');
+      expect(stub.calls.some((c) => c.method === 'POST' && c.url.endsWith('/git/blobs'))).toBe(true);
+    });
+
+    // MENU_PATH's own `{1,64}` bound (review finding) -- worker/upload.ts's
+    // MENU_NAME_PATTERN shares the identical bound, but that only stops a
+    // request built through PdfField/handleMenuUpload; commitFiles is the
+    // one function every publish path funnels through (see this describe
+    // block's own top comment), so the cap has to hold here independently
+    // too, not just at the one caller that happens to check it today.
+    it('refuses a menu PDF path whose name is over 64 characters', async () => {
+      const tooLong = 'a'.repeat(65);
+      await expect(
+        commitFiles(NO_FETCH_ENV, [utf8(`public/menus/${tooLong}.pdf`, 'x')], 'm'),
+      ).rejects.toThrow(/path/i);
+    });
+
+    it('accepts a menu PDF path whose name is exactly 64 characters (the boundary is inclusive)', async () => {
+      const atLimit = 'a'.repeat(64);
+      await commitFiles(envWith(stub), [{ path: `public/menus/${atLimit}.pdf`, content: 'AA', encoding: 'base64' }], 'm');
       expect(stub.calls.some((c) => c.method === 'POST' && c.url.endsWith('/git/blobs'))).toBe(true);
     });
 
