@@ -197,5 +197,38 @@ describe('Hero', () => {
       // already run by here, this fails.
       expect(openSpy).toHaveBeenCalledTimes(1);
     });
+
+    // Review finding: the previous test above proves window.open ran by a
+    // certain point in time, but says nothing about its position relative
+    // to the beacon call -- a handler that fires sendBeacon FIRST and
+    // window.open second, with the try/catch left in place, still passes
+    // every test above: the try/catch swallows whatever the beacon does,
+    // and window.open still eventually runs before the assertion. That
+    // reordering defeats the whole point of this button (see
+    // openReservationWhatsApp's own comment: "window.open runs first,
+    // synchronously, as the very first statement") with every other test
+    // in this file green. This test catches reordering specifically, by
+    // recording the actual sequence both mocks ran in rather than only
+    // whether each ran at all.
+    it('calls window.open before firing the beacon -- not merely both, but in that order', () => {
+      const order: string[] = [];
+      const openSpy = vi.spyOn(window, 'open').mockImplementation(() => {
+        order.push('open');
+        return null;
+      });
+      Object.defineProperty(window.navigator, 'sendBeacon', {
+        value: vi.fn(() => {
+          order.push('sendBeacon');
+          return true;
+        }),
+        configurable: true,
+      });
+
+      const { getByRole } = renderHero();
+      fireEvent.click(getByRole('button', { name: copy.hero.reserveButton }));
+
+      expect(openSpy).toHaveBeenCalledTimes(1);
+      expect(order).toEqual(['open', 'sendBeacon']);
+    });
   });
 });

@@ -553,9 +553,14 @@ async function handlePublish(request: Request, env: Env): Promise<Response> {
 //      immediately by (2); this cap is the backstop against inflating the
 //      number she makes decisions on and exhausting the day's KV write
 //      quota -- which would silently disable login rate limiting too --
-//      from any angle (2) doesn't cover, at the cost of the count itself
-//      simply stopping for the rest of the day rather than the route
-//      failing.
+//      from any angle (2) doesn't cover (chiefly: many distinct IPs, each
+//      individually under (2)'s per-IP limit), at the cost of the count
+//      itself simply stopping for the rest of the day rather than the
+//      route failing. This cap gates BOTH KV writes this route can make
+//      (wa:counts below, and (2)'s own recordHit call) -- an earlier
+//      version gated only wa:counts, leaving recordHit to fire
+//      unconditionally and defeating the cap's own purpose; see
+//      handleRecordWaTap's comment for exactly how that's now ordered.
 //
 // Storage is deliberately minimal: ONE KV key (WA_COUNTS_KV_KEY) holding
 // `{ "<IST date>": <count> }` and nothing else -- no IP, no user agent, no
@@ -582,13 +587,25 @@ async function handlePublish(request: Request, env: Env): Promise<Response> {
 const WA_ORIGIN = 'https://viabiancadelhi.com';
 const WA_RATE_MAX = 20;
 const WA_RATE_WINDOW_SECONDS = 60;
-// Comfortably under KV Free's 1,000 writes/day cap for the WHOLE
-// namespace, not just this key -- leaving headroom for every other write
-// this Worker makes against the same KV binding (login's own rate-limit
-// bookkeeping chief among them; see the file comment above). Exported so
-// count.test.ts can seed a fake KV at exactly this value rather than
-// looping a few hundred real requests to reach it.
-export const WA_DAILY_CAP = 500;
+// A budget on ACCEPTED taps/day, not on requests -- and, because recordHit
+// below is only ever called for a request that lands within this budget
+// (see handleRecordWaTap), every accepted tap costs exactly two KV writes:
+// one to wa:counts, one to the rate limiter's own wa:<ip> key. Halved from
+// an earlier 500 for exactly that reason -- a security review found that
+// recordHit used to run unconditionally, BEFORE this cap was checked, so a
+// flood from many distinct IPs kept costing real KV writes (to wa:<ip>)
+// even once wa:counts itself had stopped moving; the cap bounded only half
+// of what this route writes. With both writes now gated behind the same
+// check, this route's worst-case total is 2 * WA_DAILY_CAP -- 500, at 250 --
+// which is the same total-write ceiling the original 500 (assuming, wrongly,
+// one write per tap) was already trying to hold this route to, comfortably
+// under KV Free's 1,000-writes/day cap for the WHOLE namespace and leaving
+// headroom for every other write this Worker makes against the same KV
+// binding (login's own rate-limit bookkeeping chief among them; see the
+// file comment above). Exported so count.test.ts can seed a fake KV at
+// exactly this value rather than looping hundreds of real requests to
+// reach it.
+export const WA_DAILY_CAP = 250;
 const WA_COUNTS_KV_KEY = 'wa:counts';
 
 function waRateKeyFor(ip: string): string {
@@ -628,22 +645,48 @@ async function handleRecordWaTap(request: Request, env: Env): Promise<Response> 
   // Same CF-Connecting-IP-based limiter login uses (worker/ratelimit.ts),
   // with this route's own key prefix and its own, more generous policy --
   // see the file comment above for why the two routes' thresholds differ.
+  // A CHECK ONLY here -- checkRate never writes. Recording the hit
+  // (recordHit, a KV write) is deferred below, until AFTER the daily
+  // budget has also been confirmed to have room, so a request this route
+  // is about to refuse for being over budget never costs a write either.
   const ip = request.headers.get('CF-Connecting-IP') ?? 'unknown';
   if (!(await checkRate(env.KV, waRateKeyFor(ip), WA_RATE_MAX))) {
     return json(429, { message: 'Too many requests.' });
   }
-  await recordHit(env.KV, waRateKeyFor(ip), WA_RATE_WINDOW_SECONDS);
 
   const today = todayInKolkata();
   const counts = await readWaCounts(env.KV);
   const todayCount = counts[today] ?? 0;
-  // Stops writing once the daily cap is reached -- see the file comment
-  // above for the KV Free quota this protects. The response is 204 either
-  // way: sendBeacon never reads it, and a uniform response gives a caller
-  // probing this endpoint no signal about whether the cap has been hit.
-  if (todayCount < WA_DAILY_CAP) {
-    counts[today] = todayCount + 1;
+
+  // Stops writing once the daily cap is reached -- ALL of this route's
+  // writes, not just wa:counts. A security review found the previous
+  // version called recordHit unconditionally, before this check ran, so a
+  // flood spread across enough distinct IPs (each individually under the
+  // per-IP limit) kept costing a real KV write per request even after
+  // wa:counts itself had stopped moving -- defeating the cap's entire
+  // purpose of bounding this route's total write volume. Nothing below
+  // this line runs once the budget for today is spent; the response is
+  // still 204 either way (sendBeacon never reads it, and a uniform
+  // response gives a caller probing this endpoint no signal about whether
+  // the cap has been hit).
+  if (todayCount >= WA_DAILY_CAP) {
+    return new Response(null, { status: 204 });
+  }
+
+  await recordHit(env.KV, waRateKeyFor(ip), WA_RATE_WINDOW_SECONDS);
+  counts[today] = todayCount + 1;
+  try {
     await env.KV.put(WA_COUNTS_KV_KEY, JSON.stringify(counts));
+  } catch {
+    // KV Free also throttles to 1 write/sec against the SAME key, and
+    // wa:counts (unlike wa:<ip>) is shared across every visitor -- two
+    // accepted taps landing in the same second could race here. Losing an
+    // increment (or this put throwing) cannot cost her a customer: the
+    // click and window.open already happened before this beacon was even
+    // sent, and sendBeacon never reads this response either way. The
+    // count itself is already documented as a best-effort lower bound
+    // (see the file comment above), so a rare dropped write is exactly
+    // the kind of gap that caveat exists to cover, not a new failure mode.
   }
 
   return new Response(null, { status: 204 });

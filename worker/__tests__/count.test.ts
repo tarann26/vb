@@ -22,11 +22,19 @@ const SITE_ORIGIN = 'https://viabiancadelhi.com';
 // vitest.config.ts's comment), only a type-only ambient declaration.
 class FakeKV {
   store = new Map<string, string>();
+  // Every put() call, in order -- used by the daily-cap tests below to prove
+  // not just what wa:counts ends up holding, but how many actual KV writes
+  // (against ANY key -- including the rate limiter's own wa:<ip> keys) the
+  // route made. `store.size` or a single key's final value can't distinguish
+  // "one write happened" from "zero writes happened, then a coincidentally
+  // identical value" -- this can.
+  puts: { key: string; value: string }[] = [];
   async get(key: string): Promise<string | null> {
     return this.store.get(key) ?? null;
   }
   async put(key: string, value: string): Promise<void> {
     this.store.set(key, value);
+    this.puts.push({ key, value });
   }
   async delete(key: string): Promise<void> {
     this.store.delete(key);
@@ -181,6 +189,30 @@ describe('POST /api/wa', () => {
     expect(second.status).toBe(204);
     const storedAfterSecond = JSON.parse(kv.store.get('wa:counts') as string) as Record<string, number>;
     expect(storedAfterSecond[today]).toBe(WA_DAILY_CAP);
+  });
+
+  // Review finding: the daily cap used to gate only the wa:counts write.
+  // recordHit (the rate limiter's own KV write, to wa:<ip>) ran
+  // unconditionally, before the cap was ever checked -- so 50 distinct IPs,
+  // each never individually rate-limited, still cost 50 real KV writes even
+  // with the counter already sitting at the cap. That defeats the cap's
+  // entire purpose: bounding this route's total write volume against KV
+  // Free's shared, namespace-wide 1,000-writes/day budget (see the file
+  // comment in worker/index.ts). This asserts on the actual number of
+  // put() calls FakeKV recorded, not just on what wa:counts ends up
+  // holding (the previous test's own assertion) -- that distinction is
+  // exactly what let the bug ship with a green suite.
+  it('the daily cap bounds every write this route makes, not just wa:counts', async () => {
+    const today = todayInKolkata();
+    await kv.put('wa:counts', JSON.stringify({ [today]: WA_DAILY_CAP }));
+    const putsBeforeFlood = kv.puts.length;
+
+    for (let i = 0; i < 50; i++) {
+      const response = await worker.fetch(postWa({ ip: `cap-flood-${i}` }), env);
+      expect(response.status).toBe(204);
+    }
+
+    expect(kv.puts.length).toBe(putsBeforeFlood);
   });
 
   it('a day under the cap still counts normally -- the cap does not block everything', async () => {
