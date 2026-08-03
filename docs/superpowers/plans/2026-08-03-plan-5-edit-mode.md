@@ -59,7 +59,9 @@ Components call them at the JSX site. `Copy` stays `string` everywhere, tsc keep
 
 Checked against every rendered component, because an earlier draft got this wrong.
 
-**Covered:** the non-attribute leaves of `copy.json` that are rendered on a page edit mode serves, and every `<img>`.
+**Covered:** the non-attribute leaves of `copy.json` **that have a `COPY_FIELDS` entry** and are rendered on a page edit mode serves, plus every `<img>` **whose `src` comes from content**.
+
+Both qualifiers are load-bearing and an earlier draft omitted both. Without the first, this rule demands wrapping `copy.nav.links[*].label`, which the exclusion note below correctly excludes — an affordance no publish path can honour, since `CopyLeafShape` drops `nav.links` as an array and no nav-link editor exists in `src/admin/`. Without the second, it demands wrapping `Hero.tsx:44`'s `/hero/brick.webp`, a hardcoded decorative asset with no content leaf behind it: an editor there would edit nothing. Wrap exactly the 31 `COPY_FIELDS` keys that are not attribute-bound, and exactly the seven content-sourced image sites.
 
 **Excluded, and why — three different reasons, not one:**
 
@@ -132,7 +134,7 @@ export function useContent(): ContentBundle { return useContext(ContentContext) 
 
 `import { copy } from '../content'` → `const { copy } = useContent();` in the component body. Then wrap editable sites: `{copy.atmosphere.heading}` → `{content.renderText('atmosphere.heading', copy.atmosphere.heading)}`, and each `<img …>` → `{content.renderImage(path, {…})}`.
 
-**`Drinks.tsx:8-12` is the one module-scope content read in the whole rendered tree.** `CATEGORY_ORDER` captures `copy.drinks.mocktails/cocktails/wine` at module load. Move it inside the component body. Leaving it would freeze three visible headings at build-time values in edit mode while the dashboard edits the same three leaves — the two surfaces would disagree.
+**Two module-scope content reads exist in the rendered tree, and they fail differently.** `Drinks.tsx:8-12`'s `CATEGORY_ORDER` *eagerly* captures `copy.drinks.mocktails/cocktails/wine` into a frozen array at import. `Hero.tsx`'s `openReservationWhatsApp` *defers* its read of `site.whatsapp` to click time, but still through a module binding, so it bypasses the provider just the same. Move both into the component body. An earlier draft of this plan named only the first and called it "the one" — the implementer found the second and was right to move it. Leaving `CATEGORY_ORDER` would freeze three visible headings at build-time values while the dashboard edits those same three leaves.
 
 **`SeoHead` migrates normally and is simply never editable.** It has no module-scope read; all nine values are interpolated into `JSON.stringify`, so there is no text child to wrap.
 
@@ -203,7 +205,9 @@ git commit -m "feat(admin): render the real homepage at /edit with live content"
 
 - [ ] **Step 1: The path list, derived and then narrowed**
 
-Start from Plan 4 Task 2's `COPY_FIELDS` flat map — do not re-derive it. Remove the leaves that are attribute-only, and exclude `site.*` entirely per the table above.
+Start from Plan 4 Task 2's `COPY_FIELDS` flat map — do not re-derive it. Remove the leaves that are attribute-only, and exclude `site.*` entirely per the table above. That leaves 31 paths, which is exactly what Task 1 wrapped.
+
+**A path is not a DOM identity.** `press.readArticle` renders up to ten times on `/blogs` (`BlogsPage.tsx:111`, inside the article map) and up to three on the homepage (`BlogTeaser.tsx:79`) — one leaf, N sites, all correct. Key a React `key`, a DOM `id` or an `aria-` reference on the path alone and you get N duplicate ids on one page, and clicking any "Read article" opens the editor over the first. Compose the path with the site's own index.
 
 - [ ] **Step 2: The boundary test, which an earlier draft got wrong twice**
 
@@ -258,6 +262,8 @@ git commit -m "feat(admin): edit visible text in place on the real page"
 Lift `uploadStaged` plus the HEIC, size and progress pipeline into `src/admin/upload-photo.ts`, leaving `PhotoField` as its first consumer **with its tests unedited**. If one needs editing, you changed behaviour rather than location.
 
 The collector hook is `useStagedFiles` (`staged.ts:65`) — there is no `useStaged`.
+
+**Know before you start: the thirty gallery paths Task 1 emitted are positional.** `Hero.tsx:53` `galleries.heroCollage.${i}`, `OurStory.tsx:43` `.ourStory.${idx}`, `PlaceGallery.tsx:24` `.atmosphere.${index}`. Entries in `galleries.json` are `{src, alt}` or `{src, className}` with **no `id` field**, so the index is the only handle the content shape offers — and deleting one photo shifts the path of every photo after it. `dishes`, `drinks` and `press` are unaffected: those paths key on `.id`, which is unique and contains no dots. This is Plan 4's handover item 2 in a second costume, so treat it as an input to Step 2's key decision rather than discovering it there.
 
 - [ ] **Step 2: Key staged bytes on `useRowIds`, not on the content path**
 
