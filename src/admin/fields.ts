@@ -43,7 +43,19 @@ type Kind<V> =
   [V] extends [boolean] ? 'toggle' :
   [V] extends [number] ? 'number' : never;
 
-export type FieldSpec<V = unknown> = { label: string; kind: Kind<V>; options?: readonly string[]; help?: string };
+// A plain `options?: readonly string[]` on a single object type would let
+// `kind: 'select'` compile with no `options` at all, or with a value that
+// isn't even a member of `V` (e.g. `Drink['category']`'s
+// `'mocktail' | 'cocktail' | 'wine'`) -- `options` was never parameterized
+// by `V`, so nothing tied it to what `assertDrinkCategory`
+// (src/content/guards.ts) actually accepts. Splitting into a discriminated
+// union on `kind` fixes both: the 'select' branch requires `options:
+// readonly V[]`, so a bogus entry or a missing `options` is a compile error,
+// and the non-'select' branch has no `options` property to accidentally
+// attach one to.
+export type FieldSpec<V = unknown> =
+  | { label: string; kind: Exclude<Kind<V>, 'select'>; help?: string }
+  | { label: string; kind: Extract<Kind<V>, 'select'>; options: readonly V[]; help?: string };
 
 // `Required<T>` makes an optional content field (e.g. `publishAt`) required
 // *in the descriptor* -- the dashboard still needs a label and a kind for a
@@ -178,18 +190,30 @@ const _incomplete: FieldsOf<Dish> = { id: DISH_FIELDS.id }; // eslint-disable-li
 //
 // CopyLeafShape/SiteLeafShape are a hand-maintained flat *projection* of
 // Copy/SiteContent's leaf strings, not something derived from those types by
-// the compiler -- a fully generic dotted-path deriver would have to already
-// know which fields to skip (Copy.nav.links is a NavLink[], SiteContent.hours
-// is a Hours[]; neither is a single value any FieldSpec kind can describe,
-// since Kind<V> above has no branch that produces one for an array of
-// objects), at which point it is no safer than this hand-written list. What
-// keeps THIS list honest instead is `fields.test.ts`, which walks the real,
-// committed copy.json/site.json and asserts every leaf it finds has a
-// matching entry here, and that no entry here is orphaned. That coupling to
-// real content is deliberate: copy.json's and site.json's *shape* (which
-// fields exist) is developer-owned even though their *values* are the
-// owner's -- the same reasoning src/content/__tests__/shape.test.ts already
-// applies to dishes/drinks/press.
+// the compiler. A recursive template-literal type gated by the same Kind<V>
+// test above (only descend into a nested object; stop and exclude a field
+// whose value produces no Kind<V> at all, which is exactly what happens for
+// Copy.nav.links and SiteContent.hours) could derive the dotted-path union
+// generically instead of naming every leaf by hand. That route was
+// considered and not pursued -- not because it's unsafe, but because a
+// recursive template-literal type's compiler errors quote the whole
+// expanded union at whatever recursion depth failed, which reads far worse
+// than the one-line error a flat, hand-named type gives (`Property
+// 'seo.locale' is missing in type '{...}'`). This codebase already prefers
+// that trade in a structurally similar spot: SECTION_ID_SET
+// (src/content/guards.ts) is a hand-written `Record<SectionId, true>`, not a
+// derivation, for the same legible-errors-over-cleverness reason. Either
+// way, what actually keeps this list honest is `fields.test.ts`, which
+// walks the real, committed
+// copy.json/site.json and asserts every leaf it finds has a matching entry
+// here, and that no entry here is orphaned -- a runtime check a type-level
+// derivation would still need, since Copy.nav.links being excluded from the
+// *type* says nothing about whether copy.json's *values* still match every
+// leaf this map claims to cover. That coupling to real content is
+// deliberate: copy.json's and site.json's *shape* (which fields exist) is
+// developer-owned even though their *values* are the owner's -- the same
+// reasoning src/content/__tests__/shape.test.ts already applies to
+// dishes/drinks/press.
 
 interface CopyLeafShape {
   'nav.wordmark': string;

@@ -50,11 +50,24 @@ describe('every descriptor has a non-empty label and a real kind', () => {
 
 describe('DISH_FIELDS.category-equivalent controlled vocabularies carry their options', () => {
   it('DRINK_FIELDS.category lists the same three categories assertDrinkCategory accepts', () => {
-    // Hand-checked against src/content/guards.ts's assertDrinkCategory
-    // rather than imported from it, so this test does not silently pass by
+    // FieldSpec<V>'s discriminated union means a select field's declared
+    // type only exposes `options` once `kind === 'select'` is proven --
+    // `.options` isn't reachable off the union directly, the same narrowing
+    // any renderer consuming this descriptor would need. That union already
+    // makes a typo'd or bogus category a compile-time error in fields.ts
+    // itself (options: readonly V[], V being Drink['category']'s literal
+    // union). What tsc cannot catch is the reverse -- Drink['category']
+    // gaining a fourth member that this options list never mentions --
+    // since `readonly V[]` only requires every listed option be a real V,
+    // not that every V be listed. This runtime check is what closes that
+    // gap, hand-checked against assertDrinkCategory (src/content/guards.ts)
+    // rather than imported from it, so it does not silently pass by
     // comparing the same list to itself if that function's own list ever
     // drifted.
-    expect(DRINK_FIELDS.category.options).toEqual(['mocktail', 'cocktail', 'wine']);
+    const categorySpec = DRINK_FIELDS.category;
+    expect(categorySpec.kind).toBe('select');
+    if (categorySpec.kind !== 'select') throw new Error('unreachable -- asserted above');
+    expect(categorySpec.options).toEqual(['mocktail', 'cocktail', 'wine']);
   });
 });
 
@@ -75,16 +88,81 @@ describe('the two field.help strings task-2-brief.md calls out by name', () => {
   });
 });
 
-describe("SITE_FIELDS marks name, tagline and every seo.* field read-only", () => {
-  it.each(['name', 'tagline', 'seo.title', 'seo.description', 'seo.keywords', 'seo.ogImage', 'seo.url', 'seo.locale'] as const)(
-    '%s is kind: readonly',
-    (key) => {
-      expect(SITE_FIELDS[key].kind).toBe('readonly');
-    },
-  );
+// `checkSpecs` above only proves `kind` is SOME known kind, never the RIGHT
+// one -- it would stay green if `DISH_FIELDS.name.kind` were quietly
+// changed from 'text' to 'readonly' (both are legal members of
+// Kind<string>), silently locking a field the owner needs to be able to
+// edit. tsc -b can't catch this either: `Kind<V>` describes which kinds a
+// VALUE TYPE permits, not which kind a given field is supposed to have --
+// editing semantics aren't part of the type. Confirmed directly: that exact
+// mutation (DISH_FIELDS.name.kind -> 'readonly') passes `tsc -b --noEmit`
+// clean and left every test in this file green before the checks below
+// existed.
+//
+// The fix is an explicit allowlist per descriptor, naming exactly which
+// keys may be 'readonly' or 'select' -- so any OTHER field silently
+// acquiring either kind fails here, and any of the named ones silently
+// losing it does too.
+function keysWithKind(specs: Record<string, { kind: string }>, kind: string): string[] {
+  return Object.entries(specs)
+    .filter(([, spec]) => spec.kind === kind)
+    .map(([key]) => key)
+    .sort();
+}
 
-  it('strapline is NOT read-only -- only the fields index.html duplicates are', () => {
-    expect(SITE_FIELDS.strapline.kind).not.toBe('readonly');
+describe('exactly the expected fields are kind: readonly or kind: select -- nothing else silently became uneditable or turned into a picker', () => {
+  it('DISH_FIELDS has no readonly or select fields', () => {
+    expect(keysWithKind(DISH_FIELDS, 'readonly')).toEqual([]);
+    expect(keysWithKind(DISH_FIELDS, 'select')).toEqual([]);
+  });
+
+  it('DRINK_FIELDS: category is the only select field, nothing is readonly', () => {
+    expect(keysWithKind(DRINK_FIELDS, 'select')).toEqual(['category']);
+    expect(keysWithKind(DRINK_FIELDS, 'readonly')).toEqual([]);
+  });
+
+  it('ARTICLE_FIELDS has no readonly or select fields', () => {
+    expect(keysWithKind(ARTICLE_FIELDS, 'readonly')).toEqual([]);
+    expect(keysWithKind(ARTICLE_FIELDS, 'select')).toEqual([]);
+  });
+
+  it('SECTION_FIELDS: id is the only readonly field, nothing is select', () => {
+    expect(keysWithKind(SECTION_FIELDS, 'readonly')).toEqual(['id']);
+    expect(keysWithKind(SECTION_FIELDS, 'select')).toEqual([]);
+  });
+
+  it('MENU_FIELDS has no readonly or select fields', () => {
+    expect(keysWithKind(MENU_FIELDS, 'readonly')).toEqual([]);
+    expect(keysWithKind(MENU_FIELDS, 'select')).toEqual([]);
+  });
+
+  it('GALLERY_IMAGE_FIELDS has no readonly or select fields', () => {
+    expect(keysWithKind(GALLERY_IMAGE_FIELDS, 'readonly')).toEqual([]);
+    expect(keysWithKind(GALLERY_IMAGE_FIELDS, 'select')).toEqual([]);
+  });
+
+  it('HOURS_FIELDS has no readonly or select fields', () => {
+    expect(keysWithKind(HOURS_FIELDS, 'readonly')).toEqual([]);
+    expect(keysWithKind(HOURS_FIELDS, 'select')).toEqual([]);
+  });
+
+  it('COPY_FIELDS has no readonly or select fields', () => {
+    expect(keysWithKind(COPY_FIELDS, 'readonly')).toEqual([]);
+    expect(keysWithKind(COPY_FIELDS, 'select')).toEqual([]);
+  });
+
+  // The one descriptor where 'readonly' is not just permitted but required:
+  // name, tagline, and every seo.* key are duplicated by hand into
+  // index.html (src/test/head.test.ts), so editing them here without also
+  // hand-editing index.html fails the deploy. strapline is deliberately
+  // absent from this list -- head.test.ts does not pin it -- so its
+  // exclusion from the expected array below is itself the regression test
+  // for "strapline must stay editable."
+  it('SITE_FIELDS: name, tagline, and every seo.* are readonly; nothing is select', () => {
+    expect(keysWithKind(SITE_FIELDS, 'readonly')).toEqual(
+      ['name', 'seo.description', 'seo.keywords', 'seo.locale', 'seo.ogImage', 'seo.title', 'seo.url', 'tagline'].sort(),
+    );
+    expect(keysWithKind(SITE_FIELDS, 'select')).toEqual([]);
   });
 });
 

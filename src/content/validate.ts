@@ -41,6 +41,21 @@ function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
 }
 
+// Stricter than `asRecord`, which maps anything that isn't a plain object
+// (including `null` -- `typeof null === 'object'` in JS) to `{}` so every
+// *field-level* check above can stay a simple property read. That silent
+// fallback is wrong for validateContent's `current` parameter specifically:
+// `asRecord(null)` returning `{}` would make the site rule below compare
+// every developer-owned field against an empty object, i.e. read every one
+// of them as "changed," and refuse all eight -- even when nothing actually
+// differs. `isPlainObject` is what lets the call site tell "a real,
+// well-formed committed record was supplied" apart from "something else was
+// passed where `current` goes," and treat the second the same as `current`
+// being omitted entirely, not as license to blame every field.
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 // Names retired from the printed drinks menu (see Drinks.test.tsx's git
 // history: `describes only drinks that exist`, moved here by this task). A
 // dashboard write that reintroduces one of these -- even under a brand new
@@ -396,9 +411,15 @@ function validateCopy(data: unknown): ValidationProblem[] {
 const SITE_DEVELOPER_OWNED_MESSAGE =
   "Changing this needs your developer — it's written into a file the site is built from.";
 
-function validateSiteDeveloperOwnedFields(data: unknown, current: unknown): ValidationProblem[] {
+// `current` is typed as an already-narrowed `Record<string, unknown>`, not
+// `unknown` -- its only caller (validateContent) gates on `isPlainObject`
+// first, and that narrowing is what keeps a malformed `current` (e.g.
+// `null`) from ever reaching this function and reading as "every field
+// changed." See isPlainObject's own comment above for why that distinction
+// matters.
+function validateSiteDeveloperOwnedFields(data: unknown, current: Record<string, unknown>): ValidationProblem[] {
   const proposed = asRecord(data);
-  const committed = asRecord(current);
+  const committed = current;
   const problems: ValidationProblem[] = [];
   if (proposed.name !== committed.name) problems.push(problem('name', SITE_DEVELOPER_OWNED_MESSAGE));
   if (proposed.tagline !== committed.tagline) problems.push(problem('tagline', SITE_DEVELOPER_OWNED_MESSAGE));
@@ -454,12 +475,22 @@ const RULES: Record<string, (data: unknown) => ValidationProblem[]> = {
 // keep working unchanged -- this file deliberately imports no JSON of its
 // own (see the header comment), so it has no other way to know what's
 // currently committed, and Task 3 is what gives the Worker a value to pass.
+//
+// Gated on `isPlainObject(current)`, not `current !== undefined`: Task 3's
+// GET /api/content could plausibly represent "the fetch failed" as
+// `current: null` rather than never passing the argument at all. Read note
+// for whoever wires that up -- treat a failed fetch as omitting `current`
+// (call with two arguments, or pass `undefined` explicitly), not as
+// `null`. `isPlainObject` makes that the same case either way: a `current`
+// that isn't a well-formed record is treated exactly like no `current` was
+// supplied, so a transient fetch problem can never manufacture eight
+// developer-owned-field complaints against content that hasn't changed.
 export function validateContent(file: string, data: unknown, current?: unknown): ValidationProblem[] {
   const rule = RULES[file];
   if (!rule) return [problem('', `This file cannot be edited here (${file}).`)];
   try {
     const problems = rule(data);
-    if (file === 'site.json' && current !== undefined) {
+    if (file === 'site.json' && isPlainObject(current)) {
       problems.push(...validateSiteDeveloperOwnedFields(data, current));
     }
     return problems;

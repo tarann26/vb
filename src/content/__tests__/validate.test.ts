@@ -491,4 +491,26 @@ describe('validateContent: site.json refuses a change to a developer-owned field
     const changed = { ...validSite, strapline: 'A brand new strapline' };
     expect(validateContent('site.json', changed, validSite)).toEqual([]);
   });
+
+  // Code review finding: `asRecord` maps anything that isn't a plain object
+  // -- including `null`, since `typeof null === 'object'` in JS -- to `{}`.
+  // Before isPlainObject gated this rule, `validateContent('site.json',
+  // validSite, null)` read as "every developer-owned field changed from
+  // committed value undefined," and returned all eight problems even though
+  // nothing about `validSite` itself is invalid. No caller does this today,
+  // but Task 3 adds the one that will, and a failed content fetch is a
+  // plausible way for `current` to arrive as `null` instead of being
+  // omitted. `null` must be refused nothing at all, the same as omitting
+  // the argument entirely.
+  it('treats current: null the same as an omitted current -- no problems, not eight', () => {
+    expect(validateContent('site.json', validSite, null)).toEqual([]);
+  });
+
+  it('treats a non-object current (e.g. a string) the same as an omitted current', () => {
+    expect(validateContent('site.json', validSite, 'not an object')).toEqual([]);
+  });
+
+  it('treats an array current the same as an omitted current -- typeof [] === "object" too', () => {
+    expect(validateContent('site.json', validSite, [])).toEqual([]);
+  });
 });
