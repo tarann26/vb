@@ -4,10 +4,12 @@ import Login from './Login';
 import { fetchContent } from './content';
 import type { ContentFileName, ContentTypeMap, LoadedContent } from './content';
 import RecordList from './RecordList';
+import SectionList from './SectionList';
+import HoursField from './HoursField';
 import { ARTICLE_FIELDS, DISH_FIELDS, DRINK_FIELDS } from './fields';
 import type { FieldsOf } from './fields';
 import { replaceAt, useValidation } from './useValidation';
-import type { Article, Dish, Drink } from '../content/types';
+import type { Article, Dish, Drink, Section, SiteContent } from '../content/types';
 
 // Default export, deliberately: React.lazy (src/App.tsx) requires one --
 // there is no lazy() form that takes a named export.
@@ -19,9 +21,10 @@ import type { Article, Dish, Drink } from '../content/types';
 // screen for the three content files whose forms Tasks 4/5 already built in
 // full (dishes.json, drinks.json, press.json -- each a flat array of
 // records with an `id`, so RecordList's own machinery already covers them
-// with no new component). Hours/sections/scheduling (site.json's own
-// fields, sections.json), the menu PDFs, and story/galleries/copy.json are
-// later tasks' screens, not this one's.
+// with no new component). Task 7 adds sections.json's reorder/toggle screen
+// and site.json's opening-hours screen. Site.json's remaining leaf fields,
+// the menu PDFs, and story/galleries/copy.json are later tasks' screens, not
+// this one's.
 const AdminApp: React.FC = () => {
   const { status, logIn } = useSession();
 
@@ -77,6 +80,8 @@ const AdminApp: React.FC = () => {
           itemLabel={(article) => article.title || 'Untitled article'}
           makeBlank={blankArticle}
         />
+        <SectionsSection />
+        <HoursSection />
       </div>
     </div>
   );
@@ -200,6 +205,149 @@ function ArraySection<Item extends { id: string }>({
         onRemove={(index) => commit(items.filter((_, i) => i !== index))}
         noun={noun}
         itemLabel={itemLabel}
+        problems={problems}
+      />
+    </section>
+  );
+}
+
+type SectionsLoadState =
+  | { status: 'loading' }
+  | { status: 'error'; message: string }
+  | { status: 'loaded'; data: Section[]; sha: string };
+
+// sections.json's own screen: reorder and toggle only, matching
+// SectionList's own D6-driven contract (no Add, no Remove -- see
+// SectionList.tsx's own header comment). Deliberately NOT built on the
+// generic ArraySection above: that component always renders RecordList's
+// Add/Remove buttons unconditionally (RecordList itself has no prop to hide
+// either one), which would let this screen build a state assertSections
+// refuses -- see SectionList.tsx's own header for why reorder/toggle alone
+// cannot.
+function SectionsSection() {
+  const [state, setState] = useState<SectionsLoadState>({ status: 'loading' });
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchContent('sections.json')
+      .then((loaded) => {
+        if (!cancelled) setState({ status: 'loaded', data: loaded.data, sha: loaded.sha });
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setState({ status: 'error', message: error instanceof Error ? error.message : String(error) });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const data = state.status === 'loaded' ? state.data : undefined;
+  const problems = useValidation('sections.json', data);
+
+  if (state.status === 'loading') {
+    return <p className="mb-10 font-['Montserrat'] text-sm text-gray-500">Loading sections…</p>;
+  }
+  if (state.status === 'error') {
+    return (
+      <p role="alert" className="mb-10 font-['Montserrat'] text-sm text-red-600">
+        {`Could not load sections: ${state.message}`}
+      </p>
+    );
+  }
+
+  const items = state.data;
+  function commit(next: Section[]) {
+    setState({ status: 'loaded', data: next, sha: (state as { status: 'loaded'; sha: string }).sha });
+  }
+
+  return (
+    <section className="mb-10">
+      <h2 className="mb-4 font-['Montserrat'] text-lg uppercase tracking-wide text-[#222]">Homepage sections</h2>
+      <SectionList
+        items={items}
+        onChange={(index, next) => commit(replaceAt(items, index, next))}
+        onReorder={(ids) => {
+          const byId = new Map(items.map((item) => [item.id, item]));
+          commit(ids.map((id) => byId.get(id) as Section));
+        }}
+        problems={problems}
+      />
+    </section>
+  );
+}
+
+type HoursLoadState =
+  | { status: 'loading' }
+  | { status: 'error'; message: string }
+  // `initial` is the committed snapshot exactly as GET /api/content
+  // returned it -- captured once, when the fetch resolves, and never
+  // written to again. `data` is the live, editable copy `onChange` updates.
+  // Kept as two separate fields (not one, re-derived) so `initial` cannot
+  // possibly drift just because `data` does.
+  | { status: 'loaded'; data: SiteContent; initial: SiteContent; sha: string };
+
+// The one part of site.json this task's own scope covers. No task in this
+// plan builds a full SiteForm for site.json's remaining leaf fields
+// (strapline, address, phones, ...) -- see task-6-report.md's own note
+// attributing HoursField specifically, not a whole site.json screen, to
+// Task 7. Fetches the WHOLE site.json (there is no narrower read) and holds
+// it all in memory, but only ever changes the `hours` key on write: `{
+// ...data, hours: next }` preserves every other field exactly, the same
+// spread-not-reconstruct guarantee `replaceAt`'s own header comment
+// describes for a whole-array update.
+function HoursSection() {
+  const [state, setState] = useState<HoursLoadState>({ status: 'loading' });
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchContent('site.json')
+      .then((loaded) => {
+        if (!cancelled) setState({ status: 'loaded', data: loaded.data, initial: loaded.data, sha: loaded.sha });
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setState({ status: 'error', message: error instanceof Error ? error.message : String(error) });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const data = state.status === 'loaded' ? state.data : undefined;
+  const initial = state.status === 'loaded' ? state.initial : undefined;
+  // `initial`, the untouched committed snapshot (see HoursLoadState's own
+  // comment) -- not `data` -- so useValidation's site.json rule can tell a
+  // developer-owned field (name, tagline, seo.*) apart from one this screen
+  // actually changed (validateSiteDeveloperOwnedFields,
+  // src/content/validate.ts). This screen structurally never touches any of
+  // those fields (its only write is `{ ...data, hours: next }`), so this is
+  // a defensive no-op today, not a fix for anything reachable here -- kept
+  // anyway so this screen matches the same `current` contract a future full
+  // SiteForm would need, rather than quietly omitting it.
+  const problems = useValidation('site.json', data, initial);
+
+  if (state.status === 'loading') {
+    return <p className="mb-10 font-['Montserrat'] text-sm text-gray-500">Loading opening hours…</p>;
+  }
+  if (state.status === 'error') {
+    return (
+      <p role="alert" className="mb-10 font-['Montserrat'] text-sm text-red-600">
+        {`Could not load opening hours: ${state.message}`}
+      </p>
+    );
+  }
+
+  return (
+    <section className="mb-10">
+      <h2 className="mb-4 font-['Montserrat'] text-lg uppercase tracking-wide text-[#222]">Opening hours</h2>
+      <HoursField
+        value={state.data.hours}
+        onChange={(next) =>
+          setState({ status: 'loaded', data: { ...state.data, hours: next }, initial: state.initial, sha: state.sha })
+        }
         problems={problems}
       />
     </section>

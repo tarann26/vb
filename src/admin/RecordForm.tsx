@@ -1,5 +1,6 @@
 import React from 'react';
 import Field from './Field';
+import ScheduleField from './ScheduleField';
 import { problemsFor, arrayIndexOf } from './problems';
 import type { FieldsOf } from './fields';
 import type { ValidationProblem } from '../content/validate';
@@ -37,6 +38,27 @@ function belongsToAnotherIndex(field: string, index: number): boolean {
   return found !== undefined && found !== index;
 }
 
+// Deletes `key` from a shallow copy of `value`, keeping every OTHER key --
+// including ones this file has no descriptor for, the same "never
+// reconstruct from known fields" guarantee `{ ...value, [key]: next }` (the
+// ordinary SET path, just below) already gives every other edit. Used only
+// by the `publishAt` branch above: clearing a schedule date must remove
+// `publishAt` entirely, not merely set it to `undefined` -- the latter would
+// still leave the KEY present (`'publishAt' in record` stays true,
+// `Object.keys` still lists it, `toHaveProperty('publishAt')` still passes),
+// even though `JSON.stringify` happens to drop an `undefined`-valued
+// property from its OUTPUT the same way it drops an absent one. "Delete the
+// key" and "set it to undefined" read identically once serialized, but are
+// not the same operation on the in-memory record, and the brief is explicit
+// that clearing must do the former. See RecordForm.test.tsx's own test,
+// which asserts the key is ABSENT (`not.toHaveProperty`), not merely that
+// its value happens to serialize away.
+function omitKey<T>(value: T, key: keyof T): T {
+  const clone: Record<string, unknown> = { ...(value as Record<string, unknown>) };
+  delete clone[String(key)];
+  return clone as T;
+}
+
 function RecordForm<T extends object>({ fields, index, value, onChange, problems }: RecordFormProps<T>) {
   const keys = Object.keys(fields) as (keyof T)[];
 
@@ -64,15 +86,55 @@ function RecordForm<T extends object>({ fields, index, value, onChange, problems
   function renderField<K extends keyof T>(key: K, fieldProblems: ValidationProblem[]): React.ReactNode {
     const spec = fields[key];
     const raw = value[key];
-    // The only optional field across every descriptor today is
-    // Dish/Drink/Article's `publishAt` (kind 'date') -- Required<T>[K]
-    // strips that optionality from the DESCRIPTOR's point of view, so a
-    // record that simply hasn't scheduled a publish date needs a concrete
-    // fallback to hand Field, same as Field's own `?? ''` for a `null`
-    // image/readonly value. Deciding whether clearing that field back to ''
-    // should DELETE the key (validatePublishAt throws on '', not on a
-    // missing key) is Task 7's (Hours, sections, and scheduling) -- out of
-    // this task's "one record" scope.
+
+    // `publishAt` (Dish/Drink/Article's optional `Schedulable` field --
+    // src/content/types.ts) is the one field across every FieldsOf<T>
+    // descriptor whose EMPTY state must DELETE the key rather than write
+    // '' -- see ScheduleField.tsx's own header comment for why
+    // (validatePublishAt -> isPublished throws on '', not on a missing key,
+    // turning a routine "publish immediately" edit into a 422). This was
+    // deliberately left undecided when this file was first written (see the
+    // comment that used to sit here, now resolved) -- Task 7's own scope.
+    //
+    // Checked by KEY NAME, not by `spec.kind`: Article's own REQUIRED `date`
+    // field is ALSO `kind: 'date'` (ARTICLE_FIELDS.date), and clearing THAT
+    // one must stay '' -- an empty date is correctly a validation error
+    // there ("needs a real date"), not "no date". Confirmed directly:
+    // switching this condition to `spec.kind === 'date'` makes
+    // RecordForm.test.tsx's "clearing Article's own required `date` field
+    // empties it, and does not delete it" go red, because Article's `date`
+    // would then ALSO route through ScheduleField and lose its key on
+    // clearing. `key` can only ever literally equal 'publishAt' for a row
+    // whose type actually declares that field (Section, MenuFile,
+    // GalleryImage, Hours, and the copy/site leaf shapes do not -- FieldsOf<T>
+    // being total over T's own keys, and nothing else, is what guarantees
+    // `Object.keys(fields)` can never produce this string for any of them).
+    if (String(key) === 'publishAt') {
+      return (
+        <ScheduleField
+          key={String(key)}
+          id={idFor(String(key))}
+          label={spec.label}
+          help={spec.help}
+          value={raw as string | undefined}
+          onChange={(next) => {
+            if (next === undefined) {
+              onChange(omitKey(value, key));
+            } else {
+              onChange({ ...value, [key]: next });
+            }
+          }}
+          problems={fieldProblems}
+        />
+      );
+    }
+
+    // Required<T>[K] strips `publishAt`'s optionality from the DESCRIPTOR's
+    // point of view, so a record that simply hasn't scheduled a publish date
+    // needs a concrete fallback to hand Field -- same as Field's own `?? ''`
+    // for a `null` image/readonly value. (This branch never actually runs
+    // for `publishAt` itself, which returns above; the fallback still applies
+    // to any other field whose value happens to be `undefined`.)
     const current = (raw === undefined ? '' : raw) as Required<T>[K];
     return (
       <Field<Required<T>[K]>

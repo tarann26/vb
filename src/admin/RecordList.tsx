@@ -70,11 +70,19 @@ function unclaimedProblems(problems: ValidationProblem[], itemCount: number): Va
 // naming rule below), so there is no `disabled` state for one to ever
 // reach, and a `disabled:opacity-*` class here would just be unused CSS
 // shipped for a state that can't occur.
-const MOVE_BUTTON_CLASSNAME =
+//
+// Exported, not module-private: HoursField.tsx and SectionList.tsx (Task 7)
+// need the identical Move/Add/Remove button styling this list already uses,
+// and reusing these exact bindings (rather than retyping the same Tailwind
+// utility strings in a second file) is what keeps a typo there from reading
+// as a brand-new class Tailwind would scan and ship extra CSS for -- see
+// Field.tsx's own INPUT_CLASSNAME/LABEL_CLASSNAME export for the identical
+// reasoning.
+export const MOVE_BUTTON_CLASSNAME =
   "rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-[#6B8B59] transition hover:bg-[#6B8B59] hover:text-white";
-const REMOVE_BUTTON_CLASSNAME =
+export const REMOVE_BUTTON_CLASSNAME =
   "rounded border border-red-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-red-600 transition hover:bg-red-600 hover:text-white";
-const ADD_BUTTON_CLASSNAME =
+export const ADD_BUTTON_CLASSNAME =
   "mt-2 w-full rounded border-2 border-dashed border-[#6B8B59] py-2 font-['Montserrat'] text-sm uppercase tracking-wide text-[#6B8B59] transition hover:bg-[#6B8B59]/10";
 
 function RecordList<T extends { id: string }>({

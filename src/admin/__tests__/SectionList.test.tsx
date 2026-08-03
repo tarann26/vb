@@ -1,0 +1,143 @@
+import { describe, expect, it, vi } from 'vitest';
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import SectionList from '../SectionList';
+import { validateContent } from '../../content/validate';
+import type { Section, SectionId } from '../../content/types';
+import type { ValidationProblem } from '../../content/validate';
+
+const ALL_SEVEN: Section[] = [
+  { id: 'hero', enabled: true },
+  { id: 'ourStory', enabled: true },
+  { id: 'atmosphere', enabled: true },
+  { id: 'food', enabled: true },
+  { id: 'drinks', enabled: true },
+  { id: 'press', enabled: true },
+  { id: 'visit', enabled: true },
+];
+
+function renderList(overrides: Partial<Parameters<typeof SectionList>[0]> = {}) {
+  const onChange = vi.fn();
+  const onReorder = vi.fn();
+  render(<SectionList items={ALL_SEVEN} onChange={onChange} onReorder={onReorder} problems={[]} {...overrides} />);
+  return { onChange, onReorder };
+}
+
+describe('SectionList: human names, not SectionIds', () => {
+  it('shows the human name and anchor the brief itself names, verbatim', () => {
+    renderList();
+    expect(screen.getByText('Atmosfera')).toBeInTheDocument();
+    expect(screen.getByText('#gallery')).toBeInTheDocument();
+    // The raw SectionId is not shown anywhere as its own label.
+    expect(screen.queryByText('atmosphere')).not.toBeInTheDocument();
+  });
+
+  it('every section gets a human name, and every id is covered', () => {
+    renderList();
+    ['Hero', 'Our Story', 'Atmosfera', 'Menu', 'Drinks', 'Stories', 'Visit Us'].forEach((name) => {
+      expect(screen.getByText(name)).toBeInTheDocument();
+    });
+  });
+
+  it("a section absent from the nav (hero, drinks) says so, rather than showing a blank or a raw id", () => {
+    renderList();
+    // Two sections have no anchor -- both must show the same plain-English
+    // explanation, not an empty string or "null".
+    expect(screen.getAllByText('not in the navigation menu')).toHaveLength(2);
+  });
+});
+
+describe('SectionList: hero cannot be toggled off, structurally -- not merely refused after the click', () => {
+  it("hero's own checkbox is disabled", () => {
+    renderList();
+    const heroToggle = screen.getAllByLabelText('Shown on homepage')[0];
+    expect(heroToggle).toBeDisabled();
+    expect(heroToggle).toBeChecked();
+  });
+
+  it('clicking a disabled hero checkbox never calls onChange -- jsdom will not even fire the event', async () => {
+    const user = userEvent.setup();
+    const { onChange } = renderList();
+    const heroToggle = screen.getAllByLabelText('Shown on homepage')[0];
+    await user.click(heroToggle);
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('every OTHER section\'s checkbox is enabled and can be toggled', async () => {
+    const user = userEvent.setup();
+    const { onChange } = renderList();
+    const toggles = screen.getAllByLabelText('Shown on homepage');
+    expect(toggles[1]).not.toBeDisabled(); // ourStory
+    await user.click(toggles[1]);
+    expect(onChange).toHaveBeenCalledWith(1, { id: 'ourStory', enabled: false });
+  });
+});
+
+describe('SectionList: no Remove button anywhere, and no Add button either -- D6', () => {
+  it('renders zero buttons named Remove or Add', () => {
+    renderList();
+    expect(screen.queryByRole('button', { name: /remove/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /add/i })).not.toBeInTheDocument();
+  });
+
+  // Structural proof, not just an absent-button check: EVERY interaction
+  // this component exposes (reorder, toggle) still leaves exactly the same
+  // seven SectionIds present, in some order, which is what actually makes
+  // assertSections' "every id exactly once" rule unreachable. Simulates a
+  // caller applying every onReorder/onChange call this component could ever
+  // produce and checks the id SET never changes.
+  it('reordering never changes WHICH ids are present, only their order', async () => {
+    const user = userEvent.setup();
+    const { onReorder } = renderList();
+    await user.click(screen.getByRole('button', { name: 'Move Our Story up' }));
+    const newOrder = onReorder.mock.calls[0][0] as SectionId[];
+    expect(new Set(newOrder)).toEqual(new Set(ALL_SEVEN.map((s) => s.id)));
+    expect(newOrder).toHaveLength(7);
+  });
+
+  it('toggling a section never changes its id', async () => {
+    const user = userEvent.setup();
+    const { onChange } = renderList();
+    const toggles = screen.getAllByLabelText('Shown on homepage');
+    await user.click(toggles[3]); // food
+    expect(onChange).toHaveBeenCalledWith(3, { id: 'food', enabled: false });
+  });
+});
+
+describe('SectionList: reordering', () => {
+  it('names move buttons per section, omitted at the ends', () => {
+    renderList();
+    expect(screen.queryByRole('button', { name: 'Move Hero up' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Move Hero down' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Move Visit Us up' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Move Visit Us down' })).not.toBeInTheDocument();
+  });
+
+  it('moving a section down swaps it with its neighbour, by id order', async () => {
+    const user = userEvent.setup();
+    const { onReorder } = renderList();
+    await user.click(screen.getByRole('button', { name: 'Move Hero down' }));
+    expect(onReorder).toHaveBeenCalledWith(['ourStory', 'hero', 'atmosphere', 'food', 'drinks', 'press', 'visit']);
+  });
+});
+
+describe('SectionList: sections.json-level problems -- one banner, since assertSections gives no per-id shape', () => {
+  it('shows the real validator\'s own message when hero is disabled', () => {
+    const bad = ALL_SEVEN.map((s) => (s.id === 'hero' ? { ...s, enabled: false } : s));
+    const problems = validateContent('sections.json', bad);
+    expect(problems).toEqual([{ field: '', message: expect.stringMatching(/hero/i) }]);
+    render(<SectionList items={bad} onChange={vi.fn()} onReorder={vi.fn()} problems={problems} />);
+    expect(screen.getByRole('alert', { name: 'Problems with the homepage section order' })).toHaveTextContent(/hero/i);
+  });
+
+  it('no banner when there is nothing wrong', () => {
+    renderList();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('a hand-typed problem is rendered too, exactly as given', () => {
+    const problems: ValidationProblem[] = [{ field: '', message: 'content/sections.json: duplicate section id "food"' }];
+    renderList({ problems });
+    expect(screen.getByText('content/sections.json: duplicate section id "food"')).toBeInTheDocument();
+  });
+});

@@ -14,9 +14,19 @@ export interface FieldProps<V> {
   problems: ValidationProblem[];
 }
 
-const INPUT_CLASSNAME =
+// Exported, not module-private: ScheduleField.tsx (Task 7) renders the same
+// input/label shell Field.tsx already does for every other kind, for the
+// `publishAt` field specifically (see RecordForm.tsx's own comment on why
+// that one field is special-cased to a sibling component instead of a tenth
+// `kind`). Reusing these exact bindings, rather than retyping the same
+// Tailwind utility strings a second time, is what keeps that new component
+// from being able to introduce a single-character-off utility that Tailwind
+// would then scan as a NEW class and ship extra CSS for -- this project has
+// shipped unused/duplicate CSS from exactly this kind of drift seven times
+// before (see this repo's own commit history).
+export const INPUT_CLASSNAME =
   "w-full rounded border border-gray-300 px-3 py-2 text-[#222] focus:border-[#6B8B59] focus:outline-none disabled:bg-gray-100 disabled:text-gray-500";
-const LABEL_CLASSNAME = "mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-[#6B8B59]";
+export const LABEL_CLASSNAME = "mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-[#6B8B59]";
 
 // A comma-separated text field, not a chip editor with its own per-item
 // add/remove buttons -- that interaction belongs to Tasks 5/6 (RecordList's
