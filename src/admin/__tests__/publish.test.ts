@@ -113,7 +113,7 @@ describe('buildPublishRequest', () => {
 
   it('a staged file is included even with no content entry registered at all', () => {
     const staged: Record<string, StagedFile> = {
-      'dishes.json:a:image': { path: 'assets-source/food/aaa.jpg', content: REAL_BASE64_JPEG, encoding: 'base64' },
+      'dishes.json:a:image': { path: 'assets-source/food/aaa.jpg', content: REAL_BASE64_JPEG, encoding: 'base64', contentPath: '/food/aaa.webp' },
     };
     const plan = expectOk(buildPublishRequest({}, staged));
     expect(plan.files).toEqual([{ path: 'assets-source/food/aaa.jpg', content: REAL_BASE64_JPEG, encoding: 'base64' }]);
@@ -137,7 +137,7 @@ describe('buildPublishRequest', () => {
       },
     };
     const staged: Record<string, StagedFile> = {
-      'menus.json:food:file': { path: 'public/menus/food-menu.pdf', content: REAL_BASE64_JPEG, encoding: 'base64' },
+      'menus.json:food:file': { path: 'public/menus/food-menu.pdf', content: REAL_BASE64_JPEG, encoding: 'base64', contentPath: '/menus/food-menu.pdf' },
     };
     const plan = expectOk(buildPublishRequest(entries, staged));
 
@@ -167,6 +167,7 @@ describe('buildPublishRequest', () => {
         path: `assets-source/food/photo-${i}.jpg`,
         content: REAL_BASE64_JPEG,
         encoding: 'base64',
+        contentPath: `/food/photo-${i}.webp`,
       };
     }
     return staged;
@@ -194,7 +195,7 @@ describe('buildPublishRequest', () => {
       'dishes.json': { data: [{ id: 'a', image: '/food/x.webp' }], initial: [{ id: 'a', image: '' }], sha: 'dishes-sha' },
     };
     const staged: Record<string, StagedFile> = {
-      'dishes.json:a:image': { path: 'assets-source/food/x.jpg', content: REAL_BASE64_JPEG, encoding: 'base64' },
+      'dishes.json:a:image': { path: 'assets-source/food/x.jpg', content: REAL_BASE64_JPEG, encoding: 'base64', contentPath: '/food/x.webp' },
     };
     const plan = expectOk(buildPublishRequest(entries, staged));
     expect(plan.files).toHaveLength(2);
@@ -209,13 +210,92 @@ describe('dirtyDraftMap', () => {
       'dishes.json': { data: [{ id: 'a', name: 'Edited' }], initial: [{ id: 'a', name: '' }], sha: 's' },
       'drinks.json': { data: [{ id: 'b' }], initial: [{ id: 'b' }], sha: 's' }, // clean
     };
-    expect(dirtyDraftMap(entries, 12_345)).toEqual({
+    expect(dirtyDraftMap(entries, {}, 12_345)).toEqual({
       'dishes.json': { data: [{ id: 'a', name: 'Edited' }], savedAt: 12_345 },
     });
   });
 
   it('empty when nothing is dirty', () => {
-    expect(dirtyDraftMap({}, 1)).toEqual({});
+    expect(dirtyDraftMap({}, {}, 1)).toEqual({});
+  });
+
+  // Critical review finding, reproduced exactly: she stages a photo, the tab
+  // dies before Publish, she reloads, Restore, publish -- the RESTORED
+  // record still names the staged contentPath, whose bytes died with the
+  // tab. Proven here at the exact function the fix lives in: a dirty
+  // dish carrying a currently-staged contentPath must never reach
+  // localStorage with that reference intact.
+  function staged(contentPath: string): Record<string, StagedFile> {
+    return { 'dishes.json:a:image': { path: 'assets-source/food/new.jpg', content: REAL_BASE64_JPEG, encoding: 'base64', contentPath } };
+  }
+
+  it('a leaf equal to a staged contentPath is reverted to the value at the SAME location in initial', () => {
+    const entries: ContentEntries = {
+      'dishes.json': {
+        data: [{ id: 'a', name: 'Dish A', image: '/food/new.webp' }],
+        initial: [{ id: 'a', name: 'Dish A', image: '/food/old.webp' }],
+        sha: 's',
+      },
+    };
+    expect(dirtyDraftMap(entries, staged('/food/new.webp'))).toEqual({
+      'dishes.json': { data: [{ id: 'a', name: 'Dish A', image: '/food/old.webp' }], savedAt: expect.any(Number) },
+    });
+  });
+
+  // The scrub is surgical -- an unrelated edit made in the SAME record
+  // (and the same publish session) is not collateral damage of reverting
+  // the one dangling leaf.
+  it('an unrelated field edited in the SAME record survives the scrub untouched', () => {
+    const entries: ContentEntries = {
+      'dishes.json': {
+        data: [{ id: 'a', name: 'Dish A Edited', image: '/food/new.webp' }],
+        initial: [{ id: 'a', name: 'Dish A', image: '/food/old.webp' }],
+        sha: 's',
+      },
+    };
+    const map = dirtyDraftMap(entries, staged('/food/new.webp'));
+    expect(map['dishes.json']?.data).toEqual([{ id: 'a', name: 'Dish A Edited', image: '/food/old.webp' }]);
+  });
+
+  // A record added THIS session has no counterpart in `initial` at all --
+  // there is no committed value to fall back to, so the leaf is blanked
+  // rather than left dangling. A blank image is exactly what
+  // validateContent's own "needs an image" rule already treats as a
+  // normal, actionable state, never a broken reference.
+  it('a brand-new record with no counterpart in initial falls back to blank, not the dangling path', () => {
+    const entries: ContentEntries = {
+      'dishes.json': {
+        data: [{ id: 'a', name: 'Dish A', image: '/food/old.webp' }, { id: 'new', name: 'New Dish', image: '/food/new.webp' }],
+        initial: [{ id: 'a', name: 'Dish A', image: '/food/old.webp' }],
+        sha: 's',
+      },
+    };
+    const map = dirtyDraftMap(entries, staged('/food/new.webp'));
+    expect((map['dishes.json']?.data as { id: string; image: string }[]).find((d) => d.id === 'new')?.image).toBe('');
+  });
+
+  // Matched by `id`, not raw array index -- reordering the SAME list in the
+  // SAME session must not pair a record against a DIFFERENT record's
+  // committed value just because they now share a position.
+  it('matches the initial counterpart by id, not position, after a reorder', () => {
+    const entries: ContentEntries = {
+      'dishes.json': {
+        // Reordered relative to `initial`: 'b' now comes first.
+        data: [{ id: 'b', name: 'Dish B', image: '/food/b.webp' }, { id: 'a', name: 'Dish A', image: '/food/new.webp' }],
+        initial: [{ id: 'a', name: 'Dish A', image: '/food/old.webp' }, { id: 'b', name: 'Dish B', image: '/food/b.webp' }],
+        sha: 's',
+      },
+    };
+    const map = dirtyDraftMap(entries, staged('/food/new.webp'));
+    expect((map['dishes.json']?.data as { id: string; image: string }[]).find((d) => d.id === 'a')?.image).toBe('/food/old.webp');
+  });
+
+  it('nothing currently staged -- data passes through unscrubbed, byte for byte', () => {
+    const entries: ContentEntries = {
+      'dishes.json': { data: [{ id: 'a', image: '/food/x.webp' }], initial: [{ id: 'a', image: '' }], sha: 's' },
+    };
+    const map = dirtyDraftMap(entries, {});
+    expect(map['dishes.json']?.data).toEqual([{ id: 'a', image: '/food/x.webp' }]);
   });
 });
 
@@ -469,6 +549,54 @@ describe('useContentRegistry', () => {
     const before = result.current.version;
     act(() => result.current.register('dishes.json', [{ id: 'a' }], 'sha-1'));
     expect(result.current.version).toBeGreaterThan(before);
+  });
+
+  // Critical review finding: every section's own write path used to call
+  // `register` -- which unconditionally overwrites `sha` -- passing its own
+  // stale, load-time `sha` back in on every edit. `updateData` is the fix:
+  // proven here as the API's own contract, independent of AdminApp's wiring.
+  describe('updateData', () => {
+    it('updates data, leaves sha and initial exactly as they were', () => {
+      const { result } = renderHook(() => useContentRegistry());
+      act(() => result.current.register('dishes.json', [{ id: 'a', name: '' }], 'sha-1'));
+      act(() => result.current.updateData('dishes.json', [{ id: 'a', name: 'Edited' }]));
+      const entry = result.current.getEntries()['dishes.json']!;
+      expect(entry.data).toEqual([{ id: 'a', name: 'Edited' }]);
+      expect(entry.initial).toEqual([{ id: 'a', name: '' }]);
+      expect(entry.sha).toBe('sha-1');
+    });
+
+    // The exact shape of the Critical: a publish refreshes `sha` via
+    // markPublished, and she keeps editing in the SAME session. The OLD
+    // `register`-based write path would clobber that fresh sha right back
+    // to the stale one -- proven by NAME below (revert this call to
+    // `register(file, next, sha)` with the load-time `sha` closed over, and
+    // this assertion fails: `entry.sha` reads back 'sha-stale', not
+    // 'sha-fresh-from-publish').
+    it('a fresh sha set by markPublished survives a LATER edit made through updateData', () => {
+      const { result } = renderHook(() => useContentRegistry());
+      act(() => result.current.register('dishes.json', [{ id: 'a', name: 'Edited' }], 'sha-stale'));
+      act(() => result.current.markPublished({ 'dishes.json': { data: [{ id: 'a', name: 'Edited' }], sha: 'sha-fresh-from-publish' } }));
+      // She edits again, in the same session, before ever reloading.
+      act(() => result.current.updateData('dishes.json', [{ id: 'a', name: 'Edited again' }]));
+      const entry = result.current.getEntries()['dishes.json']!;
+      expect(entry.sha).toBe('sha-fresh-from-publish');
+      expect(entry.data).toEqual([{ id: 'a', name: 'Edited again' }]);
+    });
+
+    it('a file never registered is a no-op, not a crash or a fabricated entry', () => {
+      const { result } = renderHook(() => useContentRegistry());
+      act(() => result.current.updateData('dishes.json', [{ id: 'a' }]));
+      expect(result.current.getEntries()['dishes.json']).toBeUndefined();
+    });
+
+    it('version increments on updateData, the same way it does on register', () => {
+      const { result } = renderHook(() => useContentRegistry());
+      act(() => result.current.register('dishes.json', [{ id: 'a', name: '' }], 'sha-1'));
+      const before = result.current.version;
+      act(() => result.current.updateData('dishes.json', [{ id: 'a', name: 'Edited' }]));
+      expect(result.current.version).toBeGreaterThan(before);
+    });
   });
 
   it('markPublished resets initial to the published snapshot and refreshes sha, but keeps the CURRENT live data', () => {

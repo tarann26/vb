@@ -168,7 +168,19 @@ const AdminApp: React.FC = () => {
         {pendingDraft ? (
           <DraftBanner
             draft={pendingDraft}
-            staleStagedCount={pendingStagedCount}
+            // Minor review finding: `pendingStagedCount` alone is honest
+            // about a genuine RELOAD (staged.ts's own in-memory collector,
+            // `stagedFiles` here, really is empty then) but wrong for an
+            // in-page 401 re-login -- AdminApp never unmounts on that path
+            // (this component's own comment above on why the banner is
+            // re-offered anyway), so `stagedFiles` is the SAME collector
+            // instance she staged into before the 401, still holding every
+            // byte. Telling her those photos "will need to be picked
+            // again" when they are, right now, still in memory and will
+            // publish correctly is the opposite of what's true. Subtracting
+            // what is STILL staged from what the draft recorded as staged
+            // leaves only what a real reload would have actually lost.
+            staleStagedCount={Math.max(0, pendingStagedCount - Object.keys(stagedFiles).length)}
             onRestore={() => {
               setRestoreDraft(pendingDraft);
               setPendingDraft(null);
@@ -182,13 +194,17 @@ const AdminApp: React.FC = () => {
           <PublishBar
             registry={registry}
             stagedFiles={stagedFilesApi}
-            onUnauthenticated={() => {
+            onUnauthenticated={(notice) => {
               // Set BEFORE logOut -- both are plain setState calls in the
               // same synchronous handler, batched into the one re-render
               // that flips `status`, so <Login>'s very first paint already
               // has the notice; there is no intermediate frame where the
-              // dashboard is gone and the notice isn't there yet.
-              setSignOutNotice("You've been signed out. Log in and your changes will still be here.");
+              // dashboard is gone and the notice isn't there yet. `notice`
+              // itself comes from PublishBar (its own prop comment) -- it
+              // already knows whether this 401 landed BEFORE or AFTER the
+              // commit succeeded, which is not something this callback can
+              // tell on its own.
+              setSignOutNotice(notice);
               logOut();
             }}
           >
@@ -401,7 +417,7 @@ function ArraySection<Item extends { id: string }>({
   const sha = (state as { status: 'loaded'; sha: string }).sha;
 
   function commit(next: Item[]) {
-    registry.register(file, next, sha);
+    registry.updateData(file, next);
     setState({ status: 'loaded', data: next, sha });
   }
 
@@ -494,7 +510,7 @@ function SectionsSection({ registry, restoreDraft }: { registry: ContentRegistry
   const items = state.data;
   const sha = (state as { status: 'loaded'; sha: string }).sha;
   function commit(next: Section[]) {
-    registry.register('sections.json', next, sha);
+    registry.updateData('sections.json', next);
     setState({ status: 'loaded', data: next, sha });
   }
 
@@ -592,7 +608,7 @@ function HoursSection({ registry, restoreDraft }: { registry: ContentRegistry; r
         value={state.data.hours}
         onChange={(next) => {
           const nextData = { ...state.data, hours: next };
-          registry.register('site.json', nextData, state.sha);
+          registry.updateData('site.json', nextData);
           setState({ status: 'loaded', data: nextData, initial: state.initial, sha: state.sha });
         }}
         problems={problems}
@@ -689,7 +705,7 @@ function MenusSection({
   const items = state.data;
   const sha = (state as { status: 'loaded'; sha: string }).sha;
   function commit(next: MenuFile[]) {
-    registry.register('menus.json', next, sha);
+    registry.updateData('menus.json', next);
     setState({ status: 'loaded', data: next, sha });
   }
 
@@ -814,7 +830,7 @@ function GallerySection({
       <GalleryList
         value={state.data}
         onChange={(next) => {
-          registry.register('galleries.json', next, state.sha);
+          registry.updateData('galleries.json', next);
           setState({ status: 'loaded', data: next, sha: state.sha });
         }}
         problems={problems}
@@ -875,7 +891,7 @@ function StorySection({ registry, restoreDraft }: { registry: ContentRegistry; r
       <StoryForm
         value={state.data}
         onChange={(next) => {
-          registry.register('story.json', next, state.sha);
+          registry.updateData('story.json', next);
           setState({ status: 'loaded', data: next, sha: state.sha });
         }}
         problems={problems}
@@ -1034,7 +1050,7 @@ function CopySection({ registry, restoreDraft }: { registry: ContentRegistry; re
 
   const sha = (state as { status: 'loaded'; sha: string }).sha;
   function commit(next: Copy) {
-    registry.register('copy.json', next, sha);
+    registry.updateData('copy.json', next);
     setState({ status: 'loaded', data: next, sha });
   }
 

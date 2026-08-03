@@ -33,20 +33,44 @@ export interface ContentEntry {
 export type ContentEntries = Partial<Record<ContentFileName, ContentEntry>>;
 
 export interface ContentRegistry {
-  // Called by a section's own load-effect (once, with the freshly-fetched
-  // value) AND by its commit/onChange path (on every edit) -- see
-  // AdminApp.tsx's call sites. Mutates a ref SYNCHRONOUSLY, not through
-  // setState: the Publish button's own click handler un-focuses whatever
-  // field is currently focused before reading anything (Step 1's "flush the
-  // focused field" requirement, TagsInput's onBlur-commits-the-buffer
-  // contract), and that focus-loss's own onChange -> ... -> register() chain
-  // runs synchronously, in the SAME call stack, as part of dispatching the
-  // underlying DOM focus-out notification -- a version of this that only
-  // updated REACT STATE would not be visible to
+  // Called by a section's own load-effect ONLY -- once with the
+  // freshly-fetched value, and again (still load-time) if a restored draft
+  // exists for this file (registerLoaded's own two-call contract,
+  // AdminApp.tsx). Review finding (Critical): this used to ALSO be what a
+  // section's own commit/onChange path called on every edit, passing its
+  // own stale, load-time `sha` back in and clobbering whatever
+  // `markPublished` had just refreshed it to -- see `updateData` below,
+  // which is what a write path calls now. Mutates a ref SYNCHRONOUSLY, not
+  // through setState: the Publish button's own click handler un-focuses
+  // whatever field is currently focused before reading anything (Step 1's
+  // "flush the focused field" requirement, TagsInput's onBlur-commits-the-
+  // buffer contract), and that focus-loss's own onChange -> ... ->
+  // updateData() chain runs synchronously, in the SAME call stack, as part
+  // of dispatching the underlying DOM focus-out notification -- a version
+  // of this that only updated REACT STATE would not be visible to
   // getEntries() until the next render, which is too late: the whole point
   // is that Publish reads the flushed value in the SAME synchronous call
   // that triggered the flush, not a value from before it.
   register: (file: ContentFileName, data: unknown, sha: string) => void;
+  // Review finding (Critical): every section's own write path (its
+  // `commit`/`onChange`) used to call `register` too, passing its OWN
+  // local `sha` -- captured once at load time and never refreshed after a
+  // publish. `register`'s own contract OVERWRITES the tracked `sha`
+  // unconditionally (see its own comment: it exists to re-pin a file on
+  // every fresh LOAD, restoreDraft's second call included), so a second
+  // publish of the same file later in the same session sent that stale
+  // `sha` back as `baseSha` and was refused with a 409 -- as if someone
+  // else had published, when the only "someone else" was her own prior,
+  // already-successful publish (markPublished's own fresh `sha` was
+  // overwritten the instant she typed the next keystroke). `updateData`
+  // is the one write path a commit/onChange should call instead: touches
+  // `data` only, leaves `sha`/`initial` exactly as `register`/
+  // `markPublished` last set them. A no-op if the file has never been
+  // registered at all -- every real call site only exists once its own
+  // section has already loaded (and therefore already registered), so
+  // this guards a state that should be unreachable rather than silently
+  // inventing a `sha` this module has no way to know is correct.
+  updateData: (file: ContentFileName, data: unknown) => void;
   // A function, not a plain object property -- returns whatever the ref
   // CURRENTLY holds, always fresh, regardless of whether the component that
   // holds this registry has re-rendered since the last `register` call (see
@@ -84,6 +108,22 @@ export function useContentRegistry(): ContentRegistry {
     setVersion((v) => v + 1);
   }, []);
 
+  // Touches `data` only -- `sha` and `initial` stay exactly what `register`
+  // (the load path) or `markPublished` (a prior success) last set them to.
+  // See ContentRegistry's own comment on `updateData` for the Critical this
+  // fixes: a write path that instead called `register` re-passed its own
+  // stale, load-time `sha`, clobbering a fresh one `markPublished` had just
+  // written. No entry for `file` yet is treated as a caller bug, not a
+  // reason to invent one -- every real call site is a section's own
+  // commit/onChange, reachable only after that section's own load-effect
+  // has already registered it at least once.
+  const updateData = useCallback((file: ContentFileName, data: unknown) => {
+    const existing = ref.current[file];
+    if (!existing) return;
+    ref.current = { ...ref.current, [file]: { ...existing, data } };
+    setVersion((v) => v + 1);
+  }, []);
+
   const getEntries = useCallback(() => ref.current, []);
 
   const markPublished = useCallback((updates: Partial<Record<ContentFileName, { data: unknown; sha: string }>>) => {
@@ -105,7 +145,7 @@ export function useContentRegistry(): ContentRegistry {
     setVersion((v) => v + 1);
   }, []);
 
-  return { register, getEntries, version, markPublished };
+  return { register, updateData, getEntries, version, markPublished };
 }
 
 // True when `data` differs from the committed `initial` it started from.
@@ -213,17 +253,98 @@ export function buildPublishRequest(entries: ContentEntries, staged: Record<stri
   return { ok: true, files: [...contentFiles, ...stagedPayload], contentSnapshots, stagedKeys };
 }
 
+// Review finding (Critical): the "same location" a leaf gets restored to
+// when it names a staged file is found by matching `id`, not raw array
+// index, wherever `initial` is itself an array of id-carrying records
+// (dishes/drinks/press/menus) -- every reorderable list in this dashboard
+// already treats `id` as a record's true identity independent of its
+// position (RecordList's own onReorder, markPublished's own snapshot), and
+// pairing `data[3]` against `initial[3]` by bare position would silently
+// pull the WRONG record's committed value if she reordered the same list in
+// the same session. Arrays with no `id` field to key on (galleries.json's
+// three lists) and a brand-new record `initial` has no counterpart for at
+// all (added this session, nothing committed to fall back to) both fall
+// through to plain index, which `initialCounterpart`'s own `undefined`
+// return handles the same way scrubStagedReferences' own default does: a
+// blank leaf is always a safe, actionable value (validateContent's own
+// "needs an image" rule), never a broken reference.
+function initialCounterpart(initial: unknown, key: string | number, sibling: unknown): unknown {
+  if (Array.isArray(initial)) {
+    if (typeof key !== 'number') return undefined;
+    const siblingId = sibling !== null && typeof sibling === 'object' ? (sibling as Record<string, unknown>).id : undefined;
+    if (typeof siblingId === 'string') {
+      const match = initial.find(
+        (item) => item !== null && typeof item === 'object' && (item as Record<string, unknown>).id === siblingId,
+      );
+      if (match !== undefined) return match;
+    }
+    return initial[key];
+  }
+  if (initial !== null && typeof initial === 'object' && typeof key === 'string') {
+    return (initial as Record<string, unknown>)[key];
+  }
+  return undefined;
+}
+
+// Review finding (Critical): reproduced end to end -- she stages a photo
+// (drafts.ts's own case for why this exists: iOS evicting a backgrounded
+// tab), the tab dies before Publish ever runs, she reloads, is offered the
+// draft, clicks Restore, and publishes. The RESTORED record still names the
+// staged `contentPath`; the bytes behind it lived only in staged.ts's
+// in-memory map and died with the tab. Publish carries `dishes.json` with
+// its own `image` field naming a food-category derivative under a hash it
+// never committed, and zero staged files -- accepted (the Worker's own
+// validateContent has no filesystem to check against), landing
+// on `main`, where the deploy gate's own asset-existence check then fails
+// FOREVER, for every subsequent publish of anything, until a developer
+// hand-edits the JSON. Fixed here, not at Restore time: `dirtyDraftMap` runs
+// on every persistence tick (AdminApp's own effect, keyed on
+// `registry.version`), long before any tab ever dies, so a reference to a
+// currently-staged file's own bytes is scrubbed out of what gets WRITTEN to
+// localStorage in the first place -- replaced with whatever `initial`
+// (the last committed value) held at the same location. A restored draft
+// therefore cannot carry a reference this collector itself has already
+// forgotten it ever staged: Restore is safe by construction, not by asking
+// her to notice a warning count and act on it (staleStagedCount's own,
+// separate, honest "some picked files were lost" note is what THAT is for).
+function scrubStagedReferences(data: unknown, initial: unknown, stagedContentPaths: Set<string>): unknown {
+  if (typeof data === 'string') {
+    if (!stagedContentPaths.has(data)) return data;
+    return typeof initial === 'string' ? initial : '';
+  }
+  if (Array.isArray(data)) {
+    return data.map((item, index) => scrubStagedReferences(item, initialCounterpart(initial, index, item), stagedContentPaths));
+  }
+  if (data !== null && typeof data === 'object') {
+    const result: Record<string, unknown> = {};
+    Object.entries(data as Record<string, unknown>).forEach(([key, value]) => {
+      result[key] = scrubStagedReferences(value, initialCounterpart(initial, key, value), stagedContentPaths);
+    });
+    return result;
+  }
+  return data;
+}
+
 // The draft map (drafts.ts) is scoped to content JSON only -- see that
 // file's own comment on why staged photo/PDF bytes are deliberately left
 // out (localStorage's practical quota). Every currently dirty file is
 // re-stamped with `now` on every call: this only ever runs from AdminApp's
 // own persistence effect, which only fires when the registry's `version`
 // actually moved (a real edit, or a fresh load) -- so `now` genuinely means
-// "as of the last thing she touched", not a fabricated recency.
-export function dirtyDraftMap(entries: ContentEntries, now: number = Date.now()): DraftMap {
+// "as of the last thing she touched", not a fabricated recency. `staged` is
+// the collector's own live map (PublishBar.tsx's own call site has it in
+// scope already) -- every leaf equal to one of ITS `contentPath` values is
+// scrubbed via `scrubStagedReferences` above before this file's `data` is
+// written out; skipped entirely (not merely a no-op walk) when nothing is
+// currently staged, the overwhelmingly common case, so an ordinary edit
+// with no photo involved costs nothing extra.
+export function dirtyDraftMap(entries: ContentEntries, staged: Record<string, StagedFile> = {}, now: number = Date.now()): DraftMap {
+  const stagedContentPaths = new Set(Object.values(staged).map((file) => file.contentPath));
   const map: DraftMap = {};
   dirtyContentFiles(entries).forEach((file) => {
-    map[file] = { data: entries[file]!.data, savedAt: now };
+    const entry = entries[file]!;
+    const data = stagedContentPaths.size === 0 ? entry.data : scrubStagedReferences(entry.data, entry.initial, stagedContentPaths);
+    map[file] = { data, savedAt: now };
   });
   return map;
 }

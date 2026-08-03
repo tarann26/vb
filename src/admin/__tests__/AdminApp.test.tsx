@@ -25,7 +25,7 @@ import galleriesJson from '../../content/galleries.json';
 import menusJson from '../../content/menus.json';
 import storyJson from '../../content/story.json';
 import copyJson from '../../content/copy.json';
-import { DRAFT_STORAGE_KEY } from '../drafts';
+import { DRAFT_STORAGE_KEY, DRAFT_STAGED_COUNT_KEY } from '../drafts';
 
 function dish(id: string, name: string): Dish {
   return { id, name, description: `${name}, described.`, image: `/food/${id}.webp`, tags: [] };
@@ -635,6 +635,118 @@ describe("AdminApp: Task 9's wiring -- replacing a menu PDF under the SAME name 
   });
 });
 
+// Critical review finding, reproduced through the real upload chain and the
+// real draft store -- not a hand-built draft fixture: she stages a photo
+// (drafts.ts's own case for why this exists: iOS evicting a backgrounded
+// tab), the tab dies before Publish ever runs, she reloads, is offered the
+// draft, clicks Restore, and publishes. Proven end to end that the fix
+// (publish.ts's dirtyDraftMap) holds at every step: the SAVED draft never
+// carried the dangling reference in the first place, Restore lands on the
+// committed photo, and an unrelated edit made in the SAME record survives
+// untouched. Also the first end-to-end proof of I6's DRAFT_STAGED_COUNT_KEY
+// wiring -- unit-tested at both ends (drafts.test.ts) but never through the
+// real write (PublishBar's persistence effect) and read (AdminApp's own
+// restore banner) it connects.
+describe('AdminApp: Critical review fix -- a restored draft cannot publish a photo reference whose bytes are gone', () => {
+  beforeEach(() => {
+    FakeXHR.instances = [];
+    vi.stubGlobal('XMLHttpRequest', FakeXHR as unknown as typeof XMLHttpRequest);
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function stubFetchWithPublish() {
+    const publishBodies: { files: { path: string; content: string; encoding: string }[] }[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url === '/api/wa') return WA_RESPONSE();
+        if (url === '/api/publish') {
+          publishBodies.push(JSON.parse(String(init?.body)) as { files: { path: string; content: string; encoding: string }[] });
+          return new Response(JSON.stringify({ sha: 'commit-1' }), { status: 200, headers: { 'content-type': 'application/json' } });
+        }
+        if (url.startsWith('/api/build-status')) {
+          return new Response(JSON.stringify({ state: 'live', deploymentUrl: null, commitUrl: 'https://c' }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        if (url === '/build-info.json') {
+          return new Response(JSON.stringify({ sha: 'commit-1', builtAt: 'now' }), { status: 200, headers: { 'content-type': 'application/json' } });
+        }
+        if (url.includes('dishes.json')) return contentResponse(DISHES, 'sha-dishes');
+        if (url.includes('drinks.json')) return contentResponse(DRINKS, 'sha-drinks');
+        if (url.includes('press.json')) return contentResponse(PRESS, 'sha-press');
+        if (url.includes('sections.json')) return contentResponse(SECTIONS, 'sha-sections');
+        if (url.includes('site.json')) return contentResponse(SITE, 'sha-site');
+        if (url.includes('galleries.json')) return contentResponse(GALLERIES, 'sha-galleries');
+        if (url.includes('menus.json')) return contentResponse(MENUS, 'sha-menus');
+        if (url.includes('story.json')) return contentResponse(STORY, 'sha-story');
+        if (url.includes('copy.json')) return contentResponse(COPY, 'sha-copy');
+        throw new Error(`AdminApp.test.tsx: unexpected fetch to ${url}`);
+      }),
+    );
+    return publishBodies;
+  }
+
+  it('stage a photo, edit the name, lose the tab, reload -- the banner names the lost photo, and Restore + Publish carries the ORIGINAL image with the name edit intact', async () => {
+    stubFetchWithPublish();
+    const user = userEvent.setup();
+    const { unmount } = render(<AdminApp />);
+
+    const dSection = await dishesSection();
+    const nameInput = await within(dSection).findByDisplayValue('Dish A');
+    await user.clear(nameInput);
+    await user.type(nameInput, 'Dish A Edited');
+
+    const dishPhotoInput = within(dSection).getAllByLabelText(DISH_FIELDS.image.label)[0];
+    await user.upload(dishPhotoInput, jpegFile('dish.jpg'));
+    await waitFor(() => expect(FakeXHR.instances).toHaveLength(1));
+    FakeXHR.instances[0].respond(200, { path: 'assets-source/food/aaa111aaa111.jpg', contentPath: '/food/aaa111aaa111.webp' });
+    await screen.findByText('1 section edited, 1 file staged — ready to publish.');
+
+    // The draft (and the real staged count, I6's own wiring) is persisted
+    // BEFORE the tab ever dies.
+    await waitFor(() => expect(window.localStorage.getItem(DRAFT_STAGED_COUNT_KEY)).toBe('1'));
+
+    // The tab dies -- staged.ts's in-memory collector (unmount) goes with
+    // it; localStorage does not.
+    unmount();
+
+    // She reloads: a fresh AdminApp, a fresh (empty) staged-files collector,
+    // against the SAME, unchanged server content.
+    const publishBodies = stubFetchWithPublish();
+    render(<AdminApp />);
+
+    const banner = await screen.findByRole('alert');
+    expect(banner).toHaveTextContent(/you have unsaved changes/i);
+    // I6: the real wiring, not a hand-passed prop -- this is the sentence
+    // DRAFT_STAGED_COUNT_KEY's own value (read back by AdminApp on this
+    // fresh mount) actually produces.
+    expect(banner).toHaveTextContent("A photo or PDF you picked in that session wasn't saved and will need to be picked again.");
+
+    await user.click(screen.getByRole('button', { name: 'Restore' }));
+    const restoredSection = await dishesSection();
+    await within(restoredSection).findByDisplayValue('Dish A Edited'); // the unrelated edit survived the scrub
+
+    await user.click(screen.getByRole('button', { name: 'Publish' }));
+    await waitFor(() => expect(publishBodies).toHaveLength(1));
+    const dishesFile = publishBodies[0].files.find((f) => f.path === 'src/content/dishes.json');
+    expect(dishesFile).toBeDefined();
+    const publishedDishes = JSON.parse(dishesFile!.content) as Dish[];
+    // The ORIGINAL committed image -- never the staged contentPath, whose
+    // bytes died with the tab. Skipping the scrub in dirtyDraftMap would
+    // instead publish '/food/aaa111aaa111.webp' here, with zero staged
+    // bytes behind it -- a broken image live, reported as a success.
+    expect(publishedDishes.find((d) => d.id === 'a')?.image).toBe('/food/a.webp');
+    expect(publishedDishes.find((d) => d.id === 'a')?.name).toBe('Dish A Edited');
+    // No staged bytes were sent either -- there was nothing left to send.
+    expect(publishBodies[0].files.some((f) => f.path.startsWith('assets-source/'))).toBe(false);
+  });
+});
+
 describe('AdminApp: Task 10 -- a reload mid-edit offers to restore the draft', () => {
   const DRAFT = {
     'dishes.json': { data: [dish('a', 'Dish A (restored)'), dish('b', 'Dish B')], savedAt: Date.now() },
@@ -763,5 +875,40 @@ describe('AdminApp: Task 10 review fix -- a 401 mid-edit does not destroy the dr
 
     await user.click(screen.getByRole('button', { name: 'Restore' }));
     expect(await screen.findByDisplayValue('Dish A Edited')).toBeInTheDocument();
+  });
+
+  // Minor review finding: the SAME banner also warns about staged
+  // PHOTOS/PDFs "not saved, will need to be picked again" -- true for a
+  // genuine reload (staged.ts's own in-memory collector really is gone),
+  // false here: AdminApp never unmounts on an in-page 401, so the exact
+  // same collector instance she staged into is still holding the bytes
+  // when the banner is offered again.
+  it('a photo staged before the 401 is NOT reported as lost -- its bytes are still in memory and still publish correctly', async () => {
+    FakeXHR.instances = [];
+    vi.stubGlobal('XMLHttpRequest', FakeXHR as unknown as typeof XMLHttpRequest);
+    const getPublishCalls = stubFetchWithLoginAndPublish();
+    const user = userEvent.setup();
+    render(<AdminApp />);
+
+    const dSection = await dishesSection();
+    await within(dSection).findByDisplayValue('Dish A');
+    const dishPhotoInput = within(dSection).getAllByLabelText(DISH_FIELDS.image.label)[0];
+    await user.upload(dishPhotoInput, jpegFile('dish.jpg'));
+    await waitFor(() => expect(FakeXHR.instances).toHaveLength(1));
+    FakeXHR.instances[0].respond(200, { path: 'assets-source/food/aaa111aaa111.jpg', contentPath: '/food/aaa111aaa111.webp' });
+    await screen.findByText('1 section edited, 1 file staged — ready to publish.');
+
+    await user.click(screen.getByRole('button', { name: 'Publish' }));
+    expect(await screen.findByText("You've been signed out. Log in and your changes will still be here.")).toBeInTheDocument();
+    expect(getPublishCalls()).toBe(1);
+
+    await user.type(screen.getByLabelText(/password/i), 'whatever-the-real-password-is');
+    await user.click(screen.getByRole('button', { name: /log in/i }));
+
+    const banner = await screen.findByRole('alert');
+    expect(banner).toHaveTextContent(/you have unsaved changes/i);
+    // The wrong sentence, named exactly: mutating the fix back to the bare
+    // `pendingStagedCount` fires this assertion.
+    expect(banner).not.toHaveTextContent(/picked again/i);
   });
 });

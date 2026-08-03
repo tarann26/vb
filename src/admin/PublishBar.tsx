@@ -100,9 +100,32 @@ type BarState =
   | { phase: 'validation'; problems: ValidationProblem[] }
   | { phase: 'server-error'; message: string }
   | { phase: 'network-error' }
-  | { phase: 'unauthenticated' };
+  // `notice` carries the EXACT sentence also handed to `onUnauthenticated`
+  // (see that prop's own comment, and PRE_PUBLISH/POST_PUBLISH_
+  // UNAUTHENTICATED_NOTICE below) -- one computed string, not two that have
+  // to be kept in sync by hand, for what she reads here (in the unlikely
+  // event this phase ever paints before AdminApp's own logOut unmounts this
+  // component) and what Login shows after the unmount that normally beats
+  // it there.
+  | { phase: 'unauthenticated'; notice: string };
 
 const BUSY_PHASES = new Set<BarState['phase']>(['publishing', 'polling', 'confirming']);
+
+// Review finding (Important): a 401 mid-POLL is not the same event as a 401
+// on the publish REQUEST itself, and reusing one sentence for both told her
+// the opposite of what happened. By the time trackPublish can ever report
+// `unauthenticated`, requestPublish has already returned success -- the
+// commit landed, clearDraft() already ran -- so "your changes will still be
+// here" is false for this case: there is nothing left to protect, and after
+// logging back in she read "No changes to publish yet" with no way to learn
+// whether the build actually finished. `result.sha` is the one thing this
+// state has to offer instead: a commit reference she can hand a developer,
+// the same fallback build-failed/stalled already give when there's no
+// commitUrl to link.
+const PRE_PUBLISH_UNAUTHENTICATED_NOTICE = "You've been signed out. Log in and your changes will still be here.";
+function postPublishUnauthenticatedNotice(sha: string): string {
+  return `Your changes were already published (commit ${sha}). We couldn't confirm the build finished before you were signed out — log in and check back in a minute.`;
+}
 
 function describeBuildState(state: BuildState): string {
   switch (state) {
@@ -136,7 +159,11 @@ function progressToBarState(progress: PublishProgress, sha: string): BarState {
     case 'mismatch':
       return { phase: 'mismatch' };
     case 'unauthenticated':
-      return { phase: 'unauthenticated' };
+      // Only ever reached from trackPublish, which only ever runs AFTER
+      // requestPublish has already returned success -- see this file's own
+      // POST_PUBLISH_UNAUTHENTICATED_NOTICE comment for why that makes this
+      // a different sentence than the one on the publish REQUEST's own 401.
+      return { phase: 'unauthenticated', notice: postPublishUnauthenticatedNotice(sha) };
   }
 }
 
@@ -170,13 +197,21 @@ export interface PublishBarProps {
   stagedFiles: StagedFiles;
   // Called the moment either the publish request itself, or a build-status
   // poll made after it succeeded, comes back 401 -- the session's own 7-day
-  // token can expire mid-edit. AdminApp wires this to useSession's logOut,
-  // which re-shows the login form; nothing here assumes what happens next,
-  // since her still-unsaved edits are already safe in both the in-memory
-  // registry (until AdminApp itself unmounts on the status flip) and, more
-  // durably, in the localStorage draft this component keeps current on
-  // every change.
-  onUnauthenticated: () => void;
+  // token can expire mid-edit. Handed the exact sentence she should read for
+  // WHICHEVER of those two cases just happened (PRE_PUBLISH/POST_PUBLISH_
+  // UNAUTHENTICATED_NOTICE above) -- review finding (Important): the two are
+  // not interchangeable. A mid-poll 401 fires only after the commit already
+  // landed and clearDraft() already ran, so "your changes will still be
+  // here" is actively false for that case, not merely imprecise; a caller
+  // that hardcoded one sentence for both (AdminApp used to) told her the
+  // opposite of what happened, and left her with no way to learn whether
+  // the build finished after logging back in. AdminApp wires this to
+  // useSession's logOut, which re-shows the login form; nothing here
+  // assumes what happens next, since her still-unsaved edits (the
+  // pre-publish case only) are already safe in both the in-memory registry
+  // (until AdminApp itself unmounts on the status flip) and, more durably,
+  // in the localStorage draft this component keeps current on every change.
+  onUnauthenticated: (notice: string) => void;
   // Every content section AdminApp renders -- Dishes, Drinks, Press,
   // Sections, Hours, Menus, Galleries, Story, Copy -- rendered INSIDE the
   // <form> below, not as a sibling next to it. That is what makes Step 1's
@@ -254,7 +289,10 @@ const PublishBar: React.FC<PublishBarProps> = ({ registry, stagedFiles, onUnauth
   useEffect(() => {
     const entries = registry.getEntries();
     if (Object.keys(entries).length === 0) return; // nothing has loaded yet -- never clear on this alone
-    const map = dirtyDraftMap(entries);
+    // `stagedFiles.files` -- so a leaf naming a file THIS session has
+    // staged (but not yet published) is scrubbed out of what gets written
+    // below; see dirtyDraftMap's own comment for the Critical this closes.
+    const map = dirtyDraftMap(entries, stagedFiles.files);
     if (Object.keys(map).length > 0) saveDraft(map, stagedCount);
     else clearDraft();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -305,8 +343,8 @@ const PublishBar: React.FC<PublishBarProps> = ({ registry, stagedFiles, onUnauth
     if (!mountedRef.current) return;
 
     if (result.status === 'unauthenticated') {
-      setState({ phase: 'unauthenticated' });
-      onUnauthenticated();
+      setState({ phase: 'unauthenticated', notice: PRE_PUBLISH_UNAUTHENTICATED_NOTICE });
+      onUnauthenticated(PRE_PUBLISH_UNAUTHENTICATED_NOTICE);
       return;
     }
     if (result.status !== 'success') {
@@ -355,8 +393,9 @@ const PublishBar: React.FC<PublishBarProps> = ({ registry, stagedFiles, onUnauth
       },
     );
     if (!mountedRef.current) return;
-    setState(progressToBarState(outcome, result.sha));
-    if (outcome.phase === 'unauthenticated') onUnauthenticated();
+    const nextState = progressToBarState(outcome, result.sha);
+    setState(nextState);
+    if (nextState.phase === 'unauthenticated') onUnauthenticated(nextState.notice);
   }
 
   return (
@@ -469,19 +508,22 @@ function PublishStatus({ state }: { state: BarState }) {
     case 'unauthenticated':
       return (
         <p role="alert" className="mt-3 font-['Montserrat'] text-sm text-red-600">
-          You&apos;ve been signed out. Log in and your changes will still be here.
+          {state.notice}
         </p>
       );
     case 'validation':
       return (
         <div role="alert" className="mt-3 font-['Montserrat'] text-sm text-red-600">
-          <p>There&apos;s a problem with what you tried to publish:</p>
+          {/* Review finding (Important): rendering `problem.field` raw put
+              internal validator paths like "[0].name" in front of her --
+              reachable in one click. Dropped: every message already names
+              the dish or article it belongs to (validate.ts's own
+              messages), and Task 6 already routes every one of these
+              problems inline, next to the field it describes, in red. */}
+          <p>Fix the fields marked in red below.</p>
           <ul className="list-disc pl-5">
             {state.problems.map((problem, index) => (
-              <li key={index}>
-                {problem.field ? <strong>{problem.field}: </strong> : null}
-                {problem.message}
-              </li>
+              <li key={index}>{problem.message}</li>
             ))}
           </ul>
         </div>

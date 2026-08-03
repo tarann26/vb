@@ -28,6 +28,15 @@ export interface StagedFile {
   path: string;
   content: string;
   encoding: 'base64';
+  // What the record's own field holds for this upload -- StagedPhoto's own
+  // `contentPath` for a photo, StagedMenuPdf's own `file` for a menu PDF.
+  // Review finding (Critical): dropped entirely until this fix, which is
+  // exactly what let a RESTORED draft publish a reference this collector
+  // itself no longer has bytes for -- publish.ts's own dirtyDraftMap needs
+  // this to tell "a leaf that names a file THIS session staged" apart from
+  // an ordinary string, so it can scrub a stale one out of what gets saved
+  // to localStorage before the tab that would ever publish it dies.
+  contentPath: string;
 }
 
 export interface StagedFiles {
@@ -84,12 +93,15 @@ export function useStagedFiles(): StagedFiles {
 // `stage` above stores -- every real caller (ArraySection, GalleryList, the
 // menus section, all in AdminApp.tsx) needs exactly this, and a
 // second/third independently-written copy of "pick path/content/encoding
-// back out and drop the rest" is exactly the kind of thing that could
-// silently drift out of sync with itself across call sites.
+// back out" is exactly the kind of thing that could silently drift out of
+// sync with itself across call sites. `contentPath` IS kept now (see
+// StagedFile's own comment) -- it is the one field publish.ts's
+// dirtyDraftMap needs to recognise a leaf that names bytes this collector
+// holds.
 export function fromStagedPhoto(staged: StagedPhoto | null): StagedFile | null {
-  return staged === null ? null : { path: staged.path, content: staged.content, encoding: staged.encoding };
+  return staged === null ? null : { path: staged.path, content: staged.content, encoding: staged.encoding, contentPath: staged.contentPath };
 }
 
 export function fromStagedMenuPdf(staged: StagedMenuPdf | null): StagedFile | null {
-  return staged === null ? null : { path: staged.path, content: staged.content, encoding: staged.encoding };
+  return staged === null ? null : { path: staged.path, content: staged.content, encoding: staged.encoding, contentPath: staged.file };
 }

@@ -26,10 +26,10 @@ describe('useStagedFiles: the one collector every staging screen shares', () => 
   it('stages a file under its own key', () => {
     const { result } = renderHook(() => useStagedFiles());
     act(() => {
-      result.current.stage('dishes.json:negroni:image', { path: PHOTO_A.path, content: PHOTO_A.content, encoding: 'base64' });
+      result.current.stage('dishes.json:negroni:image', { path: PHOTO_A.path, content: PHOTO_A.content, encoding: 'base64', contentPath: PHOTO_A.contentPath });
     });
     expect(result.current.files).toEqual({
-      'dishes.json:negroni:image': { path: PHOTO_A.path, content: PHOTO_A.content, encoding: 'base64' },
+      'dishes.json:negroni:image': { path: PHOTO_A.path, content: PHOTO_A.content, encoding: 'base64', contentPath: PHOTO_A.contentPath },
     });
   });
 
@@ -39,14 +39,14 @@ describe('useStagedFiles: the one collector every staging screen shares', () => 
   it('two different keys coexist -- staging a second file does not evict the first', () => {
     const { result } = renderHook(() => useStagedFiles());
     act(() => {
-      result.current.stage('dishes.json:negroni:image', { path: PHOTO_A.path, content: PHOTO_A.content, encoding: 'base64' });
+      result.current.stage('dishes.json:negroni:image', { path: PHOTO_A.path, content: PHOTO_A.content, encoding: 'base64', contentPath: PHOTO_A.contentPath });
     });
     act(() => {
-      result.current.stage('drinks.json:viola:image', { path: PHOTO_B.path, content: PHOTO_B.content, encoding: 'base64' });
+      result.current.stage('drinks.json:viola:image', { path: PHOTO_B.path, content: PHOTO_B.content, encoding: 'base64', contentPath: PHOTO_B.contentPath });
     });
     expect(Object.keys(result.current.files).sort()).toEqual(['dishes.json:negroni:image', 'drinks.json:viola:image']);
-    expect(result.current.files['dishes.json:negroni:image']).toEqual({ path: PHOTO_A.path, content: PHOTO_A.content, encoding: 'base64' });
-    expect(result.current.files['drinks.json:viola:image']).toEqual({ path: PHOTO_B.path, content: PHOTO_B.content, encoding: 'base64' });
+    expect(result.current.files['dishes.json:negroni:image']).toEqual({ path: PHOTO_A.path, content: PHOTO_A.content, encoding: 'base64', contentPath: PHOTO_A.contentPath });
+    expect(result.current.files['drinks.json:viola:image']).toEqual({ path: PHOTO_B.path, content: PHOTO_B.content, encoding: 'base64', contentPath: PHOTO_B.contentPath });
   });
 
   // PhotoField.tsx/PdfField.tsx's own `onStaged` contract: `null` means "a
@@ -58,7 +58,7 @@ describe('useStagedFiles: the one collector every staging screen shares', () => 
   it('staging null under an existing key removes it entirely', () => {
     const { result } = renderHook(() => useStagedFiles());
     act(() => {
-      result.current.stage('dishes.json:negroni:image', { path: PHOTO_A.path, content: PHOTO_A.content, encoding: 'base64' });
+      result.current.stage('dishes.json:negroni:image', { path: PHOTO_A.path, content: PHOTO_A.content, encoding: 'base64', contentPath: PHOTO_A.contentPath });
     });
     act(() => {
       result.current.stage('dishes.json:negroni:image', null);
@@ -87,30 +87,35 @@ describe('useStagedFiles: the one collector every staging screen shares', () => 
   it('restaging the same key overwrites its own previous value, not the whole map', () => {
     const { result } = renderHook(() => useStagedFiles());
     act(() => {
-      result.current.stage('dishes.json:negroni:image', { path: PHOTO_A.path, content: PHOTO_A.content, encoding: 'base64' });
-      result.current.stage('drinks.json:viola:image', { path: PHOTO_B.path, content: PHOTO_B.content, encoding: 'base64' });
+      result.current.stage('dishes.json:negroni:image', { path: PHOTO_A.path, content: PHOTO_A.content, encoding: 'base64', contentPath: PHOTO_A.contentPath });
+      result.current.stage('drinks.json:viola:image', { path: PHOTO_B.path, content: PHOTO_B.content, encoding: 'base64', contentPath: PHOTO_B.contentPath });
     });
     act(() => {
-      result.current.stage('dishes.json:negroni:image', { path: 'assets-source/food/ccc.jpg', content: 'Yw==', encoding: 'base64' });
+      result.current.stage('dishes.json:negroni:image', { path: 'assets-source/food/ccc.jpg', content: 'Yw==', encoding: 'base64', contentPath: '/food/ccc.webp' });
     });
-    expect(result.current.files['dishes.json:negroni:image']).toEqual({ path: 'assets-source/food/ccc.jpg', content: 'Yw==', encoding: 'base64' });
+    expect(result.current.files['dishes.json:negroni:image']).toEqual({ path: 'assets-source/food/ccc.jpg', content: 'Yw==', encoding: 'base64', contentPath: '/food/ccc.webp' });
     // The OTHER key is untouched.
-    expect(result.current.files['drinks.json:viola:image']).toEqual({ path: PHOTO_B.path, content: PHOTO_B.content, encoding: 'base64' });
+    expect(result.current.files['drinks.json:viola:image']).toEqual({ path: PHOTO_B.path, content: PHOTO_B.content, encoding: 'base64', contentPath: PHOTO_B.contentPath });
   });
 });
 
-describe('fromStagedPhoto / fromStagedMenuPdf: pick path/content/encoding, drop the rest', () => {
-  it('fromStagedPhoto keeps path/content/encoding and drops contentPath', () => {
-    expect(fromStagedPhoto(PHOTO_A)).toEqual({ path: PHOTO_A.path, content: PHOTO_A.content, encoding: 'base64' });
+// Review finding (Critical): "drop the rest" used to include `contentPath`,
+// which is exactly the field publish.ts's dirtyDraftMap needs to recognise
+// a leaf that names bytes THIS collector holds -- a restored draft could
+// otherwise carry a reference to a photo the tab lost, with nothing left in
+// StagedFile to tell that reference apart from an ordinary committed path.
+describe('fromStagedPhoto / fromStagedMenuPdf: pick path/content/encoding/contentPath, drop only the rest', () => {
+  it('fromStagedPhoto keeps path/content/encoding, and contentPath', () => {
+    expect(fromStagedPhoto(PHOTO_A)).toEqual({ path: PHOTO_A.path, content: PHOTO_A.content, encoding: 'base64', contentPath: PHOTO_A.contentPath });
   });
 
   it('fromStagedPhoto(null) is null', () => {
     expect(fromStagedPhoto(null)).toBeNull();
   });
 
-  it('fromStagedMenuPdf keeps path/content/encoding and drops file', () => {
+  it('fromStagedMenuPdf keeps path/content/encoding, and its own `file` as contentPath', () => {
     const staged: StagedMenuPdf = { path: 'public/menus/food-menu.pdf', file: '/menus/food-menu.pdf', content: 'ZA==', encoding: 'base64' };
-    expect(fromStagedMenuPdf(staged)).toEqual({ path: staged.path, content: staged.content, encoding: 'base64' });
+    expect(fromStagedMenuPdf(staged)).toEqual({ path: staged.path, content: staged.content, encoding: 'base64', contentPath: staged.file });
   });
 
   it('fromStagedMenuPdf(null) is null', () => {

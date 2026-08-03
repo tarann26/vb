@@ -8,10 +8,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useState } from 'react';
 import PublishBar, { DraftBanner } from '../PublishBar';
-import { useContentRegistry } from '../publish';
+import { useContentRegistry, MAX_STAGED_PHOTOS_PER_PUBLISH } from '../publish';
 import { useStagedFiles } from '../staged';
 import type { ContentRegistry } from '../publish';
-import type { StagedFiles } from '../staged';
+import type { StagedFile, StagedFiles } from '../staged';
 import { DRAFT_STORAGE_KEY } from '../drafts';
 
 afterEach(() => {
@@ -41,7 +41,7 @@ function Harness({
   pollClock,
   withTagsField = false,
 }: {
-  onUnauthenticated?: () => void;
+  onUnauthenticated?: (notice: string) => void;
   pollClock?: { now: () => number; sleep: (ms: number) => Promise<void> };
   withTagsField?: boolean;
 }) {
@@ -98,9 +98,40 @@ describe('PublishBar: idle summary and the disabled/enabled Publish button', () 
   it('a staged file with no dirty content -> "N files staged", no "sections edited" clause', () => {
     render(<Harness />);
     act(() => {
-      captured!.stagedFiles.stage('menus.json:food:file', { path: 'public/menus/food-menu.pdf', content: 'AAAA', encoding: 'base64' });
+      captured!.stagedFiles.stage('menus.json:food:file', {
+        path: 'public/menus/food-menu.pdf',
+        content: 'AAAA',
+        encoding: 'base64',
+        contentPath: '/menus/food-menu.pdf',
+      });
     });
     expect(screen.getByText('1 file staged — ready to publish.')).toBeInTheDocument();
+  });
+
+  // I6 review finding: `tooManyStaged` (PublishBar.tsx) had no test at all
+  // -- mutating it to a hardcoded `false` left 153 tests green, meaning
+  // neither the disabled button nor the cap message was ever actually
+  // proven. One over the cap disables Publish even though the registry is
+  // otherwise clean, and tells her the same plain-language reason
+  // buildPublishRequest itself would refuse the request for.
+  it('more staged files than the cap disables Publish and shows the plain-language reason', () => {
+    render(<Harness />);
+    act(() => {
+      for (let i = 0; i <= MAX_STAGED_PHOTOS_PER_PUBLISH; i++) {
+        captured!.stagedFiles.stage(`dishes.json:dish-${i}:image`, {
+          path: `assets-source/food/photo-${i}.jpg`,
+          content: 'AAAA',
+          encoding: 'base64',
+          contentPath: `/food/photo-${i}.webp`,
+        });
+      }
+    });
+    expect(screen.getByRole('button', { name: 'Publish' })).toBeDisabled();
+    expect(
+      screen.getByText(
+        `You have ${MAX_STAGED_PHOTOS_PER_PUBLISH + 1} photos or PDFs staged; only ${MAX_STAGED_PHOTOS_PER_PUBLISH} can publish at once. Remove some before publishing.`,
+      ),
+    ).toBeInTheDocument();
   });
 });
 
@@ -218,10 +249,17 @@ describe('PublishBar: Step 5 translation table', () => {
     expect(alert).toHaveTextContent("Couldn't reach the server that stores your changes. Nothing was lost — try again in a minute.");
   });
 
-  it('422 -> each problem listed, field and message both on screen', async () => {
+  // Review finding (Important): rendering `problem.field` raw put an
+  // internal validator path ("[0].name") in front of her -- reachable in
+  // one click, and unreadable ("this dish needs a name" already tells her
+  // what's wrong; "[0].name:" does not). Dropped in favour of a plain
+  // lead-in line, since every message already names the dish/article it
+  // belongs to and Task 6 already marks the matching field red inline.
+  it('422 -> the message is shown, the RAW field path is not, and she is pointed at the marked fields', async () => {
     const alert = await publishAndGetAlert(422, { problems: [{ field: '[0].name', message: 'Name is required.' }] });
-    expect(alert).toHaveTextContent('[0].name');
+    expect(alert).toHaveTextContent('Fix the fields marked in red below.');
     expect(alert).toHaveTextContent('Name is required.');
+    expect(alert).not.toHaveTextContent('[0].name');
   });
 
   it('a problem whose field matches no rendered input still appears on screen', async () => {
@@ -229,7 +267,7 @@ describe('PublishBar: Step 5 translation table', () => {
     expect(alert).toHaveTextContent('Something obscure is wrong.');
   });
 
-  it('401 on the publish itself -> the signed-out sentence, and onUnauthenticated fires', async () => {
+  it('401 on the publish itself -> the pre-publish signed-out sentence, and onUnauthenticated fires with it', async () => {
     const onUnauthenticated = vi.fn();
     vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(401, { message: 'Not authenticated.' })));
     render(<Harness onUnauthenticated={onUnauthenticated} pollClock={instantClock()} />);
@@ -238,6 +276,7 @@ describe('PublishBar: Step 5 translation table', () => {
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent("You've been signed out. Log in and your changes will still be here.");
     expect(onUnauthenticated).toHaveBeenCalledTimes(1);
+    expect(onUnauthenticated).toHaveBeenCalledWith("You've been signed out. Log in and your changes will still be here.");
   });
 });
 
@@ -320,7 +359,14 @@ describe('PublishBar: Step 3 -- polling to live, confirmed against build-info.js
   // Step 3's own explicit instruction: GET /api/build-status is
   // authenticated too, and a 401 can arrive MID-POLL (the 7-day session
   // expiring while she waits), not only on the publish itself.
-  it('a 401 mid-poll -> the signed-out sentence, onUnauthenticated fires, polling stops', async () => {
+  //
+  // Review finding (Important): this used to assert the SAME sentence as
+  // the pre-publish 401 above -- wrong, because by the time trackPublish can
+  // ever report `unauthenticated`, requestPublish already returned success:
+  // the commit landed and clearDraft() already ran. "Your changes will
+  // still be here" is false for this case, not merely imprecise, and after
+  // logging back in she had no way to learn whether the build finished.
+  it('a 401 mid-poll -> a DIFFERENT sentence (the commit already landed), onUnauthenticated fires with it, polling stops', async () => {
     const onUnauthenticated = vi.fn();
     let statusCall = 0;
     const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
@@ -340,7 +386,9 @@ describe('PublishBar: Step 3 -- polling to live, confirmed against build-info.js
 
     await waitFor(() => expect(onUnauthenticated).toHaveBeenCalledTimes(1));
     const alert = await screen.findByRole('alert');
-    expect(alert).toHaveTextContent("You've been signed out. Log in and your changes will still be here.");
+    expect(alert).toHaveTextContent('Your changes were already published (commit commit-1).');
+    expect(alert).not.toHaveTextContent("You've been signed out. Log in and your changes will still be here.");
+    expect(onUnauthenticated).toHaveBeenCalledWith(expect.stringContaining('Your changes were already published'));
     expect(statusCall).toBe(2);
   });
 });
@@ -359,7 +407,7 @@ describe('PublishBar: after a successful publish', () => {
     render(<Harness pollClock={instantClock()} />);
     dirty(captured!.registry);
     act(() => {
-      captured!.stagedFiles.stage('dishes.json:a:image', { path: 'assets-source/food/x.jpg', content: 'AAAA', encoding: 'base64' });
+      captured!.stagedFiles.stage('dishes.json:a:image', { path: 'assets-source/food/x.jpg', content: 'AAAA', encoding: 'base64', contentPath: '/food/x.webp' });
     });
 
     fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
@@ -367,6 +415,55 @@ describe('PublishBar: after a successful publish', () => {
 
     expect(captured!.stagedFiles.files).toEqual({});
     expect(captured!.registry.getEntries()['dishes.json']?.sha).toBe('sha-fresh');
+  });
+
+  // I6 review finding: the ONLY assertion on this guarantee was
+  // `toEqual({})` on the happy path above -- true whether the code clears
+  // "exactly the staged keys this request included" (the comment's own
+  // claim) or unconditionally wipes every staged file regardless of what
+  // this specific request sent, because nothing was EVER staged mid-flight
+  // in that test, so there was never a SECOND file whose survival could
+  // tell the two apart. Here, one is staged after the request is already
+  // built (while the first is still in flight) -- it must survive.
+  it('a file staged mid-flight (after the request was built, before it resolved) survives -- only the keys THIS request sent are cleared', async () => {
+    let resolvePublish!: (response: Response) => void;
+    const publishResponse = new Promise<Response>((resolve) => {
+      resolvePublish = resolve;
+    });
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/publish') return publishResponse;
+      if (url.startsWith('/api/content')) return jsonResponse(200, { content: JSON.stringify([{ id: 'a', name: 'Edited' }]), sha: 'sha-fresh' });
+      if (url.startsWith('/api/build-status')) return jsonResponse(200, { state: 'live', deploymentUrl: null, commitUrl: 'https://c' });
+      if (url === '/build-info.json') return jsonResponse(200, { sha: 'commit-1', builtAt: 'now' });
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchImpl);
+    render(<Harness pollClock={instantClock()} />);
+    dirty(captured!.registry);
+    const midFlightFile: StagedFile = { path: 'assets-source/mocktails/y.jpg', content: 'BBBB', encoding: 'base64', contentPath: '/mocktails/y.webp' };
+    act(() => {
+      captured!.stagedFiles.stage('dishes.json:a:image', { path: 'assets-source/food/x.jpg', content: 'AAAA', encoding: 'base64', contentPath: '/food/x.webp' });
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
+    await waitFor(() => expect(fetchImpl).toHaveBeenCalledWith('/api/publish', expect.anything()));
+    // She stages a SECOND photo, on a different field, WHILE the first
+    // request is still in flight.
+    act(() => {
+      captured!.stagedFiles.stage('drinks.json:x:image', midFlightFile);
+    });
+
+    resolvePublish(jsonResponse(200, { sha: 'commit-1' }));
+    await screen.findByText('Your changes are live.');
+
+    // Deleting the clearing call entirely fires this assertion (it would
+    // see BOTH files still staged, not just the mid-flight one) -- the same
+    // failure a wipe-the-whole-map "clear everything" implementation would
+    // produce from the other direction (it would see NEITHER file, having
+    // taken the mid-flight one down with it). Either way, only a clear
+    // scoped to exactly `plan.stagedKeys` leaves this assertion green.
+    expect(captured!.stagedFiles.files).toEqual({ 'drinks.json:x:image': midFlightFile });
   });
 
   it('clears the localStorage draft on a 200', async () => {
