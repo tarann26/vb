@@ -22,7 +22,7 @@ this GitHub repository.
 
 ## 2. Set the build configuration
 
-**After entering the build command below, jump to Step 12 and do that check now, before moving on
+**After entering the build command below, jump to Step 13 and do that check now, before moving on
 to Step 3** — it confirms what you just typed into the dashboard actually landed the way this page
 describes, before anything downstream (the cron in particular) comes to depend on it silently
 matching.
@@ -141,6 +141,31 @@ or promise conversion numbers out of this analytics setup — page-level traffic
 Only after Step 3 has passed both checks and Step 4 is done. Update the domain's DNS records to
 point at the Cloudflare Pages project, following Cloudflare's instructions for the custom domain.
 
+**Also handle `www`, even if nobody plans to advertise it.** The Worker route in `wrangler.toml`
+(`viabiancadelhi.com/api/*`) matches the apex only, and `WA_ORIGIN` in `worker/index.ts` is
+hardcoded to `https://viabiancadelhi.com` — neither matches `https://www.viabiancadelhi.com`. If
+`www` ever resolves to this Cloudflare Pages project (common: someone types it, an old link points
+at it, a DNS record gets copied from a template), every `/api/*` request made against that hostname
+falls through to the SPA catch-all in `public/_redirects` and gets back **200 with the homepage's
+HTML** — `sendBeacon('/api/wa')` reports success while counting nothing, and login and publish get
+HTML back where they expect JSON. That is the exact silent-200 failure this project's own
+`_redirects` comment already had to work around once for `/api/*` on the apex (see that file); a
+served-but-unredirected `www` is the same hole, one hostname over. Close it now, before DNS goes
+live, not after someone reports "the site is broken on www":
+
+- In the Cloudflare dashboard for this zone, add a redirect that sends `www.viabiancadelhi.com/*`
+  to `https://viabiancadelhi.com/$1` with a 301 — a **Redirect Rule** (Rules → Redirect Rules →
+  Create rule, matching `hostname eq "www.viabiancadelhi.com"`) or a **Bulk Redirect** both work;
+  use whichever this account's plan offers. Do not add `www` as a second custom domain on the
+  Pages project itself and leave it unredirected — that is exactly the configuration that falls
+  through to the SPA catch-all above instead of ever reaching the redirect.
+- Confirm the DNS record for `www` actually exists and is proxied (orange-clouded) through
+  Cloudflare — a redirect rule does nothing for a hostname that isn't on Cloudflare's network at
+  all.
+
+Step 10 below extends the deploy-time curl check to `www` specifically, so this doesn't rely on
+someone remembering to test it by hand later.
+
 ## 6. Verify the live site
 
 Once DNS has propagated, check the live domain itself (not just the preview URL):
@@ -178,16 +203,55 @@ A human with Cloudflare account access must, before the admin Worker is ever dep
 3. Paste it into `wrangler.toml`, replacing `PLACEHOLDER-NOT-A-REAL-NAMESPACE-ID` on the
    `[[kv_namespaces]]` block's `id` line.
 
-`src/test/wrangler-config.test.ts` asserts that id is still exactly the placeholder string. Skip
-this step and `npm run test:deploy` fails there, with a message naming the reason, instead of the
-Worker failing at runtime with an unbound KV binding the first time a login or a publish tries to
-use it.
+`src/test/wrangler-config.test.ts` accepts either the placeholder or a well-formed 32-character hex
+id, so completing this step does not, itself, break `npm run test:deploy` — that test used to pin
+the placeholder by exact string equality, which meant finishing this step was indistinguishable
+from typing garbage: both replaced the placeholder with something that wasn't it, and the old test
+failed on either. What still fails it is an invented or half-pasted value instead of the real one
+`wrangler kv namespace create` printed (an empty string, a truncated id, `PLACEHOLDER-partially-
+edited`) — that guards against a plausible-looking fake id passing review and only failing at
+deploy time, silently, with the Worker unable to bind `env.KV`.
 
-## 9. Deploy the admin Worker, then confirm its route is actually live
+## 9. Create a GitHub token for the Worker, and set `GITHUB_TOKEN`
 
-Do this after Step 8 (the KV namespace exists) and after DNS (Step 5) has the zone on Cloudflare —
-the Worker's route (`viabiancadelhi.com/api/*` in `wrangler.toml`) is meaningless on a zone
-Cloudflare doesn't control yet.
+Unrelated to Steps 1–8 above (no ordering dependency on DNS, Pages, or the KV namespace), but
+required before `POST /api/publish` or `POST /api/upload` (Tasks 5 and 6 of the worker plan) can
+ever succeed. `worker/github.ts` sends `Authorization: Bearer ${env.GITHUB_TOKEN}` on every commit
+it makes — with no token set, every publish and every photo upload fails with a `502` reading
+`could not read the current main branch (GitHub returned 401) -- Bad credentials`, and login still
+works fine, so the first sign anything is wrong is her pressing Publish on real content.
+
+1. GitHub → your account's avatar → **Settings** → **Developer settings** (bottom of the left
+   sidebar) → **Personal access tokens** → **Fine-grained tokens** → **Generate new token**.
+2. **Resource owner:** the account or organization that owns this repository (`tarann26`).
+   **Repository access:** **Only select repositories** → `tarann26/vb`. Do not grant access to any
+   other repository — this token only ever needs to touch this one.
+3. **Permissions → Repository permissions → Contents: Read and write.** (GitHub will also require
+   **Metadata: Read-only**, added automatically — that's expected and sufficient; no other
+   permission is needed. `worker/github.ts`'s own path allowlist, not this token's scope, is what
+   keeps a publish confined to `src/content/` and `assets-source/` even though the token itself can
+   write anywhere in the repository — see that file's comment.)
+4. Set an expiration and **write down when it expires somewhere you'll actually see it** — a
+   fine-grained token that lapses silently turns into the exact same `401` failure as never having
+   set one at all, just months later and harder to place. Generate the token and copy it
+   immediately; GitHub shows it exactly once.
+5. Set it as a Worker secret:
+   ```bash
+   printf '%s' '<the token you just copied>' | npx wrangler secret put GITHUB_TOKEN
+   ```
+   (`printf '%s'`, not `echo`, for the same reason `DEPLOY_HOOK_URL` below uses it — no trailing
+   newline even offered to the pipe, on top of `wrangler secret put` already trimming trailing
+   whitespace from piped stdin.)
+
+This is the token Step 11 below refers to when it says the password's own entropy is the real
+control, "since the prize for guessing it is a GitHub token with write access to this site's
+repository."
+
+## 10. Deploy the admin Worker, then confirm its route is actually live
+
+Do this after Step 8 (the KV namespace exists), Step 9 (`GITHUB_TOKEN` is set), and after DNS
+(Step 5) has the zone on Cloudflare — the Worker's route (`viabiancadelhi.com/api/*` in
+`wrangler.toml`) is meaningless on a zone Cloudflare doesn't control yet.
 
 1. `wrangler deploy` (from the repo root; needs a Cloudflare API token with Workers-deploy
    permission, either via `wrangler login` or a `CLOUDFLARE_API_TOKEN` env var).
@@ -202,6 +266,18 @@ Cloudflare doesn't control yet.
    and **every** `/api/*` call (login, publish, upload, the WhatsApp tap counter) is silently
    hitting the same catch-all right now. Stop here and fix the route before doing anything else;
    do not treat a successful `wrangler deploy` as proof the route works.
+3. **Then run the same check against `www`** (see Step 5's own note on why this hostname needs
+   handling at all):
+
+   ```bash
+   curl -sL -o /dev/null -w '%{http_code} %{content_type}\n' https://www.viabiancadelhi.com/api/health
+   ```
+
+   `-L` here, unlike the apex check above, because `www` is expected to answer with a 301 to the
+   apex first (Step 5's redirect) — this follows that redirect and checks what it actually lands
+   on. Expected result is the same: `200 application/json`. `text/html` here means either the `www`
+   redirect isn't in place or `www` is being served directly by Pages without one — both leave
+   `/api/*` on `www` silently answering with the homepage.
 
 **This curl check is the only reliable way to confirm the route is live — nothing committed to
 this repository can do it.** `public/_redirects` cannot express "fail loudly" for an unrouted
@@ -212,12 +288,12 @@ isn't actually intercepting the request first. `src/test/hosting.test.ts` pins t
 configuration* in `wrangler.toml` names the right pattern and zone, which catches a config typo
 before it ships — but it cannot observe whether Cloudflare is actually honouring that
 configuration on the live zone. Only a real request against the live domain, after a real deploy,
-can. Re-run the same curl after any future change to `wrangler.toml`'s `routes`, not just the
-first time.
+can. Re-run the same curl (both hostnames) after any future change to `wrangler.toml`'s `routes` or
+the `www` redirect, not just the first time.
 
-## 10. Set the admin login password, and how to rotate it
+## 11. Set the admin login password, and how to rotate it
 
-Unrelated to Steps 1–9 above (no ordering dependency on DNS, Pages, or the KV namespace) but
+Unrelated to Steps 1–10 above (no ordering dependency on DNS, Pages, or the KV namespace) but
 required before `POST /api/login` (Task 4 of the worker plan) can ever succeed. `env.ADMIN_PASSWORD_HASH`
 and `env.TOKEN_SECRET` are Worker secrets, not `wrangler.toml` vars — `wrangler.toml` carries only
 non-secret bindings by design, and `src/test/secrets.test.ts` fails the build if a real password
@@ -234,22 +310,24 @@ both now check the secret is present before doing anything that would otherwise 
 zero-length HMAC key — see `worker/auth.ts` for why an unset secret used to be an unhandled throw,
 not a clean failure.
 
-1. **Generate the password — don't choose one.** The rate limit below is best-effort, not a hard
-   wall, which means password strength is the control that actually matters here. Prefer:
+1. **Generate the password, hash it, and set it as a Worker secret in one pipeline — don't run
+   `hash-password.mjs` a second time with nothing piped into it.** An earlier version of this step
+   split this into two commands: one that piped a generated password into `hash-password.mjs` and
+   printed the hash, then a second that ran `hash-password.mjs` *again* with no stdin at all, which
+   makes it prompt interactively — a reader following that literally would type or paste the
+   *hash* from step one into that second prompt, hashing an already-hashed value instead of setting
+   it. One composed pipeline has no second prompt to get confused by:
    ```bash
-   openssl rand -base64 24 | tee /dev/tty | node scripts/hash-password.mjs
+   openssl rand -base64 24 | tee /dev/tty | node scripts/hash-password.mjs | npx wrangler secret put ADMIN_PASSWORD_HASH
    ```
-   `tee /dev/tty` shows you the generated password once (so you can save it in a password manager)
-   while still piping it into the hashing script — the alternative of typing a password yourself
-   tends to produce something far weaker than 24 random bytes.
-2. Set it as a Worker secret:
-   ```bash
-   node scripts/hash-password.mjs | npx wrangler secret put ADMIN_PASSWORD_HASH
-   ```
-   (Confirmed safe against the CLI adding stray whitespace: `wrangler secret put` trims trailing
-   whitespace from piped stdin, so the trailing newline `console.log` puts after the hash does not
-   end up stored as part of the secret.)
-3. Set `TOKEN_SECRET` — the HMAC key session tokens are signed with, unrelated to the password
+   `tee /dev/tty` shows you the generated password once, in the middle of the pipeline, so you can
+   save it in a password manager before it's gone — the alternative of typing a password yourself
+   tends to produce something far weaker than 24 random bytes. (Confirmed safe against the CLI
+   adding stray whitespace: `wrangler secret put` trims trailing whitespace from piped stdin, so
+   the trailing newline `console.log` puts after the hash does not end up stored as part of the
+   secret.) The rate limit below is best-effort, not a hard wall, which is exactly why password
+   strength — not the rate limit — is the control that actually matters here.
+2. Set `TOKEN_SECRET` — the HMAC key session tokens are signed with, unrelated to the password
    itself — the same way, e.g.:
    ```bash
    openssl rand -base64 32 | npx wrangler secret put TOKEN_SECRET
@@ -264,10 +342,31 @@ because the alternative, the Workers Rate Limiting binding, can't express a 15-m
 (`period` must be 10 or 60 seconds), counts per Cloudflare location rather than globally, and has
 no API to reset the counter on a successful login. Given that, **the password's own entropy is the
 real control** — the prize for guessing it is a GitHub token with write access to this site's
-repository — which is why Step 1 above generates one rather than asking you to choose one. If a
-durable, atomic rate limit is ever wanted, the right place for it is a Cloudflare WAF rate-limiting
-rule on `/api/login` at the edge, in front of the Worker; that is not built as part of this task,
-only recorded here as where it goes.
+repository — which is why Step 1 above generates one rather than asking you to choose one.
+
+**Required, not optional: a Cloudflare WAF rate-limiting rule on `/api/login`.** The KV limiter
+above is best-effort in a second way too, verified directly: a KV whose writes are failing (KV
+Free's 1,000-writes/day cap, shared across every write this Worker makes, chief among them this
+same login limiter's own bookkeeping) used to make a wrong password crash the request into a raw
+Cloudflare exception page instead of a clean `401` — `worker/index.ts` now catches that specific
+failure and still returns the right status, but the counter genuinely cannot increment while KV is
+exhausted, which means zero guesses get blocked for as long as that lasts. There is no durable,
+atomic cap on this route from the Worker alone. Close that at the edge, in front of the Worker, as
+part of this cutover:
+
+1. Cloudflare dashboard → this zone → **Security** → **WAF** → **Rate limiting rules** → **Create
+   rule**.
+2. Match: **URI Path** equals `/api/login`.
+3. Rate: this rule exists to hold the line under KV exhaustion, not to duplicate the KV limiter's
+   exact 5-per-15-minutes — 10 requests per 1 minute per IP is a reasonable starting point; adjust
+   if it ever false-positives against the one real person using this endpoint.
+4. Action: **Block** (or **Managed Challenge**, if this account's plan doesn't offer Block on this
+   rule type).
+5. Deploy the rule.
+
+This is the same reason the Workers Rate Limiting binding was rejected in favour of hand-rolled KV
+counters above — that binding can't express a 15-minute window either, so it was never a substitute
+for this edge rule, only for the in-Worker bookkeeping.
 
 **Rotating the password does not, on its own, invalidate sessions already issued.** A session
 cookie's validity comes entirely from `verifyToken`'s HMAC check against `TOKEN_SECRET` (see
@@ -284,13 +383,13 @@ openssl rand -base64 32 | npx wrangler secret put TOKEN_SECRET
 Rotating `TOKEN_SECRET` signs out every existing session immediately, including whoever is doing
 the rotation — they will need to log in again with the new password right after.
 
-## 11. Set up the scheduled-rebuild cron and build-status reporting (Task 8, separate from Steps 1–10)
+## 12. Set up the scheduled-rebuild cron and build-status reporting (Task 8, separate from Steps 1–11)
 
 Two independent pieces, both required before Task 8's `scheduled` handler and `GET /api/build-status`
-work in production. Neither has an ordering dependency on Steps 1–10, but both need the Pages
+work in production. Neither has an ordering dependency on Steps 1–11, but both need the Pages
 project from Step 1 to already exist.
 
-### 11a. Create a Deploy Hook and set `DEPLOY_HOOK_URL`
+### 12a. Create a Deploy Hook and set `DEPLOY_HOOK_URL`
 
 In the Cloudflare dashboard: this Pages project → **Settings** → **Builds & deployments** →
 **Deploy hooks** → **Add deploy hook**. Name it something identifiable (e.g.
@@ -304,13 +403,13 @@ printf '%s' 'https://api.cloudflare.com/client/v4/pages/webhooks/deploy_hooks/<i
 
 (`printf '%s'`, not `echo`, so no trailing newline is even offered to the pipe — belt-and-braces on
 top of `wrangler secret put` already trimming trailing whitespace from piped stdin, the same fact
-Step 10 above relies on.)
+Step 11 above relies on.)
 
 Anyone holding this URL can trigger a Pages build for this project — a minor quota-exhaustion
 nuisance, not a data leak, but it is still a Worker secret, never a `wrangler.toml` var, matching
-`GITHUB_TOKEN`'s treatment for the same reason.
+`GITHUB_TOKEN`'s treatment for the same reason (Step 9 above).
 
-### 11b. Create a Pages-scoped API token, and fill in the account/project identifiers
+### 12b. Create a Pages-scoped API token, and fill in the account/project identifiers
 
 `GET /api/build-status` reads Cloudflare's own Pages deployments API, which needs its own
 credential — **do not reuse** any token created for other purposes.
@@ -330,11 +429,15 @@ credential — **do not reuse** any token created for other purposes.
    project list`) and paste it into `wrangler.toml`, replacing
    `PLACEHOLDER-NOT-A-REAL-PAGES-PROJECT-NAME` on the `CLOUDFLARE_PAGES_PROJECT` line.
 
-`src/test/wrangler-config.test.ts` asserts both are still exactly those placeholder strings. Skip
-this step and `npm run test:deploy` fails there, with a message naming the reason, instead of
-`GET /api/build-status` silently querying an account or project that doesn't exist once deployed.
+`src/test/wrangler-config.test.ts` accepts either the placeholder or a well-formed real value for
+both (a 32-character hex account id; a Pages project name that isn't the placeholder), so
+completing this step does not, itself, break `npm run test:deploy` — see Step 8's own note above
+for why the previous exact-placeholder version of this test could never distinguish "not done yet"
+from "done". What still fails it is an invented or half-pasted value instead of the real ones this
+step just had you copy from the dashboard, guarding against `GET /api/build-status` silently
+querying an account or project that doesn't exist once deployed.
 
-### 11c. Decision recorded: an upload-only commit still triggers its own Pages build
+### 12c. Decision recorded: an upload-only commit still triggers its own Pages build
 
 `POST /api/upload` (Task 6) commits one photo to `assets-source/` in its own commit, separate from
 any content publish. Cloudflare's default GitHub integration (**Automatic deployments**, enabled
@@ -356,7 +459,7 @@ its own build; there is no batching or debouncing anywhere in this stack, and th
 If usage ever changes enough that this becomes a real quota concern, the fix belongs on the deploy
 hook's own debounce, not a change to the conditional check above.
 
-## 12. Confirm the dashboard's build command still matches what Step 2 documented
+## 13. Confirm the dashboard's build command still matches what Step 2 documented
 
 Do this now, right after Step 2, and again any time anyone edits this Pages project's build
 settings by hand afterward. Open this project's **Settings** → **Builds & deployments** and read
