@@ -57,7 +57,19 @@ function gitLsFiles(dir: string): string[] {
 // regression this check exists to catch. ALLOWED, not a second regex or a
 // deleted check, is what keeps that widening from also flagging App.tsx's
 // own legitimate reference as a false positive.
-const IMPORTS_ADMIN = /(?:from|import)\s*\(?\s*['"][^'"]*admin\/[^'"]+['"]/;
+//
+// The trailing `\/[^'"]+` on the original version required a slash after
+// `admin`, which made it miss a barrel import of the admin directory
+// itself with no trailing slash at all. There is no src/admin/index.ts
+// today, but a barrel is the natural refactor once a dozen admin modules
+// exist (Plan 4 Tasks 2-10), and confirmed directly: adding a bare
+// side-effect import of the admin directory (no trailing slash) to
+// Hero.tsx left this whole describe block green under the old pattern.
+// `admin(?:\/[^'"]*)?` makes the slash-and-remainder optional instead of
+// required, so both the bare directory and a path inside it match, while
+// still anchored on the from/import keyword so it doesn't fire on unrelated
+// prose or a differently-named directory like `administrative`.
+const IMPORTS_ADMIN = /(?:from|import)\s*\(?\s*['"][^'"]*admin(?:\/[^'"]*)?['"]/;
 
 // src/App.tsx's lazy route is the ONE legitimate reference: React.lazy's
 // dynamic import is what puts admin code in its own chunk. Listed
@@ -77,7 +89,7 @@ describe('nothing outside src/admin imports admin code', () => {
   it('App.tsx references admin code only through React.lazy', () => {
     const app = readFileSync('src/App.tsx', 'utf8');
     expect(app).toMatch(/lazy\(\s*\(\)\s*=>\s*import\(['"]\.\/admin\/AdminApp['"]\)\s*\)/);
-    expect(app).not.toMatch(/(?:from|import)\s+['"][^'"]*admin\/[^'"]+['"]/);
+    expect(app).not.toMatch(/(?:from|import)\s*['"][^'"]*admin\/[^'"]+['"]/);
   });
 
   // "does not render admin code at /" was deliberately NOT added as a
@@ -101,6 +113,14 @@ describe('nothing outside src/admin imports admin code', () => {
 // fragment-joining precedent src/test/secrets.test.ts already uses for the
 // same reason (see that file's GH_TOKEN_PREFIXES/PBKDF2_MARKER).
 const ADMIN_DIR = ['admin', '/'].join('');
+
+// The barrel-import fixtures below need the directory name with NO trailing
+// slash (there is no src/admin/index.ts today, but Tasks 2-10 add a dozen
+// admin modules and a barrel is the natural refactor). Derived from
+// ADMIN_DIR at runtime, same as ADMIN_DIR itself is fragment-joined, for the
+// identical self-matching reason -- this file's own source text never
+// contains "admin" immediately inside a quoted from/import target.
+const ADMIN_BARREL = ADMIN_DIR.slice(0, -1);
 
 describe('IMPORTS_ADMIN catches every import form a bundler follows', () => {
   // Not exhaustive of JS import syntax, but every form this codebase (or a
@@ -150,6 +170,36 @@ describe('IMPORTS_ADMIN catches every import form a bundler follows', () => {
     // import. Built the same fragment-joined way as FORMS above, for the
     // same self-matching reason.
     const snippet = `it('imports ${ADMIN_DIR}heic', () => {});`;
+    expect(IMPORTS_ADMIN.test(snippet)).toBe(false);
+  });
+
+  // M-3: a barrel import of the admin directory with no trailing slash at
+  // all evaded the original `admin\/[^'"]+` target entirely -- there was no
+  // slash for it to anchor on. There is no src/admin/index.ts today, but
+  // Tasks 2-10 add a dozen admin modules and a barrel is the natural
+  // refactor. Confirmed directly: adding a bare side-effect import of the
+  // admin directory (no trailing slash) to Hero.tsx left the whole "nothing
+  // outside src/admin imports admin code" describe block green under the
+  // old pattern. Three forms, matching the three categories already covered
+  // above with a trailing slash.
+  describe('matches a barrel import with no trailing slash', () => {
+    const BARREL_FORMS: Record<string, string> = {
+      'bare side-effect': `import '../${ADMIN_BARREL}';`,
+      'named import': `import { Login } from '../${ADMIN_BARREL}';`,
+      'dynamic import()': `const AdminApp = lazy(() => import('../${ADMIN_BARREL}'));`,
+    };
+
+    it.each(Object.entries(BARREL_FORMS))('%s', (_label, snippet) => {
+      expect(IMPORTS_ADMIN.test(snippet)).toBe(true);
+    });
+  });
+
+  // The widened, slash-optional pattern must still not fire on a component
+  // whose name merely starts with "Admin" (capital, part of the identifier,
+  // not the directory) or contains the substring "admin" without it being
+  // the actual src/admin/ directory.
+  it('does not match an unrelated component path containing "Admin"', () => {
+    const snippet = `import AdminReservations from './components/AdminReservations';`;
     expect(IMPORTS_ADMIN.test(snippet)).toBe(false);
   });
 });

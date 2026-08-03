@@ -14,9 +14,12 @@ function stubFetchOnce(status: number) {
   );
 }
 
-async function submitWith(password: string) {
+// Accepts an onLogin mock rather than always creating its own anonymous one:
+// the 401 test below needs to hold a reference to assert against, and a
+// fresh vi.fn() per call keeps every other caller's behavior unchanged.
+async function submitWith(password: string, onLogin: () => void = vi.fn()) {
   const user = userEvent.setup();
-  render(<Login onLogin={vi.fn()} />);
+  render(<Login onLogin={onLogin} />);
   await user.type(screen.getByLabelText(/password/i), password);
   await user.click(screen.getByRole('button', { name: /log in/i }));
 }
@@ -40,19 +43,36 @@ describe('Login', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
-  it('shows "That didn\'t work" on a 401 and echoes the password nowhere but the field she typed it into', async () => {
+  it('shows "That didn\'t work" on a 401, never logs in, and echoes the password nowhere but the field she typed it into', async () => {
     stubFetchOnce(401);
-    await submitWith('a-wrong-password');
+    const onLogin = vi.fn();
+    await submitWith('a-wrong-password', onLogin);
     expect(await screen.findByRole('alert')).toHaveTextContent("That password didn't work.");
+
+    // A wrong password must never transition the parent to logged-in --
+    // confirmed this can fail: calling onLogin() unconditionally after
+    // setError() left this suite entirely green until this assertion was
+    // added, since the 204 test only ever checks onLogin WAS called, never
+    // that it wasn't on a rejected attempt.
+    expect(onLogin).not.toHaveBeenCalled();
 
     // The controlled input legitimately holds what she typed -- that IS the
     // field she typed it into, and it is masked by type="password". A blanket
     // `body.innerHTML` check can therefore never pass, which is why an earlier
     // version of this test failed. The property actually worth guarding is that
     // the password appears nowhere ELSE: echoed into the error text, a title,
-    // an aria-label, a data attribute. So blank out input values, then assert.
-    const withoutInputValues = document.body.innerHTML.replace(/value="[^"]*"/g, 'value=""');
-    expect(withoutInputValues).not.toContain('a-wrong-password');
+    // an aria-label, a data attribute.
+    //
+    // Blank only the field she actually typed into, by its own outerHTML --
+    // not a blanket `replace(/value="[^"]*"/g, ...)` over every `value=` in
+    // the document. That blanket form blanks EVERY input's value attribute
+    // indiscriminately, including a `<input type="hidden" value={password} />`
+    // planted anywhere else in the tree -- confirmed directly, adding one
+    // left this assertion green. Scoping the blank-out to the one field she
+    // typed into is what makes a leak into any OTHER element (hidden input,
+    // title, data attribute) actually show up here.
+    const field = screen.getByLabelText(/password/i);
+    expect(document.body.innerHTML.replace(field.outerHTML, '')).not.toContain('a-wrong-password');
   });
 
   it('shows the rate-limit message on a 429', async () => {

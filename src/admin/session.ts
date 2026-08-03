@@ -20,12 +20,29 @@ export interface Session {
 // from a stray probe, and it answers a clean 401 the moment the cookie is
 // missing, expired, or fails HMAC verification -- so it doubles as the
 // session probe rather than this task adding a dedicated "am I logged in"
-// endpoint. Treat 401 as logged out; anything else (200 today; any future
-// non-auth error this route might grow) as logged in, since 401 is the
-// only status this route uses to mean "not authenticated."
+// endpoint.
+//
+// Deliberately NOT `status !== 401`: public/_redirects' SPA catch-all
+// (`/*  /index.html  200`) answers ANY unrouted path with a 200 carrying
+// the homepage's HTML -- that file's own comment says this "would look
+// identical to a successful API response" for exactly this reason. If the
+// Worker route (wrangler.toml) is ever down or misrouted, a `!== 401` probe
+// would call that 200 "logged in" and hand her a dashboard that then 401s
+// on every real action -- the exact failure this hook's own module comment
+// below already argues against for the network-failure branch. Same for
+// any 5xx or a raw Cloudflare edge error page. So only a genuine JSON 200
+// counts as logged in; 401, any other status, and a 200 that isn't JSON all
+// count as logged out. This route might acquire other statuses later, and
+// the content-type check is what keeps this honest either way.
 async function probeSession(): Promise<boolean> {
-  const response = await fetch('/api/wa', { credentials: 'same-origin' });
-  return response.status !== 401;
+  const response = await fetch('/api/wa', {
+    credentials: 'same-origin',
+    // A hanging /api/wa would otherwise leave `status: 'checking'` forever
+    // -- a permanently blank /edit/manage with no error and no way to log
+    // in. The existing catch() below already routes an abort to 'out'.
+    signal: AbortSignal.timeout(8000),
+  });
+  return response.ok && (response.headers.get('content-type') ?? '').includes('application/json');
 }
 
 // Deliberately not backed by localStorage (or anything else persisted

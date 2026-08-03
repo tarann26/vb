@@ -9,7 +9,7 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:deploy": "vitest run --exclude scripts/__tests__/images.derivatives.test.mjs",
-    "test:bundle": "vitest run src/test/bundle.post-build.test.ts",
+    "test:bundle": "VB_REQUIRE_DIST=1 vitest run src/test/bundle.post-build.test.ts",
     "test:watch": "vitest",
     "preview": "vite preview",
     "images": "node scripts/images.mjs"

@@ -38,9 +38,12 @@ matching.
   the gate tests what it's supposed to: a real build, gated by tests that see the real output.
 
   `npm run test:bundle` (Plan 4 Task 1) is the last step of `npm run build` itself, not a separate
-  entry in the command above — it runs `src/test/bundle.post-build.test.ts`, which greps the just-built
-  `dist/assets/` for the admin-only libheif WASM marker, after `vite build` has produced a real
-  `dist/` for it to inspect. Because it's nested inside `npm run build` rather than appended to the
+  entry in the command above — it runs `src/test/bundle.post-build.test.ts` against the just-built
+  `dist/assets/`, after `vite build` has produced a real `dist/` for it to inspect. Its main job now
+  is confirming admin code (the `/edit/manage` dashboard) stays out of the entry chunk every visitor
+  downloads, never in the main bundle regardless of who's looking at the site; it also still greps
+  for the admin-only libheif WASM marker, the narrower check this file started as. Because it's
+  nested inside `npm run build` rather than appended to the
   outer command this bullet documents, the text you paste into the dashboard's Build command field
   does not need to change for this — but if that field was ever hand-typed as something other than
   a literal `npm run build` call, re-verify it with Step 13 below rather than assuming this update
