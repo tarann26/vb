@@ -68,6 +68,37 @@ const TRUNCATED_WEBP = new Uint8Array([...enc('RIFF'), 0xff, 0xff, 0x00, 0x00, .
 // scripts/images.mjs exists to catch downstream instead.
 const GARBAGE_TIFF = new Uint8Array([0x49, 0x49, 0x2a, 0x00, 1, 2, 3, 4, 5, 6, 7, 8]);
 
+// Task 8's own fixtures: category=menu's `%PDF-` + `%%EOF` check
+// (looksCompletePdf, worker/upload.ts), the direct analogue of
+// looksComplete's per-format trailer checks above.
+const PDF_HEADER = enc('%PDF-1.4\n');
+const PDF_TRAILER = enc('\n%%EOF');
+
+// A real, complete PDF's own shape: the header at byte 0, and the trailer
+// marker well within the last 1KB. `paddingBytes` lets a caller build a
+// larger-but-still-complete PDF without hand-writing a bigger fixture.
+function completePdf(paddingBytes = 0): Uint8Array {
+  const padding = new Uint8Array(paddingBytes).fill(0x20);
+  return new Uint8Array([...PDF_HEADER, ...padding, ...PDF_TRAILER]);
+}
+
+const PDF_BYTES = completePdf();
+// Header only -- no `%%EOF` anywhere in the file, the PDF equivalent of
+// TRUNCATED_JPEG above.
+const PDF_MISSING_TRAILER = PDF_HEADER;
+// `%%EOF` is present, but the file doesn't start with `%PDF-` at all -- a
+// non-PDF file that happens to contain the trailer marker somewhere must
+// still be refused; the header check alone has to catch it.
+const PDF_WRONG_HEADER = enc('not a pdf at all, but it does end %%EOF');
+// The boundary the brief specifies precisely: `%%EOF` present, but pushed
+// more than 1KB from the file's own end by trailing padding after it --
+// proves the check is "within the last 1KB", not "anywhere in the file".
+const PDF_EOF_TOO_FAR_FROM_END = new Uint8Array([
+  ...PDF_HEADER,
+  ...enc('%%EOF'),
+  ...new Uint8Array(2000).fill(0x20),
+]);
+
 async function sessionCookie(): Promise<string> {
   const expiresAt = Math.floor(Date.now() / 1000) + 3600;
   const token = await signToken(TOKEN_SECRET, expiresAt);
@@ -80,6 +111,10 @@ function uploadRequest(opts: {
   cookie?: string;
   omitFile?: boolean;
   omitCategory?: boolean;
+  // category=menu's own required field (Task 8) -- appended only when
+  // present, so every existing (non-menu) test above stays byte-for-byte
+  // unaffected.
+  name?: string;
   // Appended to the URL as `?stage=<value>` when present -- Task 5's
   // staged-upload branch. A caller passes the literal string it wants on
   // the query string (not a boolean) so a test can also exercise a
@@ -89,6 +124,7 @@ function uploadRequest(opts: {
 }): Request {
   const form = new FormData();
   if (!opts.omitCategory && opts.category !== undefined) form.append('category', opts.category);
+  if (opts.name !== undefined) form.append('name', opts.name);
   if (!opts.omitFile && opts.file) {
     const blob = new Blob([opts.file.bytes], { type: opts.file.type ?? 'application/octet-stream' });
     form.append('file', blob, opts.file.filename ?? 'photo.jpg');
@@ -567,6 +603,225 @@ describe('POST /api/upload', () => {
       );
       expect(response.status).toBe(401);
       expect(stub.calls).toHaveLength(0);
+    });
+  });
+
+  // Task 8: a downloadable menu PDF, not a photo -- a different validation
+  // shape entirely (no detectFormat, a required `name`, a PDF-specific
+  // completeness check) and a NAMED rather than content-addressed commit
+  // path, so it gets its own describe block rather than being folded into
+  // the image tests above.
+  describe('category=menu: a downloadable PDF, not a photo', () => {
+    it('a missing menu name is 400 with the exact owner-facing message, and makes no GitHub call', async () => {
+      env = freshEnv();
+      const cookie = await sessionCookie();
+      const response = await handleUpload(
+        uploadRequest({ category: 'menu', file: { bytes: PDF_BYTES }, cookie }),
+        env,
+      );
+      expect(response.status).toBe(400);
+      const body = (await response.json()) as { message: string };
+      expect(body.message).toBe('A menu name can only use lowercase letters, numbers and hyphens.');
+      expect(stub.calls).toHaveLength(0);
+    });
+
+    it.each(['Food-Menu', 'food_menu', 'food menu', 'food.menu', ''])(
+      'rejects an invalid menu name %s',
+      async (name) => {
+        env = freshEnv();
+        const cookie = await sessionCookie();
+        const response = await handleUpload(
+          uploadRequest({ category: 'menu', name, file: { bytes: PDF_BYTES }, cookie }),
+          env,
+        );
+        expect(response.status).toBe(400);
+        const body = (await response.json()) as { message: string };
+        expect(body.message).toBe('A menu name can only use lowercase letters, numbers and hyphens.');
+        expect(stub.calls).toHaveLength(0);
+      },
+    );
+
+    it('a missing file is 400 and makes no GitHub call', async () => {
+      env = freshEnv();
+      const cookie = await sessionCookie();
+      const response = await handleUpload(
+        uploadRequest({ category: 'menu', name: 'food-menu', cookie, omitFile: true }),
+        env,
+      );
+      expect(response.status).toBe(400);
+      expect(stub.calls).toHaveLength(0);
+    });
+
+    // Both directions the brief's own Step 2 asks for.
+    it('category=menu carrying image bytes is refused, not silently accepted as a menu', async () => {
+      env = freshEnv();
+      const cookie = await sessionCookie();
+      const response = await handleUpload(
+        uploadRequest({ category: 'menu', name: 'food-menu', file: { bytes: JPEG_BYTES }, cookie }),
+        env,
+      );
+      expect(response.status).toBe(400);
+      const body = (await response.json()) as { message: string };
+      expect(body.message.toLowerCase()).toContain('pdf');
+      expect(stub.calls).toHaveLength(0);
+    });
+
+    it('an image category carrying PDF bytes is refused by detectFormat returning null', async () => {
+      env = freshEnv();
+      const cookie = await sessionCookie();
+      const response = await handleUpload(
+        uploadRequest({ category: 'food', file: { bytes: PDF_BYTES, filename: 'menu.pdf' }, cookie }),
+        env,
+      );
+      expect(response.status).toBe(400);
+      const body = (await response.json()) as { message: string };
+      expect(body.message.toLowerCase()).toContain('format');
+      expect(stub.calls).toHaveLength(0);
+    });
+
+    it('rejects a PDF missing its %PDF- header, even though it ends %%EOF', async () => {
+      env = freshEnv();
+      const cookie = await sessionCookie();
+      const response = await handleUpload(
+        uploadRequest({ category: 'menu', name: 'food-menu', file: { bytes: PDF_WRONG_HEADER }, cookie }),
+        env,
+      );
+      expect(response.status).toBe(400);
+      const body = (await response.json()) as { message: string };
+      expect(body.message.toLowerCase()).toContain('incomplete');
+      expect(stub.calls).toHaveLength(0);
+    });
+
+    it('rejects a PDF missing its %%EOF trailer entirely', async () => {
+      env = freshEnv();
+      const cookie = await sessionCookie();
+      const response = await handleUpload(
+        uploadRequest({ category: 'menu', name: 'food-menu', file: { bytes: PDF_MISSING_TRAILER }, cookie }),
+        env,
+      );
+      expect(response.status).toBe(400);
+      expect(stub.calls).toHaveLength(0);
+    });
+
+    // The boundary the brief specifies precisely: "%%EOF within the last
+    // 1KB", not "anywhere in the file" -- a real PDF's xref table and
+    // trailer dictionary sit at the very end, so a marker thousands of
+    // bytes from the file's actual end is not what a genuinely complete
+    // file looks like, even though the exact bytes are technically present
+    // somewhere earlier.
+    it('rejects a PDF whose %%EOF trailer is present but more than 1KB from the end', async () => {
+      env = freshEnv();
+      const cookie = await sessionCookie();
+      const response = await handleUpload(
+        uploadRequest({ category: 'menu', name: 'food-menu', file: { bytes: PDF_EOF_TOO_FAR_FROM_END }, cookie }),
+        env,
+      );
+      expect(response.status).toBe(400);
+      expect(stub.calls).toHaveLength(0);
+    });
+
+    it('rejects an over-25MB PDF using the same post-read size check as a photo', async () => {
+      env = freshEnv();
+      const cookie = await sessionCookie();
+      const oversized = new Uint8Array(26 * 1024 * 1024);
+      oversized.set(PDF_HEADER);
+      const response = await handleUpload(
+        uploadRequest({ category: 'menu', name: 'food-menu', file: { bytes: oversized }, cookie }),
+        env,
+      );
+      expect(response.status).toBe(413);
+      const body = (await response.json()) as { message: string };
+      expect(body.message).toBe('This PDF is 26.00MB; the limit is 25MB.');
+      expect(stub.calls).toHaveLength(0);
+    });
+
+    it('commits a valid menu PDF to public/menus/<name>.pdf as base64', async () => {
+      env = freshEnv();
+      const cookie = await sessionCookie();
+      const response = await handleUpload(
+        uploadRequest({ category: 'menu', name: 'food-menu', file: { bytes: PDF_BYTES }, cookie }),
+        env,
+      );
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as { sha: string; path: string };
+      expect(body.path).toBe('public/menus/food-menu.pdf');
+      expect(typeof body.sha).toBe('string');
+
+      const blobBody = stub.bodies.find((b) => 'encoding' in b) as { content: string; encoding: string } | undefined;
+      expect(blobBody).toBeDefined();
+      expect(blobBody!.encoding).toBe('base64');
+      expect(new Uint8Array(Buffer.from(blobBody!.content, 'base64'))).toEqual(PDF_BYTES);
+    });
+
+    describe('?stage=1: stages the PDF without committing it', () => {
+      it('returns path and file, without committing, and without an sha', async () => {
+        env = freshEnv();
+        const cookie = await sessionCookie();
+        const response = await handleUpload(
+          uploadRequest({ category: 'menu', name: 'food-menu', file: { bytes: PDF_BYTES }, cookie, stage: '1' }),
+          env,
+        );
+        expect(response.status).toBe(200);
+        const body = (await response.json()) as { path: string; file: string; sha?: string };
+        expect(body.path).toBe('public/menus/food-menu.pdf');
+        expect(body.file).toBe('/menus/food-menu.pdf');
+        expect(body.sha).toBeUndefined();
+        expect(stub.calls).toHaveLength(0);
+      });
+
+      // The whole point of a stable, named path: replacing the PDF under
+      // the SAME name commits to the identical path and file both times, so
+      // menus.json's own `file` field never needs to change on a routine
+      // replacement.
+      it('replacing under the same name yields the same path and file both times', async () => {
+        env = freshEnv();
+        const cookie = await sessionCookie();
+        const first = await handleUpload(
+          uploadRequest({ category: 'menu', name: 'food-menu', file: { bytes: PDF_BYTES }, cookie, stage: '1' }),
+          env,
+        );
+        const second = await handleUpload(
+          uploadRequest({
+            category: 'menu',
+            name: 'food-menu',
+            file: { bytes: completePdf(4) },
+            cookie,
+            stage: '1',
+          }),
+          env,
+        );
+        const firstBody = (await first.json()) as { path: string; file: string };
+        const secondBody = (await second.json()) as { path: string; file: string };
+        expect(firstBody).toEqual(secondBody);
+        expect(stub.calls).toHaveLength(0);
+      });
+
+      it('still rejects a truncated PDF under ?stage=1, and makes no GitHub call', async () => {
+        env = freshEnv();
+        const cookie = await sessionCookie();
+        const response = await handleUpload(
+          uploadRequest({
+            category: 'menu',
+            name: 'food-menu',
+            file: { bytes: PDF_MISSING_TRAILER },
+            cookie,
+            stage: '1',
+          }),
+          env,
+        );
+        expect(response.status).toBe(400);
+        expect(stub.calls).toHaveLength(0);
+      });
+
+      it('an unauthenticated staged menu upload is still 401 and makes no GitHub call', async () => {
+        env = freshEnv();
+        const response = await handleUpload(
+          uploadRequest({ category: 'menu', name: 'food-menu', file: { bytes: PDF_BYTES }, stage: '1' }),
+          env,
+        );
+        expect(response.status).toBe(401);
+        expect(stub.calls).toHaveLength(0);
+      });
     });
   });
 });

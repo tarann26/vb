@@ -203,8 +203,30 @@ describe('commitFiles', () => {
       'src/content/a .json', // space -- not a real content filename
       'src/content/a\nb.json', // embedded newline
       'src/content/UPPER.json', // uppercase -- not a real content filename shape
+      // Plan 4 Task 8's own traversal set, re-run with MENU_PATH in place --
+      // the exact four the task's brief names.
+      'public/menus/../../package.json', // caught by the `..` substring check
+      'public/menus/%2e%2e/x.pdf', // literal percent-encoding, not a real ".." -- caught by MENU_PATH's single-segment shape instead
+      'public/../public/menus/x.pdf', // caught by the `..` substring check
+      'public/menus/a/b.pdf', // an extra path segment -- MENU_PATH allows none
     ])('refuses to write %s', async (path) => {
       await expect(commitFiles(NO_FETCH_ENV, [utf8(path, 'x')], 'm')).rejects.toThrow(/path/i);
+    });
+
+    // The positive control for the new shape, matching the same "still
+    // accepts the real content file" pattern above -- both PDFs actually
+    // committed under public/menus/ today (see src/content/menus.json).
+    it.each(['food-menu.pdf', 'drinks-menu.pdf'])('still accepts the real menu PDF path public/menus/%s', async (name) => {
+      await commitFiles(envWith(stub), [{ path: `public/menus/${name}`, content: 'AA', encoding: 'base64' }], 'm');
+      expect(stub.calls.some((c) => c.method === 'POST' && c.url.endsWith('/git/blobs'))).toBe(true);
+    });
+
+    // A real test, not a decoration: reverting DisallowedPathError's message
+    // to name only the first two shapes (the state it was in before this
+    // task) makes this fail, since a message naming only src/content/ and
+    // assets-source/ contains no "public/menus" substring at all.
+    it("DisallowedPathError's message names all three allowed shapes, including the new PDF one", async () => {
+      await expect(commitFiles(NO_FETCH_ENV, [utf8('package.json', 'x')], 'm')).rejects.toThrow(/public\/menus/);
     });
 
     // Every content file this Worker's validateContent (Task 2) actually

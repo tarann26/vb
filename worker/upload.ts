@@ -26,6 +26,27 @@ const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 // the thing that actually keeps a request from inventing an eighth one.
 const CATEGORIES: Set<string> = new Set(UPLOAD_CATEGORIES);
 
+// `category=menu` (handleMenuUpload, below) is deliberately NOT a ninth
+// member of UPLOAD_CATEGORIES/CATEGORIES: that list is specifically the
+// assets-source/<category>/ subfolders a photo can land in, and a menu PDF
+// commits to an entirely different tree (public/menus/, not assets-source/)
+// under commitFiles' own MENU_PATH shape (worker/github.ts), not ASSET_PATH.
+// Folding "menu" into the same Set would let commitFiles' ASSET_PATH regex
+// -- which accepts any `[a-z0-9_-]+` category segment -- start matching
+// `assets-source/menu/...` too, a directory this route never actually
+// writes to and no test would catch drifting out of sync with reality.
+//
+// A menu's file name is chosen, not content-addressed -- see uploadPath's
+// own comment just below for why that's wrong for a photo, and why it's
+// exactly backwards for a menu (replacing the PDF under the same name must
+// NOT produce a new path, or every replacement would force a menus.json
+// edit). `/^[a-z0-9-]+$/` matches this repo's real menu ids today (food,
+// drinks) and is intentionally narrower than a filename ever needs to be:
+// nothing about a menu's name is ever an original upload filename the way
+// PhotoField's picked file names are, so there is no space, mixed case, or
+// punctuation a legitimate write here needs to admit.
+const MENU_NAME_PATTERN = /^[a-z0-9-]+$/;
+
 // The canonical extension `uploadPath` writes for each detected format --
 // never the extension the uploaded filename happened to have (see that
 // function's own comment). `heic` is included only so this `Record` stays
@@ -156,6 +177,63 @@ function containsAscii(bytes: Uint8Array, needle: string): boolean {
   return false;
 }
 
+function startsWithAscii(bytes: Uint8Array, needle: string): boolean {
+  const target = new TextEncoder().encode(needle);
+  if (bytes.length < target.length) return false;
+  for (let i = 0; i < target.length; i++) {
+    if (bytes[i] !== target[i]) return false;
+  }
+  return true;
+}
+
+// The direct analogue of `looksComplete` above, for `category=menu`
+// (handleMenuUpload, below): a PDF isn't one of `Format`'s members, so it
+// never reaches that function at all, and without a check of its own here
+// it would fall into exactly the gap that function's `default: return true`
+// leaves for avif/tiff/heic -- except a menu PDF has no scripts/images.mjs
+// downstream to catch a truncated one later. If it reaches the repo broken,
+// the printed menu on the live site is broken too, and she has no way to
+// remove it herself.
+//
+// Both halves are cheap, well-defined markers of a real PDF, the same shape
+// as JPEG's EOI marker or PNG's IEND chunk above: `%PDF-` is the format's
+// own required file-header signature at the very first byte, and `%%EOF`
+// is the marker every well-formed PDF's trailer ends with. Checked "within
+// the last 1KB", not "the literal last five bytes" -- a real PDF's trailer
+// dictionary and `startxref` line sit just before that marker, so the
+// exact byte offset varies slightly file to file, but never by anywhere
+// near 1KB in a genuinely complete one. A `%%EOF` appearing thousands of
+// bytes earlier and nowhere near the file's actual end is exactly the
+// signature of a truncated upload, not a false rejection of a good one.
+function looksCompletePdf(bytes: Uint8Array): boolean {
+  if (!startsWithAscii(bytes, '%PDF-')) return false;
+  const tailStart = Math.max(0, bytes.length - 1024);
+  return containsAscii(bytes.subarray(tailStart), '%%EOF');
+}
+
+// public/menus/<name>.pdf -- deliberately NOT content-addressed like
+// uploadPath above. uploadPath's own comment explains why a hash is right
+// for a photo (collision-proof, and a guessable name can't leak an
+// unpublished item); both reasons are absent here (there is only ever one
+// live file per menu id, and every downloadable menu is meant to be
+// public), and a hash would actively break the one property this route
+// exists for: replacing the PDF under an unchanged `name` must commit to
+// the SAME path every time, so menus.json's own `file` field never needs
+// to change just because she swapped in an updated PDF.
+function menuAssetPath(name: string): string {
+  return `public/menus/${name}.pdf`;
+}
+
+// What menus.json's own `file` field stores for this upload. `public/` is
+// the site's web root (Cloudflare Pages serves it verbatim at `/`), so this
+// is menuAssetPath's own result with that one leading segment dropped and
+// the leading slash kept -- computed here, once, so PdfField.tsx never
+// carries a second copy of that rule, the same reason derivativePath exists
+// for a photo's contentPath.
+function menuFilePath(name: string): string {
+  return `/menus/${name}.pdf`;
+}
+
 // ---------------------------------------------------------------------------
 // `bytesToBase64` (the `content` field commitFiles sends GitHub's blob API,
 // and Task 5's staged-upload response body below) now lives in
@@ -226,13 +304,23 @@ export async function handleUpload(request: Request, env: UploadEnv): Promise<Re
   }
 
   const categoryField = formData.get('category');
-  if (typeof categoryField !== 'string' || !CATEGORIES.has(categoryField)) {
-    return json(400, {
-      message:
-        typeof categoryField === 'string'
-          ? `Unknown category "${categoryField}".`
-          : 'A category is required.',
-    });
+  if (typeof categoryField !== 'string') {
+    return json(400, { message: 'A category is required.' });
+  }
+
+  // A downloadable menu PDF, not a photo -- an entirely different
+  // validation shape (no detectFormat, a required `name`, a PDF-specific
+  // completeness check) and an entirely different commit path
+  // (public/menus/, not assets-source/<category>/), so it branches off
+  // here, before `category` is checked against CATEGORIES at all. See
+  // handleMenuUpload's own comment for why 'menu' is deliberately not a
+  // member of that Set.
+  if (categoryField === 'menu') {
+    return handleMenuUpload(formData, request, env);
+  }
+
+  if (!CATEGORIES.has(categoryField)) {
+    return json(400, { message: `Unknown category "${categoryField}".` });
   }
   const category = categoryField;
 
@@ -315,6 +403,78 @@ export async function handleUpload(request: Request, env: UploadEnv): Promise<Re
 
   try {
     const { sha } = await commitFiles(env, [file], `Add photo to ${category}`);
+    return json(200, { sha, path });
+  } catch (error) {
+    if (error instanceof DisallowedPathError) {
+      return json(400, { message: error.message });
+    }
+    return json(502, { message: error instanceof Error ? error.message : 'Upload failed.' });
+  }
+}
+
+// The `category=menu` branch handleUpload delegates to above, once
+// `formData` is already parsed and the pre-read Content-Length check (step
+// 2 above, which runs before `category` is even read) has already passed.
+// Kept as its own function rather than interleaved with the image branch:
+// almost nothing is shared between them (no detectFormat, no HEIC, no EXT
+// table, a different completeness check, a required `name`, a NAMED rather
+// than content-addressed path), so writing this as a run of early returns
+// inside handleUpload would make neither branch's own shape easy to read.
+async function handleMenuUpload(formData: FormData, request: Request, env: UploadEnv): Promise<Response> {
+  // A. `name`, checked before the file is even read -- cheap, and the exact
+  // wording this task's brief specifies verbatim.
+  const nameField = formData.get('name');
+  if (typeof nameField !== 'string' || !MENU_NAME_PATTERN.test(nameField)) {
+    return json(400, { message: 'A menu name can only use lowercase letters, numbers and hyphens.' });
+  }
+  const name = nameField;
+
+  const fileField = formData.get('file');
+  if (!(fileField instanceof Blob)) {
+    return json(400, { message: 'No PDF was attached.' });
+  }
+
+  const bytes = new Uint8Array(await fileField.arrayBuffer());
+
+  // B. The post-read size check -- identical reasoning to handleUpload's
+  // own step 4: the pre-read Content-Length check already ran, before
+  // `formData` was ever parsed, and covers the common case; this is the
+  // real safety net for a missing or understated header.
+  if (bytes.length > MAX_UPLOAD_BYTES) {
+    return json(413, { message: `This PDF is ${megabytes(bytes.length)}; the limit is 25MB.` });
+  }
+
+  // C. No detectFormat: a PDF isn't one of image-format.ts's Format
+  // members, and that module exists to answer for image bytes only.
+  // looksCompletePdf is both the format check and the completeness check at
+  // once -- real PDF bytes start with `%PDF-` and end with `%%EOF` within
+  // the last 1KB; anything else (an image picked under category=menu by
+  // mistake, a non-PDF file, a genuinely truncated PDF) fails it the same
+  // way a menu picked under an image category fails detectFormat: refused,
+  // never silently accepted by the wrong route.
+  if (!looksCompletePdf(bytes)) {
+    return json(400, { message: 'This PDF looks incomplete or corrupted. Try uploading it again.' });
+  }
+
+  const path = menuAssetPath(name);
+  const menuFile = menuFilePath(name);
+
+  // D. Task 5's `?stage=1` contract, unchanged for this branch: every check
+  // above has already run, so a staged menu upload is exactly as validated
+  // as a committing one always was, and it joins the SAME single publish a
+  // JSON edit to menus.json would -- see this task's brief on why the two
+  // must travel together.
+  const url = new URL(request.url);
+  if (url.searchParams.get('stage') === '1') {
+    return json(200, { path, file: menuFile });
+  }
+
+  // E. Every OTHER request (no `?stage=1`) still commits on its own, the
+  // same direct-commit fallback handleUpload's own image branch keeps.
+  const commitFile: CommitFile = { path, content: bytesToBase64(bytes), encoding: 'base64' };
+
+  try {
+    const { sha } = await commitFiles(env, [commitFile], `Update menu PDF: ${name}`);
     return json(200, { sha, path });
   } catch (error) {
     if (error instanceof DisallowedPathError) {

@@ -50,24 +50,31 @@ const API = 'https://api.github.com';
 //     anything else. This does NOT reject `.github/workflows/evil.yml` or
 //     `package.json` -- neither string contains two consecutive dots -- so
 //     it is necessary but not sufficient on its own.
-//  2. The path must positively match one of the two shapes this Worker is
-//     allowed to touch. Each character class is deliberately narrow, not
-//     just `[^/]+` -- a security review found the wider version admitted
-//     junk that names no real repository path (percent-encoded sequences,
-//     embedded whitespace/newlines, uppercase content filenames, arbitrary
-//     length), some of which only surfaced as an opaque GitHub 422 later
-//     rather than a clean rejection here. `[a-z0-9-]+\.json` matches all
-//     nine real files under src/content/ today (see github.test.ts's
-//     `still accepts the real content file` block); `[A-Za-z0-9 ._-]+`
-//     matches every real assets-source/<category>/<file> checked in the
-//     same suite except one apostrophe'd filename -- see that test's own
-//     comment for why that specific gap is recorded, not fixed.
+//  2. The path must positively match one of the three shapes this Worker
+//     is allowed to touch. Each character class is deliberately narrow,
+//     not just `[^/]+` -- a security review found the wider version
+//     admitted junk that names no real repository path (percent-encoded
+//     sequences, embedded whitespace/newlines, uppercase content
+//     filenames, arbitrary length), some of which only surfaced as an
+//     opaque GitHub 422 later rather than a clean rejection here.
+//     `[a-z0-9-]+\.json` matches all nine real files under src/content/
+//     today (see github.test.ts's `still accepts the real content file`
+//     block); `[A-Za-z0-9 ._-]+` matches every real
+//     assets-source/<category>/<file> checked in the same suite except one
+//     apostrophe'd filename -- see that test's own comment for why that
+//     specific gap is recorded, not fixed. The third shape,
+//     `public/menus/[a-z0-9-]+\.pdf` (Plan 4 Task 8), is narrower still: a
+//     menu PDF's name is always a chosen slug (worker/upload.ts's own
+//     `MENU_NAME_PATTERN`), never an original filename or a hash the way a
+//     photo's is, so there is no space, mixed case, or punctuation a
+//     legitimate write here ever needs to admit.
 //
 // Together they cover both attack shapes: traversal sequences, and
-// requests that simply name a path outside the two allowed directories
+// requests that simply name a path outside the three allowed shapes
 // without using `..` at all.
 const CONTENT_PATH = /^src\/content\/[a-z0-9-]+\.json$/;
 const ASSET_PATH = /^assets-source\/[a-z0-9_-]+\/[A-Za-z0-9 ._-]+$/;
+const MENU_PATH = /^public\/menus\/[a-z0-9-]+\.pdf$/;
 
 // Distinguishable from a generic Error so a caller (worker/index.ts's
 // handlePublish) can map a bad *path* to a 400 -- a client-side mistake --
@@ -81,19 +88,19 @@ export class DisallowedPathError extends Error {}
 // below already restricts *writes* to -- built on the same CONTENT_PATH
 // regex and the same `..` substring rule, not a second, independently
 // maintained allowlist that could quietly drift from this one. Deliberately
-// narrower than assertAllowedPath: only the content half of its two
+// narrower than assertAllowedPath: only the content shape of its three
 // allowed shapes. There is no reason a read route ever serves anything
-// under assets-source/ -- those are binary photos, not JSON this route
-// could sensibly return as text -- so ASSET_PATH has no equivalent export
-// here.
+// under assets-source/ or public/menus/ -- those are binary photos and
+// PDFs, not JSON this route could sensibly return as text -- so neither
+// ASSET_PATH nor MENU_PATH has an equivalent export here.
 export function isContentPath(path: string): boolean {
   return !path.includes('..') && CONTENT_PATH.test(path);
 }
 
 function assertAllowedPath(path: string): void {
-  if (path.includes('..') || !(CONTENT_PATH.test(path) || ASSET_PATH.test(path))) {
+  if (path.includes('..') || !(CONTENT_PATH.test(path) || ASSET_PATH.test(path) || MENU_PATH.test(path))) {
     throw new DisallowedPathError(
-      `refuses to write to path "${path}" -- only src/content/<name>.json and assets-source/<category>/<file> are allowed`,
+      `refuses to write to path "${path}" -- only src/content/<name>.json, assets-source/<category>/<file>, and public/menus/<name>.pdf are allowed`,
     );
   }
 }
