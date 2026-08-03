@@ -154,13 +154,33 @@ describe('useValidation: validates the WHOLE file, never the one record she is e
 });
 
 // ---------------------------------------------------------------------------
-// The most valuable test in this plan. She edits one dish; the eventual
-// publish (Task 10) sends the whole file. `replaceAt` is what AdminApp uses
-// to apply that edit to the in-memory array -- these tests exercise it
-// through the REAL RecordList/RecordForm/Field components and a REAL DOM
-// interaction, not a hand-rolled reducer standing in for them, so a
-// regression in the actual wiring (not just in replaceAt taken in
-// isolation) would turn one of these red.
+// She edits one dish; the eventual publish (Task 10) sends the whole file.
+// `replaceAt` is what AdminApp uses to apply that edit to the in-memory
+// array -- these tests exercise it through the REAL RecordList/RecordForm/
+// Field components and a REAL DOM interaction, not a hand-rolled reducer
+// standing in for them, so a regression in the actual wiring (not just in
+// replaceAt taken in isolation) would turn one of these red.
+//
+// A correction to this task's own brief, found by mutation-testing the
+// claim it makes: the brief calls the tags test below "the most valuable
+// test in this plan" on the premise that `Dish.tags` is "rendered by
+// nothing." That is true of the PUBLIC site (types.ts's own comment says
+// so) -- it is NOT true of this admin form. `DISH_FIELDS.tags` is
+// `kind: 'tags'`, rendered by a real `TagsInput`, so inside RecordForm it is
+// exactly as protected as `name` or `description`: a mutation that
+// reconstructs the edited record from its RENDERED/DECLARED fields (rather
+// than spreading the whole value) still keeps `tags`, because `tags` is one
+// of the rendered fields. Confirmed directly: applying that exact mutation
+// to RecordForm's onChange (rebuild from `Object.keys(fields)` instead of
+// `{ ...value, [key]: next }`) leaves the tags test below GREEN. The test
+// immediately after it -- "preserves a key the Dish type does not declare
+// at all" -- is the one that actually catches that mutation, because
+// `futureField` has no descriptor for a known-fields rebuild to have
+// carried along. The tags test still earns its place (it proves the real,
+// committed 15-dish menu round-trips end to end, and that untouched
+// siblings survive in full -- see its own assertions), but it does not
+// prove what the brief claimed it proves; the `futureField` test is what
+// does.
 
 function DishesHarness({ initial }: { initial: Dish[] }) {
   const [items, setItems] = useState(initial);
@@ -213,6 +233,14 @@ describe('the whole-file round trip never drops a field', () => {
     });
   });
 
+  // *** This is the test that actually catches "reconstruct the record from
+  // its rendered/declared fields instead of spreading the whole value" --
+  // see the correction above the describe block. `futureField` has no
+  // FieldsOf<Dish> descriptor at all, so a reconstruction built from
+  // `Object.keys(fields)` (or from `DISH_FIELDS`' own keys) has nothing to
+  // carry it along with, unlike `tags`. Confirmed directly: applying that
+  // mutation to RecordForm's onChange fails exactly this test and no other
+  // in this file.
   it('editing one field preserves a key the Dish type does not declare at all', async () => {
     const user = userEvent.setup();
     // The explicit widening is required -- `value` typed as `Dish` will not

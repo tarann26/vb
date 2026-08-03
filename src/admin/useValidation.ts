@@ -22,13 +22,13 @@
 // refuses to commit whatever this hook would have called invalid, whether
 // or not this hook ran, ran correctly, or ran in this browser at all. This
 // client-side pass exists only so she sees "this dish needs a name" while
-// she is still typing, instead of after a round trip. Plan 3's own ledger
-// records the opposite conclusion being proposed and caught: "the client
-// already validates, so the server check is redundant" -- rejected, because
-// a check a page can always be made to skip (a stale bundle, a disabled
-// script, a handcrafted request straight to the API) is not a check at all.
-// Never let this hook's result gate what a publish is ALLOWED to send --
-// only use it to tell her sooner what that request would already refuse.
+// she is still typing, instead of after a round trip. A check that runs
+// only in this browser is trivially bypassed by anything that isn't this
+// dashboard -- a stale cached bundle, a disabled script, or a handcrafted
+// request straight to the API -- so it can never be the thing standing
+// between an invalid write and a commit. Never let this hook's result gate
+// what a publish is ALLOWED to send -- only use it to tell her sooner what
+// that request would already refuse.
 import { useEffect, useState } from 'react';
 import { validateContent, type ValidationProblem } from '../content/validate';
 import type { ContentFileName, ContentTypeMap } from './content';

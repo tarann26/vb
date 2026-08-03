@@ -189,7 +189,7 @@ function ArraySection<Item extends { id: string }>({
         // carries everything RecordForm's own onChange preserved (unknown
         // keys included), and replaceAt's whole job is to not undo that.
         // See src/admin/useValidation.ts's own comment and
-        // useValidation.test.ts's round-trip tests for exactly the failure
+        // useValidation.test.tsx's round-trip tests for exactly the failure
         // this guards against.
         onChange={(index, next) => commit(replaceAt(items, index, next))}
         onReorder={(ids) => {
