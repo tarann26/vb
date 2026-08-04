@@ -14,7 +14,7 @@
 // directly and firing the same focus/blur events a real tap produces is
 // what this component actually listens for.
 import { readFileSync } from 'node:fs';
-import { useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import EditableText from '../EditableText';
@@ -86,6 +86,61 @@ describe('EditableText: uncontrolled, buffered on focus, committed on blur', () 
 
     expect(onCommit).toHaveBeenCalledTimes(1);
     expect(onCommit).toHaveBeenCalledWith('hero.reserveButton', 'Book a Table');
+  });
+
+  // I7 review finding: the test above (and most others in this file) only
+  // ever asserts what `onCommit` was called with -- never what
+  // handleBlur's own unconditional resync write (EditableText.tsx:143,
+  // `ref.current.textContent = displayTextFor(next)`) actually leaves in
+  // the DOM. That write's EXISTENCE is already pinned elsewhere (the
+  // Finding C2 "emptied field" tests need SOME write to produce a
+  // non-collapsing placeholder at all; the Finding C1 <br>/paste tests
+  // need SOME write to strip the stray markup they build), but nothing
+  // pins that what gets written is specifically `next` -- the value that
+  // was just committed -- rather than some other string.
+  //
+  // Checking FINAL DOM state after the fact (the obvious approach, and
+  // what an earlier draft of this test did) cannot catch this: with
+  // CommitHarness, `onCommit` also updates the `value` PROP to `next` in
+  // the same batch, so the resync `useLayoutEffect` (line 105) re-runs
+  // moments later anyway (its own deps, `[value, isFocused]`, both just
+  // changed) and independently re-corrects the DOM to `displayTextFor(next)`
+  // regardless of what line 143 itself wrote a moment earlier -- confirmed
+  // directly: a version of this test that only checked `el.textContent`
+  // after `fireEvent.blur` stayed GREEN even with `next` swapped for
+  // `beforeEditRef.current` on line 143, because the layout effect's own,
+  // separate write papered over it. Spying on the element's own
+  // `textContent` SETTER instead captures the literal sequence of writes
+  // as they happen -- line 143's own write is the FIRST one made
+  // synchronously inside the blur dispatch itself, strictly before React
+  // flushes the batched state update and runs the layout effect's later,
+  // separate correction -- which is what actually isolates this one line.
+  it('the DOM after an ordinary blur shows exactly the value that was committed, not merely something', () => {
+    const onCommit = vi.fn();
+    render(<CommitHarness path="hero.reserveButton" initial="Reserve Now" onCommitSpy={onCommit} />);
+    const el = screen.getByText('Reserve Now');
+    fireEvent.focus(el);
+    el.textContent = 'Book a Table';
+
+    const writes: (string | null)[] = [];
+    const setter = Object.getOwnPropertyDescriptor(Node.prototype, 'textContent')!.set as (this: Node, v: string | null) => void;
+    const textContentSpy = vi.spyOn(Node.prototype, 'textContent', 'set').mockImplementation(function (this: Node, value: string | null) {
+      if (this === el) writes.push(value);
+      setter.call(this, value);
+    });
+    fireEvent.blur(el);
+    // Restores ONLY this one spy -- `vi.restoreAllMocks()` would also reset
+    // `onCommit`'s own recorded calls (it resets every mock's call history,
+    // `vi.fn()`-created ones included, not merely spies), which would make
+    // the assertion below fail for a reason that has nothing to do with
+    // this component at all. Confirmed directly while writing this test.
+    textContentSpy.mockRestore();
+
+    expect(onCommit).toHaveBeenCalledWith('hero.reserveButton', 'Book a Table');
+    // The very FIRST write this element's own textContent setter saw
+    // during the blur dispatch -- handleBlur's own line 143, ahead of
+    // anything the layout effect's later correction might also write.
+    expect(writes[0]).toBe('Book a Table');
   });
 
   // Mutation this guards: dropping the `next !== beforeEditRef.current`
@@ -377,6 +432,77 @@ describe('Task 3 review Finding C1: the DOM never permanently diverges from the 
     fireEvent.blur(el);
     expect(onCommit).toHaveBeenCalledWith('press.intro', 'Come Visit!');
   });
+
+  // I5 review finding: the test above only ever checked the RESULT of
+  // paste, never that the browser's own default paste action was actually
+  // cancelled -- and on jsdom, that distinction is invisible in the
+  // result, because jsdom's own default paste action is already a no-op
+  // (this file's own comment on the test above). So a mutation that
+  // deleted ONLY `event.preventDefault()` (EditableText.tsx:183),
+  // leaving the rest of handlePaste's own manual Range-API insertion
+  // running exactly as before, produced the identical `el.textContent`
+  // and stayed green. On a real browser this matters: without it, the
+  // browser's OWN default insertion (the clipboard's real HTML) would run
+  // IN ADDITION to this component's manual one, corrupting the field.
+  // Checked the same way this file's own Enter test above already checks
+  // preventDefault on a different event: `fireEvent`'s own return value
+  // (`element.dispatchEvent`'s per-spec result) is `false` the instant
+  // anything calls `preventDefault()`, regardless of what jsdom's default
+  // action for that event would have done.
+  it('paste is prevented outright -- the browser\'s own default paste action never gets a chance to run alongside this component\'s own', () => {
+    const onCommit = vi.fn();
+    render(<EditableText path="press.intro" value="Come Visit" onCommit={onCommit} />);
+    const el = screen.getByText('Come Visit');
+    fireEvent.focus(el);
+
+    const textNode = el.firstChild!;
+    const range = document.createRange();
+    range.setStart(textNode, textNode.textContent!.length);
+    range.collapse(true);
+    const selection = window.getSelection()!;
+    selection.removeAllRanges();
+    selection.addRange(range);
+
+    const clipboardData = { getData: (type: string) => (type === 'text/plain' ? '!' : '<b>!</b>') };
+    const notCancelled = fireEvent.paste(el, { clipboardData });
+    expect(notCancelled).toBe(false); // false === preventDefault() was called
+  });
+
+  // I6 review finding: the existing paste test above only ever pastes at a
+  // COLLAPSED caret (nothing selected), so it can never tell
+  // `range.deleteContents()` (EditableText.tsx:188) apart from simply
+  // deleting that one line -- `Range.insertNode()` inserts at the range's
+  // START boundary regardless of whether deleteContents ran first, and
+  // with nothing selected, "start" and "the whole (empty) selection" are
+  // the same point either way. Pasting OVER a real selection is the case
+  // that actually depends on it: without `deleteContents()`,
+  // `insertNode()` would insert the new text at the selection's start and
+  // leave the selected text sitting immediately after it, un-removed --
+  // confirmed red by deleting that one line: the result becomes
+  // 'Come ThereVisit', not the replacement 'Come There' this test expects.
+  it('pasting over a selected range REPLACES the selection, not merely inserts before it', () => {
+    const onCommit = vi.fn();
+    render(<EditableText path="press.intro" value="Come Visit" onCommit={onCommit} />);
+    const el = screen.getByText('Come Visit');
+    fireEvent.focus(el);
+
+    // Select "Visit" (the last five characters) within the single text
+    // node "Come Visit".
+    const textNode = el.firstChild!;
+    const range = document.createRange();
+    range.setStart(textNode, 'Come '.length);
+    range.setEnd(textNode, 'Come Visit'.length);
+    const selection = window.getSelection()!;
+    selection.removeAllRanges();
+    selection.addRange(range);
+
+    const clipboardData = { getData: (type: string) => (type === 'text/plain' ? 'There' : '<b>There</b>') };
+    fireEvent.paste(el, { clipboardData });
+
+    expect(el.textContent).toBe('Come There');
+    fireEvent.blur(el);
+    expect(onCommit).toHaveBeenCalledWith('press.intro', 'Come There');
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -446,12 +572,32 @@ describe('Task 3 review Finding C2: an emptied field stays tappable', () => {
     expect(el.childNodes.length).toBeGreaterThan(0);
   });
 
+  // I4 review finding: the previous version of this test set
+  // `el.textContent = 'New Heading'` -- a bare property assignment that
+  // REPLACES the whole node list, destroying the ZWSP placeholder node
+  // before blur ever runs. With no placeholder left in the DOM to strip,
+  // `stripPlaceholder(raw)` had nothing to do and `raw` already equalled
+  // 'New Heading' -- confirmed red: mutating `stripPlaceholder(raw)` to
+  // the identity `raw` (src/admin/EditableText.tsx:130, called from
+  // handleBlur at :130) left this test green, 53/53 across the whole
+  // file. Fixed by building the DOM the way a real caret actually leaves
+  // it: typing new characters does not erase a sibling text node, it
+  // inserts alongside it -- so the placeholder's own ZWSP survives
+  // sitting next to what she typed, exactly like the C1 <br>/paste tests
+  // above build real sibling DOM state rather than only ever overwriting
+  // `textContent` wholesale.
   it('focusing an emptied field again allows typing a fresh value, with no leftover placeholder character committed', () => {
+    // The explicit \u200b escape, not a literal zero-width-space character
+    // sitting invisibly in this source file -- this file's own NBSP tests
+    // above (and EditableText.tsx's own header comment on ZWSP) make the
+    // identical choice, for the identical reason: the character this test
+    // depends on needs to stay legible in a diff.
+    const ZWSP = '\u200b';
     const onCommit = vi.fn();
     render(<EditableText path="press.heading" value="" onCommit={onCommit} />);
     const el = screen.getByRole('textbox');
     fireEvent.focus(el);
-    el.textContent = 'New Heading';
+    el.textContent = `${ZWSP}New Heading`;
     fireEvent.blur(el);
     expect(onCommit).toHaveBeenCalledWith('press.heading', 'New Heading');
   });
@@ -521,5 +667,52 @@ describe('a non-breaking space a real browser introduced (not just one already p
     expect(onCommit).toHaveBeenCalledWith('hero.reserveButton', `Reserve Now${NBSP}`);
     const committed = onCommit.mock.calls[0][1] as string;
     expect(committed.charCodeAt(committed.length - 1)).toBe(0x00a0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Minor review finding: EditableText.tsx's own initial-DOM-write effect
+// (the one that populates a freshly-mounted span with `displayTextFor(value)`
+// -- this component renders no React children of its own, see that file's
+// header comment) uses `useLayoutEffect`, not `useEffect`, specifically so
+// the very first frame she ever sees already has real text in it rather than
+// a blank span that fills in a moment later. The previous review pass
+// claimed this was "impossible to pin in jsdom" -- wrong: jsdom fully
+// implements React's own effect-ordering contract (layout effects, child
+// before parent, ALL run before ANY passive effect anywhere in the tree),
+// so a PARENT's own `useLayoutEffect` reading the child's DOM is exactly as
+// reliable a probe in jsdom as in a real browser, with no layout/paint
+// engine required at all -- unlike the genuinely real-layout-dependent
+// checks elsewhere in this file (Finding C2's box-size reasoning), which
+// really can only be checked at the source level.
+describe('the initial DOM write happens in the layout-effect phase, not a later passive effect', () => {
+  function ParentProbe({ value, onProbe }: { value: string; onProbe: (textContent: string | null) => void }) {
+    const wrapperRef = useRef<HTMLDivElement>(null);
+    // Runs AFTER every descendant's own layout effect (React's own
+    // documented child-before-parent order within the layout phase) but
+    // BEFORE any passive effect anywhere in the tree, and before the
+    // browser (or jsdom) ever paints. If EditableText's own resync ran as
+    // a passive `useEffect` instead, it would not have run yet by the time
+    // THIS effect fires -- the span would still be empty.
+    useLayoutEffect(() => {
+      const span = wrapperRef.current?.querySelector('[role="textbox"]');
+      onProbe(span ? span.textContent : null);
+    });
+    return (
+      <div ref={wrapperRef}>
+        <EditableText path="hero.logoName" value={value} onCommit={vi.fn()} />
+      </div>
+    );
+  }
+
+  // Mutation this guards: changing `useLayoutEffect` to `useEffect` on
+  // EditableText.tsx's own resync effect -- confirmed red: the probe above
+  // then observes `''` (the span's true initial, childless state) instead
+  // of 'Via Bianca', since the child's passive effect has not run yet at
+  // the moment the parent's own layout effect fires.
+  it("a parent's own useLayoutEffect already sees the real text, not an empty span", () => {
+    const probe = vi.fn();
+    render(<ParentProbe value="Via Bianca" onProbe={probe} />);
+    expect(probe).toHaveBeenCalledWith('Via Bianca');
   });
 });

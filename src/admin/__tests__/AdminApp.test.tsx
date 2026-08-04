@@ -25,7 +25,7 @@ import galleriesJson from '../../content/galleries.json';
 import menusJson from '../../content/menus.json';
 import storyJson from '../../content/story.json';
 import copyJson from '../../content/copy.json';
-import { DRAFT_STORAGE_KEY, DRAFT_STAGED_COUNT_KEY } from '../drafts';
+import { DRAFT_STORAGE_KEY, DRAFT_STAGED_COUNT_KEY, saveDraft } from '../drafts';
 
 function dish(id: string, name: string): Dish {
   return { id, name, description: `${name}, described.`, image: `/food/${id}.webp`, tags: [] };
@@ -910,5 +910,29 @@ describe('AdminApp: Task 10 review fix -- a 401 mid-edit does not destroy the dr
     // The wrong sentence, named exactly: mutating the fix back to the bare
     // `pendingStagedCount` fires this assertion.
     expect(banner).not.toHaveTextContent(/picked again/i);
+  });
+});
+
+// Minor review finding: the dashboard correctly never offers an /edit
+// draft for restore here (drafts.ts's own per-surface separation -- they
+// are different sessions, and this screen must never apply the OTHER
+// one's draft), but until now nothing told her one exists at all -- the
+// reciprocal of EditMode.tsx's own identical note.
+describe('AdminApp: Minor -- a pre-existing /edit draft is mentioned, never restored, here', () => {
+  it('an /edit draft on disk is mentioned as a plain sentence, and the dashboard offers nothing to restore for it', async () => {
+    saveDraft('edit', { 'dishes.json': { data: DISHES, savedAt: 1_000 } });
+    stubFetch();
+    render(<AdminApp />);
+
+    expect(await screen.findByText(/unpublished changes saved on the live-page editor/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Restore' })).not.toBeInTheDocument();
+  });
+
+  it('with no /edit draft on disk, nothing is said about the other surface', async () => {
+    stubFetch();
+    render(<AdminApp />);
+
+    await screen.findByRole('heading', { name: 'Via Bianca Dashboard' });
+    expect(screen.queryByText(/unpublished changes saved on the live-page editor/i)).not.toBeInTheDocument();
   });
 });

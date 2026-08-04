@@ -93,25 +93,106 @@ describe('dist/assets/ keeps the libheif WASM decoder out of every EAGERLY-loade
     expect(assetsContainingLibheif().length).toBeGreaterThan(0);
   });
 
-  it.skipIf(!REQUIRED && !existsSync(DIST_ASSETS))('the entry chunk does not contain it', () => {
-    const entryChunks = readdirSync(DIST_ASSETS).filter((n) => /^index-.*\.js$/.test(n));
-    expect(entryChunks.length).toBeGreaterThan(0);
-    const leaking = assetsContainingLibheif().filter((name) => entryChunks.includes(name));
-    expect(leaking).toEqual([]);
-  });
+  // I3 review finding: the two checks this replaced asserted "not in
+  // index-*.js" and "not in AdminApp-*.js" -- two HARDCODED chunk names.
+  // `82490de` made EditMode.tsx import PublishBar.tsx, and because both
+  // AdminApp.tsx and EditMode.tsx now share that dependency, Rollup split
+  // it into its OWN chunk (`PublishBar-<hash>.js`) that matches NEITHER
+  // hardcoded pattern -- confirmed directly: the reviewer's mutation (the
+  // dynamic `import('heic-to')` in heic.ts changed to a static one) put
+  // libheif in exactly that chunk, and every check below (and both of the
+  // two this replaced) stayed green, because a hardcoded allowlist of
+  // chunk names can only ever catch a regression that lands in a chunk it
+  // already knew to name.
+  //
+  // The fix walks the REAL static-import graph Rollup actually built,
+  // instead of guessing at names. Two facts make this graph cheap to
+  // reconstruct from the built files alone, with no bundler API: Rollup's
+  // ESM output writes a static `import ... from"./chunk.js"` for every
+  // module-graph edge that must be paid for immediately, and a *dynamic*
+  // `import("./chunk.js")` (a function call, never a `from` clause) for
+  // every edge that may be deferred -- confirmed directly against this
+  // project's own real build (`import("./AdminApp-*.js")` /
+  // `import("./EditMode-*.js")` inside the entry chunk, for React.lazy;
+  // `import("./heic-to-*.js")` inside whichever chunk ends up holding
+  // `convertHeic`, for heic.ts's own dynamic import). Only a STATIC edge
+  // is followed below -- crossing a dynamic one is exactly the boundary a
+  // lazy route or a lazily-imported dependency is allowed to defer past,
+  // and the entire point of this file's guard is telling those two apart.
+  function staticImportTargets(source: string): string[] {
+    return [...source.matchAll(/from"\.\/([^"]+)"/g)].map((m) => m[1]);
+  }
 
-  // Not just the entry chunk: the AdminApp chunk itself must also stay
-  // clean, or every dashboard visit (not just one that picks a HEIC photo)
-  // pays for the ~3MB decoder -- heic.ts's own comment on why the
-  // `import('heic-to')` is dynamic, gated behind a per-file content check,
-  // rather than a static import at the top of the module, is precisely what
-  // this asserts actually held.
-  it.skipIf(!REQUIRED && !existsSync(DIST_ASSETS))('the AdminApp chunk does not contain it either -- it stays in its own, separately-loaded chunk', () => {
-    const adminChunks = readdirSync(DIST_ASSETS).filter((n) => /^AdminApp-.*\.js$/.test(n));
-    expect(adminChunks.length).toBeGreaterThan(0);
-    const leaking = assetsContainingLibheif().filter((name) => adminChunks.includes(name));
-    expect(leaking).toEqual([]);
-  });
+  function dynamicImportTargets(source: string): string[] {
+    return [...source.matchAll(/import\("\.\/([^"]+)"\)/g)].map((m) => m[1]);
+  }
+
+  function readChunk(name: string): string {
+    return readFileSync(join(DIST_ASSETS, name), 'utf8');
+  }
+
+  // Every chunk reachable from `start` by following only STATIC import
+  // edges -- i.e. everything that is downloaded the instant `start` itself
+  // is, with no further choice involved. `start` is included: a regression
+  // that inlined libheif directly into the start chunk itself (no separate
+  // chunk at all, the shape the reviewer's own mutation actually produced)
+  // must be caught the same way as one that landed one hop away.
+  function staticClosure(start: string): Set<string> {
+    const seen = new Set<string>();
+    const stack = [start];
+    while (stack.length > 0) {
+      const name = stack.pop()!;
+      if (seen.has(name)) continue;
+      seen.add(name);
+      staticImportTargets(readChunk(name)).forEach((dep) => {
+        if (!seen.has(dep)) stack.push(dep);
+      });
+    }
+    return seen;
+  }
+
+  function entryChunkName(): string {
+    const html = readFileSync('dist/index.html', 'utf8');
+    const match = html.match(/<script[^>]*type="module"[^>]*src="\/assets\/([^"]+)"/);
+    if (!match) throw new Error('bundle.post-build.test.ts: no <script type="module"> found in dist/index.html');
+    return match[1];
+  }
+
+  // The lazy route chunks React.lazy actually produced -- discovered by
+  // reading the entry chunk's OWN dynamic-import call sites, never
+  // hardcoded as `AdminApp-*`/`EditMode-*` name patterns: a future route
+  // (or a rename Rollup applies on its own) is picked up here automatically
+  // the same way a genuinely new one would be.
+  function lazyRoutes(): string[] {
+    return dynamicImportTargets(readChunk(entryChunkName()));
+  }
+
+  function libheifChunksIn(closure: Iterable<string>): string[] {
+    return [...closure].filter((name) => readChunk(name).includes(LIBHEIF_MARKER));
+  }
+
+  it.skipIf(!REQUIRED && !existsSync(DIST_ASSETS))(
+    'no chunk reachable from a bare page load, or from opening either lazy admin route, contains it -- via the real import graph, not a hardcoded chunk name',
+    () => {
+      // A bare visit to `/`: everything the entry chunk pulls in
+      // statically, whatever it's named.
+      expect(libheifChunksIn(staticClosure(entryChunkName()))).toEqual([]);
+
+      // Opening either lazy admin route: everything ITS OWN static closure
+      // pulls in -- this is what actually catches the PublishBar-*.js
+      // case, since PublishBar is a static dependency of both AdminApp and
+      // EditMode's own chunks, wherever Rollup happens to place it.
+      const routes = lazyRoutes();
+      // Non-vacuous: there really are lazy routes here for the loop below
+      // to walk -- a refactor that removed React.lazy entirely would
+      // otherwise make every assertion below pass by finding nothing to
+      // check, silently.
+      expect(routes.length).toBeGreaterThan(0);
+      routes.forEach((route) => {
+        expect(libheifChunksIn(staticClosure(route))).toEqual([]);
+      });
+    },
+  );
 });
 
 // The libheif check above guards one dependency. This guards the invariant

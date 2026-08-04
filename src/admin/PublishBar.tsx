@@ -246,6 +246,43 @@ export interface PublishBarProps {
   // prop exists so a COMPONENT test can reach those same terminal states
   // without re-proving that math a second, slower way.
   pollClock?: { now: () => number; sleep: (ms: number) => Promise<void> };
+  // C2 fix: while a caller is holding an unresolved restore-or-discard
+  // decision in front of her (EditMode's own `pendingDraft`, offered via a
+  // DraftBanner rendered ALONGSIDE this bar rather than instead of it --
+  // see EditMode.tsx's own comment on why /edit can't use AdminApp's
+  // either/or ternary), the persistence effect below must not run its
+  // `clearDraft` branch. Without this, the effect's very first tick after
+  // this bar mounts sees a freshly-loaded, entirely CLEAN registry (nothing
+  // has been restored into it yet -- "never auto-apply" is the whole point
+  // of asking first) and reads that the same way an ordinary "nothing
+  // dirty" tick would: `dirtyDraftMap` comes back `{}`, and the old,
+  // unconditional `else clearDraft(draftSurface)` deleted the very draft
+  // the banner is, at that exact moment, still asking her about -- gone
+  // from localStorage before she could answer, even though the banner
+  // itself (plain React state) kept showing it. AdminApp never reaches
+  // this at all, structurally: it renders DraftBanner INSTEAD of this bar
+  // while a decision is pending (its own ternary), so this component's own
+  // effect never even exists yet to run. EditMode has no such swap -- Task
+  // 2's invariant is that the real page (and therefore this bar, which
+  // wraps it) never unmounts -- so it needs an explicit hold instead.
+  // Defaulted to `false`: AdminApp never passes this, and its own
+  // structural gating already makes it correct without it.
+  holdDraftClear?: boolean;
+  // I8: whole-file client-side validation problems (useValidation, the
+  // exact hook AdminApp's own sections already use per file) for whichever
+  // content files a caller lets her edit. /edit makes emptying a field a
+  // first-class action with no per-field highlighting anywhere on the real
+  // page (EditableText/EditableImage have no RecordForm-style problem
+  // slot) -- this is the minimum honest fix: tell her what a publish would
+  // already refuse, in the same place she is about to click Publish,
+  // before she clicks it. Never gates the button itself (`disabled` stays
+  // driven by `isDirty`/`busy`/`tooManyStaged` alone) -- useValidation's
+  // own header comment is explicit that its result must never decide what
+  // a publish is ALLOWED to send, only tell her sooner what the server
+  // would already say. Defaulted to `[]`: AdminApp's own sections already
+  // show every one of these inline, next to the field, so it never passes
+  // this prop.
+  problems?: ValidationProblem[];
 }
 
 const REAL_CLOCK = { now: () => Date.now(), sleep: (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)) };
@@ -257,6 +294,8 @@ const PublishBar: React.FC<PublishBarProps> = ({
   onUnauthenticated,
   children,
   pollClock = REAL_CLOCK,
+  holdDraftClear = false,
+  problems = [],
 }) => {
   const [state, setState] = useState<BarState>({ phase: 'idle' });
   const mountedRef = useRef(true);
@@ -309,9 +348,17 @@ const PublishBar: React.FC<PublishBarProps> = ({
     // below; see dirtyDraftMap's own comment for the Critical this closes.
     const map = dirtyDraftMap(entries, stagedFiles.files);
     if (Object.keys(map).length > 0) saveDraft(draftSurface, map, stagedCount);
-    else clearDraft(draftSurface);
+    // C2 fix: a LOADED-but-CLEAN registry is not the same fact as "nothing
+    // unpublished exists" -- it is also exactly what a fresh mount looks
+    // like in the instant before an unresolved restore-or-discard decision
+    // has been answered (see `holdDraftClear`'s own prop comment). Holding
+    // here leaves the map's absence unwritten rather than actively erasing
+    // whatever is already on disk, so the worst case of holding too long
+    // (she never answers, ever) is a draft that keeps existing -- never
+    // the reverse.
+    else if (!holdDraftClear) clearDraft(draftSurface);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [registry.version, stagedCount]);
+  }, [registry.version, stagedCount, holdDraftClear]);
 
   // Step 4's beforeunload handler, active only while something would
   // actually be lost.
@@ -441,6 +488,26 @@ const PublishBar: React.FC<PublishBarProps> = ({
           </p>
         ) : (
           <PublishStatus state={state} />
+        )}
+        {/* I8: client-side validation, informational only -- never disables
+            the button above (see `problems` prop's own comment). Shown only
+            at `idle`: once she has actually clicked Publish, the real
+            outcome (a 422's own `validation` phase, or success) is the more
+            current and more authoritative thing to show in this same slot,
+            and this would otherwise sit stale underneath it. Reuses the
+            exact amber sentence className the 'mismatch'/'stalled' cases
+            below already use, and the exact list className the 'validation'
+            case does -- no new Tailwind utility, so this costs nothing
+            against this project's own CSS byte ceiling. */}
+        {!tooManyStaged && state.phase === 'idle' && problems.length > 0 && (
+          <div role="status" className="mt-3 font-['Montserrat'] text-sm text-amber-700">
+            <p>{`${problems.length} ${problems.length === 1 ? 'problem needs' : 'problems need'} fixing before this can publish:`}</p>
+            <ul className="list-disc pl-5">
+              {problems.map((problem, index) => (
+                <li key={index}>{problem.message}</li>
+              ))}
+            </ul>
+          </div>
         )}
       </div>
       {children}

@@ -40,10 +40,12 @@ function Harness({
   onUnauthenticated = vi.fn(),
   pollClock,
   withTagsField = false,
+  holdDraftClear = false,
 }: {
   onUnauthenticated?: (notice: string) => void;
   pollClock?: { now: () => number; sleep: (ms: number) => Promise<void> };
   withTagsField?: boolean;
+  holdDraftClear?: boolean;
 }) {
   const registry = useContentRegistry();
   const stagedFiles = useStagedFiles();
@@ -57,6 +59,7 @@ function Harness({
       draftSurface="dashboard"
       onUnauthenticated={onUnauthenticated}
       pollClock={pollClock}
+      holdDraftClear={holdDraftClear}
     >
       {withTagsField && (
         <input
@@ -520,6 +523,48 @@ describe('PublishBar: draft persistence and beforeunload', () => {
     expect(JSON.parse(window.localStorage.getItem(DRAFT_STORAGE_KEY)!)['dishes.json'].data).toEqual([
       { id: 'a', name: 'Restored' },
     ]);
+  });
+
+  // C2 review finding (Critical), a different route to the SAME "an empty
+  // registry must never reach clearDraft()" Critical the test above pins:
+  // a LOADED-but-CLEAN registry is not the same fact as "nothing
+  // unpublished exists" either -- it is also exactly what a fresh mount
+  // looks like in the instant BEFORE an unresolved restore-or-discard
+  // decision has been answered (EditMode.tsx's own case, which cannot use
+  // AdminApp's render-the-banner-INSTEAD-of-this-bar ternary -- Task 2's
+  // invariant is that the real page, and therefore this bar wrapping it,
+  // never unmounts). `holdDraftClear` is the caller's own way of saying
+  // "a decision is still pending" independent of registry emptiness.
+  it('holdDraftClear=true stops a LOADED, clean registry from clearing a pre-existing draft', () => {
+    window.localStorage.setItem(
+      DRAFT_STORAGE_KEY,
+      JSON.stringify({ 'dishes.json': { data: [{ id: 'a', name: 'Restored' }], savedAt: 1 } }),
+    );
+    render(<Harness holdDraftClear />);
+    // Registers the SAME clean value twice -- register's own contract
+    // (publish.ts) pins `initial` on the first call and updates `data`
+    // only after, so this is a genuinely LOADED, genuinely CLEAN entry
+    // (`isDirty` false), not an empty registry the way the test above
+    // covers.
+    act(() => {
+      captured!.registry.register('dishes.json', [{ id: 'a', name: 'Loaded' }], 'sha-1');
+    });
+    expect(window.localStorage.getItem(DRAFT_STORAGE_KEY)).not.toBeNull();
+  });
+
+  // The mirror image: once the hold is released (she has answered), a
+  // clean registry clears the draft exactly as it always did -- this prop
+  // must not leave a permanent leak that outlives the decision it guards.
+  it('holdDraftClear=false lets a loaded, clean registry clear the draft, same as before this prop existed', () => {
+    window.localStorage.setItem(
+      DRAFT_STORAGE_KEY,
+      JSON.stringify({ 'dishes.json': { data: [{ id: 'a', name: 'Restored' }], savedAt: 1 } }),
+    );
+    render(<Harness holdDraftClear={false} />);
+    act(() => {
+      captured!.registry.register('dishes.json', [{ id: 'a', name: 'Loaded' }], 'sha-1');
+    });
+    expect(window.localStorage.getItem(DRAFT_STORAGE_KEY)).toBeNull();
   });
 
   it('warns on beforeunload while dirty, not while clean', () => {

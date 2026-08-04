@@ -42,7 +42,8 @@ import type { StagedFile } from './staged';
 import type { UploadCategory } from '../shared/upload-categories';
 import PublishBar, { DraftBanner } from './PublishBar';
 import { loadDraft, loadDraftStagedCount, clearDraft } from './drafts';
-import type { DraftMap } from './drafts';
+import type { DraftMap, DraftSurface } from './drafts';
+import { useValidation } from './useValidation';
 // '../content/context', never '../content/ContentContext' or '../content' --
 // src/admin/__tests__/content.test.ts only whitelists types/validate/guards/
 // publish/context as safe src/content/ imports for src/admin/ (none of the
@@ -280,11 +281,21 @@ function setItemImage<T extends { id: string; image: string | null }>(items: T[]
 // conflict on the file's SECOND publish in a session). Every OTHER
 // EditMode.tsx behaviour stays proven black-box, through the rendered page,
 // the same way this file's other tests already do -- this is the one seam
-// that needs a real ContentRegistry double to observe, because Task 3 alone
-// has no way to make `register` and `updateData` produce a different
-// on-screen result to assert against (that only starts being true once
-// Task 5 wires up `markPublished`, i.e. exactly when nothing would be
-// watching if this weren't pinned first).
+// that needs a real ContentRegistry double to observe.
+//
+// Corrected (Minor review finding): an earlier version of this comment
+// claimed the on-screen difference between `register` and `updateData`
+// would become observable "once Task 5 wires up `markPublished`." Task 5
+// has since landed, and it still is not observable through the page:
+// `buildBundle` is called fresh, unmemoized, off `registry.getEntries()`
+// on every render (see this component's own render body below), so
+// `register` and `updateData` -- which differ only in whether they
+// overwrite `sha`, a field no rendered leaf ever reads -- keep producing an
+// identical `ContentBundle` regardless of which one `commitText` calls.
+// Nothing short of a second, real publish in the same session (verifying
+// the false-409 this finding exists to prevent never happens) would ever
+// make that difference visible black-box, and no test here does that --
+// this ContentRegistry double remains the only thing that pins it.
 //
 // This is the one export from this file that isn't the default component,
 // which is exactly what `react-refresh/only-export-components` warns about
@@ -442,8 +453,36 @@ const EditMode: React.FC = () => {
   // /edit never hides the real page to ask it: Task 2's own invariant is
   // that the page is always there, so the offer to restore is a banner
   // ABOVE it, not a replacement for it.
-  const [pendingDraft, setPendingDraft] = useState<DraftMap | null>(null);
+  // C2 fix (race hardening): seeded via a LAZY INITIALIZER -- evaluated
+  // synchronously on this component's very first render, not left at a
+  // plain `null` for the `[status]` effect below to fill in later. Content
+  // loading below fires all nine `fetchContent` calls in one synchronous
+  // burst, and their own promise-resolution timing is entirely independent
+  // of the `[status]` effect's OTHER work in the same call -- measured
+  // directly: when all nine happen to settle in one tight cluster, the
+  // registry's version can reach its final, fully-loaded value in a
+  // DIFFERENT React commit than the one carrying `pendingDraft`'s own
+  // freshly-loaded value, leaving one real, observable render where
+  // PublishBar's `holdDraftClear` prop below (`pendingDraft !== null`)
+  // still read stale-false against an ALREADY fully-loaded, clean registry
+  // -- exactly the window this whole fix exists to close, just moved one
+  // render earlier instead of removed. Reading localStorage during the
+  // very first render has no such gap: there is no earlier commit for a
+  // stale value to be read from. `loadDraft` is `drafts.ts`'s own pure,
+  // never-throwing, session-independent read (safe before `status` is
+  // even known) -- the `[status]` effect below still RE-CHECKS this on
+  // every fresh 'in' transition, which is what makes a 401-then-relogin
+  // cycle re-offer a NEWER draft correctly; this initializer only fixes
+  // the FIRST one.
+  const [pendingDraft, setPendingDraft] = useState<DraftMap | null>(() => loadDraft('edit'));
   const [pendingStagedCount, setPendingStagedCount] = useState(0);
+  // Minor review finding: purely informational -- unlike `pendingDraft`,
+  // never offered for restore here (drafts.ts's own per-surface
+  // separation is deliberate: the dashboard and /edit are different
+  // sessions, and this file must never apply the OTHER one's draft). Just
+  // tells her it exists, so she isn't left assuming /edit is the only
+  // place she has unpublished work.
+  const [otherSurfaceDraftExists, setOtherSurfaceDraftExists] = useState(false);
 
   // Post-review Fix 1 (Critical): on every transition into 'in' -- the
   // first load AND any later out->in cycle caused by a 401 below -- refetch
@@ -480,6 +519,7 @@ const EditMode: React.FC = () => {
     // for last.
     setPendingDraft(loadDraft('edit'));
     setPendingStagedCount(loadDraftStagedCount('edit'));
+    setOtherSurfaceDraftExists(loadDraft('dashboard' satisfies DraftSurface) !== null);
     const entries = registry.getEntries();
     CONTENT_FILES.forEach((file) => {
       // Already loaded (or holds her edits, once Task 3 adds editing) --
@@ -519,6 +559,31 @@ const EditMode: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status]);
 
+  // I8: whole-file client-side validation (useValidation, the identical
+  // hook every AdminApp section already uses per file) for exactly the
+  // five content files /edit can actually write to -- copy.json via
+  // commitText, galleries/dishes/drinks/press.json via commitImage.
+  // site.json/story.json/sections.json/menus.json have no editing
+  // affordance on this page at all (Task 3/4's own scope), so validating
+  // them here would only ever surface a problem she has no way to act on
+  // from /edit.
+  //
+  // Called unconditionally, ABOVE the `status === 'checking'` early return
+  // just below -- React's own rule that hooks can't run conditionally.
+  // `registry.getEntries()` is a plain ref read (useContentRegistry's own
+  // `useCallback`), not a hook, so hoisting it above that same early return
+  // is free: it returns the identical, safely-empty `{}` this component
+  // would have read a few lines later anyway on a render where nothing has
+  // loaded.
+  const entries = registry.getEntries();
+  const editValidationProblems = [
+    ...useValidation('copy.json', entries['copy.json']?.data as Copy | undefined),
+    ...useValidation('galleries.json', entries['galleries.json']?.data as Galleries | undefined),
+    ...useValidation('dishes.json', entries['dishes.json']?.data as ContentTypeMap['dishes.json'] | undefined),
+    ...useValidation('drinks.json', entries['drinks.json']?.data as ContentTypeMap['drinks.json'] | undefined),
+    ...useValidation('press.json', entries['press.json']?.data as ContentTypeMap['press.json'] | undefined),
+  ];
+
   if (status === 'checking') {
     // Same reasoning as AdminApp.tsx's own 'checking' branch: the lazy
     // chunk itself is already covered by src/App.tsx's <Suspense
@@ -527,7 +592,6 @@ const EditMode: React.FC = () => {
     return null;
   }
 
-  const entries = registry.getEntries();
   const bundle = buildBundle(entries, registry, staged.stage);
   const erroredFiles = Object.keys(fileErrors) as ContentFileName[];
   const loadedOrErroredCount = CONTENT_FILES.filter(
@@ -573,6 +637,31 @@ const EditMode: React.FC = () => {
   //      own UI state and nothing else. It is used nowhere in this tree but
   //      the hamburger (NavBar.tsx), so this carve-out is exactly that one
   //      button, not a general "buttons are fine" rule.
+  //   3. C1 review finding (Critical): Task 4's own camera control
+  //      (EditableImage.tsx) is a `<label htmlFor>` wrapping an `sr-only`
+  //      file input -- neither an anchor nor a button, so it fell straight
+  //      through both carve-outs above into the same
+  //      preventDefault/stopPropagation as WhatsApp or the Maps link.
+  //      preventDefault() on a label's own click cancels its activation
+  //      behaviour BEFORE the browser ever forwards a click to the input it
+  //      labels (confirmed directly, in a real Chromium build serving this
+  //      exact route: `fileInputClicks: 0`, `clickWasDefaultPrevented:
+  //      true`) -- so the file picker could never open at all, from either
+  //      a mouse click or the identical click a keyboard Enter/Space on the
+  //      focused label produces. Every element this control is made of
+  //      (the <img>, the <label>, its nested camera-glyph <span>, the
+  //      `sr-only` <input>, the status/error announcements) lives inside
+  //      EditableImage's own `data-editable-image-path` wrapper and NOTHING
+  //      else on this page carries that attribute, so `closest` on it is a
+  //      precise carve-out for exactly this control -- not a general
+  //      "images are fine" rule, and not wide enough to also exempt
+  //      anything destructive: the wrapper contains no anchor, no download,
+  //      no external navigation of any kind. This also covers the SECOND
+  //      click a real label forwards to its own input (a separate event,
+  //      independently dispatched, that reaches this same capture listener
+  //      before the input ever sees it) -- both the label's own click and
+  //      the forwarded one land inside the identical wrapper, so one
+  //      carve-out clears both.
   //
   // Everything else stays blocked, including Hero's reserve button
   // (fires the WhatsApp beacon) and BlogTeaser's "View all"
@@ -580,7 +669,7 @@ const EditMode: React.FC = () => {
   // `aria-expanded`, so both fall straight through to the same
   // preventDefault/stopPropagation as before. Fails closed: a future
   // button added anywhere in this tree is blocked by default unless it
-  // explicitly earns one of the two carve-outs above.
+  // explicitly earns one of the three carve-outs above.
   function handleCaptureClick(event: React.MouseEvent) {
     const target = event.target;
     if (target instanceof Element) {
@@ -594,6 +683,8 @@ const EditMode: React.FC = () => {
           anchor.search === window.location.search;
         if (staysOnThisPage) return;
       } else if (target.closest('button')?.hasAttribute('aria-expanded')) {
+        return;
+      } else if (target.closest('[data-editable-image-path]')) {
         return;
       }
     }
@@ -634,11 +725,51 @@ const EditMode: React.FC = () => {
         registry={registry}
         stagedFiles={staged}
         draftSurface="edit"
+        // C2 fix: held while `pendingDraft` is non-null -- see this prop's
+        // own comment (PublishBar.tsx) for exactly why an unresolved
+        // restore-or-discard decision must not let the persistence effect
+        // silently delete the very draft it names.
+        holdDraftClear={pendingDraft !== null}
+        problems={editValidationProblems}
         onUnauthenticated={(notice) => {
           setSignOutNotice(notice);
           logOut();
         }}
       >
+        {/* C2 fix: was rendered as a SIBLING after `</PublishBar>` -- i.e.
+            after the entire homepage, Footer included. Measured on the real
+            page in a real browser: six viewports below the fold on a
+            4800px-tall page -- an offer she would never scroll far enough
+            to see. Moved here, as the FIRST thing inside this bar's own
+            children, so it renders directly under the Publish button/status
+            area (already the top of the page) instead of past the very
+            bottom of it. Task 2's own invariant -- the real page never
+            unmounts -- still holds: this is a sibling INSERTION next to the
+            page's own wrapper div below, not a restructuring of it, so
+            React never tears that subtree down to make room for this. */}
+        {pendingDraft && (
+          <div className="mx-auto mb-4 max-w-3xl px-4">
+            <DraftBanner
+              draft={pendingDraft}
+              staleStagedCount={Math.max(0, pendingStagedCount - Object.keys(staged.files).length)}
+              onRestore={handleRestoreDraft}
+              onDiscard={handleDiscardDraft}
+            />
+          </div>
+        )}
+        {/* Minor review finding: /edit correctly never offers a DASHBOARD
+            draft (drafts.ts's own per-surface separation), but until now it
+            never told her one exists either -- she could sit on /edit with
+            no idea unpublished dashboard work is sitting one tab over. One
+            sentence, not a banner: this is background information, not a
+            decision she has to make right now the way `pendingDraft` above
+            is. */}
+        {otherSurfaceDraftExists && (
+          <p className="mx-auto mb-4 max-w-3xl px-4 font-['Montserrat'] text-sm text-gray-600">
+            You also have unpublished changes saved on the dashboard (/edit/manage) — untouched by anything you do
+            here.
+          </p>
+        )}
         <div onClickCapture={handleCaptureClick}>
           {stillLoading && (
             <p
@@ -679,20 +810,6 @@ const EditMode: React.FC = () => {
           </div>
         </div>
       </PublishBar>
-      {/* Task 5: /edit's own draft-restore offer -- a banner ABOVE the
-          still-fully-rendered page (never a replacement for it, unlike
-          AdminApp's identical banner, which gates its whole screen because
-          it has no live page underneath worth protecting). */}
-      {pendingDraft && (
-        <div className="mx-auto mb-4 max-w-3xl px-4">
-          <DraftBanner
-            draft={pendingDraft}
-            staleStagedCount={Math.max(0, pendingStagedCount - Object.keys(staged.files).length)}
-            onRestore={handleRestoreDraft}
-            onDiscard={handleDiscardDraft}
-          />
-        </div>
-      )}
       {/* Overlay, not a replacement: EditMode must never unmount the page
           above on status === 'out' (Step 3's whole point). A 401 mid-load
           (or mid-edit, once Task 3 adds editing) shows this on top of a

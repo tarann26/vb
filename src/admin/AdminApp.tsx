@@ -94,6 +94,14 @@ const AdminApp: React.FC = () => {
   // attempt restoring them (their bytes only ever lived in memory).
   const [pendingStagedCount, setPendingStagedCount] = useState(0);
   const [restoreDraft, setRestoreDraft] = useState<DraftMap | null>(null);
+  // Minor review finding (Plan 5 repair): purely informational, the
+  // reciprocal of EditMode.tsx's own identical note -- the dashboard
+  // correctly never offers an /edit draft for restore here (drafts.ts's
+  // own per-surface separation: they are different sessions, and this
+  // screen must never apply the OTHER one's draft), but until now nothing
+  // told her one exists at all. Read alongside `pendingDraft` below, on the
+  // same 'in' transition.
+  const [otherSurfaceDraftExists, setOtherSurfaceDraftExists] = useState(false);
   // Review finding: PublishBar's own "You've been signed out..." sentence
   // lives inside PublishBar, which unmounts the INSTANT `logOut` flips
   // `status` to 'out' -- in the same render, before a single paint could
@@ -143,6 +151,7 @@ const AdminApp: React.FC = () => {
   if (previousStatusRef.current !== 'in' && status === 'in') {
     setPendingDraft(loadDraft('dashboard'));
     setPendingStagedCount(loadDraftStagedCount('dashboard'));
+    setOtherSurfaceDraftExists(loadDraft('edit') !== null);
     setSignOutNotice(null);
   }
   previousStatusRef.current = status;
@@ -165,6 +174,12 @@ const AdminApp: React.FC = () => {
     <div className="min-h-screen bg-[#f7f5f0] px-4 py-10">
       <div className="mx-auto max-w-3xl">
         <h1 className="mb-2 font-['Parisienne'] text-3xl text-[#222]">Via Bianca Dashboard</h1>
+        {otherSurfaceDraftExists && (
+          <p className="mb-4 font-['Montserrat'] text-sm text-gray-500">
+            You also have unpublished changes saved on the live-page editor (/edit) — untouched by anything you do
+            here.
+          </p>
+        )}
         {pendingDraft ? (
           <DraftBanner
             draft={pendingDraft}

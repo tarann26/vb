@@ -470,6 +470,51 @@ describe('EditMode: in-page navigation and page chrome are not blocked (post-rev
     fireEvent.click(hamburger);
     expect(hamburger).toHaveAttribute('aria-expanded', 'true');
   });
+
+  // C1 review finding (Critical): proven in a real Chromium build serving
+  // this exact route -- clicking the camera control on a real, rendered
+  // photo gave `fileInputClicks: 0`, `clickWasDefaultPrevented: true`. This
+  // test drives the SAME interaction the bug report used and every other
+  // test in this file could not: a real `fireEvent.click` on the CONTROL
+  // ITSELF (the visible `<label>`, not `fireEvent.change(input)` fired
+  // directly against the input, which is what every EditableImage test --
+  // and every other test in this file -- does instead, and which cannot
+  // observe whether the click ever REACHED the input in the first place),
+  // mounted INSIDE EditMode's own capture-phase guard (not EditableImage in
+  // isolation, the way EditableImage.test.tsx renders it -- the guard this
+  // bug lives in does not exist there at all). jsdom implements a real
+  // browser's own label-forwards-a-click-to-its-control behaviour (confirmed
+  // directly: a preventDefault()'d capture-phase click on a label suppresses
+  // the forwarded click on its input here exactly as it did in the
+  // reviewer's own Chromium run) -- which is exactly why `fireEvent.change`
+  // could never have caught this: it skips the click path (and therefore
+  // the guard) entirely, going straight to dispatching `change` on the
+  // input as if the picker had already returned a file.
+  it('the camera control on a real photo actually reaches its own file input -- C1: fireEvent.change alone could never prove this', async () => {
+    stubFetch();
+    render(
+      <MemoryRouter>
+        <EditMode />
+      </MemoryRouter>,
+    );
+
+    // The real, committed galleries.json's own first Atmosfera photo --
+    // named explicitly by the review's own repro.
+    const [firstAtmospherePhoto] = GALLERIES.atmosphere;
+    const control = await screen.findByTitle(`Replace ${firstAtmospherePhoto.alt}`);
+    expect(control.tagName).toBe('LABEL');
+    const input = control.querySelector('input[type="file"]') as HTMLInputElement;
+    expect(input).not.toBeNull();
+
+    const inputClickSpy = vi.fn();
+    input.addEventListener('click', inputClickSpy);
+    // `fireEvent.click`'s own return value is `!event.defaultPrevented` --
+    // `true` here is what a fixed guard must produce (the mirror image of
+    // the "reserve button"/"Maps link" tests above, which assert `false`
+    // for the clicks that must stay blocked).
+    expect(fireEvent.click(control)).toBe(true);
+    expect(inputClickSpy).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('EditMode: one malformed content file does not take down the page', () => {
@@ -741,6 +786,70 @@ describe('EditMode: committing a text edit writes it back and it appears on scre
   });
 });
 
+// I8 review finding (Important): Task 3/4 make emptying a field a
+// first-class action, with no client-side validation anywhere on /edit --
+// she could empty a heading, see a normal-looking page, hit Publish, and
+// get a server-side refusal (a real 422) with no field highlighted at all.
+// PublishBar's own `problems` prop (already the exact mechanism the
+// dashboard's RecordForm/RecordList screens use, via useValidation) is now
+// wired up here too -- informational only, per useValidation's own header
+// comment ("never let this hook's result gate what a publish is ALLOWED to
+// send"): the Publish button itself stays enabled, this only tells her
+// sooner what a publish would already refuse.
+describe('EditMode: I8 -- client-side validation surfaces a problem before she ever clicks Publish', () => {
+  it('emptying the reserve button shows the validator\'s own message, without disabling Publish', async () => {
+    stubFetch();
+    render(
+      <MemoryRouter>
+        <EditMode />
+      </MemoryRouter>,
+    );
+
+    const button = await screen.findByRole('button', { name: COPY.hero.reserveButton });
+    const field = button.querySelector('[data-editable-path="hero.reserveButton"]')!;
+    fireEvent.focus(field);
+    field.textContent = '';
+    fireEvent.blur(field);
+
+    // useValidation's own 400ms debounce (useValidation.ts) -- findByText
+    // polls until it fires rather than this test hardcoding a wait.
+    expect(await screen.findByText('content/copy.json: "hero.reserveButton" must not be blank')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Publish' })).not.toBeDisabled();
+  });
+});
+
+// Minor review finding: /edit correctly never offers a DASHBOARD draft for
+// restore (drafts.ts's own per-surface separation -- they are different
+// sessions), but until now nothing told her one exists at all, so she could
+// sit on /edit with no idea unpublished dashboard work was one tab over.
+describe('EditMode: Minor -- a pre-existing DASHBOARD draft is mentioned, never restored, here', () => {
+  it('a dashboard draft on disk is mentioned as a plain sentence, and the edit-surface banner is not shown for it', async () => {
+    saveDraft('dashboard', { 'dishes.json': { data: DISHES, savedAt: 1_000 } });
+    stubFetch();
+    render(
+      <MemoryRouter>
+        <EditMode />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText(/unpublished changes saved on the dashboard/i)).toBeInTheDocument();
+    // Never a restore offer -- no Restore/Discard buttons for it.
+    expect(screen.queryByRole('button', { name: 'Restore' })).not.toBeInTheDocument();
+  });
+
+  it('with no dashboard draft on disk, nothing is said about the other surface', async () => {
+    stubFetch();
+    render(
+      <MemoryRouter>
+        <EditMode />
+      </MemoryRouter>,
+    );
+
+    await screen.findByRole('button', { name: COPY.hero.reserveButton });
+    expect(screen.queryByText(/unpublished changes saved on the dashboard/i)).not.toBeInTheDocument();
+  });
+});
+
 // Task 2's own re-login proof obligation landed here, undischarged (that
 // task could only prove the PAGE survived a 401 -- there was no edit yet to
 // survive). Driven the same way that task's own "a loaded file is never
@@ -998,16 +1107,38 @@ describe('Plan 5 Task 4, Step 2: staged photos are keyed on an identity the stag
     expect(GALLERIES.heroCollage[5].src).toBe('/atmosphere/dining.webp');
   });
 
-  it('restaging the SAME row three times leaves exactly one staged file', async () => {
+  // Minor review finding: an earlier version of this test rendered
+  // `bundle.renderImage('galleries.heroCollage.5', { src: ... })` exactly
+  // ONCE, with the SAME `src` prop across all three picks -- so it could
+  // never tell path-keying (what the stage key is ACTUALLY built from,
+  // EditMode.tsx's own `${stageFile}:${path}`) apart from a hypothetical
+  // src-keyed alternative, since `src` never once changed in that test's
+  // own DOM. On the real page it DOES change: `commitImage`'s own
+  // `registry.updateData` writes the newly staged `contentPath` back into
+  // galleries.json, so the NEXT render's `content.renderImage` call passes
+  // a DIFFERENT `src` for the same slot. Re-rendering with the freshly
+  // staged path between picks (below) reproduces that real sequence --
+  // confirmed red against a src-keyed mutation (`stage(\`${stageFile}:${
+  // imgProps.src}\`, ...)` in place of the real path-keyed call): three
+  // DIFFERENT keys land in `files` instead of one, since `src` itself
+  // changes on every restage.
+  it('restaging the SAME row three times leaves exactly one staged file, even as its own src changes between picks (path-keyed, not src-keyed)', async () => {
     const { files, stage } = makeStageAccumulator();
     const registry = makeRegistry();
     const bundle = buildBundle(registry.getEntries(), registry, stage);
-    const { container } = render(<>{bundle.renderImage('galleries.heroCollage.5', { src: '/atmosphere/dining.webp', alt: 'Dining room' })}</>);
+    const { container, rerender } = render(
+      <>{bundle.renderImage('galleries.heroCollage.5', { src: '/atmosphere/dining.webp', alt: 'Dining room' })}</>,
+    );
     const input = () => container.querySelector('input[type="file"]') as HTMLInputElement;
 
     await pickAndRespond(input(), 'first.jpg', '/x/first.webp');
     await waitFor(() => expect(Object.keys(files)).toHaveLength(1));
+    // What a real re-render sees next: PlaceGallery re-reads galleries.json
+    // from the (now-updated) registry, and hands renderImage the SAME
+    // path with a DIFFERENT src -- the just-staged contentPath.
+    rerender(<>{bundle.renderImage('galleries.heroCollage.5', { src: '/x/first.webp', alt: 'Dining room' })}</>);
     await pickAndRespond(input(), 'second.jpg', '/x/second.webp');
+    rerender(<>{bundle.renderImage('galleries.heroCollage.5', { src: '/x/second.webp', alt: 'Dining room' })}</>);
     await pickAndRespond(input(), 'third.jpg', '/x/third.webp');
 
     await waitFor(() => expect(Object.keys(files)).toHaveLength(1));
@@ -1237,9 +1368,54 @@ describe('Plan 5 Task 5: publishing from /edit', () => {
     const banner = await screen.findByRole('alert', { name: '' });
     expect(within(banner).getByText(/unsaved changes/i)).toBeInTheDocument();
 
+    // C2 review finding (Critical): the banner showing here (plain React
+    // state) used to be consistent with the draft ALREADY having been
+    // deleted from localStorage -- PublishBar's own persistence effect saw
+    // a freshly-loaded, entirely clean registry (nothing has been restored
+    // into it yet, "never auto-apply" is the whole point of asking first)
+    // on its very first tick and read that indistinguishably from "nothing
+    // to publish", clearing the very draft this banner is, at this exact
+    // moment, still asking her about. One more reload before she answered
+    // would have lost the work permanently, with the banner itself giving
+    // no hint anything was wrong. Asserted HERE, between mount and her
+    // decision -- not merely after Restore succeeds -- because that is
+    // exactly the window the bug lived in.
+    expect(loadDraft('edit')).not.toBeNull();
+
     fireEvent.click(within(banner).getByRole('button', { name: 'Restore' }));
 
     expect(await screen.findByRole('button', { name: 'Restored From Draft' })).toBeInTheDocument();
     expect(screen.queryByText(/unsaved changes/i)).not.toBeInTheDocument();
+  });
+
+  // C2 review finding (Critical), the other half: even once the draft
+  // itself survives (the test above), an offer she can never see is no
+  // offer at all. Measured on the real page in a real browser: the banner
+  // used to render as a SIBLING after `</PublishBar>` -- i.e. after the
+  // entire homepage, Footer included -- six viewports below the fold on a
+  // 4800px-tall page. jsdom computes no real layout (every element's own
+  // geometry is always zero, the same limitation this file's sibling
+  // EditableText.test.tsx/EditableImage.test.tsx already document for the
+  // identical reason), so DOCUMENT ORDER is the checkable proxy here: for
+  // two plain block-level elements with no absolute/fixed positioning
+  // pulling either one out of normal flow (true of both the banner and the
+  // real Footer component), appearing earlier in the DOM means rendering
+  // higher on the page. `compareDocumentPosition` is what actually proves
+  // "before", not merely "both exist somewhere".
+  it('the draft banner renders ABOVE the real Footer, not after the entire homepage', async () => {
+    saveDraft('edit', { 'copy.json': { data: COPY, savedAt: 5_000 } });
+    stubFetch();
+    render(
+      <MemoryRouter>
+        <EditMode />
+      </MemoryRouter>,
+    );
+
+    const banner = await screen.findByRole('alert', { name: '' });
+    const footer = document.querySelector('footer');
+    expect(footer).not.toBeNull();
+    // DOCUMENT_POSITION_FOLLOWING (4): `footer` comes AFTER `banner` in the
+    // document -- i.e. the banner is the earlier of the two.
+    expect(banner.compareDocumentPosition(footer!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });
