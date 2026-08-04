@@ -17,6 +17,14 @@ dist-ssr
 # category as node_modules/dist above.
 .wrangler
 
+# Playwright's own run artifacts (I-B: e2e/, playwright.config.ts) -- traces,
+# screenshots and the HTML report `npx playwright test` writes on every run,
+# same category as node_modules/dist above. The browser binary itself
+# (`npx playwright install chromium`) lives outside this repo entirely, in
+# Playwright's own user-level cache, so it needs no entry here.
+/test-results/
+/playwright-report/
+
 # Wrangler's local-secrets file (ADMIN_PASSWORD_HASH, TOKEN_SECRET, etc. for
 # `wrangler dev`). Real secrets are set with `wrangler secret put`, never
 # committed to this repo -- see src/test/secrets.test.ts.

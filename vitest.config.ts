@@ -1,4 +1,4 @@
-import { defineConfig } from 'vitest/config';
+import { configDefaults, defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 
 // Deliberate decision (worker plan, Task 3 Step 6): a single jsdom project,
@@ -47,5 +47,14 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
     globals: true,
+    // I-B: `e2e/**` (playwright.config.ts's own testDir) uses Playwright's
+    // own `test`/`expect`, not Vitest's -- Vitest's default include glob
+    // (`**/*.{test,spec}.?(c|m)[jt]s?(x)`) is not scoped to src/, so it
+    // picks up `e2e/collage-hit-test.spec.ts` too and fails hard trying to
+    // run it under the wrong test runner ("Playwright Test did not expect
+    // test.describe() to be called here"). Excluded here rather than
+    // renamed off the `.spec.ts` pattern, so it keeps the name convention
+    // Playwright itself documents.
+    exclude: [...configDefaults.exclude, 'e2e/**'],
   },
 });

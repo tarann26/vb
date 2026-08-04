@@ -28,6 +28,34 @@ import { GRID_SIZE, parsePlacement } from '../content/placement';
 // expected" apart from "dist/ should be here and isn't" (see that file's own
 // comment on the exact silent-reduction-to-nothing failure mode this guards
 // against).
+//
+// I-C review finding (repair): this file's own tests below were written
+// with that convention, but `package.json`'s `test:bundle` script -- the
+// one place VB_REQUIRE_DIST actually gets set -- named only
+// `bundle.post-build.test.ts`, never this file. The documented Cloudflare
+// build command (`docs/cloudflare-cutover.md`) is `npm run images && npm
+// run test:deploy && npm run build`: `test:deploy` runs BEFORE `dist/`
+// exists (before `vite build` inside `npm run build`), so every test below
+// skipped there every time, silently, and `npm run build`'s own closing
+// `npm run test:bundle` never ran this file at all -- so Task 2 Step 1's
+// glob-fix guard and Task 5 Step 2's "pin all 24 positions" guard were both
+// dormant in the real deploy pipeline from the day they were written,
+// running only against whatever stale `dist/` a developer happened to have
+// lying around locally. `test:bundle` now lists this file alongside
+// bundle.post-build.test.ts, so it runs for real, post-build, with
+// VB_REQUIRE_DIST=1 forcing REQUIRED (no silent skip if dist/ is somehow
+// missing at that point either).
+//
+// One known, accepted gap this does not close: `col-start-1`/`2`/`3` and
+// `row-start-1`/`2`/`3` (6 of the 24 positions the "pin all 24" test below
+// checks) are ALSO spelled out literally in CollageTile.tsx's own panel
+// markup (its mini 3x3 move-button grid), which Tailwind's scanner picks up
+// directly from that component regardless of tailwind.config.js's own
+// safelist. Removing those 6 entries from the safelist would still pass
+// this test -- it would just be passing for a different, coincidental
+// reason. The other 18 (col-start-4/5/6, every col-span/row-span, and
+// row-start-4/5/6) are not spelled out anywhere else in real source, so the
+// safelist is genuinely what this test is proving for those.
 const REQUIRED = !!process.env.VB_REQUIRE_DIST;
 const DIST_ASSETS = 'dist/assets';
 

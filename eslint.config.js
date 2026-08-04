@@ -24,5 +24,19 @@ export default tseslint.config(
         { allowConstantExport: true },
       ],
     },
+  },
+  // I-B: `playwright.config.ts` and `e2e/**` run under Node (Playwright's
+  // own test runner), never a browser -- `process.env`, `node:fs`'s
+  // `readFileSync`, `node:path`'s `join`, none of which `globals.browser`
+  // above declares. The rest of this repo's own tsconfig split (vite.config.ts
+  // + plugins under tsconfig.node.json, worker/ under tsconfig.worker.json)
+  // draws the identical Node-vs-browser line for the same reason; this is
+  // that same split's ESLint-side equivalent for the one new Node-only
+  // surface this task adds.
+  {
+    files: ['playwright.config.ts', 'e2e/**/*.ts'],
+    languageOptions: {
+      globals: globals.node,
+    },
   }
 );

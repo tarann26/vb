@@ -9,10 +9,11 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:deploy": "vitest run --exclude scripts/__tests__/images.derivatives.test.mjs",
-    "test:bundle": "VB_REQUIRE_DIST=1 vitest run src/test/bundle.post-build.test.ts",
+    "test:bundle": "VB_REQUIRE_DIST=1 vitest run src/test/bundle.post-build.test.ts src/test/collage-css.test.ts",
     "test:watch": "vitest",
     "preview": "vite preview",
-    "images": "node scripts/images.mjs"
+    "images": "node scripts/images.mjs",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "heic-to": "^1.5.2",
@@ -24,6 +25,7 @@
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260801.1",
     "@eslint/js": "^9.9.1",
+    "@playwright/test": "^1.62.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",

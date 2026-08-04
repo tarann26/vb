@@ -1,0 +1,39 @@
+name: e2e
+
+# I-B review finding: this repo had no committed browser test and no CI at
+# all -- every browser-verified claim across Plans 5 and 6 was a one-shot
+# manual run recorded in prose. This is the CI side of the fix:
+# e2e/collage-hit-test.spec.ts (a real Chromium, via @playwright/test) now
+# runs on every push/PR, independent of the Cloudflare Pages build.
+#
+# Deliberately NOT part of the Cloudflare Pages build command
+# (docs/cloudflare-cutover.md's own "npm run images && npm run test:deploy
+# && npm run build"): that environment has no browser binary, and
+# downloading one on every deploy would slow down a step that currently
+# exists to gate the SITE going live, not to run a slower, separate class
+# of check. This workflow is the pre-merge gate for that separate class
+# instead. No untrusted event input (issue/PR titles or bodies, commit
+# messages) is interpolated into any step below -- every step here is a
+# fixed command with no `${{ github.event.* }}` expansion at all.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
