@@ -1,10 +1,33 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Instagram, Menu, X } from 'lucide-react';
 import { useContent } from '../content/ContentContext';
 
+// Plan 7, Task 3, Step 2: "one nav, not two." copy.nav.links (a hand-
+// maintained list, each entry carrying the SectionId it scrolls to) and a
+// page's own `inNav` flag used to be two independent mechanisms feeding the
+// same nav bar, with nothing making them agree. This type is what makes
+// them agree BY CONSTRUCTION instead of by convention: every visible entry,
+// section or page, is reduced to the one shape the nav actually renders
+// (`href` + `label`), and `kind` is what tells the renderer below whether
+// `href` is an in-page "#" anchor (a plain `<a>`, so the browser's own
+// default scroll-to-anchor behaviour still applies) or a real route (a
+// router `<Link>`, so navigating to it is a client-side transition, not a
+// full reload). A page's OWN `name` and `slug` are what the nav shows and
+// links to -- there is no second, separate "nav label" for a page to drift
+// from, the same way copy.nav.links[].label already is section links' own
+// single source (still a real, standing gap -- see that field's own
+// comment, types.ts, for why IT is editable nowhere; unchanged by this
+// task).
+interface NavEntry {
+  kind: 'section' | 'page';
+  href: string;
+  label: string;
+}
+
 const Navbar: React.FC = () => {
   const content = useContent();
-  const { site, copy, sections } = content;
+  const { site, copy, sections, pages } = content;
   const [showNavbar, setShowNavbar] = useState(true);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const lastScrollY = useRef(0);
@@ -15,7 +38,17 @@ const Navbar: React.FC = () => {
   const enabledSectionIds = new Set(
     sections.filter((section) => section.enabled).map((section) => section.id),
   );
-  const visibleLinks = copy.nav.links.filter((link) => enabledSectionIds.has(link.section));
+  const sectionEntries: NavEntry[] = copy.nav.links
+    .filter((link) => enabledSectionIds.has(link.section))
+    .map((link) => ({ kind: 'section', href: link.href, label: link.label }));
+  // A page reaches the nav through exactly one flag it already owns
+  // (`inNav && enabled`) -- no separate list to keep in sync, and no way
+  // for a page to be linked from the nav while disabled (the same
+  // "cannot scroll to nothing" guarantee section links already have).
+  const pageEntries: NavEntry[] = pages
+    .filter((page) => page.inNav && page.enabled)
+    .map((page) => ({ kind: 'page', href: `/${page.slug}`, label: page.name }));
+  const visibleLinks: NavEntry[] = [...sectionEntries, ...pageEntries];
 
   useEffect(() => {
     const handleScroll = () => {
@@ -49,11 +82,17 @@ const Navbar: React.FC = () => {
             data-testid="desktop-nav-links"
             className="space-x-6 text-sm font-['Montserrat'] tracking-wider text-[#6B8B59] uppercase"
           >
-            {visibleLinks.map((link) => (
-              <a key={link.href} href={link.href} className="hover:text-[#222] transition">
-                {link.label}
-              </a>
-            ))}
+            {visibleLinks.map((link) =>
+              link.kind === 'section' ? (
+                <a key={link.href} href={link.href} className="hover:text-[#222] transition">
+                  {link.label}
+                </a>
+              ) : (
+                <Link key={link.href} to={link.href} className="hover:text-[#222] transition">
+                  {link.label}
+                </Link>
+              ),
+            )}
           </div>
         </div>
         {site.socials.instagram && (
@@ -83,16 +122,17 @@ const Navbar: React.FC = () => {
           data-testid="mobile-nav-panel"
           className="absolute top-full left-0 right-0 md:hidden bg-white shadow-md flex flex-col items-start px-6 py-4 space-y-4 text-sm font-['Montserrat'] tracking-wider text-[#6B8B59] uppercase"
         >
-          {visibleLinks.map((link) => (
-            <a
-              key={link.href}
-              href={link.href}
-              onClick={closeMenu}
-              className="hover:text-[#222] transition"
-            >
-              {link.label}
-            </a>
-          ))}
+          {visibleLinks.map((link) =>
+            link.kind === 'section' ? (
+              <a key={link.href} href={link.href} onClick={closeMenu} className="hover:text-[#222] transition">
+                {link.label}
+              </a>
+            ) : (
+              <Link key={link.href} to={link.href} onClick={closeMenu} className="hover:text-[#222] transition">
+                {link.label}
+              </Link>
+            ),
+          )}
         </div>
       )}
     </nav>

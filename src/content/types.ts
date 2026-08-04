@@ -300,11 +300,27 @@ export type Section = BespokeSection | TemplateSection;
 // to an arbitrary page. See guards.ts's `assertPages` for exactly what IS
 // still enforced per page (no duplicate id within that page's own list, the
 // same per-template content/publishAt checks sections.json gets).
+// Plan 7, Task 3, Step 3: a page's own metadata -- required, not optional.
+// D9's own reasoning ("a homepage with no hero is worse than her being
+// unable to produce one") applies here too: a page with no title or
+// description is a page Google will not rank, and a required field is what
+// keeps that state unreachable rather than merely discouraged. See
+// PageSeoHead.tsx's own comment for exactly where these two strings end up
+// (document.title, and the existing <meta name="description"> tag's
+// content) and why neither is templated with the restaurant's own name --
+// fully author-controlled, the same convention SiteContent.seo.title
+// already uses.
+export interface PageSeo {
+  title: string;
+  description: string;
+}
+
 export interface Page {
   slug: string;
   name: string;
   inNav: boolean;
   enabled: boolean;
+  seo: PageSeo;
   sections: Section[];
 }
 

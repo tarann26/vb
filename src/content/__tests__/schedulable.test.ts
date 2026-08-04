@@ -109,14 +109,41 @@ describe('the real, committed content under src/content/ agrees with SCHEDULABLE
   // yet). What this test DOES catch, the moment it stops being vacuous: the
   // first real dish/drink/article/section `publishAt` ever authored in a
   // file this list doesn't already name.
-  it('every real content file that carries a publishAt is listed in SCHEDULABLE_FILES', () => {
+  // Plan 7, Task 3: pages.json is a DELIBERATE exception, not an oversight.
+  // `Page` (types.ts) has no `publishAt` of its own -- the field only ever
+  // appears nested, inside a page's own `sections[]` -- so it is excluded
+  // from SCHEDULABLE_FILES on purpose and given its OWN dedicated filtering
+  // path instead (plugins/filter-unpublished.ts's `isPagesFile`/
+  // `filterPages`, which rewrites each page's own sections array rather
+  // than filtering the array of pages itself; see that module's own
+  // comment for why the generic top-level-array filter can't do this). This
+  // sweep would otherwise demand pages.json be added to SCHEDULABLE_FILES
+  // the moment any page's section ever carries a real publishAt, which
+  // would be the WRONG fix (adding it there feeds it through the generic
+  // filter, which is a silent no-op on pages.json -- see isPagesFile's own
+  // comment) -- so it is named here as a known exception, not silently
+  // excluded.
+  const HANDLED_OUTSIDE_SCHEDULABLE_FILES = new Set(['pages.json']);
+
+  it('every real content file that carries a publishAt is listed in SCHEDULABLE_FILES, or is a named, separately-handled exception', () => {
     const files = Object.fromEntries(
       realFiles.map((file) => [file, JSON.parse(readFileSync(join(CONTENT_DIR, file), 'utf8'))]),
     );
     const needsSchedule = filesNeedingSchedule(files);
     const registered: readonly string[] = SCHEDULABLE_FILES;
     needsSchedule.forEach((file) => {
+      if (HANDLED_OUTSIDE_SCHEDULABLE_FILES.has(file)) return;
       expect(registered).toContain(file);
+    });
+  });
+
+  // The exception set itself must name a real file, or it silently swallows
+  // whatever THAT typo would otherwise have caught -- mutating
+  // HANDLED_OUTSIDE_SCHEDULABLE_FILES to contain a made-up name instead of
+  // 'pages.json' would leave the test above green for the wrong reason.
+  it('the named exception is a real content file, not a typo that would silently swallow a finding', () => {
+    HANDLED_OUTSIDE_SCHEDULABLE_FILES.forEach((file) => {
+      expect(realFiles).toContain(file);
     });
   });
 });

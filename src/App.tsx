@@ -1,5 +1,5 @@
 import { Fragment, lazy, Suspense, type ReactNode } from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, useParams } from 'react-router-dom';
 import Navbar from './components/NavBar';
 import Hero from './components/Hero';
 import OurStory from './components/OurStory';
@@ -11,6 +11,7 @@ import VisitUs from './components/VisitUs';
 import Footer from './components/Footer';
 import BlogsPage from './components/BlogsPage';
 import SeoHead from './components/SeoHead';
+import PageSeoHead from './components/PageSeoHead';
 import NotFound from './components/NotFound';
 import type { SectionId, Section } from './content';
 import { useContent } from './content/ContentContext';
@@ -97,6 +98,35 @@ export function HomePage() {
   );
 }
 
+// Plan 7, Task 3, Step 1: a page she creates, rendered at `/:slug`. A
+// disabled page and a nonexistent slug both resolve here identically --
+// `pages.find` returns `undefined` for either (a disabled page is filtered
+// out by the same `&& p.enabled` check a nonexistent one would fail
+// anyway), and both fall through to the exact same <NotFound /> the
+// catch-all route below already renders for a URL that matches nothing at
+// all. No separate "this page exists but is off" message: from a visitor's
+// (or a crawler's) side, the two are indistinguishable on purpose -- a
+// disabled page must not even hint that a slug is reserved for something
+// she has simply switched off.
+function PageRoute() {
+  const { slug } = useParams<{ slug: string }>();
+  const { pages } = useContent();
+  const page = pages.find((p) => p.slug === slug && p.enabled);
+  if (!page) return <NotFound />;
+  return (
+    <div className="min-h-screen">
+      <PageSeoHead page={page} />
+      <Navbar />
+      {page.sections
+        .filter((section) => section.enabled)
+        .map((section) => (
+          <Fragment key={section.id}>{renderSection(section)}</Fragment>
+        ))}
+      <Footer />
+    </div>
+  );
+}
+
 export function AppRoutes() {
   return (
     <Routes>
@@ -118,6 +148,16 @@ export function AppRoutes() {
           </Suspense>
         }
       />
+      {/* Plan 7, Task 3, Step 1: React Router 7 ranks routes by
+          specificity, not declaration order (the same property Plan 5
+          relied on for '/edit' vs '/edit/manage', and pinned by a
+          regression test there) -- '/blogs', '/edit' and '/edit/manage/*'
+          above are all more specific than this single dynamic segment and
+          win regardless of where this line sits. Verified directly, not
+          just assumed: src/test/routing.test.tsx pins exactly this
+          property for every one of those routes against a page slugged to
+          collide with each. */}
+      <Route path="/:slug" element={<PageRoute />} />
       <Route path="*" element={<NotFound />} />
     </Routes>
   );

@@ -397,7 +397,7 @@ export function assertPages(raw: unknown): Page[] {
     if (!entry || typeof entry !== 'object') {
       throw new Error(`content/pages.json: entry [${i}] is not an object`);
     }
-    const { slug, name, inNav, enabled, sections } = entry as Record<string, unknown>;
+    const { slug, name, inNav, enabled, seo, sections } = entry as Record<string, unknown>;
     if (!isUrlSafeSlug(slug)) {
       throw new Error(`content/pages.json: "${String(slug)}" is not a URL-safe slug at [${i}]`);
     }
@@ -417,6 +417,16 @@ export function assertPages(raw: unknown): Page[] {
     if (typeof enabled !== 'boolean') {
       throw new Error(`content/pages.json: "enabled" must be a boolean for page "${slug}"`);
     }
+    // Plan 7, Task 3, Step 3: required, not optional -- see PageSeo's own
+    // comment (types.ts) for why a page with no title/description is a
+    // state this guard refuses to produce rather than merely discourages.
+    const seoRecord = (seo ?? {}) as Record<string, unknown>;
+    if (typeof seoRecord.title !== 'string' || seoRecord.title.trim().length === 0) {
+      throw new Error(`content/pages.json: page "${slug}" needs an SEO title`);
+    }
+    if (typeof seoRecord.description !== 'string' || seoRecord.description.trim().length === 0) {
+      throw new Error(`content/pages.json: page "${slug}" needs an SEO description`);
+    }
     if (!Array.isArray(sections)) {
       throw new Error(`content/pages.json: page "${slug}" needs a "sections" list`);
     }
@@ -424,7 +434,14 @@ export function assertPages(raw: unknown): Page[] {
     const parsedSections = sections.map((section, si) =>
       assertSectionEntry(section, si, pageSeenIds, `pages.json page "${slug}"`),
     );
-    return { slug, name, inNav, enabled, sections: parsedSections };
+    return {
+      slug,
+      name,
+      inNav,
+      enabled,
+      seo: { title: seoRecord.title, description: seoRecord.description },
+      sections: parsedSections,
+    };
   });
 }
 

@@ -63,6 +63,65 @@ describe('filterUnpublishedJson', () => {
   });
 });
 
+// Plan 7, Task 3: pages.json's own `publishAt` lives nested inside each
+// page's `sections[]`, not on the page itself -- structurally different
+// from every other file above, and covered separately here.
+describe('filterUnpublishedJson: pages.json (Plan 7, Task 3)', () => {
+  function page(slug: string, sections: unknown[]) {
+    return { slug, name: slug, inNav: true, enabled: true, sections };
+  }
+
+  it('drops a future-dated section from a page, keeping the page itself and its other sections', () => {
+    const pastSection = { kind: 'template', id: 'past', enabled: true, template: 'text', publishAt: '2026-07-01', content: {} };
+    const futureSection = { kind: 'template', id: 'future', enabled: true, template: 'text', publishAt: '2099-01-01', content: {} };
+    const undatedSection = { kind: 'bespoke', id: 'visit', enabled: true };
+    const fixture = JSON.stringify([page('our-menu', [pastSection, futureSection, undatedSection])]);
+
+    const result = filterUnpublishedJson('/repo/src/content/pages.json', fixture, TODAY);
+    expect(result).not.toBeNull();
+    const parsed = JSON.parse(result as string) as Array<{ slug: string; sections: Array<{ id: string }> }>;
+    expect(parsed).toHaveLength(1); // the page itself survives
+    expect(parsed[0].slug).toBe('our-menu');
+    expect(parsed[0].sections.map((s) => s.id)).toEqual(['past', 'visit']);
+  });
+
+  it('a page whose every section is future-dated survives as a page with an empty sections list, not dropped entirely', () => {
+    const futureSection = { kind: 'template', id: 'future', enabled: true, template: 'text', publishAt: '2099-01-01', content: {} };
+    const fixture = JSON.stringify([page('coming-soon', [futureSection])]);
+
+    const result = filterUnpublishedJson('/repo/src/content/pages.json', fixture, TODAY);
+    const parsed = JSON.parse(result as string) as Array<{ slug: string; sections: unknown[] }>;
+    expect(parsed).toHaveLength(1);
+    expect(parsed[0].sections).toEqual([]);
+  });
+
+  it('is a no-op for a page with no scheduled sections at all', () => {
+    const section = { kind: 'bespoke', id: 'visit', enabled: true };
+    const fixture = JSON.stringify([page('our-menu', [section])]);
+    const result = filterUnpublishedJson('/repo/src/content/pages.json', fixture, TODAY);
+    expect(JSON.parse(result as string)).toEqual(JSON.parse(fixture));
+  });
+
+  it('returns null for a pages.json payload that is not an array', () => {
+    expect(filterUnpublishedJson('/repo/src/content/pages.json', '{}', TODAY)).toBeNull();
+  });
+
+  // The mutation this test exists to catch: routing pages.json through the
+  // GENERIC top-level filter (isTargetContentFile's own path) instead of
+  // its own dedicated one -- Page itself has no publishAt, so that path is
+  // a silent no-op, and a future-dated section nested inside a page would
+  // ship regardless. Confirmed directly: temporarily adding 'pages.json' to
+  // SCHEDULABLE_FILES (routing it through the generic filter instead) makes
+  // this go red, because the generic filter never even looks at `sections`.
+  it('actually filters, not merely passes pages.json through unexamined', () => {
+    const futureSection = { kind: 'template', id: 'future', enabled: true, template: 'text', publishAt: '2099-01-01', content: {} };
+    const fixture = JSON.stringify([page('coming-soon', [futureSection])]);
+    const result = filterUnpublishedJson('/repo/src/content/pages.json', fixture, TODAY);
+    const parsed = JSON.parse(result as string) as Array<{ sections: unknown[] }>;
+    expect(parsed[0].sections).not.toEqual([futureSection]);
+  });
+});
+
 describe('filterUnpublished (the Vite plugin)', () => {
   it('applies to build only, never to dev/test', () => {
     expect(filterUnpublished().apply).toBe('build');

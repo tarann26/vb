@@ -30,6 +30,7 @@ describe('pages.json', () => {
       name: 'Breads & Dips',
       inNav: true,
       enabled: false,
+      seo: { title: 'Breads & Dips | Via Bianca', description: 'Our breads and dips menu.' },
       sections: [
         {
           kind: 'template' as const,

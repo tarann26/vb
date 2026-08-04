@@ -41,14 +41,63 @@ function asPublishable(item: unknown, file: string): { publishAt?: string } {
 // `todayInKolkata` describe block still exercises it directly, now imported
 // from there instead of defined here -- its assertions are unchanged.
 
+// Plan 7, Task 3: pages.json is NOT in SCHEDULABLE_FILES, on purpose --
+// `Page` itself (types.ts) has no `publishAt` field at all, so treating a
+// whole PAGE as the filterable unit the way `isTargetContentFile`'s four
+// files already are would be a silent no-op (`isPublished` on a Page always
+// returns true; there is nothing on it to ever be false). The real
+// Schedulable value here is nested one level down: a page's own
+// `sections[]` can contain a TemplateSection with a future `publishAt` (the
+// same field sections.json's own top-level entries can carry). Filtering
+// that requires rewriting each page's OWN `sections` array, not filtering
+// the array of pages itself -- a structurally different operation from
+// every other file this plugin touches, which is why pages.json gets its
+// own function rather than being folded into `isTargetContentFile`'s list.
+function isPagesFile(id: string): boolean {
+  return id.endsWith('/src/content/pages.json');
+}
+
+function filterPageSections(sections: unknown, today: string): unknown {
+  if (!Array.isArray(sections)) return sections;
+  return sections.filter((section) => isPublished(asPublishable(section, 'pages.json'), today));
+}
+
+function filterPages(pages: unknown[], today: string): unknown[] {
+  return pages.map((page) => {
+    if (!page || typeof page !== 'object') return page;
+    const record = page as Record<string, unknown>;
+    return { ...record, sections: filterPageSections(record.sections, today) };
+  });
+}
+
 // Pure: takes `today` as a parameter instead of reading the clock, so it
 // can be unit-tested at the one interesting boundary without stubbing
 // global Date/Intl state (see plugins/__tests__/filter-unpublished.test.ts,
 // the only place this ever runs, since the plugin below is `apply: 'build'`
-// only). Returns `null` when `id` isn't one of the three target files,
-// matching Vite's own convention for "this transform hook has nothing to
-// do with this module".
+// only). Returns `null` when `id` names neither a schedulable content file
+// nor pages.json, matching Vite's own convention for "this transform hook
+// has nothing to do with this module".
+//
+// Known, accepted residual gap (recorded, not silently left): the
+// scheduled-rebuild cron (worker/index.ts's SCHEDULABLE_CONTENT_FILES,
+// recordScheduledDates/reconcileScheduleFromSource) does NOT independently
+// track a page's own nested scheduled sections -- it assumes a schedulable
+// file's publishAt-bearing items sit at the array's TOP level, which is
+// true for sections.json but not for pages.json's own nested shape.
+// Extending it to dig into every page's own sections is real, structurally
+// separate work this task does not attempt. The shipping guarantee THIS
+// function provides is unaffected either way (a future-dated page section
+// still never reaches the built JS, regardless of whether the cron itself
+// independently knows to trigger a rebuild the day it becomes due) --
+// worst case, exactly like the cron's own already-documented reconciliation
+// gap for a hand-committed date, it goes live at the next rebuild triggered
+// for any other reason instead of the exact hour it becomes due.
 export function filterUnpublishedJson(id: string, code: string, today: string): string | null {
+  if (isPagesFile(id)) {
+    const parsed: unknown = JSON.parse(code);
+    if (!Array.isArray(parsed)) return null;
+    return JSON.stringify(filterPages(parsed, today));
+  }
   if (!isTargetContentFile(id)) return null;
   const parsed: unknown = JSON.parse(code);
   if (!Array.isArray(parsed)) return null;

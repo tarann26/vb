@@ -225,6 +225,8 @@ describe('assertPages (Plan 7, Task 1)', () => {
     expect(assertPages([])).toEqual([]);
   });
 
+  const SEO = { title: 'Our Menu | Via Bianca', description: 'A short, honest description for search engines.' };
+
   it('accepts a valid page with a template section, and does not require any bespoke section to be present', async () => {
     const { assertPages } = await import('../guards');
     const page = {
@@ -232,6 +234,7 @@ describe('assertPages (Plan 7, Task 1)', () => {
       name: 'Our Menu',
       inNav: true,
       enabled: true,
+      seo: SEO,
       sections: [
         {
           kind: 'template',
@@ -250,20 +253,20 @@ describe('assertPages (Plan 7, Task 1)', () => {
     'rejects the non-URL-safe slug %j',
     async (slug) => {
       const { assertPages } = await import('../guards');
-      const page = { slug, name: 'X', inNav: true, enabled: true, sections: [] };
+      const page = { slug, name: 'X', inNav: true, enabled: true, seo: SEO, sections: [] };
       expect(() => assertPages([page])).toThrow(/URL-safe slug/);
     },
   );
 
   it.each(['blogs', 'edit'])('rejects the reserved slug "%s", which would shadow a live route', async (slug) => {
     const { assertPages } = await import('../guards');
-    const page = { slug, name: 'X', inNav: true, enabled: true, sections: [] };
+    const page = { slug, name: 'X', inNav: true, enabled: true, seo: SEO, sections: [] };
     expect(() => assertPages([page])).toThrow(/collides with an existing route/);
   });
 
   it('rejects two pages sharing a slug', async () => {
     const { assertPages } = await import('../guards');
-    const page = { slug: 'menu', name: 'Menu', inNav: true, enabled: true, sections: [] };
+    const page = { slug: 'menu', name: 'Menu', inNav: true, enabled: true, seo: SEO, sections: [] };
     expect(() => assertPages([page, { ...page, name: 'Menu Again' }])).toThrow(/duplicate slug "menu"/);
   });
 
@@ -276,7 +279,7 @@ describe('assertPages (Plan 7, Task 1)', () => {
       template: 'text',
       content: { heading: 'H', paragraphs: ['p'] },
     };
-    const page = { slug: 'menu', name: 'Menu', inNav: true, enabled: true, sections: [section, section] };
+    const page = { slug: 'menu', name: 'Menu', inNav: true, enabled: true, seo: SEO, sections: [section, section] };
     expect(() => assertPages([page])).toThrow(/duplicate section id "dup"/);
   });
 
@@ -293,27 +296,29 @@ describe('assertPages (Plan 7, Task 1)', () => {
       template: 'text',
       content: { heading: 'H', paragraphs: ['p'] },
     };
-    const pageA = { slug: 'page-a', name: 'Page A', inNav: true, enabled: true, sections: [section] };
-    const pageB = { slug: 'page-b', name: 'Page B', inNav: true, enabled: true, sections: [section] };
+    const pageA = { slug: 'page-a', name: 'Page A', inNav: true, enabled: true, seo: SEO, sections: [section] };
+    const pageB = { slug: 'page-b', name: 'Page B', inNav: true, enabled: true, seo: SEO, sections: [section] };
     expect(() => assertPages([pageA, pageB])).not.toThrow();
   });
 
   it('rejects a page reusing a bespoke section id it already has, and allows the same bespoke id on two different pages', async () => {
     const { assertPages } = await import('../guards');
     const bespoke = { kind: 'bespoke', id: 'visit', enabled: true };
-    const dup = { slug: 'a', name: 'A', inNav: true, enabled: true, sections: [bespoke, bespoke] };
+    const dup = { slug: 'a', name: 'A', inNav: true, enabled: true, seo: SEO, sections: [bespoke, bespoke] };
     expect(() => assertPages([dup])).toThrow(/duplicate section id "visit"/);
 
-    const pageA = { slug: 'a', name: 'A', inNav: true, enabled: true, sections: [bespoke] };
-    const pageB = { slug: 'b', name: 'B', inNav: true, enabled: true, sections: [bespoke] };
+    const pageA = { slug: 'a', name: 'A', inNav: true, enabled: true, seo: SEO, sections: [bespoke] };
+    const pageB = { slug: 'b', name: 'B', inNav: true, enabled: true, seo: SEO, sections: [bespoke] };
     expect(() => assertPages([pageA, pageB])).not.toThrow();
   });
 
   it('rejects a page missing a name, inNav or enabled', async () => {
     const { assertPages } = await import('../guards');
-    expect(() => assertPages([{ slug: 'a', inNav: true, enabled: true, sections: [] }])).toThrow(/needs a name/);
-    expect(() => assertPages([{ slug: 'a', name: 'A', enabled: true, sections: [] }])).toThrow(/"inNav" must be a boolean/);
-    expect(() => assertPages([{ slug: 'a', name: 'A', inNav: true, sections: [] }])).toThrow(/"enabled" must be a boolean/);
+    expect(() => assertPages([{ slug: 'a', inNav: true, enabled: true, seo: SEO, sections: [] }])).toThrow(/needs a name/);
+    expect(() => assertPages([{ slug: 'a', name: 'A', enabled: true, seo: SEO, sections: [] }])).toThrow(/"inNav" must be a boolean/);
+    expect(() => assertPages([{ slug: 'a', name: 'A', inNav: true, seo: SEO, sections: [] }])).toThrow(/"enabled" must be a boolean/);
+    expect(() => assertPages([{ slug: 'a', name: 'A', inNav: true, enabled: true, sections: [] }])).toThrow(/needs an SEO title/);
+    expect(() => assertPages([{ slug: 'a', name: 'A', inNav: true, enabled: true, seo: { title: 'T' }, sections: [] }])).toThrow(/needs an SEO description/);
   });
 
   it('rejects pages.json that is not an array', async () => {

@@ -655,6 +655,13 @@ function validatePage(raw: unknown, index: number, seenSlugs: Set<string>): Vali
   if (typeof page.enabled !== 'boolean') {
     problems.push(problem(`[${index}].enabled`, `"${String(page.name ?? 'this page')}" needs to say whether it's shown on the site`));
   }
+  const seo = asRecord(page.seo);
+  if (isBlank(seo.title)) {
+    problems.push(problem(`[${index}].seo.title`, `"${String(page.name ?? 'this page')}" needs an SEO title`));
+  }
+  if (isBlank(seo.description)) {
+    problems.push(problem(`[${index}].seo.description`, `"${String(page.name ?? 'this page')}" needs an SEO description`));
+  }
   if (!Array.isArray(page.sections)) {
     problems.push(problem(`[${index}].sections`, `"${String(page.name ?? 'this page')}" needs a list of sections`));
   } else {
