@@ -64,6 +64,14 @@ const Hero: React.FC = () => {
             src,
             alt: '',
             className: 'w-full h-full object-cover opacity-90 hover:opacity-100 transition-opacity duration-500',
+            // Plan 6, Task 4, Step 1: native HTML5 image drag hijacks the
+            // pointer sequence a real drag-to-move needs on desktop --
+            // CollageTile.tsx (the /edit-only override of
+            // renderCollageTile) cannot set this itself, since it receives
+            // this <img> already rendered, as an opaque child. Harmless on
+            // the public page too: nothing there ever depended on a
+            // collage photo being natively draggable.
+            draggable: false,
           }),
         ),
       )}

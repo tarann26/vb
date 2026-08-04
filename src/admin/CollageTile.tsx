@@ -1,26 +1,32 @@
-// Plan 6, Task 3: the control that works everywhere. Buttons come before
-// drag (Task 4) deliberately -- the spec's Risks section mandates them on
-// touch, they double as the keyboard interface, and they satisfy the goal
-// on every device a mouse, a phone or a keyboard can reach. If scope must
-// be cut, drag is the droppable piece, not this.
+// Plan 6, Task 3/4: the collage's own move/size-change control -- buttons
+// (Task 3, always present, every device, every input) plus drag (Task 4,
+// fine pointers only). Buttons come before drag deliberately -- the spec's
+// Risks section mandates them on touch, they double as the keyboard
+// interface, and they satisfy the goal on every device a mouse, a phone or
+// a keyboard can reach. Drag is the droppable piece if scope must be cut,
+// not the buttons.
 //
 // This is `/edit`'s own override of `content.renderCollageTile`
 // (src/content/context.ts's default just renders the tile `<div>` inline,
 // unaware anything is editable -- see that module's own comment). Every
-// move or size change goes through the exact arithmetic Task 4's drag will
-// also use (`moveTile`/`resizeTile`, src/content/placement.ts) and the same
-// `isOnGrid` check `validateContent` uses server-side -- "if the button
-// path and the drag path can produce different results from the same
-// intent, you have two implementations and one is wrong" (this plan's own
-// Task 3 Step 1).
-import React, { useEffect, useState } from 'react';
+// move or size change -- button or drag -- goes through the exact same
+// arithmetic (`moveTile`/`resizeTile`, src/content/placement.ts) and the
+// same `isOnGrid` check `validateContent` uses server-side -- "if the
+// button path and the drag path can produce different results from the
+// same intent, you have two implementations and one is wrong" (this
+// plan's own Task 3 Step 1).
+import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Minus, Move, Plus, X } from 'lucide-react';
 import {
+  GRID_SIZE,
+  currentResolved,
   formatPlacement,
   isOnGrid,
   moveTile,
+  parsePlacement,
   resizeTile,
+  resolveLayout,
   type MoveDirection,
   type ResizeAxis,
   type ResolvedPlacement,
@@ -41,7 +47,10 @@ export interface CollageTileProps {
   // The already-rendered image for this tile (Hero.tsx's own
   // `content.renderImage(...)` call, passed straight through) -- this
   // component never re-derives how a collage photo is rendered, or where
-  // its own camera-replace badge (EditableImage.tsx) sits.
+  // its own camera-replace badge (EditableImage.tsx) sits. Hero.tsx sets
+  // `draggable={false}` on the underlying <img> itself (Task 4 Step 1) --
+  // this component receives it already rendered and cannot reach the <img>
+  // to set that prop itself.
   image: React.ReactNode;
   selected: boolean;
   onSelect: (index: number | null) => void;
@@ -77,6 +86,40 @@ function candidateFor(classNames: readonly string[], index: number, action: Acti
   return action.kind === 'move'
     ? moveTile(classNames, index, action.direction)
     : resizeTile(classNames, index, action.axis, action.delta);
+}
+
+// Task 4 Step 3: "pinning one tile relocates others" -- three of the real
+// sixteen entries have an auto row or column, so committing THIS tile's
+// placement can change where an UNTOUCHED sibling resolves, as a side
+// effect of the shared auto-placement cursor. Compared before/after across
+// every OTHER index, not just counted from the moved tile's own delta,
+// because a sibling's resolved position can change even when its own
+// className did not. Silently is not an answer (this task's own words) --
+// this is what lets a caller tell her.
+function describeSideEffects(classNames: readonly string[], index: number, nextClassName: string): string | null {
+  const before = resolveLayout(classNames.map((c) => parsePlacement(c)));
+  const after = resolveLayout(classNames.map((c, i) => parsePlacement(i === index ? nextClassName : c)));
+  const movedSiblings = before.filter((_, i) => i !== index && JSON.stringify(before[i]) !== JSON.stringify(after[i])).length;
+  if (movedSiblings === 0) return null;
+  return `${movedSiblings} other photo${movedSiblings === 1 ? '' : 's'} also moved to make room.`;
+}
+
+// Real Chromium finding (Task 4's own report): checking `isOnGrid` on only
+// the MOVED tile's own candidate is not enough. A move can be perfectly
+// legal for the tile itself and still push an auto-placed SIBLING off-grid
+// as a cascading side effect of "pinning one tile relocates others" (Task 4
+// Step 3) -- confirmed directly, dragging the real tile 7 up one row: its
+// own candidate resolves fine, but the cascade pushes tiles 0 and 2 off the
+// grid, and `validateContent` (the server-side authority,
+// `commitCollagePlacement` in EditMode.tsx) correctly refuses the whole
+// write -- SILENTLY, with nothing in this component's own UI explaining
+// why, before this fix. Resolving every OTHER tile too, not just the one
+// being moved, is what lets this refuse the drag/button press BEFORE ever
+// calling `onCommit`, with the same visible feedback every other refusal
+// already has.
+function wouldStayOnGrid(classNames: readonly string[], index: number, nextClassName: string): boolean {
+  const after = resolveLayout(classNames.map((c, i) => parsePlacement(i === index ? nextClassName : c)));
+  return after.every((r) => isOnGrid(r));
 }
 
 // One shared attribute, carried by EVERY interactive element this
@@ -142,6 +185,64 @@ const SELECT_BUTTON_CLASSNAME =
 const SELECTED_BUTTON_CLASSNAME =
   'absolute top-1 left-1 z-20 flex h-8 w-8 items-center justify-center rounded-full border border-white bg-[#6B8B59] text-white shadow focus-visible:outline focus-visible:outline-2 focus-visible:outline-white';
 
+// Task 4 Step 1: `matchMedia('(pointer: coarse)')`, not viewport width --
+// a small laptop window has a mouse and a large tablet does not, and only
+// the POINTER matters for whether a drag gesture can even start cleanly.
+// Decision, stated once here and not re-litigated at each call site: drag
+// is fine-pointer only. Coarse pointers get the buttons above and nothing
+// else -- Task 3's own buttons already satisfy the goal on a touchscreen
+// (the spec's Risks section mandate this task opened with), and touch-drag
+// on a grid this dense would compete with the page's own scroll gesture
+// for the exact gesture recognition window a drag needs; `touch-action:
+// none` would fix that at the cost of breaking normal scroll over every
+// collage tile on a phone, which this plan will not trade away.
+function isCoarsePointer(): boolean {
+  return typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches;
+}
+
+interface DragOrigin {
+  pointerId: number;
+  clientX: number;
+  clientY: number;
+  cellW: number;
+  cellH: number;
+  placement: ResolvedPlacement;
+}
+
+// Task 4 Step 2: snaps to whole cells -- the pointer's raw pixel delta is
+// divided by one cell's own measured size and rounded, never applied as a
+// continuous pixel offset. Measured from the GRID CONTAINER (the tile's own
+// parent), not from this tile's own rendered size: a tile that spans more
+// than one column/row would otherwise give a systematically wrong cell
+// size (its own box already includes the internal gap between its spanned
+// tracks).
+function measureCell(tileEl: HTMLElement): { cellW: number; cellH: number } | null {
+  // `gridEl`, not the bare name this variable had in an earlier draft --
+  // Tailwind's content scanner has no JS parser (this project's own
+  // standing WATCH): a negated one-word variable of that exact name, right
+  // after this comment's own null check, reads as the important-modifier
+  // spelling of the real, already-used bare utility sharing that name, and
+  // emitted an unused rule for it. Confirmed directly with the rule-level
+  // build diff this project's own standing instruction requires for every
+  // task -- deliberately not spelling either string out literally in this
+  // comment a second time, for the same reason.
+  const gridEl = tileEl.parentElement;
+  if (gridEl === null) return null;
+  const rect = gridEl.getBoundingClientRect();
+  const gapPx = parseFloat(getComputedStyle(gridEl).columnGap || '0') || 0;
+  return {
+    cellW: (rect.width - gapPx * (GRID_SIZE - 1)) / GRID_SIZE,
+    cellH: (rect.height - gapPx * (GRID_SIZE - 1)) / GRID_SIZE,
+  };
+}
+
+function placementStyle(p: ResolvedPlacement): React.CSSProperties {
+  return {
+    gridColumn: `${p.colStart} / span ${p.colSpan}`,
+    gridRow: `${p.rowStart} / span ${p.rowSpan}`,
+  };
+}
+
 // A fixed panel at the bottom of the viewport, not an overlay confined to
 // the tile itself -- the spec's own Risks section computes a ~60px cell at
 // 390px, nowhere near enough room for eight real, tappable buttons plus a
@@ -149,34 +250,182 @@ const SELECTED_BUTTON_CLASSNAME =
 // size is never constrained by the tiny grid cell it was opened from.
 const CollageTile: React.FC<CollageTileProps> = ({ index, className, classNames, image, selected, onSelect, onCommit }) => {
   const [refusedMessage, setRefusedMessage] = useState<string | null>(null);
+  const [infoMessage, setInfoMessage] = useState<string | null>(null);
+  // The tile's own placement WHILE a drag is live -- null the rest of the
+  // time, when `className` (via the resolved CSS classes it names) is what
+  // actually places this tile. Set from real pointer movement, so this is
+  // also the one piece of state that makes a drag VISIBLE at all: without
+  // it a drag would move the pointer with nothing on screen tracking it,
+  // reading exactly like Plan 5's own inert camera badge did before it was
+  // fixed.
+  const [dragPreview, setDragPreview] = useState<ResolvedPlacement | null>(null);
+  const [dragKind, setDragKind] = useState<'move' | 'span' | null>(null);
+  const tileRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef<DragOrigin | null>(null);
 
   // Cleared the instant a DIFFERENT tile is selected (or this one is
-  // deselected) -- a refusal message from a previous session has nothing to
-  // say about a fresh one.
+  // deselected) -- a message from a previous session has nothing to say
+  // about a fresh one.
   useEffect(() => {
     setRefusedMessage(null);
+    setInfoMessage(null);
   }, [selected]);
+
+  function commit(candidate: ResolvedPlacement) {
+    const nextClassName = formatPlacement(candidate);
+    setInfoMessage(describeSideEffects(classNames, index, nextClassName));
+    setRefusedMessage(null);
+    onCommit(index, nextClassName);
+  }
 
   function handleAction(button: ActionButton) {
     const candidate = candidateFor(classNames, index, button.action);
     if (!candidate || !isOnGrid(candidate)) {
+      setInfoMessage(null);
       setRefusedMessage(`Can't ${button.refusalLabel} — that would move this photo off the collage grid.`);
       return;
     }
+    if (!wouldStayOnGrid(classNames, index, formatPlacement(candidate))) {
+      setInfoMessage(null);
+      setRefusedMessage(`Can't ${button.refusalLabel} — that would push another auto-placed photo off the collage grid.`);
+      return;
+    }
+    commit(candidate);
+  }
+
+  // Task 4 Step 1: one code path for mouse and pen (Pointer Events unify
+  // both) -- `setPointerCapture` is what keeps a fast drag that leaves the
+  // tile's own bounds still tracked; without it, a move that outruns the
+  // element mid-drag stops receiving move events entirely.
+  function handleMovePointerDown(event: React.PointerEvent) {
+    if (isCoarsePointer()) return; // buttons only on touch -- see isCoarsePointer's own comment
+    if (event.pointerType === 'mouse' && event.button !== 0) return; // left button/primary contact only
+    const tileEl = tileRef.current;
+    if (!tileEl) return;
+    const cell = measureCell(tileEl);
+    const origin = currentResolved(classNames, index);
+    if (!cell || !origin) return;
+    dragRef.current = { pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY, cellW: cell.cellW, cellH: cell.cellH, placement: origin };
+    (event.target as Element).setPointerCapture(event.pointerId);
+    setDragKind('move');
+    setDragPreview(origin);
+    setInfoMessage(null);
     setRefusedMessage(null);
-    onCommit(index, formatPlacement(candidate));
+  }
+
+  function handleMovePointerMove(event: React.PointerEvent) {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId || dragKind !== 'move') return;
+    const colDelta = Math.round((event.clientX - drag.clientX) / drag.cellW);
+    const rowDelta = Math.round((event.clientY - drag.clientY) / drag.cellH);
+    setDragPreview({
+      ...drag.placement,
+      colStart: drag.placement.colStart + colDelta,
+      rowStart: drag.placement.rowStart + rowDelta,
+    });
+  }
+
+  function endDrag(event: React.PointerEvent, shouldCommit: boolean) {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    dragRef.current = null;
+    setDragKind(null);
+    const preview = dragPreview;
+    setDragPreview(null);
+    if (!shouldCommit || !preview) return;
+    const moved = preview.colStart !== drag.placement.colStart || preview.rowStart !== drag.placement.rowStart || preview.colSpan !== drag.placement.colSpan || preview.rowSpan !== drag.placement.rowSpan;
+    if (!moved) return; // dropped back where it started -- not a real edit
+    if (!isOnGrid(preview)) {
+      // Task 4 Step 2: a refused drop must produce visible feedback, not
+      // silence -- the tile has already visually snapped back (dragPreview
+      // is now null, so `className`'s own explicit placement takes over
+      // again on the very next paint) and this message says why.
+      setRefusedMessage("Can't drop it there — that would move this photo off the collage grid.");
+      return;
+    }
+    if (!wouldStayOnGrid(classNames, index, formatPlacement(preview))) {
+      // The dropped tile's OWN candidate is on-grid, but the cascade it
+      // triggers (Task 4 Step 3: "pinning one tile relocates others") would
+      // push an auto-placed sibling off-grid -- refused for the identical
+      // reason `handleAction`'s own second check is, with the identical
+      // visible feedback.
+      setRefusedMessage("Can't drop it there — that would push another auto-placed photo off the collage grid.");
+      return;
+    }
+    commit(preview);
+  }
+
+  function handleMovePointerUp(event: React.PointerEvent) {
+    endDrag(event, true);
+  }
+
+  function handleMovePointerCancel(event: React.PointerEvent) {
+    // A real pointercancel (the browser reclaiming the gesture -- a scroll,
+    // an OS gesture) is treated exactly like Escape: cancel, never commit.
+    endDrag(event, false);
+  }
+
+  // Task 4 Step 2: sizing is the same arithmetic on a corner handle: it
+  // changes span, not start." A separate handle from the move surface --
+  // dragging the PHOTO moves it; dragging this small corner grip resizes
+  // it. Shown only while selected (Task 3's own panel is the persistent,
+  // always-reachable affordance; this is the fine-pointer bonus, not a
+  // fifth permanently-visible badge on all sixteen tiles at once).
+  function handleResizePointerDown(event: React.PointerEvent) {
+    if (isCoarsePointer()) return;
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
+    const tileEl = tileRef.current;
+    if (!tileEl) return;
+    const cell = measureCell(tileEl);
+    const origin = currentResolved(classNames, index);
+    if (!cell || !origin) return;
+    dragRef.current = { pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY, cellW: cell.cellW, cellH: cell.cellH, placement: origin };
+    (event.target as Element).setPointerCapture(event.pointerId);
+    setDragKind('span');
+    setDragPreview(origin);
+    setInfoMessage(null);
+    setRefusedMessage(null);
+    event.stopPropagation();
+  }
+
+  function handleResizePointerMove(event: React.PointerEvent) {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId || dragKind !== 'span') return;
+    const colDelta = Math.round((event.clientX - drag.clientX) / drag.cellW);
+    const rowDelta = Math.round((event.clientY - drag.clientY) / drag.cellH);
+    setDragPreview({
+      ...drag.placement,
+      colSpan: Math.max(1, drag.placement.colSpan + colDelta),
+      rowSpan: Math.max(1, drag.placement.rowSpan + rowDelta),
+    });
+  }
+
+  // Escape cancels an in-flight drag -- Plan 5's review found "she could
+  // not undo her own edit" as a Critical, and a drag is far easier to
+  // trigger by accident than a text edit, with no natural inverse (she
+  // cannot retype a placement string from memory). This is the ONLY undo
+  // for a drag that has not yet released: once a drop commits, the
+  // dashboard's own existing Discard -- which reverts every unpublished
+  // change this session, not a per-move undo -- is what's there; this plan
+  // adds no new one. Attached to the tile itself (not the document), so it
+  // only fires while this tile's own pointer capture is live.
+  function handleTileKeyDown(event: React.KeyboardEvent) {
+    if (event.key === 'Escape' && dragRef.current) {
+      event.preventDefault();
+      dragRef.current = null;
+      setDragKind(null);
+      setDragPreview(null);
+    }
   }
 
   // Escape closes the panel and returns focus to the tile's own select
   // button (the browser's own default focus-return-on-unmount behaviour
   // handles the "return focus" half: the element that had focus inside the
   // now-removed panel is gone, and the select button is the nearest
-  // preceding focusable element in DOM order). Plan 5's review found "she
-  // could not undo her own edit" as a Critical; this is the equivalent for
-  // a panel that is easy to open by accident and has no destructive action
-  // of its own to undo (every button here either commits a legal move or
-  // size change, or is refused with no effect at all), so Escape here is a
-  // dismissal, not an undo.
+  // preceding focusable element in DOM order). Every button in the panel
+  // either commits a legal move/size change or is refused with no effect
+  // at all, so Escape here is a dismissal, not an undo (the drag surface
+  // above is where an in-flight edit actually needs undoing).
   function handlePanelKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
     if (event.key === 'Escape') {
       event.preventDefault();
@@ -185,10 +434,31 @@ const CollageTile: React.FC<CollageTileProps> = ({ index, className, classNames,
   }
 
   const controlLabel = selected ? `Stop moving photo ${index + 1}` : `Move or change the size of photo ${index + 1}`;
+  const dragInvalid = dragPreview !== null && !isOnGrid(dragPreview);
+  const tileStyle: React.CSSProperties = {
+    ...(dragPreview ? placementStyle(dragPreview) : {}),
+    ...(dragKind ? { touchAction: 'none' as const, cursor: dragKind === 'move' ? 'grabbing' : 'nwse-resize', zIndex: 30 } : {}),
+    ...(dragInvalid ? { boxShadow: 'inset 0 0 0 2px #dc2626' } : {}),
+  };
 
   return (
-    <div className={`${className} relative overflow-hidden`} data-collage-tile-index={index}>
-      {image}
+    <div
+      ref={tileRef}
+      className={`${className} relative overflow-hidden`}
+      style={tileStyle}
+      data-collage-tile-index={index}
+      onKeyDown={handleTileKeyDown}
+    >
+      <div
+        className="absolute inset-0 select-none"
+        style={{ touchAction: isCoarsePointer() ? 'auto' : 'none', cursor: isCoarsePointer() ? undefined : 'grab' }}
+        onPointerDown={handleMovePointerDown}
+        onPointerMove={handleMovePointerMove}
+        onPointerUp={handleMovePointerUp}
+        onPointerCancel={handleMovePointerCancel}
+      >
+        {image}
+      </div>
       <button
         type="button"
         {...CONTROL_ATTR}
@@ -200,6 +470,19 @@ const CollageTile: React.FC<CollageTileProps> = ({ index, className, classNames,
       >
         <Move className="h-4 w-4" aria-hidden="true" />
       </button>
+      {selected && !isCoarsePointer() && (
+        <div
+          {...CONTROL_ATTR}
+          role="presentation"
+          aria-label={`Drag to change the size of photo ${index + 1}`}
+          title="Drag to change size"
+          onPointerDown={handleResizePointerDown}
+          onPointerMove={handleResizePointerMove}
+          onPointerUp={(e) => endDrag(e, true)}
+          onPointerCancel={(e) => endDrag(e, false)}
+          className="absolute bottom-1 left-1 z-20 h-5 w-5 cursor-nwse-resize rounded border-2 border-white bg-[#6B8B59] shadow"
+        />
+      )}
       {selected &&
         createPortal(
           <div
@@ -268,6 +551,9 @@ const CollageTile: React.FC<CollageTileProps> = ({ index, className, classNames,
 
               <p role="status" aria-live="polite" className="min-h-[1em] font-['Montserrat'] text-xs text-red-600">
                 {refusedMessage ?? ''}
+              </p>
+              <p role="status" aria-live="polite" className="min-h-[1em] font-['Montserrat'] text-xs text-gray-500">
+                {infoMessage ?? ''}
               </p>
             </div>
           </div>,

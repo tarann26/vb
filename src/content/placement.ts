@@ -341,7 +341,13 @@ export type ResizeAxis = 'col' | 'row';
 // entry cannot be resolved at all (a className `parsePlacement` refuses, or
 // one whose span alone can never fit); a caller that reaches this with a
 // tile already on screen should never see that in practice.
-function currentResolved(classNames: readonly string[], index: number): ResolvedPlacement | null {
+//
+// Exported (not just `moveTile`/`resizeTile`'s own private helper): Task 4's
+// drag needs a tile's current resolved position at the MOMENT a pointer
+// gesture starts, before any direction or axis is known yet -- neither
+// `moveTile` nor `resizeTile` can answer that alone, since both already
+// require picking a direction/axis up front.
+export function currentResolved(classNames: readonly string[], index: number): ResolvedPlacement | null {
   const placements = classNames.map((c) => parsePlacement(c));
   return resolveLayout(placements)[index] ?? null;
 }

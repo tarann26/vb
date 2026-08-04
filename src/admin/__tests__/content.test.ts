@@ -124,7 +124,7 @@ function dotsNeeded(filePath: string): number {
   return filePath.split('/').length - 2;
 }
 
-// The five modules under src/content/ that are legitimate to import from
+// The six modules under src/content/ that are legitimate to import from
 // src/admin/ -- none of them import any JSON, and none has a transitive path
 // to src/content/index.ts, the build-time snapshot. `types`, `validate` and
 // `guards` erase entirely at compile time (every export is a type or a pure
@@ -134,7 +134,11 @@ function dotsNeeded(filePath: string): number {
 // anyway because it is react-only and imports no JSON, which is the actual
 // property this whitelist exists to guard (see EditMode.tsx's own comment on
 // why `../content/types` stopped being safe to whitelist blindly the moment
-// it held that same call, before this fix moved it out). Anything else
+// it held that same call, before this fix moved it out). `placement` (Plan 6,
+// Task 1) is the same shape as `validate`/`guards`: pure parsing/layout
+// functions, zero imports of its own (confirmed directly -- it has no
+// `import` statement at all), needed by CollageTile.tsx (Task 3) for the
+// exact move/resize arithmetic `validateContent` also calls. Anything else
 // reachable via `content/<subpath>` is NOT safe, and a first version of this
 // check (`content(?:/index)?`, matching only the bare barrel and an explicit
 // `/index`) missed that: it let `import dishes from '../content/dishes.json'`
@@ -143,7 +147,7 @@ function dotsNeeded(filePath: string): number {
 // exactly this -- straight through. Confirmed directly: that version left
 // this exact line green across all 21 tests in this file's previous
 // revision.
-const SAFE_CONTENT_SUBMODULES = ['types', 'validate', 'guards', 'publish', 'context'];
+const SAFE_CONTENT_SUBMODULES = ['types', 'validate', 'guards', 'publish', 'context', 'placement'];
 
 function importsContentSnapshot(source: string, filePath: string): boolean {
   const dots = dotsNeeded(filePath);
