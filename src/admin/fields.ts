@@ -26,6 +26,15 @@ import type {
   MenuFile,
   GalleryImage,
   Hours,
+  TextTemplateContent,
+  ItemListTemplateContent,
+  GalleryTemplateContent,
+  DetailBlockTemplateContent,
+  TemplateListItem,
+  TemplateFact,
+  TemplateWhatsAppButton,
+  Page,
+  PageSeo,
 } from '../content/types';
 import type { UploadCategory } from '../shared/upload-categories';
 
@@ -440,4 +449,97 @@ export const SITE_FIELDS: FieldsOf<SiteLeafShape> = {
   'seo.url': { label: 'Canonical URL', kind: 'readonly', help: SITE_READONLY_HELP },
   'seo.locale': { label: 'Locale', kind: 'readonly', help: SITE_READONLY_HELP },
   copyrightYear: { label: 'Copyright year', kind: 'number' },
+};
+
+// ---------------------------------------------------------------------------
+// Plan 7, Task 4, Step 2: template section content. The first DISCRIMINATED
+// descriptor -- FieldsOf<TextTemplateContent> and FieldsOf<ItemListTemplateContent>
+// are genuinely different shapes behind one `TemplateType` value, so there is
+// no single `FieldsOf<TemplateContent>` the way DISH_FIELDS is one
+// `FieldsOf<Dish>`. TemplateContentForm.tsx is what picks the right one of
+// the four below, by `template` -- each covers only the SCALAR fields
+// (`heading`, `body`, `layout`); every array field (`paragraphs`, `items`,
+// `images`, `facts`) is handled by TemplateContentForm itself, the exact
+// same "arrays handled outside FieldsOf/RecordForm entirely" precedent
+// StoryForm.tsx's own header comment documents for `paragraphs` and
+// GalleryList.tsx's for its own three lists.
+export const TEXT_TEMPLATE_FIELDS: FieldsOf<Pick<TextTemplateContent, 'heading'>> = {
+  heading: { label: 'Heading', kind: 'text' },
+};
+
+export const ITEM_LIST_TEMPLATE_FIELDS: FieldsOf<Pick<ItemListTemplateContent, 'heading'>> = {
+  heading: { label: 'Heading', kind: 'text' },
+};
+
+export const GALLERY_TEMPLATE_FIELDS: FieldsOf<Pick<GalleryTemplateContent, 'heading'>> = {
+  heading: { label: 'Heading', kind: 'text' },
+};
+
+// Kept as a bare FieldSpec, not folded into GALLERY_TEMPLATE_FIELDS -- the
+// same STORY_HEADING_FIELD precedent (a single field with no sibling array
+// to share a FieldsOf<T> with).
+export const GALLERY_LAYOUT_FIELD: FieldSpec<GalleryTemplateContent['layout']> = {
+  label: 'Layout',
+  kind: 'select',
+  options: ['scroll', 'grid'],
+  help: '"Scroll" is a horizontal photo strip (Atmosfera\'s own layout). "Grid" arranges the same photos in rows -- built for logos (B2B clients, press mentions), but usable for any small photo set.',
+};
+
+export const DETAIL_BLOCK_TEMPLATE_FIELDS: FieldsOf<Pick<DetailBlockTemplateContent, 'heading' | 'body'>> = {
+  heading: { label: 'Heading', kind: 'text' },
+  body: { label: 'Body', kind: 'textarea' },
+};
+
+// Item list's own per-item fields -- `image` is handled through PhotoField
+// directly (GALLERY_IMAGE_FIELDS' own precedent), not through Field's
+// generic 'image' dispatch, since TemplateContentForm supplies the upload
+// category itself rather than a FieldSpec carrying one.
+export const TEMPLATE_LIST_ITEM_FIELDS: FieldsOf<Pick<TemplateListItem, 'name' | 'description'>> = {
+  name: { label: 'Name', kind: 'text' },
+  description: { label: 'Description', kind: 'textarea' },
+};
+
+export const TEMPLATE_FACT_FIELDS: FieldsOf<TemplateFact> = {
+  label: { label: 'Label', kind: 'text', help: 'A short heading, e.g. "Day" or "Price".' },
+  value: { label: 'Value', kind: 'text' },
+};
+
+export const WHATSAPP_BUTTON_FIELDS: FieldsOf<TemplateWhatsAppButton> = {
+  label: { label: 'Button label', kind: 'text' },
+  message: { label: 'Pre-filled WhatsApp message', kind: 'textarea' },
+};
+
+// A template section's own id -- her name for it, not a SectionId (there
+// are only seven of those and this plan does not add an eighth -- see
+// SectionId's own comment, types.ts). Free text, checked for uniqueness and
+// collision with a built-in section server-side (guards.ts's
+// assertSectionEntry) -- this descriptor only supplies the label/help; the
+// actual refusal is what Task 4 Step 1 asks TemplateSectionList.tsx to
+// surface inline, not silently allow and let the publish step reject.
+export const TEMPLATE_SECTION_ID_FIELD: FieldSpec<string> = {
+  label: 'Section name',
+  kind: 'text',
+  help: 'Used only to tell this section apart from others -- not shown to a visitor. Must be different from every other section\'s name.',
+};
+
+// ---------------------------------------------------------------------------
+// Plan 7, Task 4, Step 3: pages.json's own scalar fields. `sections`
+// (a list inside a list) is deliberately absent -- PageList.tsx handles it
+// directly through TemplateSectionList, the same "arrays handled outside
+// FieldsOf/RecordForm entirely" precedent this file's own template
+// descriptors above already follow.
+export const PAGE_FIELDS: FieldsOf<Pick<Page, 'slug' | 'name' | 'inNav' | 'enabled'>> = {
+  slug: {
+    label: 'Web address',
+    kind: 'text',
+    help: 'The page\'s own address, e.g. "our-menu" for viabiancadelhi.com/our-menu. Letters a-z, numbers and hyphens only.',
+  },
+  name: { label: 'Page name', kind: 'text' },
+  inNav: { label: 'Shown in the navigation menu', kind: 'toggle' },
+  enabled: { label: 'Shown on the site', kind: 'toggle' },
+};
+
+export const PAGE_SEO_FIELDS: FieldsOf<PageSeo> = {
+  title: { label: 'SEO title', kind: 'text', help: 'Shown in the browser tab and search results.' },
+  description: { label: 'SEO description', kind: 'textarea', help: 'Shown under the title in search results.' },
 };

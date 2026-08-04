@@ -106,6 +106,7 @@ function stubFetch(dishesResponse: Promise<Response> | Response = contentRespons
       if (url.includes('menus.json')) return contentResponse(MENUS, 'sha-menus');
       if (url.includes('story.json')) return contentResponse(STORY, 'sha-story');
       if (url.includes('copy.json')) return contentResponse(COPY, 'sha-copy');
+      if (url.includes('pages.json')) return contentResponse([], 'sha-pages');
       throw new Error(`AdminApp.test.tsx: unexpected fetch to ${url}`);
     }),
   );
@@ -372,6 +373,50 @@ describe('AdminApp: the real "Homepage sections" screen', () => {
     await user.click(heroToggle);
     expect(heroToggle).toBeChecked(); // unchanged
   });
+
+  // Plan 7, Task 4: the real, mounted "Add a section" flow -- through the
+  // genuine AdminApp render, not TemplateSectionList.test.tsx's own
+  // isolated harness. Proves the wiring itself (fetch, registry, commit,
+  // re-render) works end to end, which an isolated component test cannot.
+  it('"Add a text section" on the real, mounted screen adds a template section beneath the seven bespoke ones', async () => {
+    stubFetch();
+    const user = userEvent.setup();
+    render(<AdminApp />);
+    const heading = await screen.findByRole('heading', { name: 'Homepage sections' });
+    const section = heading.closest('section') as HTMLElement;
+    await within(section).findByText('Hero');
+
+    await user.click(within(section).getByRole('button', { name: 'Add a text section' }));
+
+    // A fresh template row appears, with its own "Edit" control -- absent
+    // before the click (only the seven bespoke rows -- none of which show
+    // "Edit" -- existed then).
+    expect(within(section).getAllByRole('button', { name: 'Edit' })).toHaveLength(1);
+  });
+});
+
+describe('AdminApp: the real "Pages" screen', () => {
+  it('fetches pages.json and offers "Add a page"', async () => {
+    stubFetch();
+    render(<AdminApp />);
+    const heading = await screen.findByRole('heading', { name: 'Pages' });
+    const section = heading.closest('section') as HTMLElement;
+    expect(within(section).getByRole('button', { name: 'Add a page' })).toBeInTheDocument();
+  });
+
+  it('"Add a page" on the real, mounted screen adds a page row she can then open and edit', async () => {
+    stubFetch();
+    const user = userEvent.setup();
+    render(<AdminApp />);
+    const heading = await screen.findByRole('heading', { name: 'Pages' });
+    const section = heading.closest('section') as HTMLElement;
+
+    await user.click(within(section).getByRole('button', { name: 'Add a page' }));
+    await user.click(within(section).getByRole('button', { name: 'Edit' }));
+
+    expect(within(section).getByLabelText('Page name')).toBeInTheDocument();
+    expect(within(section).getByLabelText('Web address')).toBeInTheDocument();
+  });
 });
 
 // Task 7: site.json's own real, mounted "Opening hours" screen.
@@ -511,6 +556,7 @@ describe('AdminApp: a malformed content file costs one section, not the whole da
         if (url.includes('menus.json')) return contentResponse(MENUS, 'sha-menus');
         if (url.includes('story.json')) return contentResponse(STORY, 'sha-story');
         if (url.includes('copy.json')) return contentResponse(COPY, 'sha-copy');
+        if (url.includes('pages.json')) return contentResponse([], 'sha-pages');
         throw new Error(`unexpected fetch to ${url}`);
       }),
     );
@@ -685,6 +731,7 @@ describe('AdminApp: Critical review fix -- a restored draft cannot publish a pho
         if (url.includes('menus.json')) return contentResponse(MENUS, 'sha-menus');
         if (url.includes('story.json')) return contentResponse(STORY, 'sha-story');
         if (url.includes('copy.json')) return contentResponse(COPY, 'sha-copy');
+        if (url.includes('pages.json')) return contentResponse([], 'sha-pages');
         throw new Error(`AdminApp.test.tsx: unexpected fetch to ${url}`);
       }),
     );
@@ -838,6 +885,7 @@ describe('AdminApp: Task 10 review fix -- a 401 mid-edit does not destroy the dr
         if (url.includes('menus.json')) return contentResponse(MENUS, 'sha-menus');
         if (url.includes('story.json')) return contentResponse(STORY, 'sha-story');
         if (url.includes('copy.json')) return contentResponse(COPY, 'sha-copy');
+        if (url.includes('pages.json')) return contentResponse([], 'sha-pages');
         throw new Error(`AdminApp.test.tsx: unexpected fetch to ${url}`);
       }),
     );

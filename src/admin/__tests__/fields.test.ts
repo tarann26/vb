@@ -18,6 +18,17 @@ import {
   COPY_FIELDS,
   SITE_FIELDS,
   STORY_HEADING_FIELD,
+  TEXT_TEMPLATE_FIELDS,
+  ITEM_LIST_TEMPLATE_FIELDS,
+  GALLERY_TEMPLATE_FIELDS,
+  GALLERY_LAYOUT_FIELD,
+  DETAIL_BLOCK_TEMPLATE_FIELDS,
+  TEMPLATE_LIST_ITEM_FIELDS,
+  TEMPLATE_FACT_FIELDS,
+  WHATSAPP_BUTTON_FIELDS,
+  TEMPLATE_SECTION_ID_FIELD,
+  PAGE_FIELDS,
+  PAGE_SEO_FIELDS,
 } from '../fields';
 import { UPLOAD_CATEGORIES } from '../../shared/upload-categories';
 
@@ -48,6 +59,34 @@ describe('every descriptor has a non-empty label and a real kind', () => {
   it('HOURS_FIELDS', () => checkSpecs(HOURS_FIELDS));
   it('COPY_FIELDS', () => checkSpecs(COPY_FIELDS));
   it('SITE_FIELDS', () => checkSpecs(SITE_FIELDS));
+  // Plan 7, Task 4, Step 2/3.
+  it('TEXT_TEMPLATE_FIELDS', () => checkSpecs(TEXT_TEMPLATE_FIELDS));
+  it('ITEM_LIST_TEMPLATE_FIELDS', () => checkSpecs(ITEM_LIST_TEMPLATE_FIELDS));
+  it('GALLERY_TEMPLATE_FIELDS', () => checkSpecs(GALLERY_TEMPLATE_FIELDS));
+  it('DETAIL_BLOCK_TEMPLATE_FIELDS', () => checkSpecs(DETAIL_BLOCK_TEMPLATE_FIELDS));
+  it('TEMPLATE_LIST_ITEM_FIELDS', () => checkSpecs(TEMPLATE_LIST_ITEM_FIELDS));
+  it('TEMPLATE_FACT_FIELDS', () => checkSpecs(TEMPLATE_FACT_FIELDS));
+  it('WHATSAPP_BUTTON_FIELDS', () => checkSpecs(WHATSAPP_BUTTON_FIELDS));
+  it('PAGE_FIELDS', () => checkSpecs(PAGE_FIELDS));
+  it('PAGE_SEO_FIELDS', () => checkSpecs(PAGE_SEO_FIELDS));
+  it('GALLERY_LAYOUT_FIELD / TEMPLATE_SECTION_ID_FIELD (bare FieldSpecs, not FieldsOf)', () => {
+    checkSpecs({ layout: GALLERY_LAYOUT_FIELD, sectionId: TEMPLATE_SECTION_ID_FIELD });
+  });
+});
+
+// Plan 7, Task 4: GALLERY_LAYOUT_FIELD is the one 'select' descriptor this
+// task adds -- the same "options actually match what the runtime guard
+// accepts" proof DRINK_FIELDS.category already gets below, for the
+// identical reason (a select whose options drift from what
+// assertTemplateContent/validateTemplateContentFields actually accept
+// would offer her a choice the server then refuses).
+describe('GALLERY_LAYOUT_FIELD lists the same two layouts guards.ts/validate.ts accept', () => {
+  it('options are exactly ["scroll", "grid"]', () => {
+    expect(GALLERY_LAYOUT_FIELD.kind).toBe('select');
+    if (GALLERY_LAYOUT_FIELD.kind === 'select') {
+      expect([...GALLERY_LAYOUT_FIELD.options].sort()).toEqual(['grid', 'scroll']);
+    }
+  });
 });
 
 describe('DISH_FIELDS.category-equivalent controlled vocabularies carry their options', () => {
