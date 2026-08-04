@@ -6,7 +6,7 @@ import { replaceAt, useValidation } from '../useValidation';
 import { validateContent } from '../../content/validate';
 import RecordList from '../RecordList';
 import { DISH_FIELDS, SECTION_FIELDS } from '../fields';
-import type { Dish, Section } from '../../content/types';
+import type { Dish, BespokeSection } from '../../content/types';
 import dishesJson from '../../content/dishes.json';
 
 // The real, committed menu -- fifteen dishes, every one of them carrying a
@@ -263,11 +263,11 @@ describe('the whole-file round trip never drops a field', () => {
   });
 });
 
-function SectionsHarness({ initial }: { initial: Section[] }) {
+function SectionsHarness({ initial }: { initial: BespokeSection[] }) {
   const [items, setItems] = useState(initial);
   return (
     <>
-      <RecordList<Section>
+      <RecordList<BespokeSection>
         fields={SECTION_FIELDS}
         items={items}
         onChange={(index, next) => setItems((prev) => replaceAt(prev, index, next))}
@@ -286,9 +286,9 @@ function SectionsHarness({ initial }: { initial: Section[] }) {
 describe('the whole-file round trip preserves a readonly-descriptor field too', () => {
   it("toggling a section's visibility preserves its readonly id, unchanged", async () => {
     const user = userEvent.setup();
-    const initial: Section[] = [
-      { id: 'hero', enabled: true },
-      { id: 'ourStory', enabled: true },
+    const initial: BespokeSection[] = [
+      { kind: 'bespoke', id: 'hero', enabled: true },
+      { kind: 'bespoke', id: 'ourStory', enabled: true },
     ];
     render(<SectionsHarness initial={initial} />);
 
@@ -298,8 +298,8 @@ describe('the whole-file round trip preserves a readonly-descriptor field too', 
     const toggles = screen.getAllByLabelText(SECTION_FIELDS.enabled.label);
     await user.click(toggles[1]);
 
-    const published: Section[] = JSON.parse(screen.getByTestId('published').textContent ?? 'null');
-    expect(published[1]).toEqual({ id: 'ourStory', enabled: false });
+    const published: BespokeSection[] = JSON.parse(screen.getByTestId('published').textContent ?? 'null');
+    expect(published[1]).toEqual({ kind: 'bespoke', id: 'ourStory', enabled: false });
     expect(published[0]).toEqual(initial[0]); // untouched sibling
   });
 });

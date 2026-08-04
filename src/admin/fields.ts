@@ -22,7 +22,7 @@ import type {
   Dish,
   Drink,
   Article,
-  Section,
+  BespokeSection,
   MenuFile,
   GalleryImage,
   Hours,
@@ -152,7 +152,18 @@ export const ARTICLE_FIELDS: FieldsOf<Article> = {
 // ---------------------------------------------------------------------------
 // sections.json, menus.json, galleries.json, and site.json's hours[] rows.
 
-export const SECTION_FIELDS: FieldsOf<Section> = {
+// Plan 7, Task 1: `FieldsOf<BespokeSection>`, not `FieldsOf<Section>` --
+// SectionList.tsx's own screen only ever reorders/toggles the seven
+// bespoke, component-backed entries (D6's "still only PERMUTES the seven"),
+// never a template one, and `Section` (now a discriminated union) has no
+// single `Required<T>` shape FieldsOf could describe directly. `kind` is
+// declared (every key `BespokeSection` has must be, the same completeness
+// FieldsOf<Dish> already enforces) but, like MENU_FIELDS.file below, never
+// actually rendered through Field's generic dispatch -- SectionList.tsx
+// hand-builds its own row markup and has no reason to show her an internal
+// discriminant she never needs to see.
+export const SECTION_FIELDS: FieldsOf<BespokeSection> = {
+  kind: { label: 'Kind', kind: 'readonly' },
   // `id` names WHICH homepage section this entry is. Editing it does not
   // rename a section -- it repoints this entry at a different one entirely,
   // which assertSections (src/content/guards.ts) rejects the moment the

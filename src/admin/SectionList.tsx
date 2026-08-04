@@ -24,13 +24,21 @@
 // hero's own toggle is rendered `disabled`, so this screen cannot even
 // SUBMIT a click that would turn it off, rather than merely showing a
 // message after the fact.
-import type { Section, SectionId } from '../content/types';
+import type { BespokeSection, SectionId } from '../content/types';
 import type { ValidationProblem } from '../content/validate';
 import { MOVE_BUTTON_CLASSNAME } from './RecordList';
 
+// Plan 7, Task 1: `BespokeSection[]`, not the full `Section[]` union -- this
+// screen's own D6 header comment (below) is still true today: it only ever
+// permutes the seven bespoke, component-backed entries. AdminApp.tsx's own
+// SectionsSection is what narrows the full sections.json array down to this
+// shape before handing it here, and re-merges any template entries back in
+// on write -- see that component's own comment for exactly how, and for the
+// note that Task 4 ("the dashboard grows Add") is what teaches this screen
+// to show template sections too.
 export interface SectionListProps {
-  items: Section[];
-  onChange: (index: number, next: Section) => void;
+  items: BespokeSection[];
+  onChange: (index: number, next: BespokeSection) => void;
   onReorder: (ids: SectionId[]) => void;
   // The FULL sections.json problem list. validateSections
   // (src/content/validate.ts) wraps assertSections and, on ANY failure,

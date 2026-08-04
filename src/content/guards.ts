@@ -1,4 +1,20 @@
-import type { Hours, Copy, Section, SectionId, Drink } from './types';
+import type {
+  Hours,
+  Copy,
+  Section,
+  BespokeSection,
+  TemplateType,
+  TemplateContent,
+  TemplateWhatsAppButton,
+  TextTemplateContent,
+  ItemListTemplateContent,
+  GalleryTemplateContent,
+  DetailBlockTemplateContent,
+  Page,
+  SectionId,
+  Drink,
+} from './types';
+import { isPublished } from './publish';
 
 const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/; // 24-hour "HH:MM"
 
@@ -100,62 +116,316 @@ export function isSectionId(value: unknown): value is SectionId {
   return typeof value === 'string' && (SECTION_IDS as readonly string[]).includes(value);
 }
 
+// Plan 7, Task 1: the same `Record<TemplateType, true>` idiom as
+// SECTION_ID_SET above, and for the identical reason -- an array literal
+// only gets each element checked against TemplateType, never that every
+// member of the union is present, so it would silently stop enforcing
+// completeness the moment TemplateType grows a fifth member. A record
+// literal missing a key fails to compile.
+const TEMPLATE_TYPE_SET: Record<TemplateType, true> = {
+  text: true,
+  itemList: true,
+  gallery: true,
+  detailBlock: true,
+};
+const TEMPLATE_TYPES = Object.keys(TEMPLATE_TYPE_SET) as TemplateType[];
+
+export function isTemplateType(value: unknown): value is TemplateType {
+  return typeof value === 'string' && (TEMPLATE_TYPES as readonly string[]).includes(value);
+}
+
+// `today` is irrelevant to this check -- the same `INERT_TODAY` reasoning
+// src/content/validate.ts's own `validatePublishAt` documents: `isPublished`
+// only ever THROWS on a malformed date, before it ever compares to `today`,
+// so any fixed placeholder reaches the same verdict on a well-formed one.
+// Used here (guards.ts, which runs at build/import time, including the dev
+// server where plugins/filter-unpublished.ts's own `apply: 'build'` guard
+// means it never runs at all) so a malformed `publishAt` on a template
+// section fails loudly the same way assertHours/assertDrinkCategory already
+// fail loudly on a malformed value, rather than only in a production build.
+const INERT_TODAY = '1970-01-01';
+
+function assertSectionPublishAt(publishAt: unknown, context: string): string | undefined {
+  if (publishAt === undefined) return undefined;
+  if (typeof publishAt !== 'string') {
+    throw new Error(`content: "publishAt" must be a string for ${context}`);
+  }
+  try {
+    isPublished({ publishAt }, INERT_TODAY);
+  } catch (error) {
+    throw new Error(`content: ${context} -- ${error instanceof Error ? error.message : String(error)}`);
+  }
+  return publishAt;
+}
+
+function assertWhatsAppButton(raw: unknown, context: string): TemplateWhatsAppButton | undefined {
+  if (raw === undefined) return undefined;
+  if (!raw || typeof raw !== 'object') {
+    throw new Error(`content: ${context} whatsapp button must be an object`);
+  }
+  const { label, message } = raw as { label?: unknown; message?: unknown };
+  if (typeof label !== 'string' || typeof message !== 'string') {
+    throw new Error(`content: ${context} whatsapp button needs a "label" and a "message"`);
+  }
+  return { label, message };
+}
+
+// Structural, build-safety checks only -- enough that a malformed
+// TemplateContent can never crash a template component mid-render (every
+// field a template reads is guaranteed to exist, at the right primitive
+// type). The rich, named, owner-facing messages ("this text section needs a
+// heading") live in src/content/validate.ts's own per-template validators,
+// built ON TOP of this the same way validateDish/validateDrink already
+// build on assertHours/assertDrinkCategory -- see validate.ts's own header
+// comment for why that split, not a second competing definition, is the
+// rule in this codebase.
+function assertTemplateContent(template: TemplateType, raw: unknown, context: string): TemplateContent {
+  if (!raw || typeof raw !== 'object') {
+    throw new Error(`content: ${context} needs content`);
+  }
+  const content = raw as Record<string, unknown>;
+  const whatsapp = assertWhatsAppButton(content.whatsapp, context);
+  if (template === 'text') {
+    if (typeof content.heading !== 'string') throw new Error(`content: ${context} needs a "heading"`);
+    if (!Array.isArray(content.paragraphs) || content.paragraphs.some((p) => typeof p !== 'string')) {
+      throw new Error(`content: ${context} needs a "paragraphs" list of strings`);
+    }
+    return { heading: content.heading, paragraphs: content.paragraphs as string[], whatsapp };
+  }
+  if (template === 'itemList') {
+    if (typeof content.heading !== 'string') throw new Error(`content: ${context} needs a "heading"`);
+    if (!Array.isArray(content.items)) throw new Error(`content: ${context} needs an "items" list`);
+    const items = content.items.map((item, i) => {
+      if (!item || typeof item !== 'object') throw new Error(`content: ${context} items[${i}] is not an object`);
+      const { image, name, description } = item as { image?: unknown; name?: unknown; description?: unknown };
+      if (typeof image !== 'string' || typeof name !== 'string' || typeof description !== 'string') {
+        throw new Error(`content: ${context} items[${i}] needs an "image", a "name" and a "description"`);
+      }
+      return { image, name, description };
+    });
+    return { heading: content.heading, items, whatsapp };
+  }
+  if (template === 'gallery') {
+    if (typeof content.heading !== 'string') throw new Error(`content: ${context} needs a "heading"`);
+    if (content.layout !== 'scroll' && content.layout !== 'grid') {
+      throw new Error(`content: ${context} "layout" must be "scroll" or "grid"`);
+    }
+    if (!Array.isArray(content.images)) throw new Error(`content: ${context} needs an "images" list`);
+    const images = content.images.map((image, i) => {
+      if (!image || typeof image !== 'object') throw new Error(`content: ${context} images[${i}] is not an object`);
+      const { src, alt } = image as { src?: unknown; alt?: unknown };
+      if (typeof src !== 'string' || typeof alt !== 'string') {
+        throw new Error(`content: ${context} images[${i}] needs a "src" and "alt"`);
+      }
+      return { src, alt };
+    });
+    return { heading: content.heading, layout: content.layout, images, whatsapp };
+  }
+  // template === 'detailBlock' -- the last TEMPLATE_TYPES member. Written as
+  // a final `if`, not an `else`, so a fifth TemplateType added without a
+  // branch here falls through to the `never` assignment just below and
+  // fails to compile, the same exhaustiveness TEMPLATE_TYPE_SET's own
+  // comment documents for the record literal above.
+  if (template === 'detailBlock') {
+    if (typeof content.heading !== 'string') throw new Error(`content: ${context} needs a "heading"`);
+    if (typeof content.body !== 'string') throw new Error(`content: ${context} needs a "body"`);
+    if (!Array.isArray(content.facts)) throw new Error(`content: ${context} needs a "facts" list`);
+    const facts = content.facts.map((fact, i) => {
+      if (!fact || typeof fact !== 'object') throw new Error(`content: ${context} facts[${i}] is not an object`);
+      const { label, value } = fact as { label?: unknown; value?: unknown };
+      if (typeof label !== 'string' || typeof value !== 'string') {
+        throw new Error(`content: ${context} facts[${i}] needs a "label" and a "value"`);
+      }
+      return { label, value };
+    });
+    return { heading: content.heading, body: content.body, facts, whatsapp };
+  }
+  const _exhaustive: never = template;
+  throw new Error(`content: ${context} has an unknown template "${String(_exhaustive)}"`);
+}
+
+// The one function both assertSections (sections.json, the homepage) and
+// assertPages (pages.json) parse each entry of their own `Section[]`
+// through -- everything a single entry needs checked (kind, id shape and
+// collision, enabled, and -- for a template entry -- template type, content
+// shape and publishAt) lives here exactly once. `seenIds` is caller-owned
+// (sections.json tracks one Set across the whole homepage; assertPages
+// starts a fresh one per page) so id collision is scoped correctly in each
+// caller without this function knowing which caller it is.
+function assertSectionEntry(raw: unknown, index: number, seenIds: Set<string>, fileLabel: string): Section {
+  if (!raw || typeof raw !== 'object') {
+    throw new Error(`content/${fileLabel}: entry [${index}] is not an object`);
+  }
+  const entry = raw as Record<string, unknown>;
+  const { kind, id, enabled, publishAt } = entry;
+
+  if (kind === 'bespoke') {
+    if (!isSectionId(id)) {
+      throw new Error(`content/${fileLabel}: invalid section id "${String(id)}" at [${index}]`);
+    }
+    if (seenIds.has(id)) {
+      throw new Error(`content/${fileLabel}: duplicate section id "${id}"`);
+    }
+    seenIds.add(id);
+    if (typeof enabled !== 'boolean') {
+      throw new Error(`content/${fileLabel}: "enabled" must be a boolean for section "${id}"`);
+    }
+    // See Schedulable's own comment (types.ts) for why this stays forbidden
+    // on exactly the seven bespoke sections while a template section (below)
+    // may now carry it -- Plan 7 Contradiction A's resolution.
+    if (publishAt !== undefined) {
+      throw new Error(`content/${fileLabel}: "publishAt" is not supported on a bespoke section (section "${id}")`);
+    }
+    const result: BespokeSection = { kind: 'bespoke', id, enabled };
+    return result;
+  }
+
+  if (kind === 'template') {
+    if (typeof id !== 'string' || id.trim().length === 0) {
+      throw new Error(`content/${fileLabel}: a template section at [${index}] needs an id`);
+    }
+    // A template id colliding with one of the seven closed SectionIds is
+    // refused here, not merely discouraged -- App.tsx's/EditMode.tsx's own
+    // dispatch keys every REACT list `key` on `section.id` regardless of
+    // `kind`, so two sections sharing one id (a bespoke `visit` and a
+    // template she happened to name `visit`) would silently collide there.
+    if (isSectionId(id)) {
+      throw new Error(`content/${fileLabel}: template section id "${id}" collides with a built-in section`);
+    }
+    if (seenIds.has(id)) {
+      throw new Error(`content/${fileLabel}: duplicate section id "${id}"`);
+    }
+    seenIds.add(id);
+    if (typeof enabled !== 'boolean') {
+      throw new Error(`content/${fileLabel}: "enabled" must be a boolean for section "${id}"`);
+    }
+    const { template } = entry;
+    if (!isTemplateType(template)) {
+      throw new Error(`content/${fileLabel}: unknown template "${String(template)}" for section "${id}"`);
+    }
+    const content = assertTemplateContent(template, entry.content, `section "${id}"`);
+    const resolvedPublishAt = assertSectionPublishAt(publishAt, `section "${id}"`);
+    // The five-member discriminated union (TemplateSection) is reconstructed
+    // through a per-branch literal rather than one shared object spread, so
+    // `content`'s already-narrowed shape (assertTemplateContent's own return
+    // type is a plain union, not yet tied to `template`) lines back up with
+    // its sibling `template` literal the same way TemplateSection's own
+    // declaration (types.ts) pairs them.
+    switch (template) {
+      case 'text':
+        return { kind: 'template', id, enabled, publishAt: resolvedPublishAt, template, content: content as TextTemplateContent };
+      case 'itemList':
+        return { kind: 'template', id, enabled, publishAt: resolvedPublishAt, template, content: content as ItemListTemplateContent };
+      case 'gallery':
+        return { kind: 'template', id, enabled, publishAt: resolvedPublishAt, template, content: content as GalleryTemplateContent };
+      case 'detailBlock':
+        return { kind: 'template', id, enabled, publishAt: resolvedPublishAt, template, content: content as DetailBlockTemplateContent };
+    }
+  }
+
+  throw new Error(`content/${fileLabel}: entry [${index}] needs a "kind" of "bespoke" or "template"`);
+}
+
 // sections.json's `id` field is a plain string in the JSON module's inferred
-// type, wider than Section['id'] (SectionId) -- same widening problem as
-// drinks.category above. A blind `as Section[]` would silently accept a
-// typo'd id, permanently orphaning that section's component (App.tsx's
-// dispatch map would never be reached for it) or, worse, colliding with a
-// real one. This guard narrows and validates via runtime checks instead.
+// type, wider than Section['id'] -- same widening problem as drinks.category
+// above. A blind cast would silently accept a typo'd id, permanently
+// orphaning that section's component (App.tsx's dispatch map would never be
+// reached for it) or, worse, colliding with a real one. This guard narrows
+// and validates via `assertSectionEntry` above instead.
 //
-// Two rules apply on top of "is this array well-formed, with every id valid
-// and none repeated": every SectionId must appear exactly once (a dashboard
-// write that drops one silently deletes that section from the homepage --
-// this used to only be checked for `hero`, which meant a partial write
-// losing e.g. `visit` type-checked and passed the old guard), and `hero`
-// specifically must be enabled. A homepage with no hero is not a state this
-// plan supports, and the founder disabling it by a single accidental toggle
-// is worse than her being unable to.
+// Two rules apply on top of what assertSectionEntry itself already checks
+// per entry (valid/unique id, valid enabled, and -- Plan 7 -- a valid
+// template and content shape): every SectionId must appear exactly once
+// among the BESPOKE entries (a dashboard write that drops one silently
+// deletes that section from the homepage -- this used to only be checked
+// for `hero`, which meant a partial write losing e.g. `visit` type-checked
+// and passed the old guard), and `hero` specifically must be enabled. A
+// homepage with no hero is not a state this plan supports, and the founder
+// disabling it by a single accidental toggle is worse than her being unable
+// to.
 export function assertSections(raw: unknown): Section[] {
   if (!Array.isArray(raw)) {
     throw new Error('content/sections.json: expected an array of sections');
   }
-  const seen = new Set<SectionId>();
-  const result = raw.map((entry, i) => {
-    if (!entry || typeof entry !== 'object') {
-      throw new Error(`content/sections.json: entry [${i}] is not an object`);
-    }
-    const { id, enabled, publishAt } = entry as { id?: unknown; enabled?: unknown; publishAt?: unknown };
-    if (!isSectionId(id)) {
-      throw new Error(`content/sections.json: invalid section id "${String(id)}" at [${i}]`);
-    }
-    if (seen.has(id)) {
-      throw new Error(`content/sections.json: duplicate section id "${id}"`);
-    }
-    seen.add(id);
-    if (typeof enabled !== 'boolean') {
-      throw new Error(`content/sections.json: "enabled" must be a boolean for section "${id}"`);
-    }
-    // Dish/Drink/Article can be scheduled (see src/content/publish.ts and
-    // plugins/filter-unpublished.ts); Section deliberately cannot. A
-    // future-dated hero would be either a hard build failure (the plugin's
-    // own filter never runs on sections.json) or a silently heroless
-    // homepage (if a filter ever were added for it) depending on which of
-    // those two runs first -- an ambiguity that's cheaper to forbid than to
-    // resolve. `enabled: false` already covers the founder's real need.
-    if (publishAt !== undefined) {
-      throw new Error(`content/sections.json: "publishAt" is not supported on sections (section "${id}")`);
-    }
-    return { id, enabled };
-  });
-  const missing = SECTION_IDS.filter((id) => !seen.has(id));
+  const seen = new Set<string>();
+  const result = raw.map((entry, i) => assertSectionEntry(entry, i, seen, 'sections.json'));
+  const bespokeIds = new Set(result.filter((s): s is BespokeSection => s.kind === 'bespoke').map((s) => s.id));
+  const missing = SECTION_IDS.filter((id) => !bespokeIds.has(id));
   if (missing.length > 0) {
     throw new Error(`content/sections.json: missing required section(s) "${missing.join('", "')}"`);
   }
-  const hero = result.find((section) => section.id === 'hero');
+  const hero = result.find((section) => section.kind === 'bespoke' && section.id === 'hero') as
+    | BespokeSection
+    | undefined;
   if (!hero?.enabled) {
     throw new Error('content/sections.json: "hero" cannot be disabled');
   }
   return result;
+}
+
+// Plan 7, Task 1, Step 2: pages.json's own guard. Deliberately NOT the
+// "every SectionId present, hero enabled" completeness rule assertSections
+// enforces above -- that rule is about the HOMEPAGE's identity, not about
+// what a page may contain; a page's own `sections` list may be empty, may
+// contain only template sections, or may reuse a bespoke one, freely (see
+// Page's own comment, types.ts). What IS still enforced, per page: a
+// well-formed, URL-safe, unique `slug`; a name; the two booleans; and every
+// one of that page's own sections passing `assertSectionEntry` with a FRESH
+// `seenIds` Set per page (an id may repeat across two different pages, or
+// between a page and the homepage, without conflict -- each page, and the
+// homepage, is its own namespace).
+const SLUG_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+
+// The routes that already exist and must never be shadowed by `/:slug`
+// (Task 3) -- `blogs` and `edit` are the two single-segment ones a page
+// slug could actually collide with; `/edit/manage` is a second path
+// segment, structurally unreachable from a single `/:slug` route, but
+// `edit` alone already blocks a page from being named "edit" in the first
+// place, which is what would be confusing regardless of routing mechanics.
+export const RESERVED_PAGE_SLUGS = new Set(['blogs', 'edit']);
+
+export function isUrlSafeSlug(value: unknown): value is string {
+  return typeof value === 'string' && SLUG_PATTERN.test(value);
+}
+
+export function assertPages(raw: unknown): Page[] {
+  if (!Array.isArray(raw)) {
+    throw new Error('content/pages.json: expected an array of pages');
+  }
+  const seenSlugs = new Set<string>();
+  return raw.map((entry, i) => {
+    if (!entry || typeof entry !== 'object') {
+      throw new Error(`content/pages.json: entry [${i}] is not an object`);
+    }
+    const { slug, name, inNav, enabled, sections } = entry as Record<string, unknown>;
+    if (!isUrlSafeSlug(slug)) {
+      throw new Error(`content/pages.json: "${String(slug)}" is not a URL-safe slug at [${i}]`);
+    }
+    if (RESERVED_PAGE_SLUGS.has(slug)) {
+      throw new Error(`content/pages.json: slug "${slug}" collides with an existing route`);
+    }
+    if (seenSlugs.has(slug)) {
+      throw new Error(`content/pages.json: duplicate slug "${slug}"`);
+    }
+    seenSlugs.add(slug);
+    if (typeof name !== 'string' || name.trim().length === 0) {
+      throw new Error(`content/pages.json: page "${slug}" needs a name`);
+    }
+    if (typeof inNav !== 'boolean') {
+      throw new Error(`content/pages.json: "inNav" must be a boolean for page "${slug}"`);
+    }
+    if (typeof enabled !== 'boolean') {
+      throw new Error(`content/pages.json: "enabled" must be a boolean for page "${slug}"`);
+    }
+    if (!Array.isArray(sections)) {
+      throw new Error(`content/pages.json: page "${slug}" needs a "sections" list`);
+    }
+    const pageSeenIds = new Set<string>();
+    const parsedSections = sections.map((section, si) =>
+      assertSectionEntry(section, si, pageSeenIds, `pages.json page "${slug}"`),
+    );
+    return { slug, name, inNav, enabled, sections: parsedSections };
+  });
 }
 
 // Recurses through the raw copy.json shape checking every string leaf for

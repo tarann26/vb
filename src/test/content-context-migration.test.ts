@@ -111,7 +111,11 @@ describe('every rendered component reads content through the context, not a dire
   // proves it doesn't, across all thirteen real files at once.
   it('a rendered file with only legitimate content imports records none of them as offenders', () => {
     const app = readFileSync('src/App.tsx', 'utf8');
-    expect(app).toMatch(/import type \{ SectionId \} from '\.\/content';/);
+    // Plan 7, Task 1: `Section` joined `SectionId` on this same type-only
+    // line (App.tsx's own `renderSection` needs it for its parameter type) --
+    // still carries no runtime binding, so this stays a legitimate,
+    // unflagged import.
+    expect(app).toMatch(/import type \{ SectionId, Section \} from '\.\/content';/);
     expect(importsContentValue(app)).toBe(false);
 
     const footer = readFileSync('src/components/Footer.tsx', 'utf8');

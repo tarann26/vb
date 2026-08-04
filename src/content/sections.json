@@ -1,9 +1,9 @@
 [
-  { "id": "hero", "enabled": true },
-  { "id": "ourStory", "enabled": true },
-  { "id": "atmosphere", "enabled": true },
-  { "id": "food", "enabled": true },
-  { "id": "drinks", "enabled": true },
-  { "id": "press", "enabled": true },
-  { "id": "visit", "enabled": true }
+  { "kind": "bespoke", "id": "hero", "enabled": true },
+  { "kind": "bespoke", "id": "ourStory", "enabled": true },
+  { "kind": "bespoke", "id": "atmosphere", "enabled": true },
+  { "kind": "bespoke", "id": "food", "enabled": true },
+  { "kind": "bespoke", "id": "drinks", "enabled": true },
+  { "kind": "bespoke", "id": "press", "enabled": true },
+  { "kind": "bespoke", "id": "visit", "enabled": true }
 ]

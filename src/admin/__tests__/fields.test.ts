@@ -173,8 +173,12 @@ describe('exactly the expected fields are kind: readonly or kind: select -- noth
     expect(keysWithKind(ARTICLE_FIELDS, 'select')).toEqual([]);
   });
 
-  it('SECTION_FIELDS: id is the only readonly field, nothing is select', () => {
-    expect(keysWithKind(SECTION_FIELDS, 'readonly')).toEqual(['id']);
+  // Plan 7, Task 1: SECTION_FIELDS is now FieldsOf<BespokeSection>, which
+  // adds the `kind` discriminant (see that descriptor's own comment,
+  // fields.ts) -- `kind` is readonly too, for the identical "described but
+  // never actually rendered" reason MENU_FIELDS.file already documents.
+  it('SECTION_FIELDS: id and kind are the only readonly fields, nothing is select', () => {
+    expect(keysWithKind(SECTION_FIELDS, 'readonly')).toEqual(['id', 'kind']);
     expect(keysWithKind(SECTION_FIELDS, 'select')).toEqual([]);
   });
 

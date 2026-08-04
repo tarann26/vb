@@ -7,6 +7,7 @@ import storyRaw from './story.json';
 import menusRaw from './menus.json';
 import copyRaw from './copy.json';
 import sectionsRaw from './sections.json';
+import pagesRaw from './pages.json';
 import type {
   SiteContent,
   Galleries,
@@ -17,8 +18,9 @@ import type {
   MenuFile,
   Copy,
   Section,
+  Page,
 } from './types';
-import { assertHours, assertSections, assertCopy, assertDrinkCategory, narrowSectionId } from './guards';
+import { assertHours, assertSections, assertPages, assertCopy, assertDrinkCategory, narrowSectionId } from './guards';
 
 // Re-exported so existing importers (site.test.ts, copy.test.ts,
 // sections.test.tsx) that import these three guards from `./index` keep
@@ -26,7 +28,8 @@ import { assertHours, assertSections, assertCopy, assertDrinkCategory, narrowSec
 // guards.ts. assertDrinkCategory, isSectionId and narrowSectionId were never
 // part of index.ts's public surface and aren't re-exported here; a Worker
 // (or any other future consumer) reaches them directly via `./guards`.
-export { assertHours, assertSections, assertCopy };
+// Plan 7, Task 1: assertPages joins them for the identical reason.
+export { assertHours, assertSections, assertPages, assertCopy };
 
 export const site: SiteContent = {
   ...siteRaw,
@@ -49,6 +52,7 @@ export const drinks: Drink[] = drinksRaw.map((raw, index) => ({
 }));
 
 export const sections: Section[] = assertSections(sectionsRaw);
+export const pages: Page[] = assertPages(pagesRaw);
 
 const copyWithNarrowedNavSections = {
   ...copyRaw,

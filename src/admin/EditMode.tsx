@@ -69,6 +69,7 @@ import type {
   Galleries,
   StoryContent,
   Copy,
+  Page,
 } from '../content/types';
 
 const SECTION_COMPONENTS: Record<SectionId, () => React.ReactNode> = {
@@ -109,16 +110,35 @@ const SECTION_LABELS: Record<SectionId, string> = {
 // catch it. Confirmed directly: reverting this to an inline expression
 // reproduces `document.body.textContent === ''` against a real malformed
 // sections.json (src/admin/__tests__/EditMode.test.tsx's own test for it).
+// Plan 7, Task 1: mirrors src/App.tsx's own `renderSection` -- same
+// exhaustive-over-TemplateType switch, every case still `null` until Task 2
+// creates the real template components and Task 5 wires them in here too
+// (Task 5, Step 1's own scope: "template sections are editable in place").
+// Kept as its own duplicate function, not imported from App.tsx -- see this
+// file's own header comment on why EditMode.tsx never imports App.tsx.
+function renderDynamicSection(section: Section): React.ReactNode {
+  if (section.kind === 'bespoke') {
+    return (
+      <SectionErrorBoundary key={section.id} name={SECTION_LABELS[section.id]}>
+        {SECTION_COMPONENTS[section.id]()}
+      </SectionErrorBoundary>
+    );
+  }
+  switch (section.template) {
+    case 'text':
+    case 'itemList':
+    case 'gallery':
+    case 'detailBlock':
+      return <SectionErrorBoundary key={section.id} name={section.id}>{null}</SectionErrorBoundary>;
+    default: {
+      const _exhaustive: never = section;
+      return _exhaustive;
+    }
+  }
+}
+
 const DynamicSections: React.FC<{ sections: Section[] }> = ({ sections }) => (
-  <>
-    {sections
-      .filter((section) => section.enabled)
-      .map((section) => (
-        <SectionErrorBoundary key={section.id} name={SECTION_LABELS[section.id]}>
-          {SECTION_COMPONENTS[section.id]()}
-        </SectionErrorBoundary>
-      ))}
-  </>
+  <>{sections.filter((section) => section.enabled).map((section) => renderDynamicSection(section))}</>
 );
 
 // Neutral, empty starting values -- NOT the real build-time snapshot (this
@@ -146,6 +166,12 @@ const EMPTY_SITE: SiteContent = {
 const EMPTY_GALLERIES: Galleries = { atmosphere: [], ourStory: [], heroCollage: [] };
 
 const EMPTY_STORY: StoryContent = { heading: '', paragraphs: [] };
+
+// Plan 7, Task 1: an empty page list -- matches src/content/pages.json's
+// own starting value (see that file's own comment), and, like every other
+// EMPTY_* fallback here, is never the REAL build-time snapshot (this file
+// may not import that -- see the module header comment above).
+const EMPTY_PAGES: Page[] = [];
 
 const EMPTY_COPY: Copy = {
   nav: { wordmark: '', links: [], instagramLabel: '', menuLabel: '' },
@@ -426,6 +452,7 @@ export function buildBundle(
     menus: pick(entries, 'menus.json', []),
     copy,
     sections: pick(entries, 'sections.json', []),
+    pages: pick(entries, 'pages.json', EMPTY_PAGES),
     renderText: (path, value) =>
       copyLoaded ? <EditableText path={path} value={value} onCommit={commitText} /> : value,
     // Task 4: images become editable in place, exactly like renderText

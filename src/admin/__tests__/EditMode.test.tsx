@@ -53,13 +53,13 @@ const SITE: SiteContent = {
 };
 
 const SECTIONS: Section[] = [
-  { id: 'hero', enabled: true },
-  { id: 'ourStory', enabled: true },
-  { id: 'atmosphere', enabled: true },
-  { id: 'food', enabled: true },
-  { id: 'drinks', enabled: true },
-  { id: 'press', enabled: true },
-  { id: 'visit', enabled: true },
+  { kind: 'bespoke', id: 'hero', enabled: true },
+  { kind: 'bespoke', id: 'ourStory', enabled: true },
+  { kind: 'bespoke', id: 'atmosphere', enabled: true },
+  { kind: 'bespoke', id: 'food', enabled: true },
+  { kind: 'bespoke', id: 'drinks', enabled: true },
+  { kind: 'bespoke', id: 'press', enabled: true },
+  { kind: 'bespoke', id: 'visit', enabled: true },
 ];
 
 const DISHES: Dish[] = [];
@@ -140,6 +140,13 @@ function stubFetch(overrides: {
       if (url.includes('menus.json')) return contentResponse(MENUS, 'sha-menus');
       if (url.includes('story.json')) return contentResponse(STORY, 'sha-story');
       if (url.includes('copy.json')) return overrides.copyResponse ?? contentResponse(COPY, 'sha-copy');
+      // Plan 7, Task 1: the tenth content file, joining CONTENT_FILES (and
+      // therefore EditMode's own load effect) from this task onward -- see
+      // that module's own comment. Empty, matching pages.json's own real
+      // starting value, so every existing test in this file (none of which
+      // is about pages) keeps seeing exactly the same "nothing wrong"
+      // load outcome it did before this file existed.
+      if (url.includes('pages.json')) return contentResponse([], 'sha-pages');
       throw new Error(`EditMode.test.tsx: unexpected fetch to ${url}${init ? ` (${init.method ?? 'GET'})` : ''}`);
     }),
   );

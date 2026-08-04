@@ -89,7 +89,17 @@ function contentsApiResponse(items: unknown[]): Response {
 // assert exactly how many GitHub reads happened, not just what the outcome
 // was.
 function makeReconciliationFetchStub(
-  fixtures: { 'dishes.json'?: unknown[]; 'drinks.json'?: unknown[]; 'press.json'?: unknown[] },
+  fixtures: {
+    'dishes.json'?: unknown[];
+    'drinks.json'?: unknown[];
+    'press.json'?: unknown[];
+    // Plan 7, Gap B: sections.json joined SCHEDULABLE_CONTENT_FILES (now
+    // derived from src/content/types.ts's own SCHEDULABLE_FILES, see that
+    // module's comment), so reconcileScheduleFromSource's own loop now
+    // reads it too. Optional -- most tests here are about dishes/drinks/
+    // press specifically and don't care what sections.json holds.
+    'sections.json'?: unknown[];
+  },
   opts: { deployHookStatus?: number; failFiles?: Set<string> } = {},
 ) {
   const calls: string[] = [];
@@ -97,7 +107,7 @@ function makeReconciliationFetchStub(
     const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : (input as Request).url;
     calls.push(url);
     if (url === DEPLOY_HOOK_URL) return new Response(null, { status: opts.deployHookStatus ?? 200 });
-    for (const file of ['dishes.json', 'drinks.json', 'press.json'] as const) {
+    for (const file of ['dishes.json', 'drinks.json', 'press.json', 'sections.json'] as const) {
       if (url.includes(`/contents/src/content/${file}`)) {
         // A genuine GitHub failure (not "file doesn't exist") -- 500, not
         // 404. getFileContent throws on this, which is exactly the case
@@ -322,6 +332,7 @@ describe('scheduled (the cron handler)', () => {
         'dishes.json': [],
         'drinks.json': [],
         'press.json': [],
+        'sections.json': [],
       });
       vi.stubGlobal('fetch', fetchStub);
 
@@ -329,7 +340,9 @@ describe('scheduled (the cron handler)', () => {
       const githubReadsAfterFirstTick = calls.length;
       await worker.scheduled!(FAKE_CONTROLLER, env);
 
-      expect(githubReadsAfterFirstTick).toBe(3); // dishes.json, drinks.json, press.json
+      // Plan 7, Gap B: sections.json joined the schedulable set, so
+      // reconciliation now reads four files, not three.
+      expect(githubReadsAfterFirstTick).toBe(4); // dishes.json, drinks.json, press.json, sections.json
       // The second tick made no additional requests at all -- reconciliation
       // did not run again, and nothing became due as a result of the first
       // tick's reconciliation either.

@@ -1,16 +1,19 @@
 import type { Plugin } from 'vite';
 import { isPublished, todayInKolkata } from '../src/content/publish';
+import { SCHEDULABLE_FILES } from '../src/content/types';
 
-// The three content files that carry a `publishAt` field (see
-// src/content/types.ts: Dish, Drink, Article). Matched by suffix on Vite's
-// resolved module id, which is POSIX-style (forward slashes) regardless of
-// the host OS, so a plain string suffix is enough -- no path-normalizing
-// needed.
-const TARGET_SUFFIXES = [
-  '/src/content/dishes.json',
-  '/src/content/drinks.json',
-  '/src/content/press.json',
-];
+// Plan 7, Gap B, closed: derived from `SCHEDULABLE_FILES`
+// (src/content/types.ts), the single list that module and
+// worker/index.ts's own SCHEDULABLE_CONTENT_FILES both now read from --
+// see that constant's own comment for why the two used to be independent,
+// hand-maintained copies that could silently drift, and for the residual
+// limitation (a Schedulable type declared but never yet authored with a
+// real `publishAt` anywhere is not something any compile-time check can
+// catch; src/content/__tests__/schedulable.test.ts's runtime sweep is the
+// actual backstop). Matched by suffix on Vite's resolved module id, which
+// is POSIX-style (forward slashes) regardless of the host OS, so a plain
+// string suffix is enough -- no path-normalizing needed.
+const TARGET_SUFFIXES = SCHEDULABLE_FILES.map((file) => `/src/content/${file}`);
 
 function isTargetContentFile(id: string): boolean {
   return TARGET_SUFFIXES.some((suffix) => id.endsWith(suffix));
@@ -54,7 +57,8 @@ export function filterUnpublishedJson(id: string, code: string, today: string): 
   return JSON.stringify(filtered);
 }
 
-// Filters future-dated dishes, drinks and press articles out of the
+// Filters future-dated dishes, drinks and press articles -- and, since Plan
+// 7, a future-dated template section in sections.json -- out of the
 // production bundle entirely -- not hidden by CSS, not filtered in the
 // browser, absent from the shipped JavaScript. See
 // .superpowers/sdd/2026-08-02-plan-2-content-model/task-4-brief.md for why

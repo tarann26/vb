@@ -80,3 +80,244 @@ describe('guards module', () => {
     );
   });
 });
+
+// ---------------------------------------------------------------------------
+// Plan 7, Task 1: assertSections/assertPages both now parse a discriminated
+// Section union (bespoke | template) through the same shared entry parser.
+// isTemplateType (TEMPLATE_TYPE_SET's own runtime backstop) and the
+// per-template content shape checks are exercised indirectly through
+// assertSections/assertPages -- the same "test the public guard, not a
+// private helper" posture this file already takes toward assertCopy/
+// assertDrinkCategory above.
+describe('template sections (Plan 7)', () => {
+  const BESPOKE_SEVEN = [
+    { kind: 'bespoke', id: 'hero', enabled: true },
+    { kind: 'bespoke', id: 'ourStory', enabled: true },
+    { kind: 'bespoke', id: 'atmosphere', enabled: true },
+    { kind: 'bespoke', id: 'food', enabled: true },
+    { kind: 'bespoke', id: 'drinks', enabled: true },
+    { kind: 'bespoke', id: 'press', enabled: true },
+    { kind: 'bespoke', id: 'visit', enabled: true },
+  ];
+
+  const VALID_TEXT_TEMPLATE = {
+    kind: 'template',
+    id: 'membership',
+    enabled: true,
+    template: 'text',
+    content: { heading: 'Join Us', paragraphs: ['Membership has its privileges.'] },
+  };
+
+  it('accepts a homepage with the seven bespoke sections plus one valid template section', async () => {
+    const { assertSections } = await import('../guards');
+    const result = assertSections([...BESPOKE_SEVEN, VALID_TEXT_TEMPLATE]);
+    expect(result).toHaveLength(8);
+    expect(result[7]).toEqual(VALID_TEXT_TEMPLATE);
+  });
+
+  it('rejects a template section id colliding with a built-in SectionId', async () => {
+    const { assertSections } = await import('../guards');
+    const colliding = { ...VALID_TEXT_TEMPLATE, id: 'food' };
+    expect(() => assertSections([...BESPOKE_SEVEN, colliding])).toThrow(/food.*collides with a built-in section/);
+  });
+
+  it('rejects two template sections sharing an id', async () => {
+    const { assertSections } = await import('../guards');
+    expect(() =>
+      assertSections([...BESPOKE_SEVEN, VALID_TEXT_TEMPLATE, VALID_TEXT_TEMPLATE]),
+    ).toThrow(/duplicate section id "membership"/);
+  });
+
+  it('rejects an unknown template type', async () => {
+    const { assertSections } = await import('../guards');
+    const bad = { ...VALID_TEXT_TEMPLATE, template: 'carousel' };
+    expect(() => assertSections([...BESPOKE_SEVEN, bad])).toThrow(/unknown template "carousel"/);
+  });
+
+  it('rejects a template section with a blank id', async () => {
+    const { assertSections } = await import('../guards');
+    const bad = { ...VALID_TEXT_TEMPLATE, id: '  ' };
+    expect(() => assertSections([...BESPOKE_SEVEN, bad])).toThrow(/needs an id/);
+  });
+
+  it.each([
+    ['text', { paragraphs: ['ok'] }, /needs a "heading"/],
+    ['text', { heading: 'Hi', paragraphs: 'not-an-array' }, /needs a "paragraphs" list/],
+    ['itemList', { heading: 'Hi' }, /needs an "items" list/],
+    ['itemList', { heading: 'Hi', items: [{ image: '/a.webp', name: 'A' }] }, /needs an "image", a "name" and a "description"/],
+    ['gallery', { heading: 'Hi', layout: 'diagonal', images: [] }, /"layout" must be "scroll" or "grid"/],
+    ['gallery', { heading: 'Hi', layout: 'grid' }, /needs an "images" list/],
+    ['detailBlock', { heading: 'Hi', facts: [] }, /needs a "body"/],
+    ['detailBlock', { heading: 'Hi', body: 'b', facts: 'not-an-array' }, /needs a "facts" list/],
+  ])('rejects malformed %s content: %j', async (template, content, expected) => {
+    const { assertSections } = await import('../guards');
+    const bad = { kind: 'template', id: 'x', enabled: true, template, content };
+    expect(() => assertSections([...BESPOKE_SEVEN, bad])).toThrow(expected);
+  });
+
+  it('accepts every template type with a minimal valid content shape', async () => {
+    const { assertSections } = await import('../guards');
+    const entries = [
+      { kind: 'template', id: 't1', enabled: true, template: 'text', content: { heading: 'H', paragraphs: ['p'] } },
+      {
+        kind: 'template',
+        id: 't2',
+        enabled: true,
+        template: 'itemList',
+        content: { heading: 'H', items: [{ image: '/a.webp', name: 'A', description: 'd' }] },
+      },
+      {
+        kind: 'template',
+        id: 't3',
+        enabled: true,
+        template: 'gallery',
+        content: { heading: 'H', layout: 'scroll', images: [{ src: '/a.webp', alt: 'a' }] },
+      },
+      {
+        kind: 'template',
+        id: 't4',
+        enabled: true,
+        template: 'detailBlock',
+        content: { heading: 'H', body: 'b', facts: [{ label: 'l', value: 'v' }] },
+      },
+    ];
+    expect(() => assertSections([...BESPOKE_SEVEN, ...entries])).not.toThrow();
+  });
+
+  it('accepts an optional whatsapp button and rejects a malformed one', async () => {
+    const { assertSections } = await import('../guards');
+    const withButton = {
+      ...VALID_TEXT_TEMPLATE,
+      content: { ...VALID_TEXT_TEMPLATE.content, whatsapp: { label: 'Ask us', message: 'Hi, I have a question' } },
+    };
+    expect(() => assertSections([...BESPOKE_SEVEN, withButton])).not.toThrow();
+
+    const badButton = {
+      ...VALID_TEXT_TEMPLATE,
+      content: { ...VALID_TEXT_TEMPLATE.content, whatsapp: { label: 'Ask us' } },
+    };
+    expect(() => assertSections([...BESPOKE_SEVEN, badButton])).toThrow(/whatsapp button needs a "label" and a "message"/);
+  });
+
+  // Plan 7 Contradiction A, resolved: a bespoke section still forbids
+  // publishAt (unchanged, already covered by sections.test.tsx's own
+  // "rejects a publishAt key on any section"); a TEMPLATE section may now
+  // carry one.
+  it('accepts a valid publishAt on a template section, and rejects a malformed one', async () => {
+    const { assertSections } = await import('../guards');
+    const scheduled = { ...VALID_TEXT_TEMPLATE, publishAt: '2099-01-01' };
+    expect(() => assertSections([...BESPOKE_SEVEN, scheduled])).not.toThrow();
+
+    const malformed = { ...VALID_TEXT_TEMPLATE, publishAt: '01-09-2099' };
+    expect(() => assertSections([...BESPOKE_SEVEN, malformed])).toThrow(/invalid "publishAt"/);
+  });
+
+  it('rejects an entry with neither a bespoke nor a template kind', async () => {
+    const { assertSections } = await import('../guards');
+    const bad = { kind: 'mystery', id: 'x', enabled: true };
+    expect(() => assertSections([...BESPOKE_SEVEN, bad])).toThrow(/needs a "kind" of "bespoke" or "template"/);
+  });
+});
+
+describe('assertPages (Plan 7, Task 1)', () => {
+  it('accepts an empty pages list', async () => {
+    const { assertPages } = await import('../guards');
+    expect(assertPages([])).toEqual([]);
+  });
+
+  it('accepts a valid page with a template section, and does not require any bespoke section to be present', async () => {
+    const { assertPages } = await import('../guards');
+    const page = {
+      slug: 'our-menu',
+      name: 'Our Menu',
+      inNav: true,
+      enabled: true,
+      sections: [
+        {
+          kind: 'template',
+          id: 'menu-intro',
+          enabled: true,
+          template: 'text',
+          content: { heading: 'Menu', paragraphs: ['Welcome.'] },
+        },
+      ],
+    };
+    const result = assertPages([page]);
+    expect(result).toEqual([page]);
+  });
+
+  it.each(['Our-Menu', 'our menu', 'our_menu', 'our--menu', '', '-menu', 'menu-'])(
+    'rejects the non-URL-safe slug %j',
+    async (slug) => {
+      const { assertPages } = await import('../guards');
+      const page = { slug, name: 'X', inNav: true, enabled: true, sections: [] };
+      expect(() => assertPages([page])).toThrow(/URL-safe slug/);
+    },
+  );
+
+  it.each(['blogs', 'edit'])('rejects the reserved slug "%s", which would shadow a live route', async (slug) => {
+    const { assertPages } = await import('../guards');
+    const page = { slug, name: 'X', inNav: true, enabled: true, sections: [] };
+    expect(() => assertPages([page])).toThrow(/collides with an existing route/);
+  });
+
+  it('rejects two pages sharing a slug', async () => {
+    const { assertPages } = await import('../guards');
+    const page = { slug: 'menu', name: 'Menu', inNav: true, enabled: true, sections: [] };
+    expect(() => assertPages([page, { ...page, name: 'Menu Again' }])).toThrow(/duplicate slug "menu"/);
+  });
+
+  it('rejects two sections sharing an id within the same page', async () => {
+    const { assertPages } = await import('../guards');
+    const section = {
+      kind: 'template',
+      id: 'dup',
+      enabled: true,
+      template: 'text',
+      content: { heading: 'H', paragraphs: ['p'] },
+    };
+    const page = { slug: 'menu', name: 'Menu', inNav: true, enabled: true, sections: [section, section] };
+    expect(() => assertPages([page])).toThrow(/duplicate section id "dup"/);
+  });
+
+  // The scoping decision: a template id is unique WITHIN one page's own
+  // sections list (and within the homepage's own sections.json), never
+  // globally -- two different pages, or a page and the homepage, may freely
+  // reuse the same template id without colliding.
+  it('allows the SAME template section id to be reused across two different pages', async () => {
+    const { assertPages } = await import('../guards');
+    const section = {
+      kind: 'template',
+      id: 'shared-id',
+      enabled: true,
+      template: 'text',
+      content: { heading: 'H', paragraphs: ['p'] },
+    };
+    const pageA = { slug: 'page-a', name: 'Page A', inNav: true, enabled: true, sections: [section] };
+    const pageB = { slug: 'page-b', name: 'Page B', inNav: true, enabled: true, sections: [section] };
+    expect(() => assertPages([pageA, pageB])).not.toThrow();
+  });
+
+  it('rejects a page reusing a bespoke section id it already has, and allows the same bespoke id on two different pages', async () => {
+    const { assertPages } = await import('../guards');
+    const bespoke = { kind: 'bespoke', id: 'visit', enabled: true };
+    const dup = { slug: 'a', name: 'A', inNav: true, enabled: true, sections: [bespoke, bespoke] };
+    expect(() => assertPages([dup])).toThrow(/duplicate section id "visit"/);
+
+    const pageA = { slug: 'a', name: 'A', inNav: true, enabled: true, sections: [bespoke] };
+    const pageB = { slug: 'b', name: 'B', inNav: true, enabled: true, sections: [bespoke] };
+    expect(() => assertPages([pageA, pageB])).not.toThrow();
+  });
+
+  it('rejects a page missing a name, inNav or enabled', async () => {
+    const { assertPages } = await import('../guards');
+    expect(() => assertPages([{ slug: 'a', inNav: true, enabled: true, sections: [] }])).toThrow(/needs a name/);
+    expect(() => assertPages([{ slug: 'a', name: 'A', enabled: true, sections: [] }])).toThrow(/"inNav" must be a boolean/);
+    expect(() => assertPages([{ slug: 'a', name: 'A', inNav: true, sections: [] }])).toThrow(/"enabled" must be a boolean/);
+  });
+
+  it('rejects pages.json that is not an array', async () => {
+    const { assertPages } = await import('../guards');
+    expect(() => assertPages({})).toThrow(/expected an array of pages/);
+  });
+});

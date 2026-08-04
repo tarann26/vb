@@ -3,17 +3,17 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import SectionList from '../SectionList';
 import { validateContent } from '../../content/validate';
-import type { Section, SectionId } from '../../content/types';
+import type { BespokeSection, SectionId } from '../../content/types';
 import type { ValidationProblem } from '../../content/validate';
 
-const ALL_SEVEN: Section[] = [
-  { id: 'hero', enabled: true },
-  { id: 'ourStory', enabled: true },
-  { id: 'atmosphere', enabled: true },
-  { id: 'food', enabled: true },
-  { id: 'drinks', enabled: true },
-  { id: 'press', enabled: true },
-  { id: 'visit', enabled: true },
+const ALL_SEVEN: BespokeSection[] = [
+  { kind: 'bespoke', id: 'hero', enabled: true },
+  { kind: 'bespoke', id: 'ourStory', enabled: true },
+  { kind: 'bespoke', id: 'atmosphere', enabled: true },
+  { kind: 'bespoke', id: 'food', enabled: true },
+  { kind: 'bespoke', id: 'drinks', enabled: true },
+  { kind: 'bespoke', id: 'press', enabled: true },
+  { kind: 'bespoke', id: 'visit', enabled: true },
 ];
 
 function renderList(overrides: Partial<Parameters<typeof SectionList>[0]> = {}) {
@@ -58,19 +58,19 @@ describe('SectionList: human names, not SectionIds', () => {
 // not just this section.
 describe('SectionList: an unrecognised section id does not crash the page', () => {
   it('renders the raw id as a fallback label instead of throwing', () => {
-    const withBadId: Section[] = [
+    const withBadId: BespokeSection[] = [
       ...ALL_SEVEN,
       // Cast, deliberately -- this is exactly what a widened, unvalidated
       // JSON.parse result can hand this component despite the SectionId
       // type claiming otherwise (see this describe block's own comment).
-      { id: 'sponsorship' as SectionId, enabled: true },
+      { kind: 'bespoke', id: 'sponsorship' as SectionId, enabled: true },
     ];
     expect(() => renderList({ items: withBadId })).not.toThrow();
     expect(screen.getByText('sponsorship')).toBeInTheDocument();
   });
 
   it('the fallback has no anchor -- an unrecognised section cannot be assumed to be in the nav', () => {
-    const withBadId: Section[] = [{ id: 'sponsorship' as SectionId, enabled: true }];
+    const withBadId: BespokeSection[] = [{ kind: 'bespoke', id: 'sponsorship' as SectionId, enabled: true }];
     renderList({ items: withBadId });
     expect(screen.getByText('not in the navigation menu')).toBeInTheDocument();
   });
@@ -105,7 +105,7 @@ describe('SectionList: hero cannot be toggled off, structurally -- not merely re
     const toggles = screen.getAllByLabelText('Shown on homepage');
     expect(toggles[1]).not.toBeDisabled(); // ourStory
     await user.click(toggles[1]);
-    expect(onChange).toHaveBeenCalledWith(1, { id: 'ourStory', enabled: false });
+    expect(onChange).toHaveBeenCalledWith(1, { kind: 'bespoke', id: 'ourStory', enabled: false });
   });
 });
 
@@ -136,7 +136,7 @@ describe('SectionList: no Remove button anywhere, and no Add button either -- D6
     const { onChange } = renderList();
     const toggles = screen.getAllByLabelText('Shown on homepage');
     await user.click(toggles[3]); // food
-    expect(onChange).toHaveBeenCalledWith(3, { id: 'food', enabled: false });
+    expect(onChange).toHaveBeenCalledWith(3, { kind: 'bespoke', id: 'food', enabled: false });
   });
 });
 

@@ -22,7 +22,7 @@ import type { ContentRegistry } from './publish';
 import PublishBar, { DraftBanner } from './PublishBar';
 import { loadDraft, loadDraftStagedCount, clearDraft } from './drafts';
 import type { DraftMap } from './drafts';
-import type { Article, Copy, Dish, Drink, Galleries, MenuFile, Section, SiteContent, StoryContent } from '../content/types';
+import type { Article, BespokeSection, Copy, Dish, Drink, Galleries, MenuFile, Section, SiteContent, StoryContent } from '../content/types';
 import type { ValidationProblem } from '../content/validate';
 
 // The registry's own `initial` must always be the value GET /api/content
@@ -530,15 +530,28 @@ function SectionsSection({ registry, restoreDraft }: { registry: ContentRegistry
     setState({ status: 'loaded', data: next, sha });
   }
 
+  // Plan 7, Task 1: SectionList.tsx only ever shows/permutes the seven
+  // bespoke entries (see its own comment) -- `bespokeItems` is that
+  // narrowed view, and `templateItems` is everything else in the real
+  // sections.json array, carried through UNCHANGED on every write below so
+  // this screen can never silently drop a template section it doesn't yet
+  // have a UI for. Order between the two groups is not preserved across a
+  // write (every bespoke entry is written back before every template one) --
+  // harmless today (sections.json has no template entries yet) and a known
+  // limitation Task 4 ("the dashboard grows Add") resolves when this screen
+  // actually needs to interleave and reorder both kinds together.
+  const bespokeItems = items.filter((item): item is BespokeSection => item.kind === 'bespoke');
+  const templateItems = items.filter((item) => item.kind === 'template');
+
   return (
     <section className="mb-10">
       <h2 className="mb-4 font-['Montserrat'] text-lg uppercase tracking-wide text-[#222]">Homepage sections</h2>
       <SectionList
-        items={items}
-        onChange={(index, next) => commit(replaceAt(items, index, next))}
+        items={bespokeItems}
+        onChange={(index, next) => commit([...replaceAt(bespokeItems, index, next), ...templateItems])}
         onReorder={(ids) => {
-          const byId = new Map(items.map((item) => [item.id, item]));
-          commit(ids.map((id) => byId.get(id) as Section));
+          const byId = new Map(bespokeItems.map((item) => [item.id, item]));
+          commit([...ids.map((id) => byId.get(id) as BespokeSection), ...templateItems]);
         }}
         problems={problems}
       />

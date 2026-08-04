@@ -3,7 +3,17 @@ import { render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { HomePage } from '../../App';
 import { copy, story, sections, assertSections } from '../index';
-import type { SectionId } from '../index';
+import type { SectionId, BespokeSection } from '../index';
+
+// Plan 7, Task 1: `sections` is now `Section[]` (bespoke | template) --
+// this whole test file is about the seven bespoke, component-backed
+// sections specifically (their markers, their anchors, their document
+// order), so it narrows once, here, rather than at every call site below.
+// Real, committed sections.json has no template entries today, so this
+// changes nothing about what the tests below actually exercise.
+const BESPOKE_SECTIONS: BespokeSection[] = sections.filter(
+  (s): s is BespokeSection => s.kind === 'bespoke',
+);
 
 // One piece of owner-editable text that renders only inside that section's
 // own component -- used to prove a section did (or didn't) render, without
@@ -62,7 +72,7 @@ const SECTION_SELECTOR: Record<SectionId, string> = {
   visit: '#visit',
 };
 
-const SECTION_IDS: SectionId[] = sections.map((s) => s.id);
+const SECTION_IDS: SectionId[] = BESPOKE_SECTIONS.map((s) => s.id);
 
 function sectionRoot(id: SectionId): HTMLElement | null {
   return document.querySelector<HTMLElement>(SECTION_SELECTOR[id]);
@@ -124,7 +134,7 @@ describe('homepage sections', () => {
       </MemoryRouter>,
     );
 
-    const enabledIds = sections.filter((s) => s.enabled).map((s) => s.id);
+    const enabledIds = BESPOKE_SECTIONS.filter((s) => s.enabled).map((s) => s.id);
     enabledIds.forEach((id) => {
       expect(sectionMarkerPresent(id)).toBe(true);
     });
@@ -220,7 +230,7 @@ describe('homepage sections', () => {
         // Every section forced enabled here too, for the same reason as the
         // disable-loop test above: this must hold regardless of today's
         // real toggle state, not just when everything happens to be on.
-        sections: scrambled.map((id) => ({ id, enabled: true })),
+        sections: scrambled.map((id) => ({ kind: 'bespoke' as const, id, enabled: true })),
       };
     });
     const { HomePage: MockedHomePage } = await import('../../App');
@@ -252,7 +262,7 @@ describe('assertSections', () => {
   });
 
   it('rejects a duplicate id', () => {
-    expect(() => assertSections([...sections, { id: 'food', enabled: true }])).toThrow(/food/);
+    expect(() => assertSections([...sections, { kind: 'bespoke', id: 'food', enabled: true }])).toThrow(/food/);
   });
 
   // A dashboard-authored HTML form is the classic source of this bug: a

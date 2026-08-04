@@ -13,6 +13,7 @@ import { verifyPassword, signToken, verifyToken, parseCookie } from './auth';
 import { checkLoginRate, recordLoginFailure, clearLoginFailures, checkRate, recordHit } from './ratelimit';
 import { commitFiles, getFileContent, isContentPath, DisallowedPathError, PublishConflictError, type CommitFile, type FileContent, type GitHubEnv } from './github';
 import { validateContent, type ValidationProblem } from '../src/content/validate';
+import { SCHEDULABLE_FILES } from '../src/content/types';
 import { handleUpload } from './upload';
 import { handleBuildStatus, type PagesEnv } from './status';
 import { isPublished, todayInKolkata } from '../src/content/publish';
@@ -157,12 +158,16 @@ function basename(path: string): string {
 // at all, which is what exhausts the 500-build quota around day 21 (see
 // wrangler.toml's `[triggers]` comment).
 //
-// The three content files `isPublished`/`publishAt` apply to -- kept as a
-// literal list, the same hand-maintained shape plugins/filter-unpublished.ts's
-// own TARGET_SUFFIXES uses, and for the same reason: there is no compiler
-// link from src/content/types.ts's `Schedulable` back to "these three
-// files", so a fourth schedulable type would need this list updated too.
-const SCHEDULABLE_CONTENT_FILES = new Set(['dishes.json', 'drinks.json', 'press.json']);
+// The content files `isPublished`/`publishAt` apply to -- Plan 7, Gap B:
+// derived from `SCHEDULABLE_FILES` (src/content/types.ts), the single list
+// this Set and plugins/filter-unpublished.ts's own TARGET_SUFFIXES both now
+// read from, instead of each hand-maintaining an independent copy that
+// could silently drift from the other. See that constant's own comment for
+// the residual limitation this still leaves (a Schedulable type declared
+// but never authored with a real `publishAt` anywhere is not something any
+// compile-time check can catch) and for `schedulable.test.ts`, the runtime
+// backstop for exactly that gap.
+const SCHEDULABLE_CONTENT_FILES: Set<string> = new Set(SCHEDULABLE_FILES);
 
 // One KV key holding BOTH the pending-dates record and the reconciliation
 // marker (`lastReconciled`, see `reconcileScheduleFromSource` below) --

@@ -292,6 +292,8 @@ describe('commitFiles', () => {
       'drinks.json',
       'galleries.json',
       'menus.json',
+      // Plan 7, Task 1: the tenth real content file.
+      'pages.json',
       'press.json',
       'sections.json',
       'site.json',

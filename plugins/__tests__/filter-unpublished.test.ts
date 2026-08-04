@@ -24,7 +24,12 @@ describe('filterUnpublishedJson', () => {
     expect(parsed.map((item) => item.id)).toEqual(['past-item', 'undated-item']);
   });
 
-  it.each(['dishes', 'drinks', 'press'])(
+  // Plan 7, Gap B: 'sections' joins this list because TARGET_SUFFIXES is now
+  // DERIVED from src/content/types.ts's own SCHEDULABLE_FILES (see that
+  // module's own header comment) rather than hand-typed separately here --
+  // reverting TARGET_SUFFIXES to the old three-item literal makes this one
+  // case red without touching anything else in this block.
+  it.each(['dishes', 'drinks', 'press', 'sections'])(
     'filters %s.json, matched by its resolved module id',
     (name) => {
       const result = filterUnpublishedJson(`/repo/src/content/${name}.json`, fixture, TODAY);

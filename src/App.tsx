@@ -12,7 +12,7 @@ import Footer from './components/Footer';
 import BlogsPage from './components/BlogsPage';
 import SeoHead from './components/SeoHead';
 import NotFound from './components/NotFound';
-import type { SectionId } from './content';
+import type { SectionId, Section } from './content';
 import { useContent } from './content/ContentContext';
 
 // The only reference to admin code anywhere outside src/admin/ itself, and
@@ -45,6 +45,40 @@ const SECTION_COMPONENTS: Record<SectionId, () => ReactNode> = {
   visit: () => <VisitUs />,
 };
 
+// Plan 7, Task 1: `Section` is now a discriminated union (bespoke | template)
+// -- see src/content/types.ts's own comment on why. `renderSection` is the
+// one place both HomePage (below) and EditMode.tsx's own `DynamicSections`
+// dispatch through, so the two can never drift on WHICH branch handles
+// which kind, only (as before) on which COMPONENT a given id maps to.
+//
+// The `switch (section.template)` below is exhaustive over TemplateType
+// today with every case still returning `null` -- Task 2 is what creates
+// the four real template components (src/components/templates/) and swaps
+// each `null` for a real one, keeping this exact switch shape. Written this
+// way from Task 1 onward (not deferred entirely to Task 2) so the
+// compile-error guarantee the plan asks for is already true here: delete
+// one case below (or add a fifth TemplateType without a case) and
+// `_exhaustive: never` fails `tsc -b`, naming this file.
+function renderSection(section: Section): ReactNode {
+  if (section.kind === 'bespoke') {
+    return SECTION_COMPONENTS[section.id]();
+  }
+  switch (section.template) {
+    case 'text':
+      return null;
+    case 'itemList':
+      return null;
+    case 'gallery':
+      return null;
+    case 'detailBlock':
+      return null;
+    default: {
+      const _exhaustive: never = section;
+      return _exhaustive;
+    }
+  }
+}
+
 export function HomePage() {
   const { sections } = useContent();
   return (
@@ -54,7 +88,7 @@ export function HomePage() {
       {sections
         .filter((section) => section.enabled)
         .map((section) => (
-          <Fragment key={section.id}>{SECTION_COMPONENTS[section.id]()}</Fragment>
+          <Fragment key={section.id}>{renderSection(section)}</Fragment>
         ))}
       <Footer />
     </div>

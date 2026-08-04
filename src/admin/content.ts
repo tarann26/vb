@@ -32,6 +32,7 @@ import type {
   MenuFile,
   Copy,
   Section,
+  Page,
 } from '../content/types';
 
 // The nine real files under src/content/ -- the same set validateContent
@@ -52,6 +53,11 @@ export const CONTENT_FILES = [
   'menus.json',
   'copy.json',
   'sections.json',
+  // Plan 7, Task 1: the tenth content file -- her authored pages. Included
+  // here from Task 1 onward (not deferred to Task 4, which builds the
+  // Pages screen) so /edit's own load effect (EditMode.tsx, keyed on this
+  // exact list) already fetches it and every downstream type stays total.
+  'pages.json',
 ] as const;
 
 export type ContentFileName = (typeof CONTENT_FILES)[number];
@@ -69,6 +75,7 @@ export interface ContentTypeMap {
   'menus.json': MenuFile[];
   'copy.json': Copy;
   'sections.json': Section[];
+  'pages.json': Page[];
 }
 
 export interface LoadedContent<T> {

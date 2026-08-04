@@ -34,23 +34,57 @@ export interface SiteContent {
   copyrightYear: number;
 }
 
-// Shared by Dish, Drink and Article -- an ISO `YYYY-MM-DD` date after which
-// the item is live. Absent means "always published". Deliberately not on
-// `Section`: see the comment on `assertSections` in src/content/guards.ts for
-// why a future-dated section is rejected outright rather than supported.
-// Filtering on this field happens in the Vite build (plugins/filter-unpublished.ts),
-// never in the browser -- see that file for why.
+// Shared by Dish, Drink, Article and (Plan 7, Task 1) TemplateSection -- an
+// ISO `YYYY-MM-DD` date after which the item is live. Absent means "always
+// published". Filtering on this field happens in the Vite build
+// (plugins/filter-unpublished.ts), never in the browser -- see that file for
+// why.
 //
-// If a fourth type ever needs `publishAt` (`extends Schedulable`), it is
-// NOT automatically filtered: `plugins/filter-unpublished.ts`'s
-// `TARGET_SUFFIXES` is a separate, hand-maintained list of the three
-// content files (dishes/drinks/press) this applies to today, with no
-// compiler link back to this type. Adding `Schedulable` to a new type
-// compiles clean and `tsc -b` stays silent while that type's build-time
-// filtering silently never happens -- update `TARGET_SUFFIXES` too.
-type Schedulable = {
+// Plan 7 Contradiction A, resolved: D9 says "items and sections carry an
+// optional publishAt date"; the code used to say sections deliberately do
+// not, because a future-dated `hero` (or any of the seven bespoke,
+// component-backed sections) is ambiguous -- either a hard build failure
+// (the filter plugin never ran on sections.json) or a silently heroless
+// homepage (if a filter were ever added), and `enabled: false` already
+// covers the founder's real scheduling need for those seven. That reasoning
+// still holds, unchanged, for `BespokeSection` -- see `assertSections` in
+// guards.ts, which still throws on a bespoke entry carrying this field.
+//
+// It does NOT hold for `TemplateSection`: a template section is her own
+// content, created and deleted (well, disabled -- D6) freely, with no
+// "homepage has no hero" failure mode possible, so scheduling one (a
+// seasonal promotion section, say) is exactly D9's use case with none of the
+// original ambiguity. `TemplateSection` below is the one place `Schedulable`
+// now reaches beyond Dish/Drink/Article. `Section`'s own two variants
+// therefore disagree on purpose: `BespokeSection` still forbids the field,
+// `TemplateSection` allows it -- decided once, here, not per call site.
+//
+// Gap B, closed: every file whose committed shape can carry a
+// `Schedulable`-typed value is named ONCE, in `SCHEDULABLE_FILES` below, not
+// independently re-listed in `plugins/filter-unpublished.ts` and
+// `worker/index.ts` the way the two used to drift. TypeScript's structural
+// typing cannot itself detect "this interface extends Schedulable" as a
+// compile-time discriminant (the field is optional, so every object type
+// trivially "extends" `{ publishAt?: string }`) -- there is no `T extends
+// Schedulable` conditional that a fifth type could fail. The real backstop
+// is `src/content/__tests__/schedulable.test.ts`, which scans the REAL,
+// committed content of every recognised content file for an object
+// carrying a `publishAt` key and fails if that file is not listed here --
+// so a developer who starts actually using `publishAt` on a new type
+// without registering its file here gets a red test, not silence. What it
+// cannot catch is a `Schedulable` type declared but never yet authored with
+// a real `publishAt` value anywhere -- recorded here, not hidden.
+export type Schedulable = {
   publishAt?: string;
 };
+
+// The single source both `plugins/filter-unpublished.ts` (build-time
+// filtering) and `worker/index.ts` (the scheduled-rebuild cron's own
+// bookkeeping) import from -- see `Schedulable`'s own comment above for why
+// this collapsing of two previously-independent lists is what actually
+// closes Plan 7's Gap B, and what a fifth Schedulable file needs updated.
+export const SCHEDULABLE_FILES = ['dishes.json', 'drinks.json', 'press.json', 'sections.json'] as const;
+export type SchedulableFile = (typeof SCHEDULABLE_FILES)[number];
 
 export interface Dish extends Schedulable {
   id: string;
@@ -113,9 +147,165 @@ export interface MenuFile {
 export type SectionId =
   | 'hero' | 'ourStory' | 'atmosphere' | 'food' | 'drinks' | 'press' | 'visit';
 
-export interface Section {
+// Plan 7, Task 1: the homepage's section list stops being seven fixed ids
+// and becomes a list of two kinds -- bespoke sections rendered by name (the
+// same seven above, unchanged) and template sections rendered by TYPE, with
+// her own authored content. `kind` is the discriminant both variants below
+// carry, which is what makes a `switch (section.kind)` (App.tsx,
+// EditMode.tsx) exhaustive and a missing case a compile error, the same
+// closure guarantee `SectionId` already gets from `SECTION_ID_SET`
+// (guards.ts).
+//
+// `SectionId` itself stays closed at seven, on purpose (see this file's own
+// comment on it, above) -- nothing she does can add an eighth. A template
+// section's `id`, by contrast, is a free string SHE creates, so it carries
+// no such closure and needs its own uniqueness rule instead (assertSections/
+// assertPages in guards.ts: a template id must be unique among every
+// section's id, bespoke and template alike, in the same list).
+export interface BespokeSection {
+  kind: 'bespoke';
   id: SectionId;
   enabled: boolean;
+  // No `publishAt` here -- see `Schedulable`'s own comment (above) for why
+  // that stays true for exactly the seven component-backed sections.
+}
+
+// The five templates named in the Plan 7 spec collapsed to four during
+// implementation (Task 2, Step 1): "Logo grid" turned out to be "Gallery"
+// with a different `layout`, not a structurally different content shape --
+// B2B client/press logos are the same `{ heading, images }` list Atmosfera's
+// horizontal scroller already is, just arranged in a grid instead of
+// scrolled. Recorded here, not silently: the plan's own Step 1 says two of
+// the five may merge and calls that expected.
+export type TemplateType = 'text' | 'itemList' | 'gallery' | 'detailBlock';
+
+// Every template's optional call-to-action -- D8: "every call to action is a
+// WhatsApp deep link." `label` is the button's own visible text; `message`
+// is pre-filled into the chat exactly the way `site.whatsapp.prefilledMessage`
+// already is for Hero's own reservation button (Hero.tsx's
+// `openReservationWhatsApp`) -- the phone NUMBER is never repeated here,
+// deliberately: it always comes from `site.whatsapp.number`, the one place
+// that number is authored, so a template button can never point at a
+// different WhatsApp number than the rest of the site by a stray edit.
+export interface TemplateWhatsAppButton {
+  label: string;
+  message: string;
+}
+
+// Text -- membership, catering intro, or any prose block. The same shape
+// StoryContent already uses (`heading` + `paragraphs`), reused rather than
+// reinvented.
+export interface TextTemplateContent {
+  heading: string;
+  paragraphs: string[];
+  whatsapp?: TemplateWhatsAppButton;
+}
+
+// Item list -- breads and dips, cheeseboards: photo + name + description,
+// the same three fields FoodGallery already renders per dish.
+export interface TemplateListItem {
+  image: string;
+  name: string;
+  description: string;
+}
+
+export interface ItemListTemplateContent {
+  heading: string;
+  items: TemplateListItem[];
+  whatsapp?: TemplateWhatsAppButton;
+}
+
+// Gallery -- product or venue photos (a horizontal scroller, PlaceGallery's
+// own layout) OR the merged-in Logo grid use (B2B clients, press logos,
+// partners), told apart by `layout` alone; both are the same
+// `GalleryImage[]` list underneath. `GalleryImage` (declared above,
+// `{ src, alt }`) is reused rather than a second, identical shape invented
+// for this one field.
+export interface GalleryTemplateContent {
+  heading: string;
+  layout: 'scroll' | 'grid';
+  images: GalleryImage[];
+  whatsapp?: TemplateWhatsAppButton;
+}
+
+// Detail block -- kids' classes: a few short facts (day/time/price, say)
+// plus a button, distinct from Text's free-form paragraphs.
+export interface TemplateFact {
+  label: string;
+  value: string;
+}
+
+export interface DetailBlockTemplateContent {
+  heading: string;
+  body: string;
+  facts: TemplateFact[];
+  whatsapp?: TemplateWhatsAppButton;
+}
+
+// The one place TemplateType's four members are paired with their own
+// content shape -- `TemplateSection` below is DERIVED from this map (a
+// mapped type distributed over `TemplateType`, not four hand-written union
+// members), which is what makes growing `TemplateType` alone enough to
+// force every downstream switch to notice. An earlier version of this file
+// wrote `TemplateSection` as four separate literal union members instead,
+// each spelling out its own `template: 'text'` / `template: 'itemList'` /
+// etc -- confirmed directly this was NOT the same guarantee: adding a fifth
+// member to `TemplateType` alone left that hand-written union at four
+// members, unchanged, so `TEMPLATE_TYPE_SET` (guards.ts) and
+// `assertTemplateContent`'s own exhaustiveness check correctly failed to
+// compile, but `src/App.tsx`'s `renderSection` and
+// `src/admin/EditMode.tsx`'s `renderDynamicSection` -- the switches this
+// plan's own "prove it" instruction is actually about -- did not, because
+// `section.template` was still typed over the OLD four-member union there,
+// not the new five. Adding `TemplateContentMap[K]` here is what fixes it:
+// a fifth `TemplateType` member with no matching `TemplateContentMap` entry
+// is a compile error at THIS line, and once that's fixed, `TemplateSection`
+// itself grows a fifth variant, which is what makes `section.template`'s
+// type widen everywhere and turn every non-exhaustive switch over it red.
+interface TemplateContentMap {
+  text: TextTemplateContent;
+  itemList: ItemListTemplateContent;
+  gallery: GalleryTemplateContent;
+  detailBlock: DetailBlockTemplateContent;
+}
+
+export type TemplateContent = TemplateContentMap[TemplateType];
+
+// A discriminated union keyed on BOTH `kind` ('template', shared with
+// BespokeSection above) and `template` (TemplateType) -- the second
+// discriminant is what lets `content`'s type narrow automatically from a
+// `switch (section.template)`, so a template component reading
+// `section.content.paragraphs` (say) needs no cast: TypeScript already
+// knows `section.template === 'text'` implies `section.content` is
+// `TextTemplateContent`. Guards.ts keeps a `Record<TemplateType, true>` for
+// the identical completeness guarantee at RUNTIME, the same `SECTION_ID_SET`
+// idiom this file's own `SectionId` comment documents -- see that module
+// for why an array literal would not give the same guarantee there either.
+export type TemplateSection = {
+  [K in TemplateType]: { kind: 'template'; id: string; enabled: boolean; publishAt?: string; template: K; content: TemplateContentMap[K] };
+}[TemplateType];
+
+export type Section = BespokeSection | TemplateSection;
+
+// Plan 7, Task 1, Step 2: a whole new page, addressed by `slug` (validated
+// server-side -- guards.ts's `assertPages`/validate.ts's `validatePage` --
+// for URL-safety, uniqueness, and collision with a live route: `/`, `/blogs`,
+// `/edit` and `/edit/manage` are all real routes a page slug must not be
+// able to shadow). `sections` is the identical `Section[]` the homepage
+// uses -- a page can freely include a template section, or even a bespoke
+// one (reusing, say, `visit`'s map-and-hours block on a new page renders
+// the same live content again, harmlessly) -- but a page's own list is NOT
+// subject to sections.json's "all seven bespoke ids, hero enabled" homepage
+// completeness rule; that rule is specific to the homepage's identity, not
+// to an arbitrary page. See guards.ts's `assertPages` for exactly what IS
+// still enforced per page (no duplicate id within that page's own list, the
+// same per-template content/publishAt checks sections.json gets).
+export interface Page {
+  slug: string;
+  name: string;
+  inNav: boolean;
+  enabled: boolean;
+  sections: Section[];
 }
 
 export interface NavLink {
@@ -179,6 +369,12 @@ export interface ContentBundle {
   menus: MenuFile[];
   copy: Copy;
   sections: Section[];
+  // Plan 7, Task 1: every page she has created, in `pages.json` order --
+  // rendered by `/:slug` (Task 3), edited from the dashboard's own Pages
+  // screen (Task 4). Empty today (see pages.json's own comment on why it
+  // starts that way); present on ContentBundle from Task 1 onward so a
+  // rendering surface added later needs no further plumbing here.
+  pages: Page[];
   // default: (_, v) => v -- see ContentContext.ts's defaultBundle.
   renderText(path: EditableTextPath, value: string): ReactNode;
   // default: (_, p) => createElement('img', p) -- see ContentContext.ts's defaultBundle.

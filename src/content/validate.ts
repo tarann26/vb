@@ -11,7 +11,7 @@
 // one direction -- guards.ts changes and this file doesn't notice -- never
 // the other way around (this file inventing a second, competing definition
 // of "valid" that quietly drifts from what the build actually enforces).
-import { assertCopy, assertDrinkCategory, assertHours, assertSections } from './guards';
+import { assertCopy, assertDrinkCategory, assertHours, assertSections, isSectionId, isTemplateType } from './guards';
 // Task 1 (Plan 6): the hero collage's own tiny layout language --
 // `heroCollage[i].className` is a Tailwind grid-placement string this
 // module now actually understands, not merely checks for non-blankness.
@@ -435,17 +435,230 @@ function validateMenus(data: unknown): ValidationProblem[] {
 }
 
 // ---------------------------------------------------------------------------
-// sections.json / copy.json — thin wraps of the Task 1 guards, which already
-// carry the section-completeness and hero-required rules a dashboard write
-// must not be able to bypass.
+// sections.json / pages.json (Plan 7, Task 1) — named, per-field messages
+// for the discriminated Section union, alongside a thin wrap of
+// assertSections/assertPages (src/content/guards.ts) for the two whole-file
+// rules those two carry (sections.json's homepage completeness and
+// hero-required checks; pages.json has neither). Task 4 Step 1's own
+// requirement -- "make assertSections and validateContent carry" the id
+// collision this plan's Add breaks D6's old invariant for -- is what
+// `validateSectionEntry` below is for: a per-entry, owner-facing message,
+// not just the one whole-file sentence guards.ts's own throw gives.
 
-function validateSections(data: unknown): ValidationProblem[] {
+function validateWhatsAppButton(raw: unknown, path: string): ValidationProblem[] {
+  if (raw === undefined) return [];
+  const button = asRecord(raw);
+  const problems: ValidationProblem[] = [];
+  if (isBlank(button.label)) problems.push(problem(`${path}.whatsapp.label`, 'the WhatsApp button needs a label'));
+  if (isBlank(button.message)) problems.push(problem(`${path}.whatsapp.message`, 'the WhatsApp button needs a pre-filled message'));
+  return problems;
+}
+
+// Named, per-field messages for one TemplateSection's own `content` --
+// structurally the same shape assertTemplateContent (guards.ts) already
+// throws on, but a named ValidationProblem per missing/blank field instead
+// of one whole-section throw, matching every other per-record validator in
+// this file (validateDish, validateDrink, ...).
+function validateTemplateContentFields(template: string, raw: unknown, path: string): ValidationProblem[] {
+  const content = asRecord(raw);
+  const problems: ValidationProblem[] = [];
+  if (isBlank(content.heading)) problems.push(problem(`${path}.heading`, 'this section needs a heading'));
+  problems.push(...validateWhatsAppButton(content.whatsapp, path));
+
+  if (template === 'text') {
+    if (!Array.isArray(content.paragraphs) || content.paragraphs.length === 0) {
+      problems.push(problem(`${path}.paragraphs`, 'this section needs at least one paragraph'));
+    } else {
+      content.paragraphs.forEach((p, i) => {
+        if (isBlank(p)) problems.push(problem(`${path}.paragraphs[${i}]`, `paragraph ${i + 1} is blank`));
+      });
+    }
+  } else if (template === 'itemList') {
+    if (!Array.isArray(content.items) || content.items.length === 0) {
+      problems.push(problem(`${path}.items`, 'this section needs at least one item'));
+    } else {
+      content.items.forEach((raw, i) => {
+        const item = asRecord(raw);
+        if (isBlank(item.name)) problems.push(problem(`${path}.items[${i}].name`, `item ${i + 1} needs a name`));
+        if (isBlank(item.description)) problems.push(problem(`${path}.items[${i}].description`, `item ${i + 1} needs a description`));
+        if (isBlank(item.image)) problems.push(problem(`${path}.items[${i}].image`, `item ${i + 1} needs an image`));
+      });
+    }
+  } else if (template === 'gallery') {
+    if (content.layout !== 'scroll' && content.layout !== 'grid') {
+      problems.push(problem(`${path}.layout`, 'this section needs a layout of either "scroll" or "grid"'));
+    }
+    if (!Array.isArray(content.images) || content.images.length === 0) {
+      problems.push(problem(`${path}.images`, 'this section needs at least one image'));
+    } else {
+      content.images.forEach((raw, i) => {
+        const image = asRecord(raw);
+        if (isBlank(image.src)) problems.push(problem(`${path}.images[${i}].src`, `image ${i + 1} needs a source`));
+        if (isBlank(image.alt)) problems.push(problem(`${path}.images[${i}].alt`, `image ${i + 1} needs alt text`));
+      });
+    }
+  } else if (template === 'detailBlock') {
+    if (isBlank(content.body)) problems.push(problem(`${path}.body`, 'this section needs a body'));
+    if (!Array.isArray(content.facts)) {
+      problems.push(problem(`${path}.facts`, 'this section needs a facts list'));
+    } else {
+      content.facts.forEach((raw, i) => {
+        const fact = asRecord(raw);
+        if (isBlank(fact.label)) problems.push(problem(`${path}.facts[${i}].label`, `fact ${i + 1} needs a label`));
+        if (isBlank(fact.value)) problems.push(problem(`${path}.facts[${i}].value`, `fact ${i + 1} needs a value`));
+      });
+    }
+  }
+  // An unrecognised template has already been reported by the caller
+  // (validateSectionEntry, below) before this function is ever called --
+  // there is no content shape to validate for a template this codebase
+  // doesn't know.
+  return problems;
+}
+
+// One entry of a Section[] array (sections.json's own top level, or one
+// page's own `sections` list) -- everything a single entry needs checked,
+// named per field. `path` is the caller's own prefix (`[${i}]` for
+// sections.json, `[${pageIndex}].sections[${i}]` for a page) so the same
+// function produces a correctly-addressed message either way; `seenIds` is
+// caller-owned for the identical scoping reason guards.ts's own
+// `assertSectionEntry` documents (sections.json tracks one Set across the
+// whole homepage; each page starts a fresh one).
+function validateSectionEntry(raw: unknown, path: string, seenIds: Set<string>): ValidationProblem[] {
+  const entry = asRecord(raw);
+  const problems: ValidationProblem[] = [];
+  const { kind, id, enabled } = entry;
+
+  if (kind !== 'bespoke' && kind !== 'template') {
+    return [problem(`${path}.kind`, 'this section needs a "kind" of "bespoke" or "template"')];
+  }
+
+  if (kind === 'bespoke') {
+    if (!isSectionId(id)) {
+      problems.push(problem(`${path}.id`, `"${String(id)}" is not a section this site knows`));
+    } else if (seenIds.has(id)) {
+      problems.push(problem(`${path}.id`, `"${id}" is already used by another section`));
+    } else {
+      seenIds.add(id);
+    }
+    if (typeof enabled !== 'boolean') {
+      problems.push(problem(`${path}.enabled`, 'this section needs to say whether it is shown'));
+    }
+    if (entry.publishAt !== undefined) {
+      problems.push(problem(`${path}.publishAt`, 'a built-in section cannot be scheduled -- use "Shown on homepage" instead'));
+    }
+    return problems;
+  }
+
+  // kind === 'template'
+  if (isBlank(id)) {
+    problems.push(problem(`${path}.id`, 'this section needs a name'));
+  } else if (isSectionId(id)) {
+    problems.push(problem(`${path}.id`, `"${id}" collides with a built-in section -- choose a different name`));
+  } else if (seenIds.has(id as string)) {
+    problems.push(problem(`${path}.id`, `"${id}" is already used by another section`));
+  } else {
+    seenIds.add(id as string);
+  }
+  if (typeof enabled !== 'boolean') {
+    problems.push(problem(`${path}.enabled`, 'this section needs to say whether it is shown'));
+  }
+  if (!isTemplateType(entry.template)) {
+    problems.push(problem(`${path}.template`, `"${String(entry.template)}" is not a template this site knows`));
+  } else {
+    problems.push(...validateTemplateContentFields(entry.template, entry.content, `${path}.content`));
+  }
+  problems.push(...validatePublishAtAt(entry.publishAt, `${path}.publishAt`));
+  return problems;
+}
+
+// validatePublishAt (above, dishes/drinks/press's own) is indexed --
+// `[${index}].publishAt` -- which doesn't fit a section entry's own
+// dotted-path addressing. Same isPublished-based check, addressed by the
+// caller's own full path instead of rebuilding one from an index.
+function validatePublishAtAt(publishAt: unknown, path: string): ValidationProblem[] {
+  if (publishAt === undefined) return [];
   try {
-    assertSections(data);
+    isPublished({ publishAt: publishAt as string }, INERT_TODAY);
     return [];
   } catch (error) {
-    return [problem('', error instanceof Error ? error.message : String(error))];
+    return [problem(path, error instanceof Error ? error.message : String(error))];
   }
+}
+
+function validateSections(data: unknown): ValidationProblem[] {
+  if (!Array.isArray(data)) return [problem('', 'expected a list of sections')];
+  const seenIds = new Set<string>();
+  const problems = data.flatMap((entry, i) => validateSectionEntry(entry, `[${i}]`, seenIds));
+  // The two whole-homepage rules (every bespoke id present, hero enabled)
+  // are assertSections' own, and are only worth re-checking once every
+  // per-entry problem above is already clean -- otherwise a homepage
+  // missing `visit` entirely would show BOTH "missing required section
+  // visit" and, confusingly, nothing per-entry about it (there is no entry
+  // to attach a per-field message to for a section that isn't there at
+  // all), which is exactly what this ordering avoids: the per-entry sweep
+  // runs first and would have already flagged anything wrong with what IS
+  // present, so a residual assertSections failure at this point is always
+  // the whole-list shape itself, not a field within one entry.
+  if (problems.length === 0) {
+    try {
+      assertSections(data);
+    } catch (error) {
+      problems.push(problem('', error instanceof Error ? error.message : String(error)));
+    }
+  }
+  return problems;
+}
+
+// ---------------------------------------------------------------------------
+// pages.json (Plan 7, Task 1)
+
+const SLUG_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+const RESERVED_PAGE_SLUGS = new Set(['blogs', 'edit']);
+
+function validatePage(raw: unknown, index: number, seenSlugs: Set<string>): ValidationProblem[] {
+  const page = asRecord(raw);
+  const problems: ValidationProblem[] = [];
+  if (isBlank(page.slug)) {
+    problems.push(problem(`[${index}].slug`, `page at position ${index} needs an address`));
+  } else {
+    const slug = (page.slug as string).trim();
+    if (!SLUG_PATTERN.test(slug)) {
+      problems.push(
+        problem(`[${index}].slug`, `"${page.slug}" is not a web-safe address -- use lowercase letters, numbers and hyphens only, e.g. "our-menu"`),
+      );
+    } else if (RESERVED_PAGE_SLUGS.has(slug)) {
+      problems.push(problem(`[${index}].slug`, `"${slug}" is already used by the site itself -- choose a different address`));
+    } else if (seenSlugs.has(slug)) {
+      problems.push(problem(`[${index}].slug`, `"${slug}" is already used by another page`));
+    } else {
+      seenSlugs.add(slug);
+    }
+  }
+  if (isBlank(page.name)) {
+    problems.push(problem(`[${index}].name`, `"${String(page.slug ?? 'this page')}" needs a name`));
+  }
+  if (typeof page.inNav !== 'boolean') {
+    problems.push(problem(`[${index}].inNav`, `"${String(page.name ?? 'this page')}" needs to say whether it's shown in the navigation menu`));
+  }
+  if (typeof page.enabled !== 'boolean') {
+    problems.push(problem(`[${index}].enabled`, `"${String(page.name ?? 'this page')}" needs to say whether it's shown on the site`));
+  }
+  if (!Array.isArray(page.sections)) {
+    problems.push(problem(`[${index}].sections`, `"${String(page.name ?? 'this page')}" needs a list of sections`));
+  } else {
+    const seenSectionIds = new Set<string>();
+    page.sections.forEach((entry, si) => {
+      problems.push(...validateSectionEntry(entry, `[${index}].sections[${si}]`, seenSectionIds));
+    });
+  }
+  return problems;
+}
+
+function validatePages(data: unknown): ValidationProblem[] {
+  if (!Array.isArray(data)) return [problem('', 'expected a list of pages')];
+  const seenSlugs = new Set<string>();
+  return data.flatMap((page, i) => validatePage(page, i, seenSlugs));
 }
 
 // copy.footer.followLabel must keep a non-breaking space (U+00A0), not an
@@ -566,6 +779,7 @@ const RULES: Record<string, (data: unknown) => ValidationProblem[]> = {
   'site.json': validateSite,
   'galleries.json': validateGalleries,
   'menus.json': validateMenus,
+  'pages.json': validatePages,
 };
 
 // The single entry point a Worker's publish route calls before it ever
