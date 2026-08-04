@@ -10,13 +10,30 @@
 // click-guard carve-out gap and the (pre-existing, Plan 5) z-index
 // collision this component's own comments now document. This file is the
 // regression net for the logic; that pass was the proof it is reachable.
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import CollageTile from '../CollageTile';
 // The real, committed collage -- the exact fixture the cascade test below
 // needs (see that describe block's own comment for why a hand-built
 // fixture isn't enough here).
 import { galleries } from '../../content';
+
+// `renderTileIntoGrid`'s own `vi.spyOn(window, 'getComputedStyle')` (below)
+// was never restored anywhere in this file before the I-D/I-F tests added
+// alongside this repair -- harmless as long as nothing LATER in the file
+// ever called `screen.getByRole` again (accessible-name computation reads
+// real `getComputedStyle().getPropertyValue`, which the stubbed return
+// value doesn't have), which happened to be true of every test written
+// before these. It stopped being true the moment a later describe block
+// needed `getByRole` after an earlier one had run `renderTileIntoGrid` --
+// confirmed directly, this is what "TypeError: style.getPropertyValue is
+// not a function" inside dom-accessibility-api was. `afterEach` matches
+// this file's own existing convention (`matchMediaSpy.mockRestore()` at
+// the end of the touch-pointer test below) instead of asking every test
+// that calls `renderTileIntoGrid` to remember it individually.
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 // A realistic six-tile fixture -- entry 0 fully definite, entry 1 auto on
 // both axes -- so tests below can exercise both "read the declared start"
@@ -376,7 +393,15 @@ describe('CollageTile: drag to move (fine pointers only)', () => {
     expect(onCommit).toHaveBeenCalledWith(0, 'col-start-4 col-span-1 row-start-3 row-span-1');
   });
 
-  it('a drag that would land off-grid is refused: no commit, visible feedback, tile reads back its original className', () => {
+  // C1 review finding (Critical): this test used to render with
+  // `selected: false` (the default -- unchanged below) and assert nothing
+  // about feedback, even though its own title claimed one. `selected`
+  // defaults false deliberately here: `handleMovePointerDown` has no
+  // `selected` guard at all (a drag works on any tile), so a refusal has
+  // to be visible without her ever having selected this one -- the exact
+  // gap the reviewer's own proof hit on the very first unprompted drag,
+  // one cell, no selection.
+  it('a drag that would land off-grid is refused: no commit, VISIBLE FEEDBACK even though the tile was never selected, tile reads back its original className', () => {
     stubPointerCapture();
     // Tile 2 (index passed via override) starts at col-start-1 -- one cell
     // left runs off the grid.
@@ -390,6 +415,51 @@ describe('CollageTile: drag to move (fine pointers only)', () => {
     expect(onCommit).not.toHaveBeenCalled();
     const tile = container.querySelector('[data-collage-tile-index="2"]') as HTMLElement;
     expect(tile).toHaveClass('col-start-1', 'col-span-1', 'row-start-1', 'row-span-1');
+    // No panel exists at all -- this tile was never selected -- and the
+    // refusal is on screen anyway.
+    expect(screen.queryByRole('region', { name: /Moving or resizing/ })).not.toBeInTheDocument();
+    expect(screen.getByText("Can't drop it there — that would move this photo off the collage grid.")).toBeInTheDocument();
+  });
+
+  // C1's own secondary finding: the message-clearing effect used to fire
+  // on EVERY `selected` change, including false -> true -- which meant
+  // selecting the tile (to find out why a drag just failed) wiped the
+  // very explanation she opened the panel to read, in the same render
+  // that revealed the question.
+  it('selecting the tile right after an unselected refused drag does not wipe the message', () => {
+    stubPointerCapture();
+    const { container, rerender, onCommit } = renderTileIntoGrid({ index: 2, className: CLASS_NAMES[2] });
+    const surface = dragSurfaceOf(container, 2);
+
+    firePointer(surface, 'pointerdown', { pointerId: 1, clientX: 0, clientY: 0 });
+    firePointer(surface, 'pointermove', { pointerId: 1, clientX: -(CELL_PX + 20), clientY: 5 });
+    firePointer(surface, 'pointerup', { pointerId: 1, clientX: -(CELL_PX + 20), clientY: 5 });
+    expect(onCommit).not.toHaveBeenCalled();
+
+    rerender(
+      <CollageTile
+        index={2}
+        className={CLASS_NAMES[2]}
+        classNames={CLASS_NAMES}
+        image={<img src="/hero/a.webp" alt="" />}
+        selected
+        onSelect={vi.fn()}
+        onCommit={vi.fn()}
+      />,
+    );
+
+    // Plain DOM queries, not `screen.getByRole`: `renderTileIntoGrid`'s own
+    // `getComputedStyle` stub (needed for the drag's cell-size math above)
+    // is still active for the rest of THIS test, and RTL's accessible-name
+    // computation calls the real `getComputedStyle(...).getPropertyValue`
+    // to check visibility -- a stub with no such method throws, not a
+    // concern this test is actually about.
+    const region = document.body.querySelector('[role="region"][aria-label="Moving or resizing photo 3"]');
+    expect(region).toBeInTheDocument();
+    const statuses = document.body.querySelectorAll('[role="status"]');
+    expect(statuses[0]).toHaveTextContent(
+      "Can't drop it there — that would move this photo off the collage grid.",
+    );
   });
 
   it('a real pointercancel mid-drag cancels without committing, the same as a refused drop', () => {
@@ -404,10 +474,23 @@ describe('CollageTile: drag to move (fine pointers only)', () => {
     expect(onCommit).not.toHaveBeenCalled();
   });
 
-  // Task 4 Step 4: Escape cancels an in-flight drag -- the one undo this
-  // plan adds. Attached to the tile itself, so it only matters while a
-  // pointer is actually captured there.
-  it('pressing Escape mid-drag cancels it -- no commit, even if pointerup follows', () => {
+  // C2 review finding (Critical): the old version of this test fired
+  // Escape straight at the tile element (`fireEvent.keyDown(tile, ...)`),
+  // which is not what a real browser ever does -- a real keydown's target
+  // is whatever element currently has FOCUS, and confirmed directly (real
+  // Chromium, capture-phase listeners on every tile plus one on
+  // `document`) that during a drag, focus stayed on `document.body` the
+  // whole time: the tile was a plain, non-focusable `<div>`, so Escape's
+  // real target was never a descendant of it, and this component's own
+  // `onKeyDown` never fired -- the subsequent pointerup committed the move
+  // Escape was supposed to cancel. Firing at `document.activeElement`
+  // below (never at `tile` directly) is what makes this test exercise the
+  // same path a real keyboard actually takes -- and what makes it catch
+  // the class of bug the old version structurally could not: dispatching
+  // at `document.activeElement` when nothing focuses the tile reaches
+  // `document.body`, which never bubbles down into a descendant, so a
+  // reverted fix leaves this red rather than green.
+  it('pressing Escape mid-drag cancels it -- no commit, even if pointerup follows, via whatever element real focus actually landed on', () => {
     stubPointerCapture();
     const { container, onCommit } = renderTileIntoGrid();
     const surface = dragSurfaceOf(container);
@@ -415,7 +498,12 @@ describe('CollageTile: drag to move (fine pointers only)', () => {
 
     firePointer(surface, 'pointerdown', { pointerId: 1, clientX: 0, clientY: 0 });
     firePointer(surface, 'pointermove', { pointerId: 1, clientX: CELL_PX + 20, clientY: 5 });
-    fireEvent.keyDown(tile, { key: 'Escape' });
+    // The drag itself must have moved real focus onto the tile -- not
+    // asserted for its own sake, but because the next line depends on it:
+    // firing at `document.activeElement` only exercises the real bug if
+    // that really is where a real drag leaves focus.
+    expect(document.activeElement).toBe(tile);
+    fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'Escape' });
     firePointer(surface, 'pointerup', { pointerId: 1, clientX: CELL_PX + 20, clientY: 5 });
 
     expect(onCommit).not.toHaveBeenCalled();
@@ -433,6 +521,40 @@ describe('CollageTile: drag to move (fine pointers only)', () => {
 
     expect(onCommit).not.toHaveBeenCalled();
     matchMediaSpy.mockRestore();
+  });
+
+  // I-D review finding: `wouldStayOnGrid` (the cascade guard -- "pinning
+  // one tile relocates others" pushing an auto-placed SIBLING off-grid) is
+  // called separately on the button path (`handleAction`) and the drag
+  // path (`endDrag`) -- this plan's own Task 3 Step 1 rule is that if the
+  // two paths can ever disagree, one of them is wrong. Until this test
+  // existed, only the BUTTON path (the "is refused before ever calling
+  // onCommit" test above, in the cascade describe block) was ever
+  // exercised against this exact cascade. Mutation: neuter the
+  // `if (!wouldStayOnGrid(...))` check inside `endDrag` alone (leaving
+  // `handleAction`'s own copy untouched) and every other test in this
+  // file, including that one, stays green -- this is the one that goes
+  // red.
+  it('the SAME cascade (tile 7, real content) is refused via a real drag, not just the "Move up" button', () => {
+    stubPointerCapture();
+    const realClassNames = galleries.heroCollage.map((t) => t.className);
+    const { container, onCommit } = renderTileIntoGrid({
+      index: 7,
+      className: realClassNames[7],
+      classNames: realClassNames,
+      image: <img src="/hero/bus.webp" alt="" />,
+    });
+    const surface = dragSurfaceOf(container, 7);
+
+    // Tile 7 is col-start-6 col-span-1 row-start-3 row-span-2 -- one cell
+    // UP is the same gesture the button-path test's own "Move up" exercises.
+    firePointer(surface, 'pointerdown', { pointerId: 1, clientX: 0, clientY: 0 });
+    firePointer(surface, 'pointermove', { pointerId: 1, clientX: 5, clientY: -(CELL_PX + 20) });
+    firePointer(surface, 'pointerup', { pointerId: 1, clientX: 5, clientY: -(CELL_PX + 20) });
+
+    expect(onCommit).not.toHaveBeenCalled();
+    const tile = container.querySelector('[data-collage-tile-index="7"]') as HTMLElement;
+    expect(tile).toHaveClass('col-start-6', 'col-span-1', 'row-start-3', 'row-span-2');
   });
 });
 
@@ -480,5 +602,74 @@ describe('CollageTile: drag to resize (fine pointers only, tile selected)', () =
     // attempt result, since tile 0 already has colSpan 1. Not a commit at
     // all: the clamped candidate is identical to where it started.
     expect(onCommit).not.toHaveBeenCalled();
+  });
+});
+
+// I-F review finding: the panel is `createPortal`'d to the very end of
+// `document.body`, so Tab from the select button that opens it followed
+// the portal's real DOM position, not the tile's -- measured at 101 Tab
+// presses to actually reach it. The fix moves focus explicitly instead of
+// relying on DOM position: straight into the panel when it opens, trapped
+// there while it's open, and back to the select button when it closes.
+describe('CollageTile: keyboard reachability of the move/resize panel (I-F)', () => {
+  it('selecting the tile moves focus straight into the panel -- no Tabbing through the rest of the page needed', () => {
+    const { rerender } = renderTile({ selected: false });
+    rerender(
+      <CollageTile
+        index={0}
+        className={CLASS_NAMES[0]}
+        classNames={CLASS_NAMES}
+        image={<img src="/hero/a.webp" alt="" />}
+        selected
+        onSelect={vi.fn()}
+        onCommit={vi.fn()}
+      />,
+    );
+    const region = screen.getByRole('region', { name: 'Moving or resizing photo 1' });
+    expect(region.contains(document.activeElement)).toBe(true);
+  });
+
+  it("Tab from the panel's last focusable control wraps back to its first -- it never escapes into the rest of the page", () => {
+    renderTile({ selected: true });
+    const region = screen.getByRole('region', { name: 'Moving or resizing photo 1' });
+    const buttons = region.querySelectorAll('button');
+    const first = buttons[0];
+    const last = buttons[buttons.length - 1];
+    last.focus();
+    fireEvent.keyDown(region, { key: 'Tab' });
+    expect(document.activeElement).toBe(first);
+  });
+
+  it("Shift+Tab from the panel's first focusable control wraps to its last", () => {
+    renderTile({ selected: true });
+    const region = screen.getByRole('region', { name: 'Moving or resizing photo 1' });
+    const buttons = region.querySelectorAll('button');
+    const first = buttons[0];
+    const last = buttons[buttons.length - 1];
+    first.focus();
+    fireEvent.keyDown(region, { key: 'Tab', shiftKey: true });
+    expect(document.activeElement).toBe(last);
+  });
+
+  // Falsifies the in-code claim this comment replaced: a browser does NOT
+  // return focus to "the nearest preceding focusable element" on its own
+  // when a focused element unmounts -- it goes to document.body. This is
+  // the explicit fix, proven directly.
+  it("closing the panel returns focus to the tile's own select button, not document.body", () => {
+    const { rerender } = renderTile({ selected: true });
+    const selectButton = screen.getByRole('button', { name: 'Stop moving photo 1' });
+    rerender(
+      <CollageTile
+        index={0}
+        className={CLASS_NAMES[0]}
+        classNames={CLASS_NAMES}
+        image={<img src="/hero/a.webp" alt="" />}
+        selected={false}
+        onSelect={vi.fn()}
+        onCommit={vi.fn()}
+      />,
+    );
+    expect(document.activeElement).toBe(selectButton);
+    expect(document.activeElement).not.toBe(document.body);
   });
 });

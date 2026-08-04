@@ -47,10 +47,13 @@ export interface CollageTileProps {
   // The already-rendered image for this tile (Hero.tsx's own
   // `content.renderImage(...)` call, passed straight through) -- this
   // component never re-derives how a collage photo is rendered, or where
-  // its own camera-replace badge (EditableImage.tsx) sits. Hero.tsx sets
-  // `draggable={false}` on the underlying <img> itself (Task 4 Step 1) --
-  // this component receives it already rendered and cannot reach the <img>
-  // to set that prop itself.
+  // its own camera-replace badge (EditableImage.tsx) sits. Native HTML5
+  // image drag (Task 4 Step 1's own requirement to defeat, since it would
+  // otherwise hijack the pointer sequence a real drag-to-move needs) is
+  // stopped by this component's own `onDragStart` on the tile wrapper
+  // (I-A fix) instead of a `draggable={false}` on the `<img>` itself --
+  // `dragstart` bubbles, so cancelling it here works without Hero.tsx (the
+  // PUBLIC page) needing to know anything is editable at all.
   image: React.ReactNode;
   selected: boolean;
   onSelect: (index: number | null) => void;
@@ -229,10 +232,18 @@ function measureCell(tileEl: HTMLElement): { cellW: number; cellH: number } | nu
   const gridEl = tileEl.parentElement;
   if (gridEl === null) return null;
   const rect = gridEl.getBoundingClientRect();
-  const gapPx = parseFloat(getComputedStyle(gridEl).columnGap || '0') || 0;
+  const style = getComputedStyle(gridEl);
+  // Minor review finding: reused `columnGap` for BOTH axes used to be
+  // correct only because Hero.tsx's real `gap-1` is symmetric -- silently
+  // wrong the day the column and row gap ever diverge (a future
+  // `gap-x-*`/`gap-y-*`, or a hand-edited style). Reading `rowGap`
+  // separately for the row axis costs nothing today (it equals
+  // `columnGap` on the real page) and stops that from being a latent trap.
+  const columnGapPx = parseFloat(style.columnGap || '0') || 0;
+  const rowGapPx = parseFloat(style.rowGap || '0') || 0;
   return {
-    cellW: (rect.width - gapPx * (GRID_SIZE - 1)) / GRID_SIZE,
-    cellH: (rect.height - gapPx * (GRID_SIZE - 1)) / GRID_SIZE,
+    cellW: (rect.width - columnGapPx * (GRID_SIZE - 1)) / GRID_SIZE,
+    cellH: (rect.height - rowGapPx * (GRID_SIZE - 1)) / GRID_SIZE,
   };
 }
 
@@ -241,6 +252,22 @@ function placementStyle(p: ResolvedPlacement): React.CSSProperties {
     gridColumn: `${p.colStart} / span ${p.colSpan}`,
     gridRow: `${p.rowStart} / span ${p.rowSpan}`,
   };
+}
+
+// I-F fix: the move/size panel below is `createPortal`'d to the very end of
+// `document.body`, so its own place in the DOM's natural Tab order has
+// nothing to do with where the tile that opened it sits on screen -- real
+// Chromium measured 101 Tab presses to reach it from the select button that
+// opens it (past all sixteen tiles AND the rest of the homepage). Rather
+// than fight the portal's DOM position, the panel traps Tab within itself
+// while open (this function finds its boundary elements) and focus is moved
+// in/out of it explicitly (see the `useEffect` below) -- the same pattern
+// every dialog/disclosure widget uses for exactly this reason.
+const FOCUSABLE_SELECTOR =
+  'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+function getFocusable(container: HTMLElement): HTMLElement[] {
+  return Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
 }
 
 // A fixed panel at the bottom of the viewport, not an overlay confined to
@@ -262,13 +289,76 @@ const CollageTile: React.FC<CollageTileProps> = ({ index, className, classNames,
   const [dragKind, setDragKind] = useState<'move' | 'span' | null>(null);
   const tileRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<DragOrigin | null>(null);
+  // I-F: the element Tab/Enter used to OPEN the panel -- focus returns here
+  // when it closes (see the focus-management effect below), since nothing
+  // in a real browser does that automatically for a `createPortal`-rendered
+  // subtree that just unmounted (the in-code claim this replaced was wrong
+  // about that -- see this file's own C2/I-F fix history).
+  const selectButtonRef = useRef<HTMLButtonElement>(null);
+  // The portal panel's own root -- read by the focus-trap/auto-focus effect
+  // below to find its own boundary focusable elements, and by the Tab-trap
+  // in handlePanelKeyDown.
+  const panelRef = useRef<HTMLDivElement>(null);
 
-  // Cleared the instant a DIFFERENT tile is selected (or this one is
-  // deselected) -- a message from a previous session has nothing to say
-  // about a fresh one.
+  // C1 fix: `handleMovePointerDown` below has NO `selected` guard (drag
+  // works on any tile, selected or not -- that is the whole point of the
+  // control), so a refusal set by `endDrag` can happen while this tile was
+  // never selected. The OLD version of this effect cleared both messages on
+  // every `selected` change in either direction, which meant selecting the
+  // tile to see WHY a drag just failed wiped the answer in the same render
+  // that revealed the question. A `useRef` remembers the PREVIOUS value so
+  // this can tell "just deselected" (clear -- a genuinely stale message)
+  // apart from "just selected" (keep -- she may be here BECAUSE of the
+  // message), which a bare `[selected]` dependency can't distinguish.
+  const wasSelectedRef = useRef(selected);
   useEffect(() => {
-    setRefusedMessage(null);
-    setInfoMessage(null);
+    if (wasSelectedRef.current && !selected) {
+      setRefusedMessage(null);
+      setInfoMessage(null);
+    }
+    wasSelectedRef.current = selected;
+  }, [selected]);
+
+  // C1: the only path that can set `refusedMessage` while this tile is NOT
+  // selected is a refused drag (every button that can refuse lives inside
+  // the selected-only panel, so a button-triggered refusal is already
+  // showing there the instant it happens). That refusal now renders as a
+  // small, unconditional toast (below, JSX) instead of silence -- and this
+  // is what makes the toast self-dismissing, so two different tiles
+  // dragged in sequence, both refused, never leave two of them stacked on
+  // screen at once. A refusal already showing inside the open panel is NOT
+  // time-limited -- unchanged, existing behaviour.
+  useEffect(() => {
+    if (selected || refusedMessage === null) return;
+    const timer = window.setTimeout(() => setRefusedMessage(null), 4000);
+    return () => window.clearTimeout(timer);
+  }, [selected, refusedMessage]);
+
+  // I-F: moves focus INTO the panel the instant it opens (past the 101-Tab
+  // problem entirely -- she never has to Tab there, it's already where the
+  // keyboard is) and explicitly back to the select button that opened it
+  // when it closes, however it closes (Escape, the "Done" button, or
+  // re-toggling select). Both halves are effect-timed, not click-handler
+  // timed, so this also covers the panel unmounting because SOME OTHER
+  // tile became selected instead.
+  useEffect(() => {
+    if (!selected) return;
+    const panel = panelRef.current;
+    const [first] = panel ? getFocusable(panel) : [];
+    first?.focus({ preventScroll: true });
+    // Captured into a local now, not read off the ref again inside the
+    // cleanup below -- react-hooks/exhaustive-deps' own point: by the time
+    // a cleanup runs, a ref's `.current` may already have moved on to
+    // whatever the NEXT render pointed it at. This tile's own select button
+    // is the same DOM node for this component's whole lifetime (React
+    // reuses it across re-renders; only its label/pressed state change), so
+    // capturing it here changes nothing about which element cleanup
+    // returns focus to -- it only stops relying on the ref still being
+    // "current" later.
+    const selectButtonEl = selectButtonRef.current;
+    return () => {
+      selectButtonEl?.focus({ preventScroll: true });
+    };
   }, [selected]);
 
   function commit(candidate: ResolvedPlacement) {
@@ -307,6 +397,18 @@ const CollageTile: React.FC<CollageTileProps> = ({ index, className, classNames,
     if (!cell || !origin) return;
     dragRef.current = { pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY, cellW: cell.cellW, cellH: cell.cellH, placement: origin };
     (event.target as Element).setPointerCapture(event.pointerId);
+    // C2 fix: a real Escape keydown only reaches `handleTileKeyDown` below
+    // if the TILE ITSELF is the focused element when it fires. Confirmed
+    // directly, in real Chromium: a plain, non-focusable `<div>` never
+    // receives focus from a pointerdown, so focus stayed on
+    // `document.body` for the whole drag, and `document.body` is not a
+    // descendant of this tile's own div -- so React's bubble-simulated
+    // event system never called this component's handler at all, and the
+    // subsequent pointerup committed the move Escape was supposed to
+    // cancel. `tabIndex={-1}` on the tile (below, JSX) makes this call
+    // legal without adding the tile to the page's own Tab order -- drag is
+    // pointer-only, so starting one should never insert a new Tab stop.
+    tileEl.focus({ preventScroll: true });
     setDragKind('move');
     setDragPreview(origin);
     setInfoMessage(null);
@@ -381,6 +483,9 @@ const CollageTile: React.FC<CollageTileProps> = ({ index, className, classNames,
     if (!cell || !origin) return;
     dragRef.current = { pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY, cellW: cell.cellW, cellH: cell.cellH, placement: origin };
     (event.target as Element).setPointerCapture(event.pointerId);
+    // C2 fix -- see handleMovePointerDown's own comment on why this call is
+    // what makes a real Escape keydown reach handleTileKeyDown at all.
+    tileEl.focus({ preventScroll: true });
     setDragKind('span');
     setDragPreview(origin);
     setInfoMessage(null);
@@ -418,18 +523,44 @@ const CollageTile: React.FC<CollageTileProps> = ({ index, className, classNames,
     }
   }
 
-  // Escape closes the panel and returns focus to the tile's own select
-  // button (the browser's own default focus-return-on-unmount behaviour
-  // handles the "return focus" half: the element that had focus inside the
-  // now-removed panel is gone, and the select button is the nearest
-  // preceding focusable element in DOM order). Every button in the panel
-  // either commits a legal move/size change or is refused with no effect
-  // at all, so Escape here is a dismissal, not an undo (the drag surface
-  // above is where an in-flight edit actually needs undoing).
+  // Escape closes the panel; the focus-management effect above (not the
+  // browser's own default) is what returns focus to the tile's own select
+  // button -- I-F review finding: a browser does NOT automatically move
+  // focus to "the nearest preceding focusable element in DOM order" when
+  // the focused element is removed, it moves to `document.body`, full
+  // stop; confirmed directly, the claim this comment used to make here was
+  // false. Every button in the panel either commits a legal move/size
+  // change or is refused with no effect at all, so Escape here is a
+  // dismissal, not an undo (the drag surface above is where an in-flight
+  // edit actually needs undoing).
+  //
+  // Tab/Shift+Tab are trapped inside the panel here too (I-F): without
+  // this, Tab from the panel's own last control (or Shift+Tab from its
+  // first) would follow the portal's real DOM position -- the very end of
+  // `document.body` -- out into whatever happens to be there, not back to
+  // this tile. Only the two boundary cases are handled; every other
+  // Tab/Shift+Tab inside the panel is left alone to move between its own
+  // controls normally.
   function handlePanelKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
     if (event.key === 'Escape') {
       event.preventDefault();
       onSelect(null);
+      return;
+    }
+    if (event.key === 'Tab') {
+      const panel = panelRef.current;
+      if (!panel) return;
+      const focusable = getFocusable(panel);
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
     }
   }
 
@@ -447,6 +578,15 @@ const CollageTile: React.FC<CollageTileProps> = ({ index, className, classNames,
       className={`${className} relative overflow-hidden`}
       style={tileStyle}
       data-collage-tile-index={index}
+      // I-A fix: `dragstart` bubbles, so cancelling it HERE -- on this
+      // /edit-only wrapper, never on the public page -- stops native HTML5
+      // image drag (which would otherwise hijack the pointer sequence a
+      // real drag-to-move needs) without Hero.tsx's own `<img>` needing
+      // `draggable={false}` at all. See this file's own I-A note and
+      // Hero.tsx's for the full reasoning and the real-Chromium table that
+      // ruled out the alternatives.
+      onDragStart={(event) => event.preventDefault()}
+      tabIndex={-1}
       onKeyDown={handleTileKeyDown}
     >
       <div
@@ -460,6 +600,7 @@ const CollageTile: React.FC<CollageTileProps> = ({ index, className, classNames,
         {image}
       </div>
       <button
+        ref={selectButtonRef}
         type="button"
         {...CONTROL_ATTR}
         aria-pressed={selected}
@@ -483,9 +624,59 @@ const CollageTile: React.FC<CollageTileProps> = ({ index, className, classNames,
           className="absolute bottom-1 left-1 z-20 h-5 w-5 cursor-nwse-resize rounded border-2 border-white bg-[#6B8B59] shadow"
         />
       )}
+      {/* C1 fix: a refused DRAG can happen on any tile, selected or not (see
+          handleMovePointerDown's own comment -- it has no `selected`
+          guard). The panel below only ever exists while `selected`, so a
+          refusal that happens without it needs its own, unconditional
+          place to show -- this is that place. `top-0`, not `bottom-0` like
+          the panel: the two really can be on screen at once (she can open
+          one tile's panel and, without closing it, drag a DIFFERENT tile
+          straight off-grid), and stacking two `fixed` bars at the identical
+          edge would put one silently on top of the other -- the exact
+          "visible feedback that isn't actually visible" shape this fix
+          exists to close. Self-dismissing (the effect above) is the other
+          half of that: it also caps how long two coincidentally-open
+          toasts (two different UNSELECTED tiles, each just refused) could
+          ever overlap. Plain inline style, not a Tailwind class string: the
+          shared stylesheet (bundle.post-build.test.ts) carries a byte
+          ceiling every admin-only class counts against, and this needs no
+          new rule at all to express as a plain style. `zIndex: 60`, not 50:
+          NavBar.tsx's own `<nav>` is ALSO `fixed top-0 ... z-50` (the real
+          public page NavBar, still rendered underneath everything /edit
+          adds) -- an equal z-index there would leave which one paints on
+          top decided by DOM/portal insertion order, exactly the kind of
+          coin-flip stacking this whole review exists to eliminate. A
+          strictly higher value wins outright, on purpose, so the message
+          is never gambled on. */}
+      {!selected && refusedMessage !== null &&
+        createPortal(
+          <div
+            role="status"
+            aria-live="polite"
+            style={{
+              position: 'fixed',
+              left: 0,
+              right: 0,
+              top: 0,
+              zIndex: 60,
+              textAlign: 'center',
+              padding: '10px 16px',
+              background: '#ffffff',
+              color: '#dc2626',
+              borderBottom: '1px solid #e5e7eb',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+              fontFamily: "'Montserrat', sans-serif",
+              fontSize: '12px',
+            }}
+          >
+            {refusedMessage}
+          </div>,
+          document.body,
+        )}
       {selected &&
         createPortal(
           <div
+            ref={panelRef}
             {...CONTROL_ATTR}
             role="region"
             aria-label={`Moving or resizing photo ${index + 1}`}
