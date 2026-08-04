@@ -57,21 +57,27 @@ const GALLERIES: Galleries = {
     { src: '/atmosphere/bar.webp', alt: 'The bar' },
   ],
   ourStory: [{ src: '/our_story/cut.webp', alt: 'Cutting pasta by hand' }],
-  // Deliberately NOT real Tailwind grid-placement utility text (galleries.json's
-  // own real heroCollage entries use actual grid-column/row utility classes)
-  // -- this file is a real .tsx source Tailwind's own content scan DOES walk (unlike
-  // galleries.json itself, which the brief is explicit it does not), so a
-  // fixture that reproduced those class names verbatim would make this
-  // TEST FILE the thing that newly satisfies Tailwind's scan for a utility
-  // this project's own known, deliberately-unfixed defect says is missing
-  // from the real shipped CSS (see this task's own report) -- confirmed
-  // directly: an earlier version of this fixture used real grid utility
-  // class text and added a new rule to the built CSS that a real
-  // before/after diff caught. What this test actually needs is only "some
-  // opaque string", never edited here -- these two values prove that.
+  // Plan 6, Task 1: `validateContent('galleries.json', ...)` now actually
+  // parses `heroCollage[i].className` (src/content/placement.ts's own
+  // `parsePlacement`), so this fixture can no longer use an opaque
+  // non-Tailwind string the way it used to (see this file's own git
+  // history) -- an unparseable className is now a real validation problem,
+  // and this describe block's own tests need `validateContent` to come back
+  // clean for everything OTHER than the one field they're each deliberately
+  // breaking. `col-span-1`/`col-span-2` are used instead of a fuller,
+  // four-field placement string: both single-token values were ALREADY
+  // present in the real shipped stylesheet before this
+  // plan touched tailwind.config.js at all (they survived only because
+  // Hero.test.tsx's own fixtures spelled them out -- see this plan's own
+  // report), so this file's own text triggering Tailwind's content scanner
+  // for them adds no NEW rule; confirmed directly with a before/after
+  // `npm run build` CSS byte diff. Both resolve on-grid (auto-placed into
+  // row 1) under `resolveLayout`, so neither adds a spurious problem of its
+  // own to any test below that isn't explicitly testing hero collage
+  // layout.
   heroCollage: [
-    { src: '/hero/scene.webp', className: 'layout-slot-a' },
-    { src: '/hero/farfalle1.webp', className: 'layout-slot-b' },
+    { src: '/hero/scene.webp', className: 'col-span-1' },
+    { src: '/hero/farfalle1.webp', className: 'col-span-2' },
   ],
 };
 
@@ -102,7 +108,7 @@ describe('GalleryList: renders all three lists, prefilled', () => {
     const positions = screen.getAllByLabelText('Layout position');
     expect(positions).toHaveLength(2);
     positions.forEach((el) => expect(el).toBeDisabled());
-    expect((positions[0] as HTMLInputElement).value).toBe('layout-slot-a');
+    expect((positions[0] as HTMLInputElement).value).toBe('col-span-1');
   });
 });
 

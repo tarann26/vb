@@ -12,6 +12,17 @@
 // the other way around (this file inventing a second, competing definition
 // of "valid" that quietly drifts from what the build actually enforces).
 import { assertCopy, assertDrinkCategory, assertHours, assertSections } from './guards';
+// Task 1 (Plan 6): the hero collage's own tiny layout language --
+// `heroCollage[i].className` is a Tailwind grid-placement string this
+// module now actually understands, not merely checks for non-blankness.
+// `resolveLayout`/`isOnGrid` are the SAME functions Hero.test.tsx's own
+// "collage placement" tests call (src/components/__tests__/Hero.test.tsx),
+// so this validator and that test can never quietly disagree about what
+// counts as a placement the live page can actually show her -- see
+// placement.ts's own header comment for why that matters (a validator that
+// disagreed with Hero.test.tsx used to be able to pass the Worker's own
+// deploy gate, publish, and have Cloudflare refuse the build).
+import { GRID_SIZE, isOnGrid, parsePlacement, resolveLayout } from './placement';
 // Whole-branch review, Important 3: validateContent had no rule for
 // `publishAt` at all, so a malformed one (the DD-MM date-format habit,
 // "01-09-2026" instead of "2026-09-01") reached POST /api/publish, sailed
@@ -351,13 +362,57 @@ function validateGalleries(data: unknown): ValidationProblem[] {
   if (!Array.isArray(galleries.heroCollage) || galleries.heroCollage.length === 0) {
     problems.push(problem('heroCollage', 'heroCollage needs at least one image'));
   } else {
-    galleries.heroCollage.forEach((entry, i) => {
+    const entries = galleries.heroCollage;
+    entries.forEach((entry, i) => {
       const image = asRecord(entry);
       if (isBlank(image.src)) problems.push(problem(`heroCollage[${i}].src`, `heroCollage[${i}] needs an image source`));
       if (isBlank(image.className)) {
         problems.push(problem(`heroCollage[${i}].className`, `heroCollage[${i}] needs a layout class`));
       }
     });
+    // Layout resolution needs one Placement (or null) per entry, in
+    // document order -- the same order Hero.tsx renders `heroCollage` in,
+    // which is what makes `resolveLayout`'s auto-placement cursor mean the
+    // same thing here as it does on the real page. A blank className
+    // already has its own "needs a layout class" problem above; skipping
+    // resolution entirely when ANY entry is blank avoids a second, more
+    // confusing "doesn't parse" message about the exact same empty string,
+    // and avoids feeding `resolveLayout` a value `parsePlacement` would
+    // reject anyway for a reason already reported.
+    if (entries.every((entry) => !isBlank(asRecord(entry).className))) {
+      const classNames = entries.map((entry) => String(asRecord(entry).className));
+      const placements = classNames.map((className) => parsePlacement(className));
+      placements.forEach((placement, i) => {
+        if (!placement) {
+          problems.push(
+            problem(`heroCollage[${i}].className`, `"${classNames[i]}" is not a layout this collage understands`),
+          );
+        }
+      });
+      // Overlap is allowed -- she is arranging a photo collage, and CSS
+      // grid already paints the later tile over the earlier one. Refused
+      // instead: a className that resolves outside the six explicit
+      // rows/columns Hero.tsx's own `grid-cols-6 grid-rows-6` declares --
+      // whether because it names an index past `GRID_SIZE`, a start plus
+      // span that runs off the edge, or (Task 2's own C1 finding) a tile
+      // whose auto-placement gets pushed into an implicit row nothing else
+      // on the page can see, since Hero.tsx's own `overflow-hidden` (line
+      // 57) clips it there. A placement that failed to parse (handled just
+      // above) is skipped here -- it already has its own problem, and
+      // `resolveLayout` already leaves it `null`/unresolved rather than
+      // guessing at a position for it.
+      const resolved = resolveLayout(placements);
+      resolved.forEach((r, i) => {
+        if (placements[i] && !isOnGrid(r)) {
+          problems.push(
+            problem(
+              `heroCollage[${i}].className`,
+              `"${classNames[i]}" does not fit on the ${GRID_SIZE}x${GRID_SIZE} collage grid`,
+            ),
+          );
+        }
+      });
+    }
   }
   return problems;
 }

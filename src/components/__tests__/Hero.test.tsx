@@ -3,6 +3,7 @@ import { render, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import Hero from '../Hero';
 import { copy, galleries, site } from '../../content';
+import { GRID_SIZE, isOnGrid, parsePlacement, resolveLayout } from '../../content/placement';
 
 describe('Hero', () => {
   it('has exactly one h1, and it is the page heading rather than the logo', () => {
@@ -46,69 +47,87 @@ describe('Hero', () => {
     });
   });
 
-  it('places every collage image in a distinct grid cell', () => {
-    // Filter to only entries with at least one explicit placement (col-start or row-start).
-    // Auto-placed entries (no explicit col or row) have no collision risk; CSS grid handles them.
-    const explicitlyPlaced = galleries.heroCollage.filter((i) => {
-      const hasCol = /col-start-\d+/.test(i.className);
-      const hasRow = /row-start-\d+/.test(i.className);
-      return hasCol || hasRow;
+  // Replaces the old "places every collage image in a distinct grid cell"
+  // test (and its two supporting fixtures below) -- review finding C3: that
+  // test built its key as `${col-start}:${row-start}` and never read spans
+  // at all, so it accepted a tile sitting entirely INSIDE another (distinct
+  // keys, real overlap, false pass) and refused two tiles that never touch
+  // but happen to auto-place into different rows with the same key (same
+  // key, no real collision, false fail). It was written to catch an
+  // authoring mistake in a hand-edited file, back when a developer was the
+  // only editor -- once she is the editor (Tasks 3/4) it would silently
+  // revert her drags. Overlap is a legitimate thing to want in a photo
+  // collage and CSS grid already handles it; what actually breaks the page
+  // is a tile resolving outside the six explicit rows/columns
+  // `grid-rows-6`/`grid-cols-6` declare, where Hero.tsx's own
+  // `overflow-hidden` (line 57) clips it. `resolveLayout` -- the same
+  // function `validateContent` (src/content/validate.ts) calls -- is what
+  // decides that here, so this test and the server-side validator cannot
+  // disagree about what "off grid" means by construction.
+  describe('collage placement', () => {
+    it('every real heroCollage className parses -- a garbled one would silently auto-place instead of failing loudly', () => {
+      galleries.heroCollage.forEach(({ className }) => {
+        expect(parsePlacement(className)).not.toBeNull();
+      });
     });
 
-    const cells = explicitlyPlaced.map((i) => {
-      const col = i.className.match(/col-start-\d+/)?.[0];
-      const row = i.className.match(/row-start-\d+/)?.[0];
-      return `${col}:${row}`;
+    // This is the live defect this plan's own Task 2 repairs, proven here
+    // rather than merely described: entry 4 (`/hero/farfalle4.webp`,
+    // `col-start-3 col-span-2 row-span-1`, no `row-start`) resolves into an
+    // implicit SEVENTH row -- outside `grid-rows-6` -- because by the time
+    // the sparse auto-placement cursor reaches it, columns 3-4 are already
+    // occupied in every one of the six explicit rows. Every other entry
+    // already resolves on-grid today; only entry 4 does not. Once Task 2
+    // gives entry 4 an explicit row start pinning it to the collage's first
+    // row, this assertion becomes false and must be updated to "every entry
+    // is on-grid" -- it is
+    // deliberately pinned to today's real, uncorrected content so it fails
+    // the moment that content and this test's own expectation drift apart
+    // in either direction, rather than silently describing a bug that was
+    // already fixed out from under it.
+    it('today, entry 4 is the one real tile that resolves into an implicit row -- every other entry is on-grid', () => {
+      const resolved = resolveLayout(galleries.heroCollage.map((tile) => parsePlacement(tile.className)));
+      resolved.forEach((placement, i) => {
+        if (i === 4) {
+          expect(isOnGrid(placement)).toBe(false);
+        } else {
+          expect(isOnGrid(placement)).toBe(true);
+        }
+      });
     });
 
-    expect(new Set(cells).size).toBe(cells.length);
-  });
-
-  it('does not false-positive when multiple entries are auto-placed', () => {
-    // Prove that auto-placed entries don't cause spurious collisions
-    const fixture = [
-      { src: '/hero/scene.png', className: 'col-start-5 col-span-2 row-span-2' },
-      { src: '/hero/auto1.png', className: 'col-span-2 row-span-2' }, // auto-placed
-      { src: '/hero/auto2.png', className: 'col-span-2 row-span-1' }, // also auto-placed, different span
-    ];
-
-    const explicitlyPlaced = fixture.filter((i) => {
-      const hasCol = /col-start-\d+/.test(i.className);
-      const hasRow = /row-start-\d+/.test(i.className);
-      return hasCol || hasRow;
+    // Closes the old test's first blind spot: a tile sitting entirely
+    // INSIDE another must be accepted, not refused -- she is arranging a
+    // photo collage, and overlapping tiles are a legitimate thing to want.
+    it('does not refuse a tile that sits entirely inside another -- overlap is allowed', () => {
+      const resolved = resolveLayout([
+        parsePlacement('col-start-3 col-span-2 row-start-2 row-span-2'),
+        parsePlacement('col-start-3 col-span-1 row-start-2 row-span-1'), // inside the first
+      ]);
+      resolved.forEach((placement) => expect(isOnGrid(placement)).toBe(true));
     });
 
-    const cells = explicitlyPlaced.map((i) => {
-      const col = i.className.match(/col-start-\d+/)?.[0];
-      const row = i.className.match(/row-start-\d+/)?.[0];
-      return `${col}:${row}`;
+    // Closes the old test's second blind spot: two tiles that auto-place
+    // into different rows and never touch must not be refused just because
+    // the OLD test's key (`${col-start}:${row-start}`) happened to collide
+    // (both entries here have no col-start/row-start at all -- the exact
+    // shape that produced a false failure before).
+    it('does not false-positive when multiple entries are auto-placed into different rows', () => {
+      const resolved = resolveLayout([
+        parsePlacement('col-start-5 col-span-2 row-span-2'),
+        parsePlacement('col-span-2 row-span-2'),
+        parsePlacement('col-span-2 row-span-1'),
+      ]);
+      resolved.forEach((placement) => expect(isOnGrid(placement)).toBe(true));
     });
 
-    // Should pass: only the explicitly-placed entry is checked; auto-placed ones are skipped
-    expect(new Set(cells).size).toBe(cells.length);
-  });
-
-  it('detects when two entries occupy the same explicit grid cell', () => {
-    // Prove that the test catches genuine collisions
-    const fixture = [
-      { src: '/hero/scene.png', className: 'col-start-3 col-span-1 row-start-2' },
-      { src: '/hero/ceiling.png', className: 'col-start-3 col-span-1 row-start-2' }, // collision
-    ];
-
-    const explicitlyPlaced = fixture.filter((i) => {
-      const hasCol = /col-start-\d+/.test(i.className);
-      const hasRow = /row-start-\d+/.test(i.className);
-      return hasCol || hasRow;
+    // Proves this test would actually catch a real, page-breaking layout --
+    // a tile whose own declared span is wider than the grid can never
+    // resolve on-grid no matter where it lands.
+    it('refuses a placement whose span alone cannot fit on the grid', () => {
+      const [resolved] = resolveLayout([parsePlacement(`col-span-${GRID_SIZE + 1} row-span-1`)]);
+      expect(isOnGrid(resolved)).toBe(false);
     });
-
-    const cells = explicitlyPlaced.map((i) => {
-      const col = i.className.match(/col-start-\d+/)?.[0];
-      const row = i.className.match(/row-start-\d+/)?.[0];
-      return `${col}:${row}`;
-    });
-
-    // Should fail: both entries map to the same cell
-    expect(new Set(cells).size).not.toBe(cells.length);
   });
 
   // The Reserve a Table button is the single action on this site that turns

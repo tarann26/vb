@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { validateContent } from '../validate';
+import { GRID_SIZE, formatPlacement } from '../placement';
 import type { Dish, Drink, Article, StoryContent, Copy, Section, SiteContent, Galleries, MenuFile } from '../types';
 
 // Every fixture in this file is hand-built against the real types, not read
@@ -501,6 +502,87 @@ describe('validateContent: Task 6 -- content-quality rules the dashboard already
 
   it('a dish name ending in .png is refused by validateContent (FoodGallery.test.tsx\'s own rule)', () => {
     expect(messages(validateContent('dishes.json', [{ ...validDish, name: 'margherita.png' }]))).toMatch(/filename/i);
+  });
+});
+
+// Plan 6, Task 1, Step 2: `heroCollage[i].className` used to be checked for
+// nothing beyond non-blankness (`"col-start-99"`, `"garbage"` and `""` were
+// all equally acceptable). This is the same `resolveLayout`/`isOnGrid` pair
+// Hero.test.tsx's own "collage placement" tests call, so a placement this
+// suite refuses and one Hero.test.tsx would flag as off-grid can never
+// silently drift apart -- the exact disagreement review finding C3 warned
+// would let her pass the Worker's own gate, publish, and have Cloudflare
+// refuse the build. Overlap is deliberately NOT one of the rejected shapes
+// below -- she is arranging a photo collage, and CSS grid already paints
+// the later tile over the earlier one.
+describe('validateContent: hero collage placement is refused by validateContent (Task 1, Step 2)', () => {
+  function withHeroClassName(className: string): Galleries {
+    return { ...validGalleries, heroCollage: [{ src: '/hero/a.webp', className }] };
+  }
+
+  // Built through `formatPlacement`, not written out as literal
+  // `col-start-N`-shaped source text -- this project's own standing WATCH
+  // (tailwind.config.js's own `blocklist` comment, this plan's own report
+  // on the two bare-word collisions Plan 5 caught mid-flight) is that
+  // Tailwind's content scanner has no JS parser and reads comments and
+  // string literals exactly like real classNames. Routing every non-trivial
+  // fixture below through the real formatter means the only place a real
+  // grid-placement-shaped substring can ever appear in this FILE's own text
+  // is inside `formatPlacement`'s own implementation, not scattered across
+  // however many literal test fixtures happen to need one -- the fixtures
+  // below hand it plain numbers instead.
+  function placement(colStart: number | null, colSpan: number | null, rowStart: number | null, rowSpan: number | null): string {
+    return formatPlacement({ colStart, colSpan, rowStart, rowSpan });
+  }
+
+  it('placement "garbage" (does not parse at all) is refused by validateContent', () => {
+    const problems = validateContent('galleries.json', withHeroClassName('garbage'));
+    expect(messages(problems)).toMatch(/does not understand|layout/i);
+  });
+
+  it('placement "col-start-99" (index outside 1-6) is refused by validateContent', () => {
+    const problems = validateContent('galleries.json', withHeroClassName(placement(99, null, null, null)));
+    expect(messages(problems)).toMatch(/does not fit/i);
+  });
+
+  it('a start plus span that runs off the grid is refused by validateContent', () => {
+    const problems = validateContent('galleries.json', withHeroClassName(placement(GRID_SIZE, 2, null, null)));
+    expect(messages(problems)).toMatch(/does not fit/i);
+  });
+
+  // The exact shape review finding C1 found: no row-start at all, and by
+  // the time the sparse cursor reaches it, every explicit row's matching
+  // columns are already taken by earlier, fully-definite tiles -- so it
+  // resolves into an implicit row nothing on the page can see.
+  it('a placement that auto-places into an implicit row (C1) is refused by validateContent', () => {
+    const bad: Galleries = {
+      ...validGalleries,
+      heroCollage: [
+        { src: '/hero/a.webp', className: placement(1, GRID_SIZE, 1, 1) },
+        { src: '/hero/b.webp', className: placement(1, GRID_SIZE, 2, 1) },
+        { src: '/hero/c.webp', className: placement(1, GRID_SIZE, 3, 1) },
+        { src: '/hero/d.webp', className: placement(1, GRID_SIZE, 4, 1) },
+        { src: '/hero/e.webp', className: placement(1, GRID_SIZE, 5, 1) },
+        { src: '/hero/f.webp', className: placement(1, GRID_SIZE, 6, 1) },
+        // Every one of the six explicit rows is now full-width occupied --
+        // this seventh, auto-placed tile has nowhere left but an implicit row.
+        { src: '/hero/g.webp', className: placement(null, 1, null, 1) },
+      ],
+    };
+    const problems = validateContent('galleries.json', bad);
+    expect(problems.some((p) => p.field === 'heroCollage[6].className')).toBe(true);
+    expect(messages(problems)).toMatch(/does not fit/i);
+  });
+
+  it('overlap is NOT refused -- she is arranging a photo collage', () => {
+    const overlapping: Galleries = {
+      ...validGalleries,
+      heroCollage: [
+        { src: '/hero/a.webp', className: placement(1, 3, 1, 3) },
+        { src: '/hero/b.webp', className: placement(2, 1, 2, 1) }, // entirely inside the first
+      ],
+    };
+    expect(validateContent('galleries.json', overlapping)).toEqual([]);
   });
 });
 
