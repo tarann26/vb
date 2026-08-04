@@ -22,7 +22,7 @@
     { "src": "/hero/farfalle1.webp", "className": "col-start-5 col-span-2 row-start-5 row-span-2" },
     { "src": "/hero/farfalle2.webp", "className": "col-span-2 row-span-2" },
     { "src": "/hero/farfalle3.webp", "className": "col-span-2 row-start-5 row-span-2" },
-    { "src": "/hero/farfalle4.webp", "className": "col-start-3 col-span-2 row-span-1" },
+    { "src": "/hero/farfalle4.webp", "className": "col-start-3 col-span-2 row-start-1 row-span-1" },
     { "src": "/atmosphere/dining.webp", "className": "col-start-3 col-span-2 row-start-6 row-span-1" },
     { "src": "/atmosphere/ambience.webp", "className": "col-span-1 row-start-3 row-span-2" },
     { "src": "/hero/bus.webp", "className": "col-start-6 col-span-1 row-start-3 row-span-2" },

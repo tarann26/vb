@@ -351,11 +351,39 @@ describe('dist/assets/ keeps admin code out of the entry chunk', () => {
 // number that every earlier ceiling in this lineage kept over ITS own real
 // number -- a real budget, not a rounded-up snapshot, so the very next
 // admin-only class landing without a matching removal still trips it.
+//
+// Plan 6, Task 2 is a DIFFERENT kind of move: not a new admin-only
+// affordance, but the fix for a live bug (tailwind.config.js's own content
+// glob never included `.json`, so the hero collage's grid placements in
+// `src/content/galleries.json` were never scanned -- see that file's own
+// header comment). Two changes, measured independently, each with a
+// rule-level diff against a worktree checkout of the parent commit (never a
+// stash):
+//   1. `!./src/**/__tests__/**` and `!./src/test/**` added to the content
+//      glob: 32084 -> 31834 (-250 bytes), removing exactly 7 selectors
+//      (`col-span-1`, `col-span-2`, `col-start-3`, `col-start-5`,
+//      `row-span-1`, `row-span-2`, `row-start-2`) that survived only
+//      because a test fixture happened to spell them out as literal
+//      strings -- dead CSS shipped to every visitor, and a stylesheet hash
+//      that churned on an unrelated test-comment edit.
+//   2. A 24-entry safelist (`col-start-1`..`6`, `col-span-1`..`6`,
+//      `row-start-1`..`6`, `row-span-1`..`6`, generated from
+//      `placement.ts`'s own `GRID_SIZE`) added on top: 31834 -> 32674
+//      (+840 bytes), adding exactly those 24 selectors -- confirmed by the
+//      identical method, and confirmed separately that adding
+//      `./src/content/*.json` to the content glob INSTEAD of the safelist
+//      produces a byte-identical stylesheet with an identical selector set
+//      once the safelist exists (this task's own decision record explains
+//      why the safelist, not the glob, is the real fix: scanning is
+//      build-time, dragging the collage is runtime).
+// New ceiling 32900 against this measured 32674 -- the same ~200-250-byte
+// real budget over the real number every earlier ceiling in this lineage
+// kept, not a rounded-up snapshot.
 describe('dist/assets/ keeps the shared stylesheet under a byte ceiling', () => {
-  it.skipIf(!REQUIRED && !existsSync(DIST_ASSETS))('the entry CSS file stays under 32300 bytes', () => {
+  it.skipIf(!REQUIRED && !existsSync(DIST_ASSETS))('the entry CSS file stays under 32900 bytes', () => {
     const cssFiles = readdirSync(DIST_ASSETS).filter((n) => /^index-.*\.css$/.test(n));
     expect(cssFiles.length).toBeGreaterThan(0);
     const size = statSync(join(DIST_ASSETS, cssFiles[0])).size;
-    expect(size).toBeLessThan(32300);
+    expect(size).toBeLessThan(32900);
   });
 });

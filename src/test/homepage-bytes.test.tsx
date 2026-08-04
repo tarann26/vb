@@ -14,6 +14,17 @@ import { AppRoutes } from '../App';
 // what accounts for the difference, in the same commit) or a regression --
 // this test cannot tell those apart, which is the point: it forces the
 // distinction to be made explicitly rather than silently.
+//
+// Plan 6, Task 2, Step 3: 53473 -> 53485 (+12 bytes). `galleries.json`'s
+// entry 4 gained an explicit `row-start-1` -- twelve ASCII characters,
+// including the leading space Hero.tsx's own template-literal join adds
+// (`` `${className} relative overflow-hidden` ``) -- so it stops
+// auto-placing into an implicit seventh row, where `Hero.tsx:57`'s
+// `overflow-hidden` hid it. This is the one task in this plan that is
+// EXPECTED to move this number: `className` is rendered into the DOM
+// verbatim regardless of whether Tailwind has a matching CSS rule for it,
+// so this invariant cannot see -- and is not the guard for -- the CSS
+// repair itself (Task 2's own rule-level stylesheet diff is).
 describe('homepage byte count', () => {
   it('the public homepage is unchanged', () => {
     const { container } = render(
@@ -21,6 +32,6 @@ describe('homepage byte count', () => {
         <AppRoutes />
       </MemoryRouter>,
     );
-    expect(new TextEncoder().encode(container.innerHTML).length).toBe(53473);
+    expect(new TextEncoder().encode(container.innerHTML).length).toBe(53485);
   });
 });

@@ -1,7 +1,8 @@
 // The hero collage's own tiny layout language: `galleries.heroCollage[i]
-// .className` is a Tailwind grid-placement string (e.g.
-// "col-start-5 col-span-2 row-span-2"), authored by hand today and edited
-// through the dashboard from this plan onward. This module is the one place
+// .className` is a Tailwind grid-placement string (a column start, a column
+// span, a row start and a row span, each optional), authored by hand today
+// and edited through the dashboard from this plan onward. This module is
+// the one place
 // that string is parsed, formatted back, and resolved into real grid cells
 // -- Hero.tsx (the public page) never imports this file and keeps rendering
 // `className` verbatim, exactly as it always has.
@@ -54,9 +55,10 @@ const KIND_TO_FIELD: Record<PlacementKind, keyof Placement> = {
 };
 
 // Parses a `className` exactly like the ones already committed in
-// `galleries.json` (e.g. "col-start-5 col-span-2 row-start-2 row-span-2",
-// or "col-span-2 row-span-2" with both starts left to auto-placement) into
-// four nullable fields. Returns `null` -- never throws -- for anything this
+// `galleries.json` (all four fields present, in order; or just a column
+// span and a row span, with both starts left to auto-placement; or any
+// other subset) into four nullable fields. Returns `null` -- never throws
+// -- for anything this
 // module cannot confidently round-trip: an empty string, a token this
 // parser doesn't recognise, a duplicate axis (two `col-start-*` tokens in
 // the same string, which Tailwind's own cascade would silently resolve one
@@ -143,25 +145,27 @@ function cellKey(row: number, col: number): string {
 //
 // This is not a guess at the algorithm -- it was checked against a real,
 // compiled Tailwind stylesheet in real Chromium (a 6x6 grid fixture, the
-// sixteen real `galleries.json` placements applied via the real
-// `col-start-*`/`col-span-*`/`row-start-*`/`row-span-*` utility classes,
+// sixteen real `galleries.json` placements applied via the real column
+// start / column span / row start / row span utility classes,
 // `getComputedStyle` and `getBoundingClientRect()` read per tile) before
 // this function was written, specifically to settle two things a purely
 // textual reading of the spec does not make obvious:
 //
 //   1. The auto-placement cursor's COLUMN component keeps advancing across
-//      an item with a DEFINITE column (e.g. `col-start-5 col-span-2` set
-//      the shared cursor to column 7, not back to column 1) -- so a later,
-//      fully auto-placed item can be pushed past columns a naive
-//      row-by-row-only model would have left it free to reuse.
+//      an item with a DEFINITE column (e.g. a column start of 5 with a
+//      column span of 2 set the shared cursor to column 7, not back to
+//      column 1) -- so a later, fully auto-placed item can be pushed past
+//      columns a naive row-by-row-only model would have left it free to
+//      reuse.
 //   2. Items with a definite row but an indefinite column (Step 2 below)
 //      resolve entirely BEFORE any item with an indefinite row is placed
 //      (Step 4), regardless of which one appears earlier in document
 //      order -- confirmed directly: entry 4 in the real, unrepaired
-//      `galleries.json` (`col-start-3 col-span-2 row-span-1`, no
-//      `row-start`) measured into row 7, an IMPLICIT row outside
-//      `grid-rows-6`, exactly as this plan's own review found, and this
-//      function reproduces that exact number for that exact input.
+//      `galleries.json` (a column start of 3, a column span of 2, a row
+//      span of 1, and no row start at all) measured into row 7, an
+//      IMPLICIT row outside the collage's own six explicit rows, exactly
+//      as this plan's own review found, and this function reproduces that
+//      exact number for that exact input.
 //
 // Returns one slot per input entry: `null` for an entry that was itself
 // `null` (the caller's own `parsePlacement` already refused it) or one this

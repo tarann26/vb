@@ -71,28 +71,21 @@ describe('Hero', () => {
       });
     });
 
-    // This is the live defect this plan's own Task 2 repairs, proven here
-    // rather than merely described: entry 4 (`/hero/farfalle4.webp`,
-    // `col-start-3 col-span-2 row-span-1`, no `row-start`) resolves into an
-    // implicit SEVENTH row -- outside `grid-rows-6` -- because by the time
-    // the sparse auto-placement cursor reaches it, columns 3-4 are already
-    // occupied in every one of the six explicit rows. Every other entry
-    // already resolves on-grid today; only entry 4 does not. Once Task 2
-    // gives entry 4 an explicit row start pinning it to the collage's first
-    // row, this assertion becomes false and must be updated to "every entry
-    // is on-grid" -- it is
-    // deliberately pinned to today's real, uncorrected content so it fails
-    // the moment that content and this test's own expectation drift apart
-    // in either direction, rather than silently describing a bug that was
-    // already fixed out from under it.
-    it('today, entry 4 is the one real tile that resolves into an implicit row -- every other entry is on-grid', () => {
+    // This is the live defect this plan's own Task 2 repaired, proven here
+    // rather than merely described. Before Task 2 Step 3, entry 4
+    // (`/hero/farfalle4.webp`, `col-start-3 col-span-2 row-span-1`, no
+    // `row-start`) resolved into an implicit SEVENTH row -- outside
+    // `grid-rows-6` -- because by the time the sparse auto-placement cursor
+    // reached it, columns 3-4 were already occupied in every one of the six
+    // explicit rows. Task 2 gave entry 4 an explicit row start pinning it
+    // to the collage's first row; this assertion is pinned to the REAL,
+    // now-repaired content, so it fails the moment that content and this
+    // test's own expectation drift apart in either direction.
+    it('all sixteen real entries resolve on-grid -- entry 4 no longer lands in an implicit row', () => {
       const resolved = resolveLayout(galleries.heroCollage.map((tile) => parsePlacement(tile.className)));
-      resolved.forEach((placement, i) => {
-        if (i === 4) {
-          expect(isOnGrid(placement)).toBe(false);
-        } else {
-          expect(isOnGrid(placement)).toBe(true);
-        }
+      expect(resolved.length).toBe(16);
+      resolved.forEach((placement) => {
+        expect(isOnGrid(placement)).toBe(true);
       });
     });
 

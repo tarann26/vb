@@ -178,14 +178,17 @@ describe('resolveLayout', () => {
 
   // The real, sixteen-entry hero collage -- golden values measured directly
   // from a real, compiled Tailwind stylesheet in real Chromium (this
-  // module's own header comment explains the method). This is the exact
-  // input `galleries.json` has TODAY, before this plan's own Task 2 gives
-  // entry 4 an explicit row start pinning it to the collage's first row --
-  // so entry 4 resolving into an IMPLICIT seventh row, outside the six
-  // explicit rows `grid-rows-6` declares,
-  // is not a bug in this test: it is the live defect this whole plan exists
-  // to repair, proven here the same way the plan's own review proved it.
-  describe('the real, unrepaired galleries.json', () => {
+  // module's own header comment explains the method), against the REPAIRED
+  // content Task 2 Step 3 committed: entry 4 (`/hero/farfalle4.webp`) now
+  // carries an explicit row start pinning it to the collage's first row.
+  // Before that fix, entry 4 resolved into an IMPLICIT seventh row, outside
+  // the six explicit rows `grid-rows-6` declares -- proven directly, not
+  // just described, by this same describe block before Task 2 landed (see
+  // that commit's own diff): fifteen of these sixteen assertions were
+  // already true then; only entry 4's own expected value changed, from
+  // `{ colStart: 3, colSpan: 2, rowStart: 7, rowSpan: 1 }` (implicit, off
+  // grid) to the on-grid value below.
+  describe('the real, repaired galleries.json', () => {
     const placements = galleries.heroCollage.map((t) => parsePlacement(t.className));
     const resolved = resolveLayout(placements);
 
@@ -194,7 +197,7 @@ describe('resolveLayout', () => {
       1: { colStart: 5, colSpan: 2, rowStart: 5, rowSpan: 2 },
       2: { colStart: 3, colSpan: 2, rowStart: 3, rowSpan: 2 },
       3: { colStart: 1, colSpan: 2, rowStart: 5, rowSpan: 2 },
-      4: { colStart: 3, colSpan: 2, rowStart: 7, rowSpan: 1 },
+      4: { colStart: 3, colSpan: 2, rowStart: 1, rowSpan: 1 },
       5: { colStart: 3, colSpan: 2, rowStart: 6, rowSpan: 1 },
       6: { colStart: 1, colSpan: 1, rowStart: 3, rowSpan: 2 },
       7: { colStart: 6, colSpan: 1, rowStart: 3, rowSpan: 2 },
@@ -214,16 +217,11 @@ describe('resolveLayout', () => {
       });
     });
 
-    it('entry 4 lands in an implicit row today -- the nine-tile clip this plan repairs', () => {
-      expect(isOnGrid(resolved[4])).toBe(false);
-      expect((resolved[4] as { rowStart: number }).rowStart).toBeGreaterThan(GRID_SIZE);
-    });
-
-    it('every OTHER entry is on-grid today -- entry 4 is the one tile the safelist alone does not fix', () => {
-      resolved.forEach((r, i) => {
-        if (i === 4) return;
+    it('all sixteen tiles resolve inside rows and columns 1..GRID_SIZE -- none lands in an implicit row', () => {
+      resolved.forEach((r) => {
         expect(isOnGrid(r)).toBe(true);
       });
+      expect(resolved.length).toBe(16);
     });
   });
 });
