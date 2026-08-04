@@ -452,6 +452,85 @@ describe('validateContent: structural rules on the remaining files', () => {
   });
 });
 
+// Plan 7: validateContent('pages.json', ...) and validateContent's own
+// section-entry rule (shared by sections.json and pages.json) -- exercised
+// here through the DASHBOARD-FACING function itself (validate.ts), not
+// guards.test.ts's own coverage of assertSections/assertPages (guards.ts,
+// the throwing, build-time twin). Both matter: the Worker's own
+// POST /api/publish gate, and the dashboard's live, debounced validation
+// (useValidation), call THIS function, not the guard directly.
+describe('validateContent: pages.json (Plan 7)', () => {
+  const validPage = {
+    slug: 'our-menu',
+    name: 'Our Menu',
+    inNav: true,
+    enabled: true,
+    seo: { title: 'Our Menu | Via Bianca', description: 'A short description.' },
+    sections: [],
+  };
+
+  it('accepts a well-formed page', () => {
+    expect(validateContent('pages.json', [validPage])).toEqual([]);
+  });
+
+  it('rejects a non-URL-safe slug, naming the field', () => {
+    const problems = validateContent('pages.json', [{ ...validPage, slug: 'Our Menu' }]);
+    expect(messages(problems)).toMatch(/web-safe address/i);
+    expect(problems.some((p) => p.field === '[0].slug')).toBe(true);
+  });
+
+  it('rejects a slug colliding with a live route', () => {
+    const problems = validateContent('pages.json', [{ ...validPage, slug: 'blogs' }]);
+    expect(messages(problems)).toMatch(/already used by the site itself/i);
+  });
+
+  it('rejects two pages sharing a slug', () => {
+    const problems = validateContent('pages.json', [validPage, { ...validPage, name: 'Duplicate' }]);
+    expect(problems.some((p) => p.field === '[1].slug' && /already used by another page/.test(p.message))).toBe(true);
+  });
+
+  it('rejects a page missing an SEO title or description', () => {
+    const noTitle = validateContent('pages.json', [{ ...validPage, seo: { title: '', description: 'd' } }]);
+    expect(messages(noTitle)).toMatch(/needs an SEO title/i);
+    const noDescription = validateContent('pages.json', [{ ...validPage, seo: { title: 't', description: '' } }]);
+    expect(messages(noDescription)).toMatch(/needs an SEO description/i);
+  });
+
+  it('rejects an unknown template type inside a page\'s own sections', () => {
+    const problems = validateContent('pages.json', [
+      {
+        ...validPage,
+        sections: [{ kind: 'template', id: 'x', enabled: true, template: 'carousel', content: {} }],
+      },
+    ]);
+    expect(messages(problems)).toMatch(/is not a template this site knows/i);
+  });
+
+  it('rejects mismatched content -- a text section missing its own heading', () => {
+    const problems = validateContent('pages.json', [
+      {
+        ...validPage,
+        sections: [{ kind: 'template', id: 'x', enabled: true, template: 'text', content: { paragraphs: ['p'] } }],
+      },
+    ]);
+    expect(messages(problems)).toMatch(/needs a heading/i);
+  });
+
+  it('rejects a page\'s own template section id colliding with a built-in SectionId', () => {
+    const problems = validateContent('pages.json', [
+      {
+        ...validPage,
+        sections: [{ kind: 'template', id: 'visit', enabled: true, template: 'text', content: { heading: 'H', paragraphs: ['p'] } }],
+      },
+    ]);
+    expect(messages(problems)).toMatch(/collides with a built-in section/i);
+  });
+
+  it('rejects pages.json that is not an array', () => {
+    expect(messages(validateContent('pages.json', {}))).toMatch(/expected a list of pages/i);
+  });
+});
+
 // Plan 5 Task 6: "anything the tools can produce must pass the deploy gate."
 // Three content-quality rules already lived ONLY in a test against the
 // PUBLIC page (PlaceGallery.test.tsx, OurStory.test.tsx, FoodGallery.test.tsx)
