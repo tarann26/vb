@@ -380,25 +380,43 @@ describe('dist/assets/ keeps admin code out of the entry chunk', () => {
 // ~200-250-byte real budget over the real number every earlier ceiling in
 // this lineage kept, not a rounded-up snapshot.
 //
-// Plan 6, Task 3 (buttons) moves it again: 32674 -> 33561 (+887), a
-// rule-level diff against a worktree checkout of the parent commit tracing
-// all sixteen added rules to CollageTile.tsx's own select toggle and its
+// Plan 6, Task 3 (buttons) moves it again: 32674 -> 33578 (+904 -- corrected
+// below, not the +887/33561 this comment used to claim), a rule-level diff
+// against a worktree checkout of the parent commit tracing SEVENTEEN added
+// rules, not sixteen, to CollageTile.tsx's own select toggle and its
 // portal-rendered move/size-change panel (`border-white`, `bottom-0`,
-// `focus-visible:outline` and its three colour/width variants,
-// `grid-cols-3`, `grid-rows-3`, `h-9`, `inset-x-0`, `left-1`, `max-w-md`,
-// the panel's own arbitrary-value shadow, `text-[11px]`, `top-1`, `w-9`) --
-// nothing removed, nothing from any other file. Confirmed the hard way,
-// again: an early draft of this component's own source used the bare words
-// "resize", "grow" and "shrink" in prose comments and a real, user-facing
-// aria-label -- all three real Tailwind utility names (`resize`, `grow`,
-// `shrink` are single-word core-plugin utilities with no numeric suffix to
-// distinguish them from ordinary English) -- and each emitted an unused
-// rule. Rewording the offending text (a TypeScript discriminant renamed
-// from `'resize'` to `'span'`, "resize"/"grow"/"shrink" replaced with
-// "size change"/"larger"/"smaller" everywhere they were prose rather than
-// an identifier) is what took the added-rule count from nineteen back down
-// to the sixteen actually used above. New ceiling 33800 against this
-// measured 33561.
+// `focus-visible:outline` and its three colour/width variants, `grid-cols-3`,
+// `grid-rows-3`, `h-9`, `inset-x-0`, `left-1`, `max-w-md`, the panel's own
+// arbitrary-value shadow, `text-[11px]`, `top-1`, `w-9`, and `z-20`) --
+// nothing removed. Confirmed the hard way, again: an early draft of this
+// component's own source used the bare words "resize", "grow" and "shrink"
+// in prose comments and a real, user-facing aria-label -- all three real
+// Tailwind utility names (`resize`, `grow`, `shrink` are single-word
+// core-plugin utilities with no numeric suffix to distinguish them from
+// ordinary English) -- and each emitted an unused rule. Rewording the
+// offending text (a TypeScript discriminant renamed from `'resize'` to
+// `'span'`, "resize"/"grow"/"shrink" replaced with "size
+// change"/"larger"/"smaller" everywhere they were prose rather than an
+// identifier) is what took the added-rule count from nineteen back down to
+// the seventeen actually used above.
+//
+// Repair-review correction (this list's own earlier version undercounted by
+// one, and its "nothing from any other file" claim was wrong for the same
+// rule): `z-20` is co-sourced -- EditableImage.tsx's own two control-label
+// classNames (`CONTROL_LABEL_CLASSNAME`/`ERROR_CONTROL_LABEL_CLASSNAME`,
+// :81/:84) already carry `z-20` too, for the identical camera-badge
+// hit-testing fix landed in the same task, so this ONE rule has two real
+// sources, not one. A FOURTH step (Task 4, drag) added `.cursor-nwse-resize`
+// (+39 bytes) on top, also previously unmentioned here. Measured, corrected:
+// 33578 (Task 3) -> 33617 (current HEAD, Task 4's own drag/resize work,
+// including the .cursor-nwse-resize rule just named). New ceiling 33800
+// against that 33617 -- a 183-byte margin, tighter than the ~200-250 this
+// lineage's earlier ceilings kept, but still real: the very next
+// admin-only class landing without a matching removal still trips it. No
+// NEW comment-scan leak in either step; two pre-existing ones remain
+// (`.collapse`, `.invisible`, both dead weight from earlier tasks'
+// comments) and CollageTile.tsx (Task 3) re-sources `.invisible` from its
+// own prose independently of those.
 describe('dist/assets/ keeps the shared stylesheet under a byte ceiling', () => {
   it.skipIf(!REQUIRED && !existsSync(DIST_ASSETS))('the entry CSS file stays under 33800 bytes', () => {
     const cssFiles = readdirSync(DIST_ASSETS).filter((n) => /^index-.*\.css$/.test(n));
