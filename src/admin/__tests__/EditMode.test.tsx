@@ -1226,6 +1226,83 @@ describe('Task 3 review Finding C4: committing a text edit calls registry.update
   });
 });
 
+// Plan 7, Task 5, Step 1: the bug this exact double-registry technique
+// caught -- confirmed directly, before this fix existed: editing a
+// template section's own heading at /edit called `registry.updateData`
+// with `'copy.json'`, UNCHANGED (setCopyText's own malformed-namespace
+// guard silently no-ops on a path like `sections.promo.content.heading`,
+// since `Copy` has no `sections` key at all) -- a template section's own
+// text edit was being silently discarded, with no error and nothing on
+// screen telling her it never happened. This test proves the fix: the
+// SAME edit now calls updateData with `'sections.json'`, carrying the
+// real updated section, and never touches copy.json at all.
+describe('Plan 7, Task 5: a template section\'s own text edit commits to sections.json, not copy.json', () => {
+  it('editing and blurring a template section\'s heading updates sections.json, leaving the bespoke sections and copy.json untouched', () => {
+    const bespokeHero: Section = { kind: 'bespoke', id: 'hero', enabled: true };
+    const templateSection: Section = {
+      kind: 'template',
+      id: 'promo',
+      enabled: true,
+      template: 'text',
+      content: { heading: 'Old Heading', paragraphs: ['A paragraph.'] },
+    };
+    const sectionsData: Section[] = [bespokeHero, templateSection];
+    const entries: ContentEntries = {
+      'copy.json': { data: COPY, initial: COPY, sha: 'sha-copy' },
+      'sections.json': { data: sectionsData, initial: sectionsData, sha: 'sha-sections' },
+    };
+    const register = vi.fn();
+    const updateData = vi.fn();
+    const registry: ContentRegistry = {
+      register,
+      updateData,
+      getEntries: () => entries,
+      version: 0,
+      markPublished: vi.fn(),
+    };
+
+    const bundle = buildBundle(entries, registry, vi.fn(), null, vi.fn());
+    render(<>{bundle.renderText('sections.promo.content.heading', 'Old Heading')}</>);
+
+    const field = screen.getByRole('textbox');
+    fireEvent.focus(field);
+    field.textContent = 'New Heading';
+    fireEvent.blur(field);
+
+    expect(updateData).toHaveBeenCalledTimes(1);
+    const [file, nextSections] = updateData.mock.calls[0] as [string, Section[]];
+    expect(file).toBe('sections.json');
+    expect(nextSections).toHaveLength(2);
+    expect(nextSections[0]).toEqual(bespokeHero); // the bespoke sibling is untouched
+    expect(nextSections[1]).toMatchObject({ id: 'promo', content: { heading: 'New Heading', paragraphs: ['A paragraph.'] } });
+    // The mutation this specifically guards against: copy.json must never
+    // be the file this edit lands in.
+    expect(updateData).not.toHaveBeenCalledWith('copy.json', expect.anything());
+    expect(register).not.toHaveBeenCalled();
+  });
+
+  it('a section path renders NON-editable text until sections.json has actually loaded, the same gate copy.json leaves already have', () => {
+    const entries: ContentEntries = {
+      'copy.json': { data: COPY, initial: COPY, sha: 'sha-copy' },
+      // sections.json deliberately absent -- not yet loaded.
+    };
+    const registry: ContentRegistry = {
+      register: vi.fn(),
+      updateData: vi.fn(),
+      getEntries: () => entries,
+      version: 0,
+      markPublished: vi.fn(),
+    };
+    const bundle = buildBundle(entries, registry, vi.fn(), null, vi.fn());
+    render(<>{bundle.renderText('sections.promo.content.heading', 'Old Heading')}</>);
+    // No contentEditable textbox -- the plain value passed straight through,
+    // the identical "no affordance before there's somewhere real to write
+    // it" behaviour copyLoaded already gives copy.json leaves.
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+    expect(screen.getByText('Old Heading')).toBeInTheDocument();
+  });
+});
+
 // Plan 5 Task 4, Step 2: the staged-file key must be an identity the stage
 // does not mutate. Tested directly against `buildBundle`'s own `renderImage`
 // (the same white-box seam Finding C4's own describe block above uses),
@@ -1489,6 +1566,85 @@ describe('Plan 5 Task 4: committing a replacement writes back into the right con
     const { container } = render(<>{bundle.renderImage('dishes.margherita.image', { src: '/food/margherita.webp', alt: 'Margherita' })}</>);
     expect(container.querySelector('[data-editable-image-path]')).toBeNull();
     expect(container.querySelector('img')).toHaveAttribute('src', '/food/margherita.webp');
+  });
+});
+
+// Plan 7, Task 5, Step 1: a template section's own photo -- both shapes
+// (an item list's `items.<i>.image`, a gallery's `images.<i>`) -- writes
+// back into sections.json, mirroring the dishes.json test above exactly.
+describe('Plan 7, Task 5: a template section\'s own photo replacement writes back into sections.json', () => {
+  function makeRegistryWithSections(section: Section): { registry: ContentRegistry; entries: ContentEntries } {
+    const data: Section[] = [{ kind: 'bespoke', id: 'hero', enabled: true }, section];
+    const entries: ContentEntries = { 'sections.json': { data, initial: data, sha: 'sha-sections' } };
+    const registry: ContentRegistry = {
+      register: vi.fn(),
+      updateData: vi.fn((file, next) => {
+        entries[file as 'sections.json'] = { data: next, initial: entries[file as 'sections.json']!.initial, sha: 'sha-sections' };
+      }),
+      getEntries: () => entries,
+      version: 0,
+      markPublished: vi.fn(),
+    };
+    return { registry, entries };
+  }
+
+  it('an item list section\'s items.<i>.image writes into exactly that item, siblings and the bespoke section untouched', () => {
+    const section: Section = {
+      kind: 'template',
+      id: 'breads',
+      enabled: true,
+      template: 'itemList',
+      content: {
+        heading: 'Breads',
+        items: [
+          { image: '/food/old-focaccia.webp', name: 'Focaccia', description: 'd1' },
+          { image: '/food/old-hummus.webp', name: 'Hummus', description: 'd2' },
+        ],
+      },
+    };
+    const { registry, entries } = makeRegistryWithSections(section);
+    const bundle = buildBundle(entries, registry, vi.fn(), null, vi.fn());
+    const element = bundle.renderImage('sections.breads.content.items.1.image', {
+      src: '/food/old-hummus.webp',
+      alt: 'Hummus',
+    }) as React.ReactElement<{ onReplace: (contentPath: string) => void }>;
+    element.props.onReplace('/food/new-hummus.webp');
+
+    expect(registry.updateData).toHaveBeenCalledWith('sections.json', [
+      { kind: 'bespoke', id: 'hero', enabled: true },
+      {
+        ...section,
+        content: {
+          heading: 'Breads',
+          items: [
+            { image: '/food/old-focaccia.webp', name: 'Focaccia', description: 'd1' },
+            { image: '/food/new-hummus.webp', name: 'Hummus', description: 'd2' },
+          ],
+        },
+      },
+    ]);
+  });
+
+  it('a gallery section\'s images.<i> writes into exactly that image\'s src, alt untouched', () => {
+    const section: Section = {
+      kind: 'template',
+      id: 'partners',
+      enabled: true,
+      template: 'gallery',
+      content: { heading: 'Partners', layout: 'grid', images: [{ src: '/press/old-logo.webp', alt: 'Partner logo' }] },
+    };
+    const { registry, entries } = makeRegistryWithSections(section);
+    const bundle = buildBundle(entries, registry, vi.fn(), null, vi.fn());
+    const element = bundle.renderImage('sections.partners.content.images.0', {
+      src: '/press/old-logo.webp',
+      alt: 'Partner logo',
+    }) as React.ReactElement<{ onReplace: (contentPath: string) => void }>;
+    element.props.onReplace('/press/new-logo.webp');
+
+    expect(registry.updateData).toHaveBeenCalledWith('sections.json', [
+      { kind: 'bespoke', id: 'hero', enabled: true },
+      { ...section, content: { heading: 'Partners', layout: 'grid', images: [{ src: '/press/new-logo.webp', alt: 'Partner logo' }] } },
+    ]);
   });
 });
 

@@ -42,6 +42,7 @@ import EditableText from './EditableText';
 import EditableImage from './EditableImage';
 import CollageTile from './CollageTile';
 import { setCopyText } from './editable-paths';
+import { parseSectionContentPath, findTemplateSection, setTemplateSectionText, setTemplateSectionImage } from './template-section-paths';
 import { useStagedFiles, fromStagedPhoto } from './staged';
 import type { StagedFile } from './staged';
 import type { UploadCategory } from '../shared/upload-categories';
@@ -74,6 +75,7 @@ import type {
   StoryContent,
   Copy,
   Page,
+  TemplateContent,
 } from '../content/types';
 
 const SECTION_COMPONENTS: Record<SectionId, () => React.ReactNode> = {
@@ -291,7 +293,25 @@ const ITEM_CATEGORY: Record<'dishes' | 'drinks' | 'press', UploadCategory> = {
 
 type ImageTarget =
   | { kind: 'gallery'; list: 'atmosphere' | 'ourStory' | 'heroCollage'; index: number; category: UploadCategory }
-  | { kind: 'item'; collection: 'dishes' | 'drinks' | 'press'; id: string; category: UploadCategory };
+  | { kind: 'item'; collection: 'dishes' | 'drinks' | 'press'; id: string; category: UploadCategory }
+  // Plan 7, Task 5, Step 1: a template section's own item-list photo
+  // (`sections.<id>.content.items.<i>.image`) or gallery photo
+  // (`sections.<id>.content.images.<i>`) -- `rest` is kept whole (not
+  // pre-parsed into index/field here) so `setTemplateSectionImage`
+  // (template-section-paths.ts) -- the SAME function this module's own
+  // commit path calls -- is the one and only place that shape is
+  // interpreted, matching the "one place a path shape is parsed" posture
+  // every other ImageTarget variant already has.
+  | { kind: 'section'; sectionId: string; rest: string; category: UploadCategory };
+
+// One upload category for every template-section photo, regardless of
+// which template or which field -- the same category
+// TemplateContentForm.tsx's own PhotoField calls already use (see that
+// file's own comment on the decision: UPLOAD_CATEGORIES has no
+// finer-grained "template" bucket, and 'atmosphere' -- venue/product
+// photos -- is the closest existing match for what a template section
+// actually shows).
+const TEMPLATE_SECTION_CATEGORY: UploadCategory = 'atmosphere';
 
 function resolveImageTarget(path: string): ImageTarget | null {
   const gallery = path.match(/^galleries\.(atmosphere|ourStory|heroCollage)\.(\d+)$/);
@@ -303,6 +323,10 @@ function resolveImageTarget(path: string): ImageTarget | null {
   if (item) {
     const collection = item[1] as 'dishes' | 'drinks' | 'press';
     return { kind: 'item', collection, id: item[2], category: ITEM_CATEGORY[collection] };
+  }
+  const section = parseSectionContentPath(path);
+  if (section && (/^items\.\d+\.image$/.test(section.rest) || /^images\.\d+$/.test(section.rest))) {
+    return { kind: 'section', sectionId: section.sectionId, rest: section.rest, category: TEMPLATE_SECTION_CATEGORY };
   }
   return null;
 }
@@ -400,6 +424,7 @@ export function buildBundle(
   const dishes = pick(entries, 'dishes.json', []);
   const drinks = pick(entries, 'drinks.json', []);
   const press = pick(entries, 'press.json', []);
+  const sections = pick(entries, 'sections.json', []);
 
   // Undefined until copy.json has actually loaded (registered at least
   // once) -- committing an edit before then would call registry.updateData
@@ -420,8 +445,42 @@ export function buildBundle(
   const dishesLoaded = entries['dishes.json'] !== undefined;
   const drinksLoaded = entries['drinks.json'] !== undefined;
   const pressLoaded = entries['press.json'] !== undefined;
+  // Plan 7, Task 5, Step 1: the identical gate, for sections.json -- what
+  // makes a template section's own heading/paragraph/item/fact text (and,
+  // via `targetLoaded` below, its photos) editable only once there is
+  // somewhere real to write the commit back into.
+  const sectionsLoaded = entries['sections.json'] !== undefined;
 
+  // Rewrites exactly the one TemplateSection `sectionId` names inside
+  // `sections`, leaving every sibling section -- bespoke or template --
+  // untouched. `updater` is `setTemplateSectionText` or
+  // `setTemplateSectionImage` (template-section-paths.ts), applied to that
+  // one section's own `content`; a `sectionId` naming no template section
+  // (deleted from another tab, or simply not found) is a safe no-op, the
+  // same "unreachable state, not a reason to invent one" posture
+  // ContentRegistry's own `updateData` already takes.
+  function commitSectionField(sectionId: string, updater: (content: TemplateContent) => TemplateContent): void {
+    const target = findTemplateSection(sections, sectionId);
+    if (!target) return;
+    registry.updateData(
+      'sections.json',
+      sections.map((section) => (section === target ? { ...target, content: updater(target.content) } : section)),
+    );
+  }
+
+  // Plan 7, Task 5, Step 1: checked FIRST, before ever falling through to
+  // the copy.json path below -- see template-section-paths.ts's own header
+  // comment for the exact silent-no-op bug this closes (setCopyText's own
+  // `path.split('.')` only reads the first two segments of a path like
+  // `sections.<id>.content.heading`, resolves `copy['sections']`, which
+  // does not exist, and returns `copy` UNCHANGED -- a template section's
+  // own text edit was being silently discarded before this existed).
   function commitText(path: string, next: string) {
+    const section = parseSectionContentPath(path);
+    if (section) {
+      commitSectionField(section.sectionId, (content) => setTemplateSectionText(content, section.rest, next));
+      return;
+    }
     registry.updateData('copy.json', setCopyText(copy, path, next));
   }
 
@@ -437,6 +496,10 @@ export function buildBundle(
       registry.updateData('galleries.json', setGallerySrc(galleries, target.list, target.index, contentPath));
       return;
     }
+    if (target.kind === 'section') {
+      commitSectionField(target.sectionId, (content) => setTemplateSectionImage(content, target.rest, contentPath));
+      return;
+    }
     if (target.collection === 'dishes') registry.updateData('dishes.json', setItemImage(dishes, target.id, contentPath));
     else if (target.collection === 'drinks') registry.updateData('drinks.json', setItemImage(drinks, target.id, contentPath));
     else registry.updateData('press.json', setItemImage(press, target.id, contentPath));
@@ -447,6 +510,7 @@ export function buildBundle(
   // it" gate `copyLoaded` applies to text.
   function targetLoaded(target: ImageTarget): boolean {
     if (target.kind === 'gallery') return galleriesLoaded;
+    if (target.kind === 'section') return sectionsLoaded;
     if (target.collection === 'dishes') return dishesLoaded;
     if (target.collection === 'drinks') return drinksLoaded;
     return pressLoaded;
@@ -481,10 +545,38 @@ export function buildBundle(
     story: pick(entries, 'story.json', EMPTY_STORY),
     menus: pick(entries, 'menus.json', []),
     copy,
-    sections: pick(entries, 'sections.json', []),
+    sections,
+    // Plan 7, Task 5, Step 3, decided: /edit renders ONLY the homepage in
+    // this plan -- `pages` is present on the bundle (every template
+    // component that happens to read it, none do today) but this file adds
+    // NO route for `/edit/<slug>`. A page she creates is therefore
+    // dashboard-only: fully editable from PageList.tsx (Task 4 -- add,
+    // reorder, edit every field including nested sections), just not with
+    // the in-place "click and type" experience the homepage's own sections
+    // get here. Why not now: the SAME template id may legitimately appear
+    // on the homepage AND on a page (Task 1's own scoping decision --
+    // guards.test.ts's "allows the SAME template section id to be reused
+    // across two different pages"), which makes the `sections.<id>.content.*`
+    // path scheme template-section-paths.ts uses genuinely ambiguous the
+    // moment /edit could render more than one section list at once; today
+    // it renders exactly one (the homepage's), so there is nothing to
+    // disambiguate. Extending this to pages would need a page-qualified
+    // path (`pages.<slug>.sections.<id>.content.*`) and a second
+    // commitSectionField target -- real, scoped work for a later plan, not
+    // silently declined: real content has zero pages today (Plan 8, which
+    // would author the first ones, is blocked on the founder), so nothing
+    // is lost by deferring the in-place editor for them specifically.
     pages: pick(entries, 'pages.json', EMPTY_PAGES),
-    renderText: (path, value) =>
-      copyLoaded ? <EditableText path={path} value={value} onCommit={commitText} /> : value,
+    // Plan 7, Task 5, Step 1: a section-content path needs sections.json
+    // loaded, never copy.json -- gating both kinds on `copyLoaded` alone
+    // (the pre-Task-5 shape) would have shown a contentEditable affordance
+    // for a template heading before there was anywhere real to commit it,
+    // the exact "no affordance before there's somewhere real to write it"
+    // failure `copyLoaded`'s own comment already guards against elsewhere.
+    renderText: (path, value) => {
+      const loaded = parseSectionContentPath(path) ? sectionsLoaded : copyLoaded;
+      return loaded ? <EditableText path={path} value={value} onCommit={commitText} /> : value;
+    },
     // Task 4: images become editable in place, exactly like renderText
     // above -- a path this file knows how to resolve, whose own content
     // file has already loaded, gets the real editing affordance; anything
@@ -496,12 +588,14 @@ export function buildBundle(
       if (!target || !targetLoaded(target)) return <img {...props} />;
       // The stage key's own file prefix names WHICH content file this
       // upload's `contentPath` will be written into (galleries.json for a
-      // gallery target, dishes/drinks/press.json for an item one) -- purely
-      // documentary (the PATH suffix alone is already globally unique
-      // across all seven renderImage call sites), matching the shape
+      // gallery target, dishes/drinks/press.json for an item one,
+      // sections.json for a template section's own photo -- Plan 7, Task 5)
+      // -- purely documentary (the PATH suffix alone is already globally
+      // unique across every renderImage call site), matching the shape
       // GalleryList.tsx's own stage keys already use
       // (`${file}:${listName}:${index}:src`).
-      const stageFile = target.kind === 'gallery' ? 'galleries.json' : `${target.collection}.json`;
+      const stageFile =
+        target.kind === 'gallery' ? 'galleries.json' : target.kind === 'section' ? 'sections.json' : `${target.collection}.json`;
       return (
         <EditableImage
           path={path}

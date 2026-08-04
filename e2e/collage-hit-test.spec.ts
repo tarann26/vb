@@ -35,6 +35,11 @@ const CONTENT_FILES = [
   'menus.json',
   'copy.json',
   'sections.json',
+  // Plan 7, Task 1: the tenth real content file -- EditMode.tsx's own
+  // CONTENT_FILES (src/admin/content.ts) now fetches it too, and without a
+  // mocked route for it here, the mock below answers 404, which surfaces
+  // as a "Could not load pages.json" banner above the real page content.
+  'pages.json',
 ];
 
 // The real, committed content -- not a hand-built fixture. `galleries.json`
