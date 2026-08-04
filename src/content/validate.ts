@@ -625,7 +625,18 @@ function validatePage(raw: unknown, index: number, seenSlugs: Set<string>): Vali
     const slug = (page.slug as string).trim();
     if (!SLUG_PATTERN.test(slug)) {
       problems.push(
-        problem(`[${index}].slug`, `"${page.slug}" is not a web-safe address -- use lowercase letters, numbers and hyphens only, e.g. "our-menu"`),
+        // The plain-English word for "a-z, no capitals" is deliberately
+        // avoided in this message (and in this very comment) -- it is also
+        // a real, bare, no-argument Tailwind utility with no numeric suffix
+        // to distinguish it from ordinary prose, and this repo's content
+        // scanner has no JS parser to tell a class name from a string
+        // literal (see tailwind.config.js's own blocklist comment for the
+        // general pattern). Confirmed directly, the hard way, twice over:
+        // an earlier draft of the OWNER-FACING message below used that
+        // word and shipped one unused rule; the FIRST draft of this very
+        // explanatory comment then used the word again, in prose, and
+        // shipped the identical rule a second time.
+        problem(`[${index}].slug`, `"${page.slug}" is not a web-safe address -- use letters a-z, numbers and hyphens only, e.g. "our-menu"`),
       );
     } else if (RESERVED_PAGE_SLUGS.has(slug)) {
       problems.push(problem(`[${index}].slug`, `"${slug}" is already used by the site itself -- choose a different address`));

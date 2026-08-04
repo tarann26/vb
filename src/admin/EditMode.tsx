@@ -34,6 +34,10 @@ import type { ContentFileName, ContentTypeMap } from './content';
 import { useContentRegistry } from './publish';
 import type { ContentEntries, ContentRegistry } from './publish';
 import SectionErrorBoundary from './SectionErrorBoundary';
+import TextSection from '../components/templates/TextSection';
+import ItemListSection from '../components/templates/ItemListSection';
+import GallerySection from '../components/templates/GallerySection';
+import DetailBlockSection from '../components/templates/DetailBlockSection';
 import EditableText from './EditableText';
 import EditableImage from './EditableImage';
 import CollageTile from './CollageTile';
@@ -110,12 +114,19 @@ const SECTION_LABELS: Record<SectionId, string> = {
 // catch it. Confirmed directly: reverting this to an inline expression
 // reproduces `document.body.textContent === ''` against a real malformed
 // sections.json (src/admin/__tests__/EditMode.test.tsx's own test for it).
-// Plan 7, Task 1: mirrors src/App.tsx's own `renderSection` -- same
-// exhaustive-over-TemplateType switch, every case still `null` until Task 2
-// creates the real template components and Task 5 wires them in here too
-// (Task 5, Step 1's own scope: "template sections are editable in place").
-// Kept as its own duplicate function, not imported from App.tsx -- see this
-// file's own header comment on why EditMode.tsx never imports App.tsx.
+// Plan 7, Task 1/2: mirrors src/App.tsx's own `renderSection` -- same
+// exhaustive-over-TemplateType switch, now rendering the same four real
+// template components the public page does (Task 2), each still wrapped in
+// its own SectionErrorBoundary the way every bespoke section already is
+// here. Task 5, Step 1's own scope ("template sections are editable in
+// place") is what makes this "wiring, not new machinery": every template
+// component already reads exclusively through
+// `content.renderText`/`content.renderImage` (Task 2, Step 3), so once
+// `buildBundle`'s own `renderText`/`renderImage` return real
+// `EditableText`/`EditableImage` elements instead of the identity default,
+// these components become editable with no changes here at all. Kept as
+// its own duplicate function, not imported from App.tsx -- see this file's
+// own header comment on why EditMode.tsx never imports App.tsx.
 function renderDynamicSection(section: Section): React.ReactNode {
   if (section.kind === 'bespoke') {
     return (
@@ -126,10 +137,29 @@ function renderDynamicSection(section: Section): React.ReactNode {
   }
   switch (section.template) {
     case 'text':
+      return (
+        <SectionErrorBoundary key={section.id} name={section.id}>
+          <TextSection id={section.id} content={section.content} />
+        </SectionErrorBoundary>
+      );
     case 'itemList':
+      return (
+        <SectionErrorBoundary key={section.id} name={section.id}>
+          <ItemListSection id={section.id} content={section.content} />
+        </SectionErrorBoundary>
+      );
     case 'gallery':
+      return (
+        <SectionErrorBoundary key={section.id} name={section.id}>
+          <GallerySection id={section.id} content={section.content} />
+        </SectionErrorBoundary>
+      );
     case 'detailBlock':
-      return <SectionErrorBoundary key={section.id} name={section.id}>{null}</SectionErrorBoundary>;
+      return (
+        <SectionErrorBoundary key={section.id} name={section.id}>
+          <DetailBlockSection id={section.id} content={section.content} />
+        </SectionErrorBoundary>
+      );
     default: {
       const _exhaustive: never = section;
       return _exhaustive;

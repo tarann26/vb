@@ -408,20 +408,53 @@ describe('dist/assets/ keeps admin code out of the entry chunk', () => {
 // hit-testing fix landed in the same task, so this ONE rule has two real
 // sources, not one. A FOURTH step (Task 4, drag) added `.cursor-nwse-resize`
 // (+39 bytes) on top, also previously unmentioned here. Measured, corrected:
-// 33578 (Task 3) -> 33617 (current HEAD, Task 4's own drag/resize work,
-// including the .cursor-nwse-resize rule just named). New ceiling 33800
-// against that 33617 -- a 183-byte margin, tighter than the ~200-250 this
-// lineage's earlier ceilings kept, but still real: the very next
-// admin-only class landing without a matching removal still trips it. No
-// NEW comment-scan leak in either step; two pre-existing ones remain
-// (`.collapse`, `.invisible`, both dead weight from earlier tasks'
-// comments) and CollageTile.tsx (Task 3) re-sources `.invisible` from its
-// own prose independently of those.
+// 33578 (Task 3) -> 33617 (Plan 6 HEAD, Task 4's own drag/resize work,
+// including the .cursor-nwse-resize rule just named). No NEW comment-scan
+// leak in either step; two pre-existing ones remain (`.collapse`,
+// `.invisible`, both dead weight from earlier tasks' comments) and
+// CollageTile.tsx (Task 3) re-sources `.invisible` from its own prose
+// independently of those.
+//
+// Plan 7, Task 1 (content model, no component styling touched at all) is
+// what this comment's own earlier version did NOT anticipate needing an
+// entry for -- and needed one anyway: 33617 -> 33653 (+36), a real
+// comment-scan leak, `.lowercase`, caught by this task's own rule-level
+// diff (a worktree checkout of the true parent commit, 663ce09, never a
+// stash) rather than by the ceiling test itself, which stayed green
+// throughout -- 33653 is comfortably under the 33800 ceiling that was
+// already in place, the exact blind spot a "stays under N" test always has
+// for a leak smaller than its own margin. src/content/validate.ts's own
+// page-slug message used the plain-English word for "a-z, no capitals" --
+// itself a real, bare, no-argument Tailwind utility -- and was reworded to
+// avoid it, alongside its own explanatory comment (which repeated the same
+// word in prose and leaked the identical rule a second time on its own
+// first draft). Fixed before Task 1 was committed; recorded here rather
+// than silently, since the number this comment's own history tracks
+// briefly included it.
+//
+// Plan 7, Task 2 (the five -- four, after the Task 2 Step 1 merge --
+// template components) is the one this task's own Step 4 asks for: 33653
+// -> 34459 (+806), a rule-level diff against a worktree checkout of the
+// true parent commit (062e2d6, Task 1's own commit -- so this figure is
+// Task 2's contribution alone, with Task 1's own `.lowercase` fix riding
+// along and already netted out of it) tracing all twelve added rules to
+// real classNames in the four new template components: `.border-l-4`/
+// `.pl-4` (DetailBlockSection's fact rows), `.grayscale`/
+// `.hover:grayscale-0`/`.justify-items-center`/`.max-h-full`/`.max-w-full`/
+// `.object-contain`/`.md:grid-cols-4`/`.sm:grid-cols-3` (GallerySection's
+// `layout: 'grid'` variant -- the merged-in Logo grid use), `.max-w-xl`
+// (DetailBlockSection's facts list) and `.mt-10` (the shared spacing above
+// every template's own optional WhatsAppButton) -- nothing removed, nothing
+// from any other file. New ceiling 34700 against that 34459 -- a
+// ~240-byte margin, back in the ~200-250 range this lineage's ceilings
+// keep (Plan 6 Task 4's own 183-byte margin was tighter than usual): a real
+// budget, not a rounded-up snapshot, so the very next admin-only or
+// template class landing without a matching removal still trips it.
 describe('dist/assets/ keeps the shared stylesheet under a byte ceiling', () => {
-  it.skipIf(!REQUIRED && !existsSync(DIST_ASSETS))('the entry CSS file stays under 33800 bytes', () => {
+  it.skipIf(!REQUIRED && !existsSync(DIST_ASSETS))('the entry CSS file stays under 34700 bytes', () => {
     const cssFiles = readdirSync(DIST_ASSETS).filter((n) => /^index-.*\.css$/.test(n));
     expect(cssFiles.length).toBeGreaterThan(0);
     const size = statSync(join(DIST_ASSETS, cssFiles[0])).size;
-    expect(size).toBeLessThan(33800);
+    expect(size).toBeLessThan(34700);
   });
 });

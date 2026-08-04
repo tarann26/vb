@@ -14,6 +14,10 @@ import SeoHead from './components/SeoHead';
 import NotFound from './components/NotFound';
 import type { SectionId, Section } from './content';
 import { useContent } from './content/ContentContext';
+import TextSection from './components/templates/TextSection';
+import ItemListSection from './components/templates/ItemListSection';
+import GallerySection from './components/templates/GallerySection';
+import DetailBlockSection from './components/templates/DetailBlockSection';
 
 // The only reference to admin code anywhere outside src/admin/ itself, and
 // it must stay that way -- src/test/bundle.test.ts fails the build the
@@ -51,27 +55,25 @@ const SECTION_COMPONENTS: Record<SectionId, () => ReactNode> = {
 // dispatch through, so the two can never drift on WHICH branch handles
 // which kind, only (as before) on which COMPONENT a given id maps to.
 //
-// The `switch (section.template)` below is exhaustive over TemplateType
-// today with every case still returning `null` -- Task 2 is what creates
-// the four real template components (src/components/templates/) and swaps
-// each `null` for a real one, keeping this exact switch shape. Written this
-// way from Task 1 onward (not deferred entirely to Task 2) so the
-// compile-error guarantee the plan asks for is already true here: delete
-// one case below (or add a fifth TemplateType without a case) and
-// `_exhaustive: never` fails `tsc -b`, naming this file.
+// Plan 7, Task 2: the four real template components
+// (src/components/templates/) replace Task 1's own `null` stubs here, still
+// through the exact same exhaustive switch shape -- delete a case below (or
+// add a fifth TemplateType without a case) and `_exhaustive: never` fails
+// `tsc -b`, naming this file, proven directly in Task 1's own commit and
+// unchanged by this swap.
 function renderSection(section: Section): ReactNode {
   if (section.kind === 'bespoke') {
     return SECTION_COMPONENTS[section.id]();
   }
   switch (section.template) {
     case 'text':
-      return null;
+      return <TextSection id={section.id} content={section.content} />;
     case 'itemList':
-      return null;
+      return <ItemListSection id={section.id} content={section.content} />;
     case 'gallery':
-      return null;
+      return <GallerySection id={section.id} content={section.content} />;
     case 'detailBlock':
-      return null;
+      return <DetailBlockSection id={section.id} content={section.content} />;
     default: {
       const _exhaustive: never = section;
       return _exhaustive;
