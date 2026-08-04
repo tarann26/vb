@@ -64,14 +64,25 @@ const Hero: React.FC = () => {
             src,
             alt: '',
             className: 'w-full h-full object-cover opacity-90 hover:opacity-100 transition-opacity duration-500',
-            // Plan 6, Task 4, Step 1: native HTML5 image drag hijacks the
-            // pointer sequence a real drag-to-move needs on desktop --
-            // CollageTile.tsx (the /edit-only override of
-            // renderCollageTile) cannot set this itself, since it receives
-            // this <img> already rendered, as an opaque child. Harmless on
-            // the public page too: nothing there ever depended on a
-            // collage photo being natively draggable.
-            draggable: false,
+            // I-A review finding (repair of Plan 6, Task 4, Step 1): native
+            // HTML5 image drag hijacks the pointer sequence a real
+            // drag-to-move needs on desktop, but a `draggable={false}` HERE
+            // is not the fix -- it shipped an explicit `draggable="false"`
+            // attribute (React never omits it for a literal `false`) on
+            // every one of the sixteen collage `<img>`s to every PUBLIC
+            // visitor, +288 bytes for a requirement that only exists at
+            // `/edit`. `dragstart` bubbles, so CollageTile.tsx's own
+            // `onDragStart` on its tile wrapper (an /edit-only element)
+            // cancels the child <img>'s native drag without this public
+            // component -- or its rendered output -- ever needing to know
+            // anything is editable at all. See that file's own comment for
+            // the full real-Chromium comparison: a wrapper `onDragStart`
+            // (used here), a wrapper `-webkit-user-drag: none`, and a
+            // `pointerdown` preventDefault on the drag surface all worked
+            // equally well, each confined to CollageTile.tsx alone; only
+            // `React.cloneElement` genuinely doesn't, since at `/edit` the
+            // child this component receives is `<EditableImage>`, not a
+            // bare `<img>`, so there is no element to clone a prop onto.
           }),
         ),
       )}
