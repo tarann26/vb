@@ -295,17 +295,82 @@ export function resolveLayout(entries: readonly (Placement | null)[]): (Resolved
 }
 
 // True when `resolved` sits entirely within the explicit `GRID_SIZE x
-// GRID_SIZE` grid -- both axes, start and span together. `null` (unresolved,
-// or resolved into an implicit row/column) is never "on grid". Shared by
-// `validateContent` (src/content/validate.ts) and any test that needs the
-// identical definition of "visible" this function's own callers rely on,
-// so the two can never quietly disagree about what counts as off-grid.
+// GRID_SIZE` grid -- both axes, start and span together, with a span of at
+// least 1 on each (a zero or negative span is not a real tile, whatever its
+// start; Task 3's size-change buttons are what first make a non-positive
+// span reachable -- going below 1 is exactly what this clause refuses).
+// `null` (unresolved, or resolved into an implicit row/column) is never "on
+// grid". Shared by `validateContent` (src/content/validate.ts) and any test
+// that needs the identical definition of "visible" this function's own
+// callers rely on, so the two can never quietly disagree about what counts
+// as off-grid.
 export function isOnGrid(resolved: ResolvedPlacement | null): boolean {
   if (!resolved) return false;
   return (
+    resolved.colSpan >= 1 &&
+    resolved.rowSpan >= 1 &&
     resolved.colStart >= 1 &&
     resolved.colStart + resolved.colSpan - 1 <= GRID_SIZE &&
     resolved.rowStart >= 1 &&
     resolved.rowStart + resolved.rowSpan - 1 <= GRID_SIZE
   );
+}
+
+// ---------------------------------------------------------------------------
+// Task 3/4: the arithmetic the move buttons, the size-change buttons AND
+// drag (Task 4) all share -- "if the button path and the drag path can
+// produce different results from the same intent, you have two
+// implementations and one is wrong" (this plan's own Task 3 Step 1). Both
+// start from a tile's CURRENT RESOLVED position, not its raw `Placement` --
+// Task 4 Step 3's own finding applies just as much to a button press as to
+// a drag: an auto-placed tile (entries 0, 2 in the real collage) has no
+// starting position in its own `className` to read, only one
+// `resolveLayout` can compute from the whole sibling list. The very first
+// move or size change of such a tile is therefore also the moment it stops
+// being auto-placed: every
+// value this function returns has all four fields set, never null -- a
+// tile she has touched keeps the position she put it at even if a sibling
+// later changes, rather than snapping back into someone else's auto-flow.
+
+export type MoveDirection = 'up' | 'down' | 'left' | 'right';
+export type ResizeAxis = 'col' | 'row';
+
+// `classNames` in document order (the same order Hero.tsx renders
+// `heroCollage`, and the order `resolveLayout` requires) -- `index` names
+// which one is being moved/resized. Returns `null` only when `index`'s own
+// entry cannot be resolved at all (a className `parsePlacement` refuses, or
+// one whose span alone can never fit); a caller that reaches this with a
+// tile already on screen should never see that in practice.
+function currentResolved(classNames: readonly string[], index: number): ResolvedPlacement | null {
+  const placements = classNames.map((c) => parsePlacement(c));
+  return resolveLayout(placements)[index] ?? null;
+}
+
+// Returns a `ResolvedPlacement`, not a `Placement` -- every field this
+// produces is a real number, never null (that is what "fully explicit from
+// here on" above means), so a caller (CollageTile's own on-grid check,
+// `isOnGrid`) never needs to re-null-check what this function already
+// guarantees.
+export function moveTile(classNames: readonly string[], index: number, direction: MoveDirection): ResolvedPlacement | null {
+  const current = currentResolved(classNames, index);
+  if (!current) return null;
+  const next: ResolvedPlacement = { ...current };
+  if (direction === 'up') next.rowStart = current.rowStart - 1;
+  else if (direction === 'down') next.rowStart = current.rowStart + 1;
+  else if (direction === 'left') next.colStart = current.colStart - 1;
+  else next.colStart = current.colStart + 1;
+  return next;
+}
+
+// `delta` is +1 (larger) or -1 (smaller) -- a plain number, not a narrower
+// union, since the two call sites (CollageTile's "+"/"-" buttons) already
+// hand this exactly `1`/`-1` and a stricter type here would buy nothing a
+// reviewer can't already see at the call site.
+export function resizeTile(classNames: readonly string[], index: number, axis: ResizeAxis, delta: number): ResolvedPlacement | null {
+  const current = currentResolved(classNames, index);
+  if (!current) return null;
+  const next: ResolvedPlacement = { ...current };
+  if (axis === 'col') next.colSpan = current.colSpan + delta;
+  else next.rowSpan = current.rowSpan + delta;
+  return next;
 }

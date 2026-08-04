@@ -36,6 +36,7 @@ import type { ContentEntries, ContentRegistry } from './publish';
 import SectionErrorBoundary from './SectionErrorBoundary';
 import EditableText from './EditableText';
 import EditableImage from './EditableImage';
+import CollageTile from './CollageTile';
 import { setCopyText } from './editable-paths';
 import { useStagedFiles, fromStagedPhoto } from './staged';
 import type { StagedFile } from './staged';
@@ -55,6 +56,11 @@ import { useValidation } from './useValidation';
 // compile time, which is no longer true of anything holding a real
 // `createContext` call.
 import { ContentProvider } from '../content/context';
+// Plan 6, Task 3, Step 4: the same server-side rule the Worker's own deploy
+// gate applies (validate.ts is on content.test.ts's own SAFE_CONTENT_SUBMODULES
+// whitelist -- it imports no JSON and has no path to src/content/index.ts).
+// `commitCollagePlacement` below is the one call site.
+import { validateContent } from '../content/validate';
 import type {
   ContentBundle,
   SectionId,
@@ -256,6 +262,19 @@ function setGallerySrc(galleries: Galleries, list: 'atmosphere' | 'ourStory' | '
   };
 }
 
+// Plan 6, Task 3: mirrors `setGallerySrc` exactly, for the OTHER field a
+// heroCollage entry has -- `className`, never `src`. A tile whose photo she
+// also replaced this session keeps both changes: this only ever touches
+// `className` on the one entry `index` names, leaving `src` (and every
+// sibling entry) at its prior object identity, the same "spread the touched
+// level only" contract `setCopyText`/`setGallerySrc` already follow.
+function setHeroCollagePlacement(galleries: Galleries, index: number, className: string): Galleries {
+  return {
+    ...galleries,
+    heroCollage: galleries.heroCollage.map((entry, i) => (i === index ? { ...entry, className } : entry)),
+  };
+}
+
 // dishes/drinks/press key on `.id`, never on array position -- Task 1's own
 // note that these three are UNAFFECTED by the positional-path caveat
 // gallery entries carry. A `find`-by-id that matches nothing (the record
@@ -305,11 +324,20 @@ function setItemImage<T extends { id: string; image: string | null }>(items: T[]
 // default export genuinely is a component). Disabled deliberately, not
 // silenced blind: `buildBundle` is a pure function with no React state or
 // hooks of its own, so it has nothing for Fast Refresh to lose track of.
+// `selectedTileIndex`/`onSelectTile` (Plan 6, Task 3): which hero collage
+// tile, if any, currently shows its move/size-change panel -- single-select,
+// lifted here (not local to each CollageTile instance) because Hero.tsx
+// renders each tile independently via its own `renderCollageTile` call, and
+// only one panel may be open at a time. A plain closure-captured pair, the
+// same shape `stage` already is, not a new React Context: nothing else on
+// this page needs to read it.
 // eslint-disable-next-line react-refresh/only-export-components
 export function buildBundle(
   entries: ContentEntries,
   registry: ContentRegistry,
   stage: (key: string, file: StagedFile | null) => void,
+  selectedTileIndex: number | null,
+  onSelectTile: (index: number | null) => void,
 ): ContentBundle {
   const copy = pick(entries, 'copy.json', EMPTY_COPY);
   const galleries = pick(entries, 'galleries.json', EMPTY_GALLERIES);
@@ -368,6 +396,26 @@ export function buildBundle(
     return pressLoaded;
   }
 
+  // Plan 6, Task 3, Step 4: `registry.updateData`, never `register` -- the
+  // identical reasoning `commitText`/`commitImage` above already follow
+  // (see `commitText`'s own comment on Finding C4). CollageTile has already
+  // checked `isOnGrid` on `className`'s own candidate before ever calling
+  // this (both its per-button disabled state and its own commit guard), but
+  // this is the one place that ALSO holds against a bad write reaching the
+  // registry another way -- a future second caller of `onCommit`, a bug in
+  // that check -- by re-running the real, server-side `validateContent`
+  // (the SAME rule the Worker's own deploy gate applies) against the whole
+  // candidate `galleries.json`, not just this one field. A refusal here is
+  // silent by design, not silent by accident: CollageTile's own UI already
+  // never lets her reach a placement this would refuse, so surfacing a
+  // second, redundant error message for a path she cannot actually take
+  // would tell her nothing she could act on.
+  function commitCollagePlacement(index: number, className: string) {
+    const next = setHeroCollagePlacement(galleries, index, className);
+    if (validateContent('galleries.json', next).length > 0) return;
+    registry.updateData('galleries.json', next);
+  }
+
   return {
     site: pick(entries, 'site.json', EMPTY_SITE),
     galleries,
@@ -407,6 +455,33 @@ export function buildBundle(
         />
       );
     },
+    // Plan 6, Task 3: the collage's own tiles become selectable, movable
+    // and resizable, exactly like renderText/renderImage above -- gated on
+    // `galleriesLoaded` for the identical reason `renderImage` gates
+    // targetLoaded: committing a move before galleries.json has a registry
+    // entry to write into would be a documented no-op (`updateData`'s own
+    // contract) that silently discards the move. Falls back to the SAME
+    // markup ContentContext.ts's own default `renderCollageTile` produces
+    // (byte-identical -- confirmed directly), so a collage tile whose file
+    // hasn't loaded yet renders exactly as it would with no provider
+    // mounted at all, not as something broken.
+    renderCollageTile: (_path, index, className, image) =>
+      galleriesLoaded ? (
+        <CollageTile
+          key={index}
+          index={index}
+          className={className}
+          classNames={galleries.heroCollage.map((tile) => tile.className)}
+          image={image}
+          selected={selectedTileIndex === index}
+          onSelect={onSelectTile}
+          onCommit={commitCollagePlacement}
+        />
+      ) : (
+        <div key={index} className={`${className} relative overflow-hidden`}>
+          {image}
+        </div>
+      ),
   };
 }
 
@@ -483,6 +558,10 @@ const EditMode: React.FC = () => {
   // tells her it exists, so she isn't left assuming /edit is the only
   // place she has unpublished work.
   const [otherSurfaceDraftExists, setOtherSurfaceDraftExists] = useState(false);
+  // Plan 6, Task 3: which hero collage tile (if any) currently shows its
+  // move/size-change panel -- see `buildBundle`'s own comment on why this lives
+  // here rather than as local state inside each CollageTile instance.
+  const [selectedTileIndex, setSelectedTileIndex] = useState<number | null>(null);
 
   // Post-review Fix 1 (Critical): on every transition into 'in' -- the
   // first load AND any later out->in cycle caused by a 401 below -- refetch
@@ -592,7 +671,7 @@ const EditMode: React.FC = () => {
     return null;
   }
 
-  const bundle = buildBundle(entries, registry, staged.stage);
+  const bundle = buildBundle(entries, registry, staged.stage, selectedTileIndex, setSelectedTileIndex);
   const erroredFiles = Object.keys(fileErrors) as ContentFileName[];
   const loadedOrErroredCount = CONTENT_FILES.filter(
     (file) => entries[file] !== undefined || fileErrors[file] !== undefined,
@@ -662,6 +741,18 @@ const EditMode: React.FC = () => {
   //      before the input ever sees it) -- both the label's own click and
   //      the forwarded one land inside the identical wrapper, so one
   //      carve-out clears both.
+  //   4. Plan 6, Task 3: CollageTile's own move/size-change controls carry
+  //      `data-collage-control` -- the same reasoning as carve-out 3, with
+  //      one difference C1 didn't have to deal with: the control PANEL is
+  //      rendered via `createPortal` into `document.body`, so its buttons'
+  //      real DOM ancestors are `document.body`'s, never a collage tile's
+  //      own wrapper `<div>`. `closest()` walks the real DOM, not the React
+  //      tree, so a carve-out keyed on nesting inside the tile (the way
+  //      carve-out 3 nests inside EditableImage's own wrapper) would miss
+  //      the portaled panel entirely -- every interactive element the panel
+  //      renders carries this marker directly instead (CollageTile.tsx's
+  //      own `ControlButton` centralises that, so a future button in the
+  //      panel can't be added without it).
   //
   // Everything else stays blocked, including Hero's reserve button
   // (fires the WhatsApp beacon) and BlogTeaser's "View all"
@@ -669,7 +760,7 @@ const EditMode: React.FC = () => {
   // `aria-expanded`, so both fall straight through to the same
   // preventDefault/stopPropagation as before. Fails closed: a future
   // button added anywhere in this tree is blocked by default unless it
-  // explicitly earns one of the three carve-outs above.
+  // explicitly earns one of the four carve-outs above.
   function handleCaptureClick(event: React.MouseEvent) {
     const target = event.target;
     if (target instanceof Element) {
@@ -685,6 +776,8 @@ const EditMode: React.FC = () => {
       } else if (target.closest('button')?.hasAttribute('aria-expanded')) {
         return;
       } else if (target.closest('[data-editable-image-path]')) {
+        return;
+      } else if (target.closest('[data-collage-control]')) {
         return;
       }
     }

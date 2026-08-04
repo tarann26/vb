@@ -55,15 +55,18 @@ const Hero: React.FC = () => {
     />
      {/* ===== Collage ===== */}
      <div className="absolute inset-0 grid grid-cols-6 grid-rows-6 gap-1">
-      {galleries.heroCollage.map(({ src, className }, i) => (
-         <div key={i} className={`${className} relative overflow-hidden`}>
-           {content.renderImage(`galleries.heroCollage.${i}`, {
-             src,
-             alt: '',
-             className: 'w-full h-full object-cover opacity-90 hover:opacity-100 transition-opacity duration-500',
-           })}
-         </div>
-       ))}
+      {galleries.heroCollage.map(({ src, className }, i) =>
+        content.renderCollageTile(
+          `galleries.heroCollage.${i}`,
+          i,
+          className,
+          content.renderImage(`galleries.heroCollage.${i}`, {
+            src,
+            alt: '',
+            className: 'w-full h-full object-cover opacity-90 hover:opacity-100 transition-opacity duration-500',
+          }),
+        ),
+      )}
      </div>
 
 

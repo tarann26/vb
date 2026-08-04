@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { GRID_SIZE, formatPlacement, isOnGrid, parsePlacement, resolveLayout, type Placement } from '../placement';
+import { GRID_SIZE, formatPlacement, isOnGrid, moveTile, parsePlacement, resizeTile, resolveLayout, type Placement } from '../placement';
 import { galleries } from '..';
 
 describe('GRID_SIZE', () => {
@@ -120,6 +120,82 @@ describe('isOnGrid', () => {
 
   it('is false when the row starts past GRID_SIZE (an implicit row)', () => {
     expect(isOnGrid({ colStart: 1, colSpan: 1, rowStart: 7, rowSpan: 1 })).toBe(false);
+  });
+
+  // Task 3's resize buttons are what first makes a non-positive span
+  // reachable (shrinking a 1-wide tile once more). Without this, a resolved
+  // placement with colSpan 0 or -1 would read as "on grid" -- colStart + 0 -
+  // 1 is still <= GRID_SIZE -- which is exactly backwards.
+  it('is false when colSpan is zero or negative', () => {
+    expect(isOnGrid({ colStart: 3, colSpan: 0, rowStart: 1, rowSpan: 1 })).toBe(false);
+    expect(isOnGrid({ colStart: 3, colSpan: -1, rowStart: 1, rowSpan: 1 })).toBe(false);
+  });
+
+  it('is false when rowSpan is zero or negative', () => {
+    expect(isOnGrid({ colStart: 1, colSpan: 1, rowStart: 3, rowSpan: 0 })).toBe(false);
+  });
+});
+
+describe('moveTile', () => {
+  const FIXTURE = ['col-start-3 col-span-1 row-start-3 row-span-1', 'col-start-1 col-span-1 row-start-1 row-span-1'];
+
+  it('moves a fully-definite tile one cell in each direction', () => {
+    expect(moveTile(FIXTURE, 0, 'up')).toEqual({ colStart: 3, colSpan: 1, rowStart: 2, rowSpan: 1 });
+    expect(moveTile(FIXTURE, 0, 'down')).toEqual({ colStart: 3, colSpan: 1, rowStart: 4, rowSpan: 1 });
+    expect(moveTile(FIXTURE, 0, 'left')).toEqual({ colStart: 2, colSpan: 1, rowStart: 3, rowSpan: 1 });
+    expect(moveTile(FIXTURE, 0, 'right')).toEqual({ colStart: 4, colSpan: 1, rowStart: 3, rowSpan: 1 });
+  });
+
+  // Task 4 Step 3's own finding applies to a button too: an auto-placed
+  // tile has no colStart/rowStart in its own className for a naive "read
+  // the field, add one" implementation to start from -- only resolveLayout,
+  // across every sibling, can say where it currently IS. This is what makes
+  // that possible for a button press, not just a drag.
+  it('resolves an auto-placed tile\'s CURRENT position first, then moves from there -- not from a raw (absent) field', () => {
+    const autoFixture = ['col-span-1 row-span-1', 'col-start-1 col-span-1 row-start-1 row-span-1'];
+    // Entry 0 is fully auto; entry 1 occupies (1,1), so entry 0 resolves to
+    // (2,1) via resolveLayout's own wrap-to-next-row behaviour.
+    expect(moveTile(autoFixture, 0, 'right')).toEqual({ colStart: 3, colSpan: 1, rowStart: 1, rowSpan: 1 });
+  });
+
+  it('returns null when the named entry cannot be resolved at all', () => {
+    expect(moveTile(['garbage'], 0, 'up')).toBeNull();
+  });
+
+  // Confirms the move is a PURE candidate -- it does not itself refuse an
+  // off-grid result. `isOnGrid` (the same function validateContent and
+  // Hero.test.tsx use) is what a caller checks before committing; the
+  // component test (CollageTile.test.tsx) proves a button that would
+  // produce this candidate is disabled rather than committing it.
+  it('produces an off-grid candidate without refusing it -- that is the caller\'s job', () => {
+    const atLeftEdge = ['col-start-1 col-span-1 row-start-1 row-span-1'];
+    const candidate = moveTile(atLeftEdge, 0, 'left');
+    expect(candidate).toEqual({ colStart: 0, colSpan: 1, rowStart: 1, rowSpan: 1 });
+    expect(isOnGrid(candidate)).toBe(false);
+  });
+});
+
+describe('resizeTile', () => {
+  const FIXTURE = ['col-start-3 col-span-2 row-start-3 row-span-1'];
+
+  it('grows and shrinks the column span, leaving the row alone', () => {
+    expect(resizeTile(FIXTURE, 0, 'col', 1)).toEqual({ colStart: 3, colSpan: 3, rowStart: 3, rowSpan: 1 });
+    expect(resizeTile(FIXTURE, 0, 'col', -1)).toEqual({ colStart: 3, colSpan: 1, rowStart: 3, rowSpan: 1 });
+  });
+
+  it('grows and shrinks the row span, leaving the column alone', () => {
+    expect(resizeTile(FIXTURE, 0, 'row', 1)).toEqual({ colStart: 3, colSpan: 2, rowStart: 3, rowSpan: 2 });
+    expect(resizeTile(FIXTURE, 0, 'row', -1)).toEqual({ colStart: 3, colSpan: 2, rowStart: 3, rowSpan: 0 });
+  });
+
+  it('a shrink past 1 produces a non-positive span, which isOnGrid refuses', () => {
+    const shrunkTwice = resizeTile(['col-start-3 col-span-1 row-start-3 row-span-1'], 0, 'col', -1);
+    expect(shrunkTwice).toEqual({ colStart: 3, colSpan: 0, rowStart: 3, rowSpan: 1 });
+    expect(isOnGrid(shrunkTwice)).toBe(false);
+  });
+
+  it('returns null when the named entry cannot be resolved at all', () => {
+    expect(resizeTile(['garbage'], 0, 'col', 1)).toBeNull();
   });
 });
 

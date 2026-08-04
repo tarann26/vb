@@ -63,6 +63,12 @@ export const defaultBundle: ContentBundle = {
   // module-level comment above ContentBundle for why), and .ts is not
   // parsed for JSX syntax at all.
   renderImage: (_path, props) => createElement('img', props),
+  // Byte-identical to what Hero.tsx wrote inline before Task 3: the same
+  // `key`, the same `${className} relative overflow-hidden` string, the
+  // same single child. Confirmed directly -- homepage-bytes.test.tsx's own
+  // pinned count did not move when this seam was introduced.
+  renderCollageTile: (_path, index, className, image) =>
+    createElement('div', { key: index, className: `${className} relative overflow-hidden` }, image),
 };
 
 export function useContent(): ContentBundle {

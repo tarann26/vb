@@ -376,14 +376,34 @@ describe('dist/assets/ keeps admin code out of the entry chunk', () => {
 //      once the safelist exists (this task's own decision record explains
 //      why the safelist, not the glob, is the real fix: scanning is
 //      build-time, dragging the collage is runtime).
-// New ceiling 32900 against this measured 32674 -- the same ~200-250-byte
-// real budget over the real number every earlier ceiling in this lineage
-// kept, not a rounded-up snapshot.
+// New ceiling (at that point) 32900 against this measured 32674 -- the same
+// ~200-250-byte real budget over the real number every earlier ceiling in
+// this lineage kept, not a rounded-up snapshot.
+//
+// Plan 6, Task 3 (buttons) moves it again: 32674 -> 33561 (+887), a
+// rule-level diff against a worktree checkout of the parent commit tracing
+// all sixteen added rules to CollageTile.tsx's own select toggle and its
+// portal-rendered move/size-change panel (`border-white`, `bottom-0`,
+// `focus-visible:outline` and its three colour/width variants,
+// `grid-cols-3`, `grid-rows-3`, `h-9`, `inset-x-0`, `left-1`, `max-w-md`,
+// the panel's own arbitrary-value shadow, `text-[11px]`, `top-1`, `w-9`) --
+// nothing removed, nothing from any other file. Confirmed the hard way,
+// again: an early draft of this component's own source used the bare words
+// "resize", "grow" and "shrink" in prose comments and a real, user-facing
+// aria-label -- all three real Tailwind utility names (`resize`, `grow`,
+// `shrink` are single-word core-plugin utilities with no numeric suffix to
+// distinguish them from ordinary English) -- and each emitted an unused
+// rule. Rewording the offending text (a TypeScript discriminant renamed
+// from `'resize'` to `'span'`, "resize"/"grow"/"shrink" replaced with
+// "size change"/"larger"/"smaller" everywhere they were prose rather than
+// an identifier) is what took the added-rule count from nineteen back down
+// to the sixteen actually used above. New ceiling 33800 against this
+// measured 33561.
 describe('dist/assets/ keeps the shared stylesheet under a byte ceiling', () => {
-  it.skipIf(!REQUIRED && !existsSync(DIST_ASSETS))('the entry CSS file stays under 32900 bytes', () => {
+  it.skipIf(!REQUIRED && !existsSync(DIST_ASSETS))('the entry CSS file stays under 33800 bytes', () => {
     const cssFiles = readdirSync(DIST_ASSETS).filter((n) => /^index-.*\.css$/.test(n));
     expect(cssFiles.length).toBeGreaterThan(0);
     const size = statSync(join(DIST_ASSETS, cssFiles[0])).size;
-    expect(size).toBeLessThan(32900);
+    expect(size).toBeLessThan(33800);
   });
 });

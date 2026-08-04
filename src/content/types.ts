@@ -183,4 +183,19 @@ export interface ContentBundle {
   renderText(path: EditableTextPath, value: string): ReactNode;
   // default: (_, p) => createElement('img', p) -- see ContentContext.ts's defaultBundle.
   renderImage(path: EditableImagePath, props: ImgHTMLAttributes<HTMLImageElement>): ReactNode;
+  // Plan 6, Task 3: the ONE seam that lets `/edit` make a hero collage tile
+  // selectable, movable and resizable while Hero.tsx (the public page)
+  // keeps rendering `className` verbatim and stays entirely unaware
+  // anything is editable -- the same "default is the identity, /edit
+  // overrides it" shape `renderText`/`renderImage` already establish, not a
+  // new pattern. `index` is the tile's position in `heroCollage` (what
+  // `formatPlacement`'s eventual write-back needs to know which entry to
+  // replace); `className` is that entry's CURRENT placement string, read
+  // fresh on every render so a committed move is reflected immediately;
+  // `image` is the already-rendered child (Hero.tsx's own
+  // `content.renderImage(...)` call for this same tile), passed through
+  // rather than re-derived, so this seam never needs to know how an image
+  // is rendered.
+  // default: (_, index, className, image) => createElement('div', { key: index, className: `${className} relative overflow-hidden` }, image)
+  renderCollageTile(path: EditableImagePath, index: number, className: string, image: ReactNode): ReactNode;
 }

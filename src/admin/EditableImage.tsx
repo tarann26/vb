@@ -59,11 +59,29 @@ const WRAPPER_CLASSNAME = 'relative';
 // reliably. No `hover:` prefix anywhere in this string; `focus:` supplies
 // the same stronger visual cue EditableText's own className comment
 // documents, reachable by keyboard tab as well as touch.
+//
+// `z-20`, not `z-10` -- Plan 6, Task 3 review finding, caught in a real
+// Chromium build serving a real vite-served /edit, not in any prior test:
+// on every one of the sixteen HERO COLLAGE tiles specifically (this is the
+// one renderImage call site with something else stacked on top of it),
+// this control was COMPLETELY UNREACHABLE by a real click, on every single
+// tile, at every viewport tested -- `document.elementFromPoint()` at this
+// badge's own centre resolved to Hero.tsx's `relative z-10` main-content
+// div (or one of its own block-level text children -- a `<p>`'s hit box
+// spans its full container width even where the visible glyphs are
+// centred and narrow) every time, never this badge. Both elements sat at
+// the SAME z-index (10) in the SAME stacking context, a tie broken by DOM
+// order -- the content div is later in Hero.tsx's JSX, so it painted (and
+// hit-tested) on top of the entire collage, including this badge, for the
+// whole life of Plan 5's photo-replace feature. `z-20` wins that
+// comparison outright; nothing else on this page needs to sit above this
+// badge. See CollageTile.tsx's own select button for the identical fix,
+// found and applied together.
 const CONTROL_LABEL_CLASSNAME =
-  'absolute bottom-1 right-1 z-10 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border border-white/70 bg-black/60 text-white shadow focus-within:ring-2 focus-within:ring-[#6B8B59]';
+  'absolute bottom-1 right-1 z-20 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border border-white/70 bg-black/60 text-white shadow focus-within:ring-2 focus-within:ring-[#6B8B59]';
 
 const ERROR_CONTROL_LABEL_CLASSNAME =
-  'absolute bottom-1 right-1 z-10 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border border-white/70 bg-red-600/90 text-white shadow focus-within:ring-2 focus-within:ring-[#6B8B59]';
+  'absolute bottom-1 right-1 z-20 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border border-white/70 bg-red-600/90 text-white shadow focus-within:ring-2 focus-within:ring-[#6B8B59]';
 
 // A camera glyph built from plain characters, not an icon font or an SVG
 // asset -- nothing new to fetch, nothing that could itself go missing from

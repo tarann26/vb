@@ -515,6 +515,61 @@ describe('EditMode: in-page navigation and page chrome are not blocked (post-rev
     expect(fireEvent.click(control)).toBe(true);
     expect(inputClickSpy).toHaveBeenCalledTimes(1);
   });
+
+  // Plan 6, Task 3: CollageTile's own select toggle carries
+  // `data-collage-control`, the fourth carve-out this guard's own comment
+  // documents -- the same class of bug C1 found for the camera control
+  // (an affordance that renders but can never actually be activated,
+  // because EditMode's capture-phase guard swallows the click before the
+  // component's own onClick ever runs). Driven the identical way C1's own
+  // test is: a real `fireEvent.click` on the control itself, mounted
+  // inside EditMode's real guard, asserting `!event.defaultPrevented`.
+  it('the collage tile select toggle is not swallowed by the click guard (Plan 6, Task 3 carve-out 4)', async () => {
+    stubFetch();
+    render(
+      <MemoryRouter>
+        <EditMode />
+      </MemoryRouter>,
+    );
+
+    const toggle = await screen.findByRole('button', { name: 'Move or change the size of photo 1' });
+    expect(toggle).toHaveAttribute('data-collage-control', 'true');
+    expect(fireEvent.click(toggle)).toBe(true);
+    expect(toggle).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  // The panel itself is a SEPARATE case from the toggle above: it is
+  // rendered via `createPortal` into `document.body`, so its own buttons'
+  // real DOM ancestors are never a collage tile's wrapper -- CollageTile.tsx's
+  // own comment on `CONTROL_ATTR` explains why every button in the panel
+  // needs the marker directly, not just the tile. This proves that holds
+  // through EditMode's REAL guard, not just in CollageTile's own isolated
+  // render (CollageTile.test.tsx already covers the panel's own logic;
+  // this covers the one thing that render can't -- whether a portal's
+  // content actually reaches the guard the same way, and survives it).
+  it('the portal-rendered move panel is not swallowed by the click guard either', async () => {
+    stubFetch();
+    render(
+      <MemoryRouter>
+        <EditMode />
+      </MemoryRouter>,
+    );
+
+    const toggle = await screen.findByRole('button', { name: 'Move or change the size of photo 1' });
+    fireEvent.click(toggle);
+    // "Move right", not left: tile 0 is col-start-5 col-span-2 (cols 5-6,
+    // the grid's own last two columns) -- moving right would run off the
+    // 6-wide grid and be refused, proving nothing about whether the click
+    // itself reached this button. Left is the legal direction from here.
+    const moveLeft = await screen.findByRole('button', { name: 'Move left' });
+    expect(moveLeft).toHaveAttribute('data-collage-control', 'true');
+    expect(fireEvent.click(moveLeft)).toBe(true);
+    // A real commit reached the registry: the collage's first tile
+    // (col-start-5 col-span-2, auto row, in the real galleries.json) moved
+    // one column left, and its row -- previously auto -- is now pinned
+    // explicit at its own resolved value.
+    expect(document.querySelector('[data-collage-tile-index="0"]')).toHaveClass('col-start-4', 'row-start-1');
+  });
 });
 
 describe('EditMode: one malformed content file does not take down the page', () => {
@@ -974,7 +1029,7 @@ describe('Task 3 review Finding C4: committing a text edit calls registry.update
       markPublished: vi.fn(),
     };
 
-    const bundle = buildBundle(entries, registry, vi.fn());
+    const bundle = buildBundle(entries, registry, vi.fn(), null, vi.fn());
     render(<>{bundle.renderText('hero.reserveButton', COPY.hero.reserveButton)}</>);
 
     const field = screen.getByRole('textbox');
@@ -1125,7 +1180,7 @@ describe('Plan 5 Task 4, Step 2: staged photos are keyed on an identity the stag
   it('restaging the SAME row three times leaves exactly one staged file, even as its own src changes between picks (path-keyed, not src-keyed)', async () => {
     const { files, stage } = makeStageAccumulator();
     const registry = makeRegistry();
-    const bundle = buildBundle(registry.getEntries(), registry, stage);
+    const bundle = buildBundle(registry.getEntries(), registry, stage, null, vi.fn());
     const { container, rerender } = render(
       <>{bundle.renderImage('galleries.heroCollage.5', { src: '/atmosphere/dining.webp', alt: 'Dining room' })}</>,
     );
@@ -1152,7 +1207,7 @@ describe('Plan 5 Task 4, Step 2: staged photos are keyed on an identity the stag
   it('the Atmosfera row and the hero-collage tile that share /atmosphere/dining.webp leave TWO staged files, under distinct keys', async () => {
     const { files, stage } = makeStageAccumulator();
     const registry = makeRegistry();
-    const bundle = buildBundle(registry.getEntries(), registry, stage);
+    const bundle = buildBundle(registry.getEntries(), registry, stage, null, vi.fn());
     const atmosphere = render(
       <>{bundle.renderImage('galleries.atmosphere.0', { src: '/atmosphere/dining.webp', alt: 'Atmosfera dining' })}</>,
     );
@@ -1205,7 +1260,7 @@ describe('Plan 5 Task 4: committing a replacement writes back into the right con
 
   it('an item-shaped path (dishes.<id>.image) writes the new contentPath into exactly that dish, siblings untouched', () => {
     const { registry, entries } = makeRegistryWithDishes();
-    const bundle = buildBundle(entries, registry, vi.fn());
+    const bundle = buildBundle(entries, registry, vi.fn(), null, vi.fn());
     const element = bundle.renderImage('dishes.margherita.image', { src: DISH_A.image!, alt: DISH_A.name }) as React.ReactElement<{
       onReplace: (contentPath: string) => void;
     }>;
@@ -1234,7 +1289,7 @@ describe('Plan 5 Task 4: committing a replacement writes back into the right con
   it('an unrecognised path falls back to the identity <img>, exactly like the default bundle', () => {
     const { registry, entries } = makeRegistryWithDishes();
     entries['galleries.json'] = { data: GALLERIES, initial: GALLERIES, sha: 'sha-galleries' };
-    const bundle = buildBundle(entries, registry, vi.fn());
+    const bundle = buildBundle(entries, registry, vi.fn(), null, vi.fn());
     const { container } = render(<>{bundle.renderImage('hero.brick.webp', { src: '/hero/brick.webp', alt: '' })}</>);
     expect(container.querySelector('[data-editable-image-path]')).toBeNull();
     expect(container.querySelector('img')).toHaveAttribute('src', '/hero/brick.webp');
@@ -1252,7 +1307,7 @@ describe('Plan 5 Task 4: committing a replacement writes back into the right con
       version: 0,
       markPublished: vi.fn(),
     };
-    const bundle = buildBundle({}, registry, vi.fn());
+    const bundle = buildBundle({}, registry, vi.fn(), null, vi.fn());
     const { container } = render(<>{bundle.renderImage('dishes.margherita.image', { src: '/food/margherita.webp', alt: 'Margherita' })}</>);
     expect(container.querySelector('[data-editable-image-path]')).toBeNull();
     expect(container.querySelector('img')).toHaveAttribute('src', '/food/margherita.webp');
