@@ -263,22 +263,37 @@ describe('setCopyText (src/admin/editable-paths.ts)', () => {
     expect(next.hero).toBe(REAL_COPY.hero);
   });
 
-  // Minor review finding: setCopyText's near-twin AdminApp.tsx's `withLeaf`
-  // carries this same guard, cited there against a prior review finding for
-  // the identical shape -- `{ ...null, [leaf]: next }` is not a TypeScript
-  // error and does not throw (object-spreading null/undefined is a silent
-  // no-op per the language spec), so without this guard a `copy` value whose
-  // own namespace was somehow not a plain object would silently REPLACE it
-  // with a fresh single-leaf record instead of leaving it alone.
+  // Repair-review pattern fix: this guard used to return `copy` UNCHANGED
+  // for a namespace that doesn't resolve to a real object -- the exact
+  // "return the input unchanged" shape that made C1 (a template section
+  // named "Menu v2.0") silently discard every edit made to it, with no
+  // error and nothing on screen to say so. It now throws instead --
+  // "fail loudly, not silently," this repair's own governing rule for
+  // every commit path in this codebase.
   //
-  // Mutation this guards: deleting the `if (section === null || typeof
-  // section !== 'object') return copy;` guard -- confirmed red: without it,
-  // `next` is a freshly built object (`{...copy, hero: {reserveButton: 'X'}}`),
-  // never `=== malformed` by reference, so this `toBe` check fails.
-  it('a namespace that is not a real object is left untouched, not silently replaced -- matching AdminApp.tsx\'s withLeaf', () => {
+  // Mutation this guards: reverting the throw back to `return copy;` --
+  // confirmed red, this test then expects a throw that never happens.
+  it('a namespace that does not resolve to a real object throws, rather than silently discarding the edit', () => {
     const malformed = { ...REAL_COPY, hero: null } as unknown as Copy;
-    const next = setCopyText(malformed, 'hero.reserveButton', 'X');
-    expect(next).toBe(malformed);
+    expect(() => setCopyText(malformed, 'hero.reserveButton', 'X')).toThrow(
+      /does not name a real copy\.json field/,
+    );
+  });
+
+  // The concrete C1 shape, pinned directly against this function (not just
+  // against the higher-level guards that now prevent her from ever
+  // authoring an id that would reach this path -- guards.ts's own
+  // assertSectionEntry, validate.ts's own validateSectionEntry): a path
+  // like `sections.<id>.content.heading` splits to `namespace = 'sections'`,
+  // which Copy has no key for, so `source['sections']` is `undefined` and
+  // this guard now throws instead of returning `copy` unchanged.
+  //
+  // Mutation this guards: reverting the throw back to `return copy;` --
+  // confirmed red, this test then expects a throw that never happens.
+  it('throws for a "sections.<id>.content.<leaf>" path -- the exact shape C1 found silently discarding a template section\'s own edit', () => {
+    expect(() => setCopyText(REAL_COPY, 'sections.menu-v2.content.heading', 'New Heading')).toThrow(
+      /does not name a real copy\.json field/,
+    );
   });
 });
 

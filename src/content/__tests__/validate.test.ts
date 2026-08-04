@@ -424,6 +424,30 @@ describe('validateContent: structural rules on the remaining files', () => {
     expect(messages(problems)).toMatch(/hero/i);
   });
 
+  // C1 review fix: named, owner-facing message for the exact defect this
+  // repair closes -- a template section named "Menu v2.0" used to pass this
+  // check, render editable at /edit, and silently discard every edit made
+  // to it (template-section-paths.ts's own SECTION_CONTENT_PATH can't parse
+  // an id containing a "."). Reuses the same rule a page's own slug already
+  // enforces -- see guards.ts's own assertSectionEntry for the throwing
+  // twin of this check.
+  it('rejects a template section id that is not a URL-safe slug, naming the field', () => {
+    const bad: Section[] = [
+      ...validSections,
+      {
+        kind: 'template',
+        id: 'Menu v2.0',
+        enabled: true,
+        template: 'text',
+        content: { heading: 'H', paragraphs: ['p'] },
+      },
+    ];
+    const problems = validateContent('sections.json', bad);
+    expect(problems.some((p) => p.field === '[7].id' && /can only use letters a-z, numbers and hyphens/.test(p.message))).toBe(
+      true,
+    );
+  });
+
   it('rejects site.json with no phone numbers', () => {
     const bad = { ...validSite, phones: [] };
     const problems = validateContent('site.json', bad);
@@ -524,6 +548,19 @@ describe('validateContent: pages.json (Plan 7)', () => {
       },
     ]);
     expect(messages(problems)).toMatch(/collides with a built-in section/i);
+  });
+
+  // C1 review fix: the identical rule, for a page's own template sections --
+  // validateSectionEntry is the one function both sections.json (above) and
+  // pages.json (here) parse every entry through.
+  it('rejects a page\'s own template section id that is not a URL-safe slug', () => {
+    const problems = validateContent('pages.json', [
+      {
+        ...validPage,
+        sections: [{ kind: 'template', id: 'Menu v2.0', enabled: true, template: 'text', content: { heading: 'H', paragraphs: ['p'] } }],
+      },
+    ]);
+    expect(messages(problems)).toMatch(/can only use letters a-z, numbers and hyphens/i);
   });
 
   it('rejects pages.json that is not an array', () => {

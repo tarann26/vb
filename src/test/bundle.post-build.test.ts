@@ -445,11 +445,27 @@ describe('dist/assets/ keeps admin code out of the entry chunk', () => {
 // `layout: 'grid'` variant -- the merged-in Logo grid use), `.max-w-xl`
 // (DetailBlockSection's facts list) and `.mt-10` (the shared spacing above
 // every template's own optional WhatsAppButton) -- nothing removed, nothing
-// from any other file. New ceiling 34700 against that 34459 -- a
-// ~240-byte margin, back in the ~200-250 range this lineage's ceilings
-// keep (Plan 6 Task 4's own 183-byte margin was tighter than usual): a real
-// budget, not a rounded-up snapshot, so the very next admin-only or
-// template class landing without a matching removal still trips it.
+// from any other file.
+//
+// Repair-review correction (M3): the 34459/34700 pair above was Task 2's
+// OWN contribution in isolation, measured against Task 1's commit -- it was
+// never the real number at Plan 7 HEAD, and the comment did not say so.
+// Task 4 (the dashboard's own Add screens, PageList.tsx/
+// TemplateSectionList.tsx/AdminApp.tsx) landed four more rules on top,
+// undocumented until now: `.mt-4`/`.border-gray-100`/`.pt-4`
+// (PageList.tsx's and TemplateSectionList.tsx's own `"mt-4 border-t
+// border-gray-100 pt-4"` wrapper around an open row's content form) and
+// `.mt-8` (AdminApp.tsx's own "Homepage template sections" heading
+// spacing). Measured directly, the real way -- a rule-level diff against a
+// worktree checkout of `663ce09` (the actual pre-Plan-7 parent, one commit
+// before Task 1's own 062e2d6): 33617 -> 34626 (+1009), SIXTEEN rules
+// added (the twelve above plus these four), zero removed, nothing from any
+// other file. New ceiling 34700 against this real, HEAD number -- a
+// 74-byte margin, tighter than this lineage's usual ~200-250-byte range
+// (matching Plan 6 Task 4's own 183-byte margin as the closer precedent):
+// the very next admin-only or template class landing without a matching
+// removal still trips it, with less room than the stale 34459/~240 figure
+// this replaces implied.
 describe('dist/assets/ keeps the shared stylesheet under a byte ceiling', () => {
   it.skipIf(!REQUIRED && !existsSync(DIST_ASSETS))('the entry CSS file stays under 34700 bytes', () => {
     const cssFiles = readdirSync(DIST_ASSETS).filter((n) => /^index-.*\.css$/.test(n));

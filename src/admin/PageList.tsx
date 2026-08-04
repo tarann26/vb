@@ -113,6 +113,21 @@ function PageList({ items, onChange, problems, stage }: PageListProps) {
                 />
                 Shown on the site
               </label>
+              {/* M4 review fix: turning this off stops the page from being
+                  REACHABLE (it 404s, drops out of the nav and the sitemap),
+                  but its name, address, SEO text and section content still
+                  ship inside the published site's own code either way --
+                  only a section's own "Publish on" schedule date keeps
+                  content out of what gets published at all. Written directly
+                  here, not in PAGE_FIELDS.enabled's own `help` (fields.ts) --
+                  this checkbox is hand-rolled, not routed through Field, so
+                  a FieldSpec's own `help` string is never rendered for it. */}
+              <p className="mb-4 mt-1 max-w-md font-['Montserrat'] text-xs text-gray-500">
+                Turning this off stops visitors from reaching the page and removes it from the navigation menu and the
+                sitemap -- but its address, name, SEO text and section content are still part of the published
+                site's own code either way. It is not private; a section's own "Publish on" date is the one control
+                that actually keeps content out of what gets published, until that date.
+              </p>
               {isOpen && (
                 <div className="mt-4 border-t border-gray-100 pt-4">
                   <Field

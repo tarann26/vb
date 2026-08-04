@@ -73,11 +73,38 @@ export const EDITABLE_TEXT_PATHS: readonly string[] = Object.keys(COPY_FIELDS).f
 // somehow not a plain object would silently REPLACE it with a fresh
 // single-leaf record instead of leaving it alone, the same landmine
 // `withLeaf`'s own comment already documents for the identical reason.
+//
+// Throws, rather than returning `copy` unchanged (repair-review pattern
+// fix): this exact "return the input unchanged" guard is what made THREE
+// separate defects silent in this codebase before anyone noticed --
+// Plan 5's own Critical, Task 5's own Critical, and C1
+// (template-section-paths.ts's own header comment tells the C1 story in
+// full: a path like `sections.<id>.content.heading` used to resolve
+// `namespace = 'sections'`, `source['sections']` is `undefined`, and this
+// guard handed back the ORIGINAL `copy` with no signal anything was wrong --
+// she would type, watch the heading change, blur, and lose the edit on the
+// next reload). C1 itself is now closed a different way, at the point she
+// AUTHORS a section id (guards.ts's own assertSectionEntry, validate.ts's
+// own validateSectionEntry) -- `commitText` (EditMode.tsx) also checks
+// `parseSectionContentPath` FIRST and never reaches this function for a real
+// `sections.*` path at all. So by construction, every path that still
+// reaches this point names a real, hardcoded `EDITABLE_TEXT_PATHS` entry
+// (never something she typed) -- which makes a namespace failing to resolve
+// here a pure PROGRAMMER mistake (a typo'd literal, a leaf renamed in
+// fields.ts without this module noticing), the exact class of bug this
+// codebase's own guards.ts already throws loudly for (assertHours,
+// assertDrinkCategory, assertSections, ...) rather than silently
+// discarding. Thrown from inside a DOM blur handler (EditableText.tsx),
+// so it surfaces as a real, visible console error the moment it happens,
+// in dev and in CI, instead of a write that looks like it worked and
+// silently wasn't.
 export function setCopyText(copy: Copy, path: string, next: string): Copy {
   const [namespace, leaf] = path.split('.');
   const source = copy as unknown as Record<string, Record<string, unknown>>;
   const section = source[namespace];
-  if (section === null || typeof section !== 'object') return copy;
+  if (section === null || typeof section !== 'object') {
+    throw new Error(`setCopyText: "${path}" does not name a real copy.json field -- refusing to silently discard this edit`);
+  }
   return {
     ...copy,
     [namespace]: { ...section, [leaf]: next },

@@ -150,7 +150,32 @@ function TemplateSectionList({ items, onChange, onReorder, onAdd, problems, rowP
           const isOpen = openIndex === index;
           const path = rowPrefix(index);
           const rowProblems = problems.filter((p) => p.field === path || p.field.startsWith(`${path}.`) || p.field.startsWith(`${path}[`));
-          const rowId = `${idPrefix}-${index}`;
+          // I3 review fix: keyed on `section.id`, never on `index`. This
+          // string is what becomes the STAGE KEY prefix for any photo
+          // staged inside this row (via TemplateContentForm's own `idPrefix`
+          // prop, below -- see `stage(\`${idPrefix}:item-${index}:image\`,
+          // ...)` there). An index-keyed prefix names a POSITION, not a
+          // section -- stage a photo on the section at index 0, move it
+          // down (a reorder writes new array positions, never new ids), and
+          // the section now AT index 0 inherits the first section's own
+          // stage-key prefix. Staging a second photo there then evicts the
+          // first section's own staged bytes from staged.ts's key->file map
+          // (`stage` overwrites by key), while that first section's OWN
+          // `contentPath` is already written into sections.json -- publish
+          // uploads `Object.keys(staged)`, so the commit ends up pointing at
+          // a file that was never uploaded: a broken image on the live
+          // homepage. `section.id` names the record itself, stable across a
+          // reorder exactly the way every other reorderable list in this
+          // dashboard already keys (GalleryList.tsx's own `useRowIds`, or --
+          // here -- React's own `key={section.id}` on this very `<li>`,
+          // three lines below this one). Safe to use directly in a DOM id
+          // string: C1's own fix (guards.ts's assertSectionEntry,
+          // validate.ts's validateSectionEntry) now constrains every
+          // template section id to the same URL-safe-slug alphabet a page's
+          // own slug already uses (letters a-z, numbers, hyphens), so this
+          // can never contain whitespace or any character an `id` attribute
+          // would choke on.
+          const rowId = `${idPrefix}-${section.id}`;
           return (
             <li key={section.id} className="mb-6 rounded border border-gray-200 p-4">
               <div className="mb-3 flex items-center justify-between gap-2">

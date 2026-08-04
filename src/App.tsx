@@ -116,7 +116,11 @@ function PageRoute() {
   return (
     <div className="min-h-screen">
       <PageSeoHead page={page} />
-      <Navbar />
+      {/* I1 review fix: this page renders `page.sections`, never the
+          homepage's own -- `offHomePage` tells Navbar its usual "#anchor"
+          section links would resolve against DOM ids that do not exist on
+          THIS page, and to prefix them back to the homepage instead. */}
+      <Navbar offHomePage />
       {page.sections
         .filter((section) => section.enabled)
         .map((section) => (

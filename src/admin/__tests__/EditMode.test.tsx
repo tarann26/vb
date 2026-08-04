@@ -1051,6 +1051,45 @@ describe('EditMode: I8 -- client-side validation surfaces a problem before she e
   });
 });
 
+// M1 review fix: this file's own comment on `editValidationProblems` used
+// to say sections.json "has no editing affordance on this page at all" --
+// stale the moment Task 5 wired a template section's own heading/paragraph/
+// item/fact text and photos up to /edit's real commit path. Without
+// validating it here, blanking a template heading gave no advance warning
+// at all -- she would only find out at Publish, from a raw 422.
+describe('EditMode: M1 -- sections.json validation also surfaces here, now that a template section is editable in place', () => {
+  it('blanking a template section\'s heading at /edit shows the validator\'s own message, before she ever clicks Publish', async () => {
+    const sectionsWithTemplate: Section[] = [
+      ...SECTIONS,
+      { kind: 'template', id: 'promo', enabled: true, template: 'text', content: { heading: 'Original Heading', paragraphs: ['A paragraph.'] } },
+    ];
+    stubFetch({ sectionsResponse: contentResponse(sectionsWithTemplate, 'sha-sections') });
+    render(
+      <MemoryRouter>
+        <EditMode />
+      </MemoryRouter>,
+    );
+
+    const heading = await screen.findByRole('heading', { level: 2, name: 'Original Heading' });
+    const field = heading.querySelector('[data-editable-path="sections.promo.content.heading"]')!;
+    fireEvent.focus(field);
+    field.textContent = '';
+    fireEvent.blur(field);
+
+    // useValidation's own 400ms debounce -- findByText polls until it fires.
+    // Mutation this guards: dropping the `useValidation('sections.json', ...)`
+    // call this fix adds -- confirmed red, this text never appears (the old
+    // comment's claim that sections.json "has no editing affordance ... so
+    // validating them here would only ever surface a problem she has no way
+    // to act on" was itself stale -- she just acted on exactly one).
+    expect(await screen.findByText('this section needs a heading')).toBeInTheDocument();
+    // The edit above also makes sections.json genuinely dirty, so this is a
+    // real "problems don't gate Publish" proof for this file too (I8's own
+    // rule), not just a hardcoded-clean fixture that happens to pass.
+    expect(screen.getByRole('button', { name: 'Publish' })).not.toBeDisabled();
+  });
+});
+
 // Minor review finding: /edit correctly never offers a DASHBOARD draft for
 // restore (drafts.ts's own per-surface separation -- they are different
 // sessions), but until now nothing told her one exists at all, so she could

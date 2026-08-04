@@ -11,7 +11,7 @@
 // one direction -- guards.ts changes and this file doesn't notice -- never
 // the other way around (this file inventing a second, competing definition
 // of "valid" that quietly drifts from what the build actually enforces).
-import { assertCopy, assertDrinkCategory, assertHours, assertSections, isSectionId, isTemplateType } from './guards';
+import { assertCopy, assertDrinkCategory, assertHours, assertSections, isSectionId, isTemplateType, isUrlSafeSlug } from './guards';
 // Task 1 (Plan 6): the hero collage's own tiny layout language --
 // `heroCollage[i].className` is a Tailwind grid-placement string this
 // module now actually understands, not merely checks for non-blankness.
@@ -553,6 +553,17 @@ function validateSectionEntry(raw: unknown, path: string, seenIds: Set<string>):
   // kind === 'template'
   if (isBlank(id)) {
     problems.push(problem(`${path}.id`, 'this section needs a name'));
+  } else if (!isUrlSafeSlug(id)) {
+    // C1 review fix: named per-field (unlike guards.ts's own throw, this is
+    // the message she actually sees, before Publish) -- see
+    // assertSectionEntry's own comment (guards.ts) for the full mechanism
+    // this closes: an id containing a "." makes
+    // template-section-paths.ts's own path parsing ambiguous, which used to
+    // let a section named "Menu v2.0" reach sections.json and silently
+    // discard every edit made to it at /edit.
+    problems.push(
+      problem(`${path}.id`, `"${id}" can only use letters a-z, numbers and hyphens -- try something like "our-menu"`),
+    );
   } else if (isSectionId(id)) {
     problems.push(problem(`${path}.id`, `"${id}" collides with a built-in section -- choose a different name`));
   } else if (seenIds.has(id as string)) {

@@ -25,7 +25,28 @@ interface NavEntry {
   label: string;
 }
 
-const Navbar: React.FC = () => {
+export interface NavbarProps {
+  // I1 review fix: `copy.nav.links[].href` is a "#"-fragment that only ever
+  // resolves against the HOMEPAGE's own DOM -- `sections` (below) is always
+  // the homepage's own `content.sections` regardless of which route mounted
+  // this component (there is no per-page ContentProvider; a page route's
+  // own `page.sections` is a different list entirely, see App.tsx's
+  // PageRoute), and no template section emits an `id` attribute a "#"
+  // fragment could land on anyway. Bare `#anchor` is correct on the two
+  // routes that actually RENDER those homepage sections (`/` -- App.tsx's
+  // HomePage -- and `/edit` -- EditMode.tsx, which deliberately renders
+  // only the homepage, see that file's own comment); `offHomePage` is true
+  // for exactly the one route that renders something else instead
+  // (App.tsx's PageRoute), so a section link there returns to the homepage
+  // first (`/#anchor`) instead of scrolling nowhere on the current page.
+  // A prop, not a `useLocation()`/`window.location` check inside this
+  // component: the call site already knows unambiguously which content it
+  // rendered, and a prop keeps this component testable (and usable) with no
+  // Router context requirement of its own for the common, homepage case.
+  offHomePage?: boolean;
+}
+
+const Navbar: React.FC<NavbarProps> = ({ offHomePage = false }) => {
   const content = useContent();
   const { site, copy, sections, pages } = content;
   const [showNavbar, setShowNavbar] = useState(true);
@@ -40,7 +61,7 @@ const Navbar: React.FC = () => {
   );
   const sectionEntries: NavEntry[] = copy.nav.links
     .filter((link) => enabledSectionIds.has(link.section))
-    .map((link) => ({ kind: 'section', href: link.href, label: link.label }));
+    .map((link) => ({ kind: 'section', href: offHomePage ? `/${link.href}` : link.href, label: link.label }));
   // A page reaches the nav through exactly one flag it already owns
   // (`inNav && enabled`) -- no separate list to keep in sync, and no way
   // for a page to be linked from the nav while disabled (the same

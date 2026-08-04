@@ -5,7 +5,7 @@
 // globals, not jsdom's.
 import { describe, it, expect, afterEach } from 'vitest';
 import { build } from 'vite';
-import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import sitemap, { buildSitemapXml, pageUrls, STATIC_ROUTES } from '../sitemap';
@@ -99,5 +99,38 @@ describe('sitemap (the Vite plugin)', () => {
     // mechanics (this repo's own standing "don't re-derive a proof twice"
     // preference) -- checked here only at the shallow, structural level.
     expect(sitemap(BASE_URL, []).apply).toBe('build');
+  });
+
+  // M5 review fix: the test above never had a public/sitemap.xml in its own
+  // fixture root, so it could not tell "this plugin's write landed" apart
+  // from "Vite's own public-dir copy landed, and happens to look right
+  // because nobody made it look wrong." Real production has a real,
+  // committed public/sitemap.xml (the two hand-authored static routes, `/`
+  // and `/blogs` -- see this plugin's own header comment): Vite copies that
+  // into dist/ as part of every build, and this plugin's own `writeBundle`
+  // must overwrite it with the freshly generated one (now including every
+  // enabled page), not the other way around. A stale, deliberately WRONG
+  // public/sitemap.xml here is what makes that order observable: if Vite's
+  // copy ever ran AFTER this plugin's write, dist/sitemap.xml would still
+  // contain "STALE-MARKER" and this test would catch it.
+  it('overwrites Vite\'s own public/sitemap.xml copy in dist/, rather than being overwritten by it', async () => {
+    const root = makeFixtureRoot();
+    cleanupRoots.push(root);
+    const outDir = path.join(root, 'dist');
+    const publicDir = path.join(root, 'public');
+    mkdirSync(publicDir, { recursive: true });
+    writeFileSync(path.join(publicDir, 'sitemap.xml'), '<?xml version="1.0"?><urlset><!-- STALE-MARKER --></urlset>\n');
+
+    await build({
+      configFile: false,
+      root,
+      logLevel: 'silent',
+      plugins: [sitemap(BASE_URL, [page('our-menu', true)])],
+      build: { outDir, write: true },
+    });
+
+    const xml = readFileSync(path.join(outDir, 'sitemap.xml'), 'utf8');
+    expect(xml).not.toContain('STALE-MARKER');
+    expect(xml).toContain(`<loc>${BASE_URL}/our-menu</loc>`);
   });
 });

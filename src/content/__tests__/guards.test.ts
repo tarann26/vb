@@ -140,6 +140,24 @@ describe('template sections (Plan 7)', () => {
     expect(() => assertSections([...BESPOKE_SEVEN, bad])).toThrow(/needs an id/);
   });
 
+  // C1 review fix: the whole point of this rule is a dotted id -- confirmed
+  // directly, the hard way, this is what let a section named "Menu v2.0"
+  // pass this guard before this check existed, render editable at /edit and
+  // silently discard every edit made to it (template-section-paths.ts's own
+  // SECTION_CONTENT_PATH can't tell "sections.Menu v2.0.content.heading"
+  // apart from a well-formed path once the id itself contains a dot). Every
+  // other case here (spaces, capitals, underscores) is the SAME
+  // isUrlSafeSlug rule a page's own slug already enforces (guards.test.ts's
+  // own assertPages describe block, above), reused rather than re-invented.
+  it.each(['Menu v2.0', 'Our Story', 'promo_two', 'PROMO', 'sections.promo'])(
+    'rejects the non-URL-safe template section id %j',
+    async (id) => {
+      const { assertSections } = await import('../guards');
+      const bad = { ...VALID_TEXT_TEMPLATE, id };
+      expect(() => assertSections([...BESPOKE_SEVEN, bad])).toThrow(/letters a-z, numbers and hyphens only/);
+    },
+  );
+
   it.each([
     ['text', { paragraphs: ['ok'] }, /needs a "heading"/],
     ['text', { heading: 'Hi', paragraphs: 'not-an-array' }, /needs a "paragraphs" list/],
@@ -281,6 +299,23 @@ describe('assertPages (Plan 7, Task 1)', () => {
     };
     const page = { slug: 'menu', name: 'Menu', inNav: true, enabled: true, seo: SEO, sections: [section, section] };
     expect(() => assertPages([page])).toThrow(/duplicate section id "dup"/);
+  });
+
+  // C1 review fix, the page's own sections path: `assertSectionEntry` is the
+  // ONE function both assertSections (above) and assertPages (here) parse
+  // every entry through, so this closes the identical gap for a page's own
+  // template sections, not just the homepage's.
+  it('rejects a non-URL-safe template section id inside a page\'s own sections', async () => {
+    const { assertPages } = await import('../guards');
+    const section = {
+      kind: 'template',
+      id: 'Menu v2.0',
+      enabled: true,
+      template: 'text',
+      content: { heading: 'H', paragraphs: ['p'] },
+    };
+    const page = { slug: 'menu', name: 'Menu', inNav: true, enabled: true, seo: SEO, sections: [section] };
+    expect(() => assertPages([page])).toThrow(/letters a-z, numbers and hyphens only/);
   });
 
   // The scoping decision: a template id is unique WITHIN one page's own

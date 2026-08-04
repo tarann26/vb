@@ -516,10 +516,19 @@ export const WHATSAPP_BUTTON_FIELDS: FieldsOf<TemplateWhatsAppButton> = {
 // assertSectionEntry) -- this descriptor only supplies the label/help; the
 // actual refusal is what Task 4 Step 1 asks TemplateSectionList.tsx to
 // surface inline, not silently allow and let the publish step reject.
+// C1 review fix: the help text used to say only "must be different from
+// every other section's name" -- true, but silent about the OTHER rule this
+// field has always enforced server-side (guards.ts's own assertSectionEntry,
+// validate.ts's own validateSectionEntry): letters a-z, numbers and hyphens
+// only. A name like "Menu v2.0" used to pass this field with no warning,
+// render editable at /edit, and silently discard every edit made to it --
+// see guards.ts's own comment on assertSectionEntry for the full mechanism.
+// Stated here now so she sees the constraint before she hits it as a
+// validation problem.
 export const TEMPLATE_SECTION_ID_FIELD: FieldSpec<string> = {
   label: 'Section name',
   kind: 'text',
-  help: 'Used only to tell this section apart from others -- not shown to a visitor. Must be different from every other section\'s name.',
+  help: 'Used only to tell this section apart from others -- not shown to a visitor. Letters a-z, numbers and hyphens only (e.g. "our-menu"), and must be different from every other section\'s name.',
 };
 
 // ---------------------------------------------------------------------------

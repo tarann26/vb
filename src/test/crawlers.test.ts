@@ -2,6 +2,24 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync, existsSync } from 'node:fs';
 import { site } from '../content';
 
+// M5 review fix: `plugins/sitemap.ts`'s own `writeBundle` hook OVERWRITES
+// dist/sitemap.xml on every real build (Plan 7, Task 3, Step 3 -- it has to,
+// to append every enabled page's own `/<slug>`) -- the static
+// public/sitemap.xml this file used to read is what Vite copies into dist/
+// BEFORE this plugin's own write, not what a crawler ever actually reaches.
+// Gated the same way src/test/bundle.post-build.test.ts's and
+// src/test/collage-css.test.ts's own dist-dependent checks already are:
+// `npm run test`/`npm run test:deploy` both run before `dist/` exists, so a
+// bare `existsSync` alone can't tell "no dist/ yet" apart from "dist/
+// should be here and isn't" -- see that file's own comment for the exact
+// silent-reduction-to-nothing failure mode this convention exists to avoid.
+// `test:bundle` (package.json) now lists this file too, so
+// VB_REQUIRE_DIST=1 forces these to actually run, post-build, in the real
+// deploy pipeline, not just whenever a developer happens to have a stale
+// dist/ lying around locally.
+const REQUIRED = !!process.env.VB_REQUIRE_DIST;
+const DIST_SITEMAP = 'dist/sitemap.xml';
+
 describe('crawler files', () => {
   it('serves robots.txt pointing at the sitemap', () => {
     expect(existsSync('public/robots.txt')).toBe(true);
@@ -49,14 +67,33 @@ describe('crawler files', () => {
     expect('/edit'.startsWith('/edit/')).toBe(false);
   });
 
-  it('lists every public route in the sitemap', () => {
+  // The pre-build source file this repo hand-maintains -- `/` and `/blogs`,
+  // literally, the same two routes plugins/sitemap.ts's own STATIC_ROUTES
+  // keeps as a base to generate FROM (see that module's own comment). Still
+  // worth pinning on its own: if this ever drifted, the generated
+  // dist/sitemap.xml below would drift with it.
+  it('lists the two static routes in the pre-build source file', () => {
     const xml = readFileSync('public/sitemap.xml', 'utf8');
     expect(xml).toContain(`<loc>${site.seo.url}/</loc>`);
     expect(xml).toContain(`<loc>${site.seo.url}/blogs</loc>`);
   });
 
-  it('does not advertise the unrouted admin or reservation pages', () => {
-    const xml = readFileSync('public/sitemap.xml', 'utf8');
+  // The file a real crawler actually reaches: plugins/sitemap.ts's own
+  // `writeBundle` hook overwrites public/sitemap.xml's own copy in dist/
+  // with a freshly generated one on every build, appending every enabled
+  // page. Nothing pinned THIS file before this fix -- plugins/__tests__/
+  // sitemap.test.ts covers the plugin's pure functions and its own isolated
+  // fixture build, but not that its write wins over Vite's public-dir copy
+  // in the REAL build, and not what the real site's own sitemap actually
+  // contains post-build.
+  it.skipIf(!REQUIRED && !existsSync(DIST_SITEMAP))('lists every public route in the built dist/sitemap.xml -- the file a crawler actually reaches', () => {
+    const xml = readFileSync(DIST_SITEMAP, 'utf8');
+    expect(xml).toContain(`<loc>${site.seo.url}/</loc>`);
+    expect(xml).toContain(`<loc>${site.seo.url}/blogs</loc>`);
+  });
+
+  it.skipIf(!REQUIRED && !existsSync(DIST_SITEMAP))('does not advertise the unrouted admin or reservation pages in the built dist/sitemap.xml', () => {
+    const xml = readFileSync(DIST_SITEMAP, 'utf8');
     expect(xml).not.toContain('/admin');
     expect(xml).not.toContain('/reservation');
   });

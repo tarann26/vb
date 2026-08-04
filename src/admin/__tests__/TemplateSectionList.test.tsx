@@ -127,6 +127,54 @@ describe('TemplateSectionList: reorder and toggle', () => {
   });
 });
 
+// I3 review finding: `rowId` used to be `${idPrefix}-${index}` -- a POSITION,
+// not the row's own identity -- and that string becomes the stage-key
+// prefix for any photo staged inside this row, via TemplateContentForm's own
+// `idPrefix` prop (see that file's own `stage(\`${idPrefix}:item-${index}:
+// image\`, ...)` call sites). Stage a photo on the section at index 0, move
+// it down (a reorder rewrites array POSITIONS, never ids), and stage a
+// second photo on whatever now occupies index 0: staged.ts's own key->file
+// map overwrites by key, so the second stage evicts the first section's own
+// bytes -- while that first section's `contentPath` is already written into
+// sections.json. Publish uploads `Object.keys(staged)`, so the commit ends
+// up pointing at a file that was never uploaded: a broken image on the live
+// homepage. Proven here at the DOM-id level (not by driving a real file
+// upload) -- the SAME string (`rowId`) is both what a row's own content
+// form's ids are built from AND what its stage-key prefix is built from, so
+// pinning that this id survives a reorder pins the stage key too.
+describe("TemplateSectionList: a row's own content form is keyed on its section id, not its array position (I3)", () => {
+  it('a reorder does not relabel a section\'s own content form onto a different section\'s id', async () => {
+    const user = userEvent.setup();
+    const props = {
+      onChange: vi.fn(),
+      onReorder: vi.fn(),
+      onAdd: vi.fn(),
+      problems: [],
+      rowPrefix: (i: number) => `[${7 + i}]`,
+      idPrefix: 'section',
+      stage: vi.fn(),
+    };
+    const { rerender } = render(<TemplateSectionList items={[textSection('a'), textSection('b')]} {...props} />);
+    // Both rows start closed -- open row 0 ('a') specifically.
+    await user.click(screen.getAllByRole('button', { name: 'Edit' })[0]);
+    expect((screen.getByLabelText('Heading') as HTMLInputElement).id).toBe('section-a-heading');
+
+    // Simulate exactly what a reorder does: the PARENT re-renders this list
+    // with `items` in a new order -- 'a' now sits at index 1. This
+    // component holds no state of its own that could preserve a row's
+    // identity across that; only keying on `section.id` (this fix) can.
+    rerender(<TemplateSectionList items={[textSection('b'), textSection('a')]} {...props} />);
+    // Row 0 ('b') is still open (openIndex persisted at 0) -- 'a', now at
+    // index 1, is the only row left showing "Edit".
+    await user.click(screen.getByRole('button', { name: 'Edit' }));
+    // Mutation this guards: reverting `rowId` back to
+    // `${idPrefix}-${index}` -- confirmed red, this reads
+    // "section-1-heading" instead (section 'a''s own form addressed by
+    // section 'b''s former position, not by 'a''s own id).
+    expect((screen.getByLabelText('Heading') as HTMLInputElement).id).toBe('section-a-heading');
+  });
+});
+
 describe('TemplateSectionList: editing content', () => {
   it('clicking "Edit" reveals the section\'s own id field and content form, "Close" hides it again', async () => {
     const user = userEvent.setup();

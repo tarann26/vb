@@ -284,6 +284,35 @@ function assertSectionEntry(raw: unknown, index: number, seenIds: Set<string>, f
     if (typeof id !== 'string' || id.trim().length === 0) {
       throw new Error(`content/${fileLabel}: a template section at [${index}] needs an id`);
     }
+    // C1 review fix: her own free-text section name is the one thing this
+    // guard lets her author that later becomes part of a machine-parsed
+    // PATH -- template-section-paths.ts's own SECTION_CONTENT_PATH splits
+    // `sections.<id>.content.<rest>` on the FIRST dot after "sections.", so
+    // an id containing a dot (e.g. "Menu v2.0") makes that split ambiguous.
+    // Widening that regex is not the fix (`^sections\.(.+)\.content\.(.+)$`
+    // is itself ambiguous the moment an id contains the literal substring
+    // ".content."); refusing the id here, before it can ever reach
+    // sections.json, is. Confirmed directly: with this check removed, a
+    // section named "Menu v2.0" passes both this guard and validateContent,
+    // renders contentEditable at /edit (EditMode.tsx's own `sectionsLoaded`
+    // gate can't tell the difference), and every edit to it is silently
+    // discarded -- setCopyText's own malformed-namespace guard resolves
+    // `copy['sections']` (undefined) and returns `copy` unchanged, with no
+    // error and nothing on screen to say so.
+    //
+    // Reusing isUrlSafeSlug -- the exact rule a page's own `slug` already
+    // enforces (below) -- rather than a new, narrower "just block dots"
+    // check: a slug is already proven safe to embed in a dotted path (its
+    // own [a-z0-9-] alphabet excludes "." along with everything else), and
+    // sharing the rule is what keeps it from going stale in only one
+    // direction, the same reasoning this file's own header comment gives
+    // for building validate.ts on top of this module rather than
+    // duplicating it.
+    if (!isUrlSafeSlug(id)) {
+      throw new Error(
+        `content/${fileLabel}: template section id "${id}" -- use letters a-z, numbers and hyphens only, e.g. "our-menu"`,
+      );
+    }
     // A template id colliding with one of the seven closed SectionIds is
     // refused here, not merely discouraged -- App.tsx's/EditMode.tsx's own
     // dispatch keys every REACT list `key` on `section.id` regardless of

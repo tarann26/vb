@@ -791,12 +791,26 @@ const EditMode: React.FC = () => {
 
   // I8: whole-file client-side validation (useValidation, the identical
   // hook every AdminApp section already uses per file) for exactly the
-  // five content files /edit can actually write to -- copy.json via
-  // commitText, galleries/dishes/drinks/press.json via commitImage.
-  // site.json/story.json/sections.json/menus.json have no editing
-  // affordance on this page at all (Task 3/4's own scope), so validating
-  // them here would only ever surface a problem she has no way to act on
-  // from /edit.
+  // content files /edit can actually write to -- copy.json via commitText,
+  // galleries/dishes/drinks/press.json via commitImage, and (M1 review fix,
+  // Plan 7 Task 5) sections.json via commitText/commitImage too, now that a
+  // template section's own heading/paragraph/item/fact text and photos are
+  // editable in place here (this comment used to say sections.json "has no
+  // editing affordance on this page at all," which stopped being true the
+  // moment Task 5 wired that up -- the stale comment was itself the defect:
+  // without this, blanking a template heading at /edit gave no advance
+  // warning at all, and Publish would 422 the first she'd hear of it).
+  // pages.json is included too, for symmetry with dirtyContentFiles' own
+  // "every currently loaded file, not just the ones this screen's own
+  // commit paths touch" scope -- /edit still writes no pages.json field of
+  // its own (a page she creates stays dashboard-only, see this file's own
+  // header comment), so this is a defensive, cheap addition, not evidence
+  // of a second write path: a pre-existing pages.json problem from an
+  // earlier dashboard session is still worth surfacing here before Publish,
+  // the same way it would be surfaced on the dashboard itself.
+  // site.json/story.json/menus.json still have no editing affordance on
+  // this page at all, so validating them here would only ever surface a
+  // problem she has no way to act on from /edit.
   //
   // Called unconditionally, ABOVE the `status === 'checking'` early return
   // just below -- React's own rule that hooks can't run conditionally.
@@ -812,6 +826,8 @@ const EditMode: React.FC = () => {
     ...useValidation('dishes.json', entries['dishes.json']?.data as ContentTypeMap['dishes.json'] | undefined),
     ...useValidation('drinks.json', entries['drinks.json']?.data as ContentTypeMap['drinks.json'] | undefined),
     ...useValidation('press.json', entries['press.json']?.data as ContentTypeMap['press.json'] | undefined),
+    ...useValidation('sections.json', entries['sections.json']?.data as ContentTypeMap['sections.json'] | undefined),
+    ...useValidation('pages.json', entries['pages.json']?.data as ContentTypeMap['pages.json'] | undefined),
   ];
 
   if (status === 'checking') {

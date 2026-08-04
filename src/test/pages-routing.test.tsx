@@ -96,16 +96,40 @@ describe('a disabled page and a nonexistent slug both 404, indistinguishably', (
 });
 
 describe('PageSeoHead: a page\'s own metadata', () => {
-  it('sets document.title, and restores the previous title on navigating away', async () => {
-    const originalTitle = document.title;
-    await renderWithPages([makePage()], '/our-menu');
+  // I4 review fix: this test's name has always claimed to prove the restore
+  // -- but never actually unmounted anything. The old body hand-assigned
+  // `document.title = originalTitle` itself and called that a "sanity"
+  // check, which passes identically whether PageSeoHead's own cleanup runs
+  // or not (confirmed directly: commenting out that cleanup line entirely
+  // left this test green). A real `unmount()` -- the same thing a route
+  // change back to `/`, or to any route with no page metadata of its own,
+  // actually does to this component -- is what exercises the cleanup for
+  // real.
+  it('sets document.title on mount, and restores the previous title on unmount (navigating away)', async () => {
+    // A controlled sentinel, not whatever `document.title` happens to hold
+    // when this test starts -- jsdom's own document (and therefore its
+    // title) is shared across every test in this FILE (vitest's default
+    // per-file, not per-test, isolation), so an earlier test in this same
+    // describe block already having rendered (and unmounted) a PageSeoHead
+    // for this exact page could otherwise leave `document.title` already
+    // sitting at 'Our Menu | Via Bianca' before this test's own first line
+    // ever runs -- which would make THIS test pass even under the mutation
+    // it exists to catch (both sides of the final assertion would read the
+    // same already-leaked value). Confirmed directly: reading the ambient
+    // title instead of setting a sentinel first stayed green under exactly
+    // the cleanup-removed mutation this test's own comment below names.
+    document.title = 'Sentinel Title Before Mount';
+    const { unmount } = await renderWithPages([makePage()], '/our-menu');
     expect(document.title).toBe('Our Menu | Via Bianca');
-    // Unmount by rendering something else entirely -- the cleanest proxy
-    // for "she navigates to a different route" in this test harness.
-    document.title = originalTitle; // sanity: confirms the assignment above was real, not a no-op
+    unmount();
+    // Mutation this guards: PageSeoHead's own cleanup
+    // (`document.title = previousTitle`) replaced with a no-op -- confirmed
+    // red, `document.title` stays at the page's own title instead of
+    // reverting when this test's own homepage search snippet needs it to.
+    expect(document.title).toBe('Sentinel Title Before Mount');
   });
 
-  it('rewrites the existing <meta name="description"> tag\'s content, not a second, competing one', async () => {
+  it('rewrites the existing <meta name="description"> tag\'s content, not a second, competing one, and restores it on unmount', async () => {
     // jsdom's own test document (unlike a real browser navigating the real
     // index.html) starts with no <meta name="description"> at all -- the
     // static tag PageSeoHead's own comment describes only exists because
@@ -117,10 +141,24 @@ describe('PageSeoHead: a page\'s own metadata', () => {
     meta.setAttribute('content', 'The original, site-wide description.');
     document.head.appendChild(meta);
 
-    await renderWithPages([makePage()], '/our-menu');
+    const { unmount } = await renderWithPages([makePage()], '/our-menu');
     expect(document.querySelectorAll('meta[name="description"]')).toHaveLength(1);
     expect(document.querySelector('meta[name="description"]')?.getAttribute('content')).toBe(
       'A short, honest description.',
+    );
+
+    // I4 review fix: the old test stopped here, then removed `meta` BY HAND
+    // in its own teardown -- proving the mutate-not-append half but nothing
+    // about restore. A real `unmount()` is what a route change actually
+    // does; PageSeoHead's own cleanup must put the site-wide description
+    // back, or the NEXT page (or the homepage) would silently keep showing
+    // this page's own snippet in search results.
+    unmount();
+    // Mutation this guards: PageSeoHead's own cleanup restoring
+    // `descriptionMeta`'s content replaced with a no-op -- confirmed red,
+    // the tag stays at this page's own description instead of reverting.
+    expect(document.querySelector('meta[name="description"]')?.getAttribute('content')).toBe(
+      'The original, site-wide description.',
     );
 
     meta.remove();
@@ -167,5 +205,31 @@ describe('NavBar: a page reaches the nav through its own inNav flag, nothing els
     const link = screen.getAllByRole('link', { name: 'Our Menu' })[0];
     await user.click(link);
     expect(screen.getByRole('heading', { level: 2, name: 'Welcome to Our Menu' })).toBeInTheDocument();
+  });
+});
+
+// I1 review finding: copy.nav.links's own "#"-fragment hrefs (e.g.
+// "#our-story") only ever resolve against the HOMEPAGE's own DOM -- on a
+// page route, `document.querySelector('#our-story')` is null (a page
+// renders its own `page.sections`, never the homepage's), so a bare
+// "#our-story" link there scrolled nowhere, on every page she creates. The
+// fix: NavBar prefixes a section link with "/" when it is not rendering the
+// homepage's own content, so the link returns to `/` (where the id it names
+// really exists) instead of dying on the current route.
+describe('NavBar: a section link ("#our-story") returns to the homepage when off it (I1)', () => {
+  it('prefixes a section link with "/" on a page route, so it targets the homepage', async () => {
+    await renderWithPages([makePage()], '/our-menu');
+    const links = screen.getAllByRole('link');
+    const sectionLink = links.find((l) => l.getAttribute('href')?.startsWith('#') || l.getAttribute('href')?.startsWith('/#'));
+    expect(sectionLink).toBeDefined();
+    expect(sectionLink?.getAttribute('href')).toMatch(/^\/#/);
+  });
+
+  it('leaves a section link as a bare "#anchor" on the homepage itself, unchanged', async () => {
+    await renderWithPages([makePage()], '/');
+    const links = screen.getAllByRole('link');
+    const sectionLink = links.find((l) => l.getAttribute('href')?.startsWith('#'));
+    expect(sectionLink).toBeDefined();
+    expect(sectionLink?.getAttribute('href')).not.toMatch(/^\//);
   });
 });

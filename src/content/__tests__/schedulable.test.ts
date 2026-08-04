@@ -45,6 +45,26 @@ function filesNeedingSchedule(files: Record<string, unknown>): string[] {
     .map(([name]) => name);
 }
 
+// I5 review fix: the actual "is the gap closed" question, extracted so the
+// SAME implementation backs both the synthetic proof below (which mutation-
+// tests it against a case that is NOT vacuous) and the real-content sweep
+// (which, as of today, always is -- see that describe block's own comment).
+// Before this fix, the real-content block reimplemented this filter inline,
+// independently -- so a bug in THAT reimplementation had no test of its own
+// to catch it; the only thing standing between it and silently mattering
+// less than it looked like was real content someday exercising it. Sharing
+// one function does not make the real-content assertion itself non-vacuous
+// (it can't be, until real content actually authors a publishAt somewhere
+// unregistered) -- what it does is make sure the LOGIC that assertion runs
+// is the same logic the synthetic test below already proves red/green.
+export function unregisteredSchedulableFiles(
+  needsSchedule: string[],
+  registered: readonly string[],
+  exceptions: ReadonlySet<string>,
+): string[] {
+  return needsSchedule.filter((file) => !registered.includes(file) && !exceptions.has(file));
+}
+
 describe('hasPublishAtSomewhere / filesNeedingSchedule -- the detector itself', () => {
   it('finds a publishAt buried inside nested arrays and objects, not only at the top level', () => {
     expect(hasPublishAtSomewhere([{ nested: { deeper: [{ publishAt: '2099-01-01' }] } }])).toBe(true);
@@ -79,11 +99,18 @@ describe('hasPublishAtSomewhere / filesNeedingSchedule -- the detector itself', 
   // real committed content -- see the describe block below for why the real
   // sweep is vacuous today, and why that is not the same as this scenario
   // being untested.
+  //
+  // Mutation-tested (I5): this is the ONE case in this whole file where
+  // `unregisteredSchedulableFiles` is exercised against a non-empty result,
+  // so it is what actually proves that function -- the same one the
+  // real-content sweep below now calls -- works. Mutating it to always
+  // return `[]` -- the exact shape "a forgot-to-register regression" would
+  // actually look like -- confirmed red here, reverted.
   it('a file with real publishAt content that is missing from the registered set is caught by the caller', () => {
     const files = { 'site.json': [{ publishAt: '2099-01-01' }] };
     const flagged = filesNeedingSchedule(files);
     const registered: readonly string[] = SCHEDULABLE_FILES;
-    const missing = flagged.filter((file) => !registered.includes(file));
+    const missing = unregisteredSchedulableFiles(flagged, registered, new Set());
     expect(missing).toEqual(['site.json']);
   });
 });
@@ -125,16 +152,28 @@ describe('the real, committed content under src/content/ agrees with SCHEDULABLE
   // excluded.
   const HANDLED_OUTSIDE_SCHEDULABLE_FILES = new Set(['pages.json']);
 
+  // I5 review fix: this used to reimplement its own
+  // `needsSchedule.forEach(...) { if (exception) return; expect(...) }`
+  // sweep, independently of the synthetic proof above -- which meant this
+  // exact wiring (the forEach, the exception guard, the containment check)
+  // had no mutation coverage of its own: `expect(registered).toContain(file)`
+  // mutated to `expect(true).toBe(true)`, or the exception guard mutated to
+  // `if (true) return;`, both stayed green here, for the same reason either
+  // way -- `needsSchedule` is `[]` against real content today (see this
+  // describe block's own comment), so the loop body never runs regardless
+  // of what it says. Calling the SAME `unregisteredSchedulableFiles` the
+  // synthetic test above already mutation-tests is what closes that: a bug
+  // in the shared logic is caught THERE, where the fixture is non-vacuous,
+  // even though this specific call remains vacuous until real content
+  // authors a publishAt somewhere unregistered.
   it('every real content file that carries a publishAt is listed in SCHEDULABLE_FILES, or is a named, separately-handled exception', () => {
     const files = Object.fromEntries(
       realFiles.map((file) => [file, JSON.parse(readFileSync(join(CONTENT_DIR, file), 'utf8'))]),
     );
     const needsSchedule = filesNeedingSchedule(files);
     const registered: readonly string[] = SCHEDULABLE_FILES;
-    needsSchedule.forEach((file) => {
-      if (HANDLED_OUTSIDE_SCHEDULABLE_FILES.has(file)) return;
-      expect(registered).toContain(file);
-    });
+    const unregistered = unregisteredSchedulableFiles(needsSchedule, registered, HANDLED_OUTSIDE_SCHEDULABLE_FILES);
+    expect(unregistered).toEqual([]);
   });
 
   // The exception set itself must name a real file, or it silently swallows
