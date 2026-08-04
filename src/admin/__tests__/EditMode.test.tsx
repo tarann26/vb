@@ -638,6 +638,111 @@ describe('Plan 6 Task 5: publishing a collage placement move rides the existing 
   });
 });
 
+// Plan 6's own Definition of Done: "A tile moved and photo-replaced in one
+// session keeps both changes." Not exercised by any test above -- the
+// Task 5 test just above drives a move alone, and Plan 5's own gallery
+// tests (further down this file) drive a photo replace alone, each through
+// `buildBundle` directly rather than the real `<EditMode>` component. Both
+// edits write into the SAME `galleries.json` registry entry
+// (`commitCollagePlacement` patches only `heroCollage[index].className`;
+// `commitImage`, Plan 5's own path, patches only `heroCollage[index].src`),
+// so the real risk this test names is a stale-closure read -- the second
+// commit reading a `galleries` snapshot captured before the first commit's
+// re-render landed, silently discarding it. Driven through the real
+// `<EditMode>` component, in one session, in the order she would actually
+// do it (move, then replace), reading the result back from the one place
+// that cannot be fooled by an intermediate render: the actual POST
+// /api/publish body.
+describe('Plan 6 Definition of Done: a tile moved AND photo-replaced in one session keeps both changes', () => {
+  // A second, local, minimal XHR fake -- not the one further down this file
+  // (Plan 5 Task 4, Step 2's own `describe` block): that one is declared
+  // inside its own `describe` callback, an ordinary JS function scope, so
+  // it is not reachable from here. Duplicating this much (not extracting a
+  // shared module-level helper) keeps this file's existing, carefully-tuned
+  // describe blocks untouched by a change this specific test alone needs.
+  class FakeXHR {
+    static instances: FakeXHR[] = [];
+    status = 0;
+    responseText = '';
+    upload: { onprogress: ((event: { lengthComputable: boolean; loaded: number; total: number }) => void) | null } = { onprogress: null };
+    onload: (() => void) | null = null;
+    onerror: (() => void) | null = null;
+    constructor() {
+      FakeXHR.instances.push(this);
+    }
+    open() {}
+    send() {}
+    respond(status: number, body: unknown) {
+      this.status = status;
+      this.responseText = JSON.stringify(body);
+      this.onload?.();
+    }
+  }
+
+  function jpegFile(name: string): File {
+    return new File([new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 0, 0, 0])], name, { type: 'image/jpeg' });
+  }
+
+  beforeEach(() => {
+    FakeXHR.instances = [];
+    vi.stubGlobal('XMLHttpRequest', FakeXHR as unknown as typeof XMLHttpRequest);
+  });
+
+  it('moving tile 1 then replacing its photo, in one session, publishes both the moved className AND the new src', async () => {
+    stubFetch();
+    render(
+      <MemoryRouter>
+        <EditMode />
+      </MemoryRouter>,
+    );
+
+    // 1. Move, exactly like the Task 5 test above.
+    const toggle = await screen.findByRole('button', { name: 'Move or change the size of photo 1' });
+    fireEvent.click(toggle);
+    const moveLeft = await screen.findByRole('button', { name: 'Move left' });
+    fireEvent.click(moveLeft);
+    expect(document.querySelector('[data-collage-tile-index="0"]')).toHaveClass('col-start-4', 'row-start-1');
+
+    // 2. Replace the SAME tile's photo. Every collage tile renders with
+    // `alt=""` (Hero.tsx's own `content.renderImage` call) -- EditableImage's
+    // own `alt` normalises an empty string to `undefined` (its `alt.length >
+    // 0` check), so its `Replace ${alt ?? 'this photo'}` title reads "Replace
+    // this photo" identically across all sixteen tiles; `within(tileEl)` is
+    // what makes this unambiguous, not the title text.
+    const tileEl = document.querySelector('[data-collage-tile-index="0"]') as HTMLElement;
+    const control = within(tileEl).getByTitle('Replace this photo');
+    const input = control.querySelector('input[type="file"]') as HTMLInputElement;
+    expect(input).not.toBeNull();
+    const before = FakeXHR.instances.length;
+    Object.defineProperty(input, 'files', { value: [jpegFile('new-scene.jpg')], configurable: true });
+    fireEvent.change(input);
+    await waitFor(() => expect(FakeXHR.instances.length).toBeGreaterThan(before));
+    FakeXHR.instances[FakeXHR.instances.length - 1].respond(200, {
+      path: 'assets-source/x/new-scene.jpg',
+      contentPath: '/x/new-scene.webp',
+    });
+
+    // Both edits now live in the registry together -- confirmed the only way
+    // that cannot be fooled by an intermediate render: publish, and read back
+    // the actual request body.
+    const publishButton = await screen.findByRole('button', { name: 'Publish' });
+    await waitFor(() => expect(publishButton).not.toBeDisabled());
+    fireEvent.click(publishButton);
+    expect(await screen.findByText('Your changes are live.')).toBeInTheDocument();
+
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+    const publishCall = fetchMock.mock.calls.find(([url]) => url === '/api/publish');
+    const body = JSON.parse((publishCall![1] as RequestInit).body as string) as {
+      files: { path: string; content: string }[];
+    };
+    const publishedGalleries = JSON.parse(body.files.find((f) => f.path === 'src/content/galleries.json')!.content) as Galleries;
+    expect(publishedGalleries.heroCollage[0]).toEqual({
+      src: '/x/new-scene.webp',
+      className: 'col-start-4 col-span-2 row-start-1 row-span-2',
+    });
+  });
+});
+
 describe('EditMode: one malformed content file does not take down the page', () => {
   it('dishes.json parsing to the wrong shape (an object, not an array) shows a per-section error, while the rest of the page still renders', async () => {
     // Valid JSON, wrong shape: content.ts's fetchContent only parses --
