@@ -300,4 +300,57 @@ describe('resolveLayout', () => {
       expect(resolved.length).toBe(16);
     });
   });
+
+  // I-E review finding: CSS Grid L1 §8.5 step 4's own definite-column
+  // branch carries a cursor rule this function was missing entirely --
+  // "Set the column position of the cursor to the grid item's column-start
+  // line. If this is less than the previous column position of the
+  // cursor, increment the row position by 1." Not reachable through this
+  // plan's own editing UI today (the real, committed galleries.json has
+  // exactly one definite-column/auto-row entry, and this needs two), but a
+  // hand-edited galleries.json with two makes it real -- and a real
+  // differential against headless Chromium (15,376 tiles, the review's own
+  // number) found 13 cases where the missing rule said "on grid" where
+  // Chromium actually clips into an implicit row. Always that direction,
+  // never the reverse -- which is what makes this dangerous rather than
+  // merely imprecise.
+  describe('I-E: the definite-column, auto-row cursor rule (CSS Grid L1 §8.5 step 4)', () => {
+    it('a later definite-column item whose column is LESS than the previous cursor column moves to the NEXT row, not the cursor\'s current one', () => {
+      // The review's own minimal reproducer: col-start-4 then col-start-2,
+      // both row-auto. Real Chromium: tile 1 lands at row 2, col 2 -- not
+      // row 1, col 2, which is what a cursor with no such comparison at all
+      // (the unrepaired version of this function) produced.
+      const [first, second] = resolveLayout([
+        { colStart: 4, colSpan: null, rowStart: null, rowSpan: null },
+        { colStart: 2, colSpan: null, rowStart: null, rowSpan: null },
+      ]);
+      expect(first).toEqual({ colStart: 4, colSpan: 1, rowStart: 1, rowSpan: 1 });
+      expect(second).toEqual({ colStart: 2, colSpan: 1, rowStart: 2, rowSpan: 1 });
+    });
+
+    it('a later definite-column item whose column is NOT less than the previous cursor column stays on the cursor\'s current row', () => {
+      // col-start-2 then col-start-4: 4 is NOT less than the cursor's
+      // column after placing the first item (2 + 1 = 3), so the second
+      // item can still land on row 1, same as the unrepaired version
+      // already got right -- this is the negative control proving the new
+      // comparison doesn't fire when the spec says it shouldn't.
+      const [first, second] = resolveLayout([
+        { colStart: 2, colSpan: null, rowStart: null, rowSpan: null },
+        { colStart: 4, colSpan: null, rowStart: null, rowSpan: null },
+      ]);
+      expect(first).toEqual({ colStart: 2, colSpan: 1, rowStart: 1, rowSpan: 1 });
+      expect(second).toEqual({ colStart: 4, colSpan: 1, rowStart: 1, rowSpan: 1 });
+    });
+
+    it('the wrap can cross more than one item -- a THIRD definite-column item still less than the running cursor also drops a row', () => {
+      const [, , third] = resolveLayout([
+        { colStart: 4, colSpan: null, rowStart: null, rowSpan: null },
+        { colStart: 5, colSpan: null, rowStart: null, rowSpan: null },
+        { colStart: 1, colSpan: null, rowStart: null, rowSpan: null },
+      ]);
+      // Cursor column after the second item is 5 + 1 = 6; the third
+      // item's column (1) is less than that, so it drops to row 2.
+      expect(third).toEqual({ colStart: 1, colSpan: 1, rowStart: 2, rowSpan: 1 });
+    });
+  });
 });

@@ -254,7 +254,23 @@ export function resolveLayout(entries: readonly (Placement | null)[]): (Resolved
     if (colSpan > GRID_SIZE) return; // can never fit; leave unresolved
 
     if (p.colStart !== null) {
-      // Definite column, auto row: walk forward from the cursor's row only.
+      // Definite column, auto row: walk forward from the cursor's row only
+      // -- but not necessarily from `cursorRow` itself. CSS Grid L1 §8.5
+      // step 4's own definite-column branch: "Set the column position of
+      // the cursor to the grid item's column-start line. If this is less
+      // than the previous column position of the cursor, increment the row
+      // position by 1." I-E review finding: this function had no such
+      // comparison at all, and always resumed searching at `cursorRow`
+      // regardless -- confirmed wrong against real Chromium with as few as
+      // two definite-column/auto-row entries in a row (`col-start-4` then
+      // `col-start-2`): column 2 is LESS than the previous cursor's column
+      // (4 + colSpan), meaning the cursor has wrapped back to an earlier
+      // column, and the spec's own rule says that means a NEW row, not a
+      // continued search of the one the cursor was already on. Missing
+      // this said "on grid" in 13 cases the real differential (15,376
+      // tiles) found Chromium actually clips -- always the dangerous
+      // direction, never the reverse.
+      if (p.colStart < cursorCol) cursorRow++;
       let r = cursorRow;
       const limit = r + SEARCH_GUARD;
       while (r <= limit && !cellsFree(r, rowSpan, p.colStart, colSpan)) r++;
