@@ -572,6 +572,72 @@ describe('EditMode: in-page navigation and page chrome are not blocked (post-rev
   });
 });
 
+// Plan 6 Task 5, Step 1's own claim: `galleries.json` is already one of the
+// five files /edit can write, so a placement move should reach a real
+// publish with NO NEW PLUMBING -- neither dirtyContentFiles nor
+// buildPublishRequest (src/admin/publish.ts) has ever heard of `heroCollage`
+// or `className`; both are generic over any ContentFileName, comparing
+// `entry.data` against `entry.initial` by JSON string equality. Proven the
+// same way Plan 5 Task 5 proved a text edit: driven entirely through the
+// real UI -- the same "Move left" button the carve-out test just above this
+// one already proves reaches the registry -- through the real publish.ts
+// pipeline, to a real POST /api/publish body, asserting the MOVED
+// className is what actually left the browser. Confirmed directly: before
+// Task 3/4 wired `commitCollagePlacement` to call the same
+// `registry.updateData` every other field already uses, this test would
+// have found `galleries.json` simply never dirty -- Publish would have sent
+// a request with no entry for it at all (or stayed disabled, depending on
+// whether any OTHER field was also touched), which is the "new plumbing
+// silently required and never added" failure this step's own wording warns
+// against.
+describe('Plan 6 Task 5: publishing a collage placement move rides the existing publish path', () => {
+  it('moving a tile with the real UI and clicking Publish sends the moved className -- no collage-specific code in publish.ts', async () => {
+    stubFetch();
+    render(
+      <MemoryRouter>
+        <EditMode />
+      </MemoryRouter>,
+    );
+
+    const toggle = await screen.findByRole('button', { name: 'Move or change the size of photo 1' });
+    fireEvent.click(toggle);
+    const moveLeft = await screen.findByRole('button', { name: 'Move left' });
+    fireEvent.click(moveLeft);
+    // Same resolved position the carve-out test above already names: tile 0
+    // (col-start-5 col-span-2, auto row -> resolves to row-start-1
+    // row-span-2 in the real, unedited galleries.json) moved one column left.
+    expect(document.querySelector('[data-collage-tile-index="0"]')).toHaveClass(
+      'col-start-4',
+      'col-span-2',
+      'row-start-1',
+      'row-span-2',
+    );
+
+    const publishButton = await screen.findByRole('button', { name: 'Publish' });
+    expect(publishButton).not.toBeDisabled();
+    fireEvent.click(publishButton);
+
+    expect(await screen.findByText('Your changes are live.')).toBeInTheDocument();
+
+    // `vi.stubGlobal('fetch', ...)` (inside stubFetch, above) sets
+    // `globalThis.fetch` to that exact mock instance -- reading it back here
+    // is the same object, not a second stub.
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+    const publishCall = fetchMock.mock.calls.find(([url]) => url === '/api/publish');
+    expect(publishCall).toBeDefined();
+    const body = JSON.parse((publishCall![1] as RequestInit).body as string) as {
+      files: { path: string; content: string }[];
+    };
+    const galleriesFile = body.files.find((f) => f.path === 'src/content/galleries.json');
+    expect(galleriesFile).toBeDefined();
+    const publishedGalleries = JSON.parse(galleriesFile!.content) as Galleries;
+    expect(publishedGalleries.heroCollage[0].className).toBe('col-start-4 col-span-2 row-start-1 row-span-2');
+    // Every other tile's className is untouched -- this is a MOVE, not a
+    // rewrite of the whole file.
+    expect(publishedGalleries.heroCollage[1].className).toBe(GALLERIES.heroCollage[1].className);
+  });
+});
+
 describe('EditMode: one malformed content file does not take down the page', () => {
   it('dishes.json parsing to the wrong shape (an object, not an array) shows a per-section error, while the rest of the page still renders', async () => {
     // Valid JSON, wrong shape: content.ts's fetchContent only parses --
