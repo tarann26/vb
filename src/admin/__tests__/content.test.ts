@@ -261,7 +261,7 @@ describe('importsContentSnapshot catches every import form, at the right depth',
     expect(importsContentSnapshot(`import type { Dish } from '../content/types';`, AT_DEPTH_1)).toBe(false);
   });
 
-  it('does not match the validate/guards/publish/context modules, which import no JSON', () => {
+  it('does not match the validate/guards/publish/context/placement modules, which import no JSON', () => {
     expect(importsContentSnapshot(`import { validateContent } from '../content/validate';`, AT_DEPTH_1)).toBe(false);
     expect(importsContentSnapshot(`import { assertSections } from '../content/guards';`, AT_DEPTH_1)).toBe(false);
     expect(importsContentSnapshot(`import { isPublished } from '../content/publish';`, AT_DEPTH_1)).toBe(false);
@@ -271,6 +271,16 @@ describe('importsContentSnapshot catches every import form, at the right depth',
     // this whitelist exists to guard, per SAFE_CONTENT_SUBMODULES's own
     // comment above.
     expect(importsContentSnapshot(`import { ContentProvider } from '../content/context';`, AT_DEPTH_1)).toBe(false);
+    // Plan 6 review finding (Minor, repaired here): `placement` joined
+    // SAFE_CONTENT_SUBMODULES with Plan 6's own collage-layout module, but
+    // this whitelist test was never extended to cover it -- 1844 tests
+    // stayed green with the entry present or absent alike, which is exactly
+    // the kind of change this test file exists to catch. `placement.ts`
+    // itself imports no JSON today (confirmed directly -- zero imports at
+    // all), so it belongs on the list for the identical reason
+    // validate/guards/publish do; this pins that it actually IS on it, not
+    // just that adding it didn't break anything else.
+    expect(importsContentSnapshot(`import { resolveLayout } from '../content/placement';`, AT_DEPTH_1)).toBe(false);
   });
 
   // The direct-JSON-import fix must not overreach into flagging the four
