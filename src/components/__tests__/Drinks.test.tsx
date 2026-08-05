@@ -1,35 +1,61 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import Drinks from '../Drinks';
-import { drinks, copy } from '../../content';
+import { drinks } from '../../content';
 import type { Drink } from '../../content';
 
-const CATEGORY_HEADING: Record<Drink['category'], string> = {
-  mocktail: copy.drinks.mocktails,
-  cocktail: copy.drinks.cocktails,
-  wine: copy.drinks.wine,
-};
+// The owner's own request (see Drinks.tsx's header comment): the three
+// text-list categories (Mocktails/Cocktails/Wine) are gone, replaced by a
+// single FoodGallery-style photo carousel that shows only drinks with an
+// image. drinks.json keeps all 38 records -- deleting the 37 without a photo
+// yet would mean retyping every name and description once they're
+// photographed -- so this file tests the carousel's own filter, not the
+// content file's size.
+const hasImage = (drink: Drink): drink is Drink & { image: string } => drink.image !== null;
+const photographed = drinks.filter(hasImage);
+const unphotographed = drinks.filter((drink) => !hasImage(drink));
 
 describe('Drinks', () => {
-  it('renders every drink name', () => {
+  it('renders one card per drink that has a photo', () => {
     render(<Drinks />);
-    drinks.forEach((drink) => {
+    expect(screen.getAllByRole('img')).toHaveLength(photographed.length);
+  });
+
+  it("renders every photographed drink's name and description", () => {
+    render(<Drinks />);
+    photographed.forEach((drink) => {
       expect(screen.getByText(drink.name)).toBeInTheDocument();
+      expect(screen.getByText(drink.description)).toBeInTheDocument();
     });
   });
 
-  it('shows a heading for every category that currently has a drink', () => {
-    // Drinks.tsx renders `null` for a category with zero items (see
-    // Drinks.tsx's `if (items.length === 0) return null`), so deleting every
-    // drink in one category is a legitimate content edit that removes that
-    // category's heading too. Iterating only the categories actually present
-    // in `drinks` -- instead of all three unconditionally -- keeps this test
-    // invariant under that edit.
+  it('uses the drink name as alt text', () => {
     render(<Drinks />);
-    const presentCategories = [...new Set(drinks.map((d) => d.category))];
-    presentCategories.forEach((category) => {
-      expect(screen.getByRole('heading', { name: CATEGORY_HEADING[category] })).toBeInTheDocument();
+    photographed.forEach((drink) => {
+      expect(screen.getByAltText(drink.name)).toBeInTheDocument();
     });
+  });
+
+  // The real regression this guards: the old layout rendered a drink with no
+  // photo as a name-and-description text line ("Drinks without photography").
+  // That fallback is gone -- a drink with no `image` must not appear on the
+  // page at all, in any form, until it has one.
+  it('does not render a drink that has no photo -- no text-list fallback', () => {
+    render(<Drinks />);
+    expect(unphotographed.length).toBeGreaterThan(0); // non-vacuous against real content
+    unphotographed.forEach((drink) => {
+      expect(screen.queryByText(drink.name)).not.toBeInTheDocument();
+    });
+  });
+
+  // The three category sub-headings (Mocktails/Cocktails/Wine) no longer
+  // exist anywhere -- not in copy.json (see copy.json's own drinks.* keys)
+  // and not hardcoded in this component either.
+  it('renders no category sub-heading', () => {
+    render(<Drinks />);
+    expect(screen.queryByText('Mocktails')).not.toBeInTheDocument();
+    expect(screen.queryByText('Cocktails')).not.toBeInTheDocument();
+    expect(screen.queryByText('Wine')).not.toBeInTheDocument();
   });
 
   // "Describes only drinks that exist" (retired drinks and prose ghosts)

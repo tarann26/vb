@@ -38,7 +38,7 @@ const REAL_COPY = copyJson as Copy;
 // the two routes above live) because it imports COPY_FIELDS from
 // src/admin/fields.ts, the real source of truth for which dotted paths are
 // editable text -- deriving the expected set from it, rather than
-// hand-typing a second 31-entry list a future edit to fields.ts could
+// hand-typing a second 28-entry list a future edit to fields.ts could
 // silently drift out of sync with, is the same "derive from the real thing,
 // don't duplicate it by hand" call src/admin/__tests__/content.test.ts's own
 // CONTENT_FILES check already makes. src/test/bundle.test.ts's own
@@ -48,6 +48,11 @@ const REAL_COPY = copyJson as Copy;
 // content-snapshot check in this same directory -- so living inside
 // src/admin/ is not just a convenience, it is the only placement this gate
 // allows for a file that needs COPY_FIELDS.
+//
+// 31 -> 28: Drinks.tsx dropped its three category sub-headings (Mocktails/
+// Cocktails/Wine), and copy.json's drinks.mocktails/cocktails/wine keys --
+// and their COPY_FIELDS/EDITABLE_TEXT_PATHS entries -- went with them. Every
+// count below that used to read 31 now reads 28.
 
 interface TextCall {
   path: string;
@@ -125,7 +130,7 @@ describe('every renderText/renderImage call site passes a path that really point
 
   // Mounted once for the whole describe block, not per-test: blogsPage.*
   // only renders at /blogs and notFound.* only at a route nothing matches,
-  // so no single route's calls alone ever cover the full 31 -- the three
+  // so no single route's calls alone ever cover the full 28 -- the three
   // together do.
   beforeAll(() => {
     mountAt('/', bundle);
@@ -139,17 +144,17 @@ describe('every renderText/renderImage call site passes a path that really point
   });
 
   it('the recorded renderText paths are exactly EDITABLE_TEXT_PATHS (src/admin/editable-paths.ts) -- no missing, no extra', () => {
-    expect(EDITABLE_TEXT_PATHS).toHaveLength(31);
+    expect(EDITABLE_TEXT_PATHS).toHaveLength(28);
     const recorded = new Set(textCalls.map((call) => call.path));
     expect([...recorded].sort()).toEqual([...EDITABLE_TEXT_PATHS].sort());
   });
 
-  // Kills both the typo ('visit.heading' -> 'visit.headingTYPO') and the
-  // collision (Drinks.tsx's `drinks.wine` -> `drinks.mocktails`, which
-  // leaves 'drinks.mocktails' recorded twice -- once with the real
-  // mocktails heading, once with the wine heading under the wrong path,
-  // and only the second occurrence's resolved value disagrees with what
-  // was passed).
+  // Kills both the typo ('visit.heading' -> 'visit.headingTYPO') and a
+  // collision (originally reproduced as Drinks.tsx's `drinks.wine` ->
+  // `drinks.mocktails`, back when Drinks.tsx rendered three category
+  // sub-headings from those two fields -- both paths, and the headings that
+  // read them, are gone now; the mechanism this test proves generalizes to
+  // any two same-shape paths, not just that specific historical pair).
   it('every recorded renderText call resolves, against the bundle it was given, to exactly the value it was passed', () => {
     for (const call of textCalls) {
       expect(resolveTextValue(bundle, call.path)).toBe(call.value);
@@ -173,8 +178,8 @@ describe('every renderText/renderImage call site passes a path that really point
 // test of the exported module's own membership, not a re-derivation of it
 // (which would only ever prove the module equals itself).
 describe('EDITABLE_TEXT_PATHS (src/admin/editable-paths.ts)', () => {
-  it('has exactly 31 entries, every one a real COPY_FIELDS key', () => {
-    expect(EDITABLE_TEXT_PATHS).toHaveLength(31);
+  it('has exactly 28 entries, every one a real COPY_FIELDS key', () => {
+    expect(EDITABLE_TEXT_PATHS).toHaveLength(28);
     const copyFieldKeys = new Set(Object.keys(COPY_FIELDS));
     EDITABLE_TEXT_PATHS.forEach((path) => expect(copyFieldKeys.has(path)).toBe(true));
   });

@@ -308,9 +308,6 @@ interface CopyLeafShape {
   'food.heading': string;
   'drinks.heading': string;
   'drinks.intro': string;
-  'drinks.mocktails': string;
-  'drinks.cocktails': string;
-  'drinks.wine': string;
   'press.heading': string;
   'press.intro': string;
   'press.readArticle': string;
@@ -347,9 +344,6 @@ export const COPY_FIELDS: FieldsOf<CopyLeafShape> = {
   'food.heading': { label: 'Menu heading', kind: 'text' },
   'drinks.heading': { label: 'Drinks heading', kind: 'text' },
   'drinks.intro': { label: 'Drinks intro', kind: 'textarea' },
-  'drinks.mocktails': { label: 'Mocktails label', kind: 'text' },
-  'drinks.cocktails': { label: 'Cocktails label', kind: 'text' },
-  'drinks.wine': { label: 'Wine label', kind: 'text' },
   'press.heading': { label: 'Stories heading', kind: 'text' },
   'press.intro': { label: 'Stories intro', kind: 'textarea' },
   // Drives both the homepage teaser (BlogTeaser) and the /blogs page --

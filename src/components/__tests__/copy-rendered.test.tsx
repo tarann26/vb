@@ -67,34 +67,24 @@ describe('copy-rendered', () => {
     expect(screen.getByText('Fixture Reserve Button')).toBeInTheDocument();
   });
 
-  it('Drinks renders its heading, intro and category labels from copy.drinks', async () => {
-    // `drinks` is mocked alongside `copy.drinks`, not left live: Drinks.tsx
-    // renders `null` for any category with zero items (see Drinks.tsx's
-    // `if (items.length === 0) return null`), so if a real content edit ever
-    // deletes every drink in one category, a live `drinks` here would make
-    // that category's heading assertion below fail for a content reason, not
-    // a hardcoded-string reason. The fixture guarantees all three categories
-    // are present. Follows the same pattern this file already uses for
-    // `press` in the BlogTeaser/BlogsPage tests below.
-    const fixtureDrinks = [
-      { id: 'fixture-mocktail', name: 'Fixture Mocktail', description: 'x', category: 'mocktail' as const, image: null },
-      { id: 'fixture-cocktail', name: 'Fixture Cocktail', description: 'x', category: 'cocktail' as const, image: null },
-      { id: 'fixture-wine', name: 'Fixture Wine', description: 'x', category: 'wine' as const, image: null },
-    ];
+  // Drinks.tsx is now a single FoodGallery-style photo carousel (the three
+  // Mocktails/Cocktails/Wine category sub-headings are gone -- see
+  // copy.json's own drinks.* keys and Drinks.tsx's own header comment), so
+  // `copy.drinks` has only `heading` and `intro` left to prove render from
+  // content rather than a hardcoded literal. `drinks` itself is left live
+  // (not mocked): the carousel's own image filter is Drinks.test.tsx's
+  // concern, not this file's.
+  it('Drinks renders its heading and intro from copy.drinks', async () => {
     vi.resetModules();
     vi.doMock('../../content', async () => {
       const actual = await vi.importActual<typeof import('../../content')>('../../content');
       return {
         ...actual,
-        drinks: fixtureDrinks,
         copy: {
           ...actual.copy,
           drinks: {
             heading: 'Fixture Drinks Heading',
             intro: 'Fixture drinks intro sentence describing the bar programme.',
-            mocktails: 'Fixture Mocktails Label',
-            cocktails: 'Fixture Cocktails Label',
-            wine: 'Fixture Wine Label',
           },
         },
       };
@@ -107,9 +97,6 @@ describe('copy-rendered', () => {
     expect(
       screen.getByText('Fixture drinks intro sentence describing the bar programme.'),
     ).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Fixture Mocktails Label' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Fixture Cocktails Label' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Fixture Wine Label' })).toBeInTheDocument();
   });
 
   it('BlogTeaser renders its heading, intro, CTA and article-link label from copy.press', async () => {

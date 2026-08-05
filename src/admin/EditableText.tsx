@@ -71,7 +71,7 @@ function stripPlaceholder(text: string): string {
 // concatenated string equals `.textContent` on BOTH sides, the resync
 // effect's old `!==` guard could never tell the DOM needed correcting: /edit
 // would show a permanent two-line paragraph that publishes as one run-on
-// sentence. None of the 31 real editable leaves stores an intentional `\n`
+// sentence. None of the 28 real editable leaves stores an intentional `\n`
 // today (confirmed against every real copy.json value), and validate.ts has
 // no multi-line-aware rule for any of them, so blocking Enter outright loses
 // no real capability -- it only closes the one keyboard path that could ever
@@ -157,7 +157,7 @@ const EditableText: React.FC<EditableTextProps> = ({ path, value, onCommit }) =>
       ref.current?.blur();
       return;
     }
-    // None of the 31 real editable leaves stores an intentional line break
+    // None of the 28 real editable leaves stores an intentional line break
     // (see this component's own header comment) -- blocking Enter's default
     // action is what stops it from ever inserting a `<br>`/new block that
     // `.textContent` can't see, the DOM-structure half of Finding C1. Every

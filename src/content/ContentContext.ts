@@ -18,11 +18,11 @@ import { ContentReactContext, ContentProvider } from './context';
 //
 // Task 1 keeps both of these as plain string aliases -- distinct names only,
 // not distinct shapes. Task 3's own review left both this way, deliberately:
-// `EditableTextPath` could be narrowed to the real 31-entry EDITABLE_TEXT_PATHS
+// `EditableTextPath` could be narrowed to the real 28-entry EDITABLE_TEXT_PATHS
 // union (moving CopyLeafShape, fields.ts, into a type-only module would let
 // `keyof` do that with no bundle risk), but every real
 // `content.renderText('a.b', …)` call site already passes one of those exact
-// 31 literals, so the narrower type would catch nothing today that this
+// 28 literals, so the narrower type would catch nothing today that this
 // file's own boundary test (src/admin/__tests__/editable-paths.test.tsx)
 // doesn't already catch at runtime -- and a wider surface of call sites
 // (every migrated public component) would have to type-check against it for

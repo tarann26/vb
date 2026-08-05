@@ -339,7 +339,7 @@ export interface Copy {
   hero: { logoName: string; logoTagline: string; reservationsLabel: string; reserveButton: string };
   atmosphere: { heading: string };
   food: { heading: string };
-  drinks: { heading: string; intro: string; mocktails: string; cocktails: string; wine: string };
+  drinks: { heading: string; intro: string };
   press: { heading: string; intro: string; readArticle: string; viewAll: string };
   visit: { heading: string; navigateButton: string; mapTitle: string };
   footer: {

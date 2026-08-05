@@ -466,11 +466,32 @@ describe('dist/assets/ keeps admin code out of the entry chunk', () => {
 // the very next admin-only or template class landing without a matching
 // removal still trips it, with less room than the stale 34459/~240 figure
 // this replaces implied.
+//
+// Drinks section rebuild: 34626 -> 34485 (-141 bytes), the first task in
+// this lineage to ever LOWER the measured number -- every prior entry here
+// only ever added markup. Drinks.tsx dropped its three text-list categories
+// (Mocktails/Cocktails/Wine) for a single FoodGallery-style photo carousel
+// (see Drinks.tsx's own header comment and homepage-bytes.test.tsx's
+// matching entry). A rule-level diff (postcss, walking both stylesheets'
+// real rule trees, against a worktree checkout of the true parent commit
+// 9fe77c5, never a stash) found exactly four selectors removed and zero
+// added: `.gap-x-12`/`.gap-y-6` (the retired category list's own
+// `grid-cols-2 gap-x-12 gap-y-6`), `.last\:mb-0:last-child` (the per-category
+// wrapper's own spacing rule) and `.sm\:text-left` (the retired `<li>`'s own
+// responsive alignment) -- all four unique to that removed markup; nothing
+// else in this tree used them. Every OTHER class the new carousel needs
+// (`w-80`, `h-64`, `rounded-2xl`, `space-x-6`, `from-black/70`, ...) already
+// had a rule, shared with FoodGallery.tsx's identical card markup -- exactly
+// the "one component used twice" shape this task asked for, which is why
+// ADDED is empty. New ceiling 34600 against this real, measured 34485 -- a
+// 115-byte margin, matching this lineage's own tightened-margin precedent
+// rather than the older ~200-250-byte range, since this repo's own standing
+// rule is that CSS growth should be caught close to the moment it happens.
 describe('dist/assets/ keeps the shared stylesheet under a byte ceiling', () => {
-  it.skipIf(!REQUIRED && !existsSync(DIST_ASSETS))('the entry CSS file stays under 34700 bytes', () => {
+  it.skipIf(!REQUIRED && !existsSync(DIST_ASSETS))('the entry CSS file stays under 34600 bytes', () => {
     const cssFiles = readdirSync(DIST_ASSETS).filter((n) => /^index-.*\.css$/.test(n));
     expect(cssFiles.length).toBeGreaterThan(0);
     const size = statSync(join(DIST_ASSETS, cssFiles[0])).size;
-    expect(size).toBeLessThan(34700);
+    expect(size).toBeLessThan(34600);
   });
 });

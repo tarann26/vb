@@ -1,11 +1,11 @@
 // The explicit list of dotted copy.json paths edit mode lets her rewrite in
 // place -- Plan 5 Task 3, Step 1. Derived from COPY_FIELDS
 // (src/admin/fields.ts, Plan 4 Task 2's flat map), not re-typed by hand: a
-// second, hand-copied 31-entry list here could silently drift from
+// second, hand-copied 28-entry list here could silently drift from
 // fields.ts the moment a field is added, renamed, or reclassified as
 // attribute-only there. src/admin/__tests__/editable-paths.test.tsx imports
 // this same constant for its own "recorded calls match exactly" check, so
-// there is exactly one place this 31-entry set is ever written down.
+// there is exactly one place this 28-entry set is ever written down.
 //
 // Two exclusions, both already decided by the edit mode plan's own coverage
 // table, not re-litigated here:

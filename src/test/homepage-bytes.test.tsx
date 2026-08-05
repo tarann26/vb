@@ -42,6 +42,18 @@ import { AppRoutes } from '../App';
 // directly in real Chromium (see that file's own comment for the full
 // comparison against the other candidates that also worked). Hero.tsx (the
 // public page) no longer sets `draggable` on this `<img>` at all.
+//
+// Drinks section rebuild: 53486 -> 44113 (-9373 bytes). Drinks.tsx stopped
+// rendering three text-list categories (Mocktails/Cocktails/Wine -- 37 of
+// the 38 real drinks.json records have no photo yet, and every one of them
+// used to print as a name-and-description `<li>`) and became a single
+// FoodGallery-style photo carousel, the owner's own request: "I don't need
+// to list out these things. It just adds too much." The three category
+// `<h3>` headings (and copy.json's own drinks.mocktails/cocktails/wine
+// strings that fed them) are also gone. What's left renders one card --
+// today exactly one drink (`Piccante`) has an `image` -- so the removed
+// markup (37 list items' worth of name/description text plus three
+// headings) accounts for the whole drop; nothing else on the page changed.
 describe('homepage byte count', () => {
   it('the public homepage is unchanged', () => {
     const { container } = render(
@@ -49,6 +61,6 @@ describe('homepage byte count', () => {
         <AppRoutes />
       </MemoryRouter>,
     );
-    expect(new TextEncoder().encode(container.innerHTML).length).toBe(53486);
+    expect(new TextEncoder().encode(container.innerHTML).length).toBe(44113);
   });
 });

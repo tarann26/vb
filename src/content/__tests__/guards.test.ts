@@ -37,9 +37,6 @@ describe('guards module', () => {
       drinks: {
         heading: 'Drinks',
         intro: 'Our bar pours a full Italian programme.',
-        mocktails: 'Mocktails',
-        cocktails: 'Cocktails',
-        wine: 'Wine',
       },
       press: {
         heading: 'Latest Stories',

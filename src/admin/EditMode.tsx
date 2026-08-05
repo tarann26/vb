@@ -210,7 +210,7 @@ const EMPTY_COPY: Copy = {
   hero: { logoName: '', logoTagline: '', reservationsLabel: '', reserveButton: '' },
   atmosphere: { heading: '' },
   food: { heading: '' },
-  drinks: { heading: '', intro: '', mocktails: '', cocktails: '', wine: '' },
+  drinks: { heading: '', intro: '' },
   press: { heading: '', intro: '', readArticle: '', viewAll: '' },
   visit: { heading: '', navigateButton: '', mapTitle: '' },
   footer: {
@@ -367,7 +367,7 @@ function setItemImage<T extends { id: string; image: string | null }>(items: T[]
 
 // Task 3: text becomes editable in place. `registry` is passed in (not
 // closed over at module scope) because `commitText` below needs the exact
-// `copy` this render is showing -- every one of the 31 EditableText
+// `copy` this render is showing -- every one of the 28 EditableText
 // instances on the page shares this one closure, and each must write its
 // own leaf back against the SAME snapshot of `copy` every sibling saw,
 // never a stale one captured on an earlier render.
