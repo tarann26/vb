@@ -7,8 +7,8 @@
 // this same constant for its own "recorded calls match exactly" check, so
 // there is exactly one place this 28-entry set is ever written down.
 //
-// Two exclusions, both already decided by the edit mode plan's own coverage
-// table, not re-litigated here:
+// Three exclusions. The first two were decided by the edit mode plan's own
+// coverage table and are not re-litigated here:
 //   - the five COPY_FIELDS leaves wired straight to an HTML attribute
 //     (an aria-label, or VisitUs.tsx's <iframe title>) rather than painted
 //     as visible text -- no component has a content.renderText call for
@@ -21,15 +21,39 @@
 //     render `{site.name}` / `{site.tagline}` as bare, un-wrapped text).
 //     Filtering COPY_FIELDS's own keys therefore already excludes site.*
 //     for free, with nothing further to subtract here.
+// The third is this repair's own:
+//   - `nav.pagesLabel`, the word the nav groups her pages under. It is a
+//     <button>'s own label (NavBar.tsx's desktop disclosure), and a
+//     contentEditable inside a button cannot be focused in any browser --
+//     a click reaches the button, toggles the menu and focuses nothing. So
+//     /edit rendered the dashed "you can type here" edge over a word that
+//     silently refused every attempt. See NavBar.tsx's own comment at that
+//     line for why the label was NOT lifted out of the button instead. This
+//     list is what makes "nothing anywhere advertises it" enforceable
+//     rather than a promise about one file: it is the set every /edit
+//     surface is checked against
+//     (src/admin/__tests__/editable-paths.test.tsx mounts the real app
+//     under a real editing bundle and compares what it finds), so a future
+//     component that wrapped this leaf in renderText again would fail
+//     there.
 import { COPY_FIELDS } from './fields';
 import type { Copy } from '../content/types';
 
-const ATTRIBUTE_ONLY_COPY_FIELDS = new Set([
+// Named for what it MEANS -- "not offered as an in-place edit at /edit" --
+// rather than for the one reason five of its six members happen to share.
+// Every member is still fully editable on the dashboard (/edit/manage
+// renders one Field per COPY_FIELDS key, this filter never reaches it);
+// what this set decides is only whether the LIVE PAGE puts an editing
+// affordance on it.
+const NOT_EDITABLE_IN_PLACE_COPY_FIELDS = new Set([
+  // Bound to an attribute, never painted as visible text.
   'nav.instagramLabel',
   'nav.menuLabel',
   'visit.mapTitle',
   'footer.instagramLabel',
   'footer.linkedinLabel',
+  // Painted as visible text, but inside a control that owns the click.
+  'nav.pagesLabel',
 ]);
 
 // `readonly string[]`, not a narrowed literal union: `Object.keys(COPY_FIELDS)`
@@ -42,7 +66,7 @@ const ATTRIBUTE_ONLY_COPY_FIELDS = new Set([
 // mounts the real app and checks the recorded set against this exact
 // export.
 export const EDITABLE_TEXT_PATHS: readonly string[] = Object.keys(COPY_FIELDS).filter(
-  (key) => !ATTRIBUTE_ONLY_COPY_FIELDS.has(key),
+  (key) => !NOT_EDITABLE_IN_PLACE_COPY_FIELDS.has(key),
 );
 
 // Rewrites exactly the one leaf named by `path`, leaving every sibling leaf

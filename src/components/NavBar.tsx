@@ -190,10 +190,70 @@ const Navbar: React.FC<NavbarProps> = ({ offHomePage = false }) => {
                   type="button"
                   aria-expanded={isGroupOpen}
                   aria-haspopup="true"
-                  onClick={() => setIsGroupOpen((open) => !open)}
+                  // Opens; never toggles. Found while writing this
+                  // control's first tests (it had none): the wrapper above
+                  // opens on `mouseenter`, so by the time a real click
+                  // arrives the menu is ALREADY open and a toggle closed it
+                  // again. With a mouse that means clicking the word you
+                  // are pointing at makes the menu you can see disappear;
+                  // on any touch device wide enough to get this nav
+                  // (`md:` and up -- a tablet), a tap fires the
+                  // compatibility mouseenter and the click back-to-back, so
+                  // the menu opened and shut inside one tap and the four
+                  // pages were unreachable by touch entirely.
+                  //
+                  // Closing is still fully available and now has exactly
+                  // one meaning per input: the pointer leaving the group,
+                  // a click outside it, Escape, or following one of the
+                  // links. `aria-expanded` stays honest either way, and a
+                  // second Enter on an already-open menu is a no-op rather
+                  // than a surprise.
+                  onClick={() => setIsGroupOpen(true)}
                   className={`${LINK_BASE} flex items-center gap-1 uppercase tracking-wider`}
                 >
-                  {content.renderText('nav.pagesLabel', copy.nav.pagesLabel)}
+                  {/* Plain text, deliberately NOT `content.renderText(...)`.
+                      This word is a <button>'s own label, and at /edit
+                      renderText returns a contentEditable span -- which
+                      showed the same dashed edge every other editable leaf
+                      on the page shows, and could not be edited at all: a
+                      click lands on the button, toggles the menu and
+                      focuses nothing, and a contentEditable nested inside a
+                      button does not take focus in any browser regardless.
+                      The affordance was a lie, which is worse than no
+                      affordance: it teaches her that /edit's dashed edge
+                      sometimes means nothing. (Written "dashed edge", not
+                      the CSS property's own one-word name -- that word is
+                      also a real, bare Tailwind utility, and this project's
+                      content scan has no JS parser, so spelling it here
+                      emits an unused rule into the shipped stylesheet.
+                      Measured, not guessed: the first draft of this comment
+                      added exactly that rule, +29 bytes, caught by the
+                      rule-level build diff this repo's standing instruction
+                      requires.)
+
+                      The alternative -- lift the label out of the button so
+                      it CAN be focused, and leave the chevron beside it as
+                      the disclosure -- was rejected on three counts. It
+                      turns one control into two, so the word that reveals
+                      four pages stops being the thing you click and a
+                      ~14px chevron becomes the only pointer target. It adds
+                      a second Tab stop in the nav for a word that changes
+                      approximately never. And this dropdown really does
+                      render for the public (pages.json carries four
+                      `inNav` pages today), so restructuring it would move
+                      the pinned homepage byte count
+                      (src/test/homepage-bytes.test.tsx) to pay for an
+                      /edit-only benefit -- whereas rendering the bare
+                      string here is byte-identical to what renderText's own
+                      identity default already produced for every visitor.
+
+                      Nothing is lost: `nav.pagesLabel` keeps its real,
+                      working input on /edit/manage (COPY_FIELDS, "Pages
+                      menu label", under Page copy -> Navigation), and that
+                      screen is now one link away from /edit. It is excluded
+                      from EDITABLE_TEXT_PATHS (src/admin/editable-paths.ts)
+                      so no other surface can start advertising it either.*/}
+                  {copy.nav.pagesLabel}
                   <ChevronDown
                     aria-hidden="true"
                     className={`h-3.5 w-3.5 transition-transform duration-300 ${isGroupOpen ? 'rotate-180' : ''}`}

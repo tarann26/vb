@@ -175,7 +175,7 @@ describe('every renderText/renderImage call site passes a path that really point
   });
 
   it('the recorded copy.json paths are exactly EDITABLE_TEXT_PATHS (src/admin/editable-paths.ts) -- no missing, no extra', () => {
-    expect(EDITABLE_TEXT_PATHS).toHaveLength(29);
+    expect(EDITABLE_TEXT_PATHS).toHaveLength(28);
     // Partitioned, not filtered-and-forgotten: EDITABLE_TEXT_PATHS is derived
     // from COPY_FIELDS and therefore describes copy.json ONLY, so a template
     // section's `sections.<id>.content.*` path is legitimately not a member.
@@ -234,27 +234,45 @@ describe('every renderText/renderImage call site passes a path that really point
 // test of the exported module's own membership, not a re-derivation of it
 // (which would only ever prove the module equals itself).
 describe('EDITABLE_TEXT_PATHS (src/admin/editable-paths.ts)', () => {
-  it('has exactly 29 entries, every one a real COPY_FIELDS key', () => {
-    expect(EDITABLE_TEXT_PATHS).toHaveLength(29);
+  it('has exactly 28 entries, every one a real COPY_FIELDS key', () => {
+    expect(EDITABLE_TEXT_PATHS).toHaveLength(28);
     const copyFieldKeys = new Set(Object.keys(COPY_FIELDS));
     EDITABLE_TEXT_PATHS.forEach((path) => expect(copyFieldKeys.has(path)).toBe(true));
   });
 
-  // The five names this list must NOT contain, spelled out independently of
+  // The six names this list must NOT contain, spelled out independently of
   // editable-paths.ts's own internal set (fields.ts's CopyLeafShape comment
-  // is the authority both lists trace back to) -- if editable-paths.ts ever
-  // dropped its own exclusion, this still catches it without depending on
-  // the same constant that would already be wrong.
-  it('excludes exactly the five attribute-bound COPY_FIELDS leaves, and nothing else', () => {
-    const attributeOnly = [
+  // is the authority the first five trace back to) -- if editable-paths.ts
+  // ever dropped its own exclusion, this still catches it without depending
+  // on the same constant that would already be wrong.
+  it('excludes exactly the six COPY_FIELDS leaves /edit does not offer in place, and nothing else', () => {
+    const notEditableInPlace = [
+      // Bound to an attribute, never painted as visible text.
       'nav.instagramLabel',
       'nav.menuLabel',
       'visit.mapTitle',
       'footer.instagramLabel',
       'footer.linkedinLabel',
+      // Painted, but as a <button>'s own label -- see NavBar.tsx's own
+      // comment, and the describe block at the end of this file.
+      'nav.pagesLabel',
     ];
-    attributeOnly.forEach((path) => expect(EDITABLE_TEXT_PATHS).not.toContain(path));
-    expect(Object.keys(COPY_FIELDS)).toHaveLength(EDITABLE_TEXT_PATHS.length + attributeOnly.length);
+    notEditableInPlace.forEach((path) => expect(EDITABLE_TEXT_PATHS).not.toContain(path));
+    expect(Object.keys(COPY_FIELDS)).toHaveLength(EDITABLE_TEXT_PATHS.length + notEditableInPlace.length);
+  });
+
+  // The other half of the decision, and the reason excluding it is honest
+  // rather than a capability quietly dropped: /edit/manage still renders a
+  // real, working input for it, because that screen iterates COPY_FIELDS
+  // itself (AdminApp.tsx's COPY_GROUPS) and never consults this list.
+  //
+  // Mutation this guards: deleting the `'nav.pagesLabel'` entry from
+  // COPY_FIELDS (src/admin/fields.ts) -- confirmed red here, and green in
+  // every other test in this file, since EDITABLE_TEXT_PATHS excludes it
+  // either way.
+  it('keeps nav.pagesLabel editable on the dashboard -- it is excluded from in-place editing only', () => {
+    expect(Object.keys(COPY_FIELDS)).toContain('nav.pagesLabel');
+    expect(COPY_FIELDS['nav.pagesLabel'].kind).toBe('text');
   });
 });
 
@@ -413,6 +431,67 @@ describe('the real element-substitution boundary: renderText returning actual el
       .filter((s) => s.kind === 'template' && s.enabled)
       .map((s) => s.id);
     expect([...reachedSections].sort()).toEqual([...enabledSections].sort());
+  });
+});
+
+// ---------------------------------------------------------------------------
+// nav.pagesLabel: the word the nav groups her pages under. It used to go
+// through `content.renderText`, so at /edit it rendered as a contentEditable
+// span with the same dashed edge every other editable leaf carries -- inside
+// a <button>. Clicking it toggled the menu and focused nothing (a
+// contentEditable nested in a button does not take focus in any browser), so
+// the affordance was purely a lie. See NavBar.tsx's own comment at that
+// label for why the label was not lifted out of the button instead, and
+// editable-paths.ts's own exclusion comment for the enforcement.
+//
+// Written against the REAL editing bundle, not against the plain page: with
+// no provider mounted `renderText` is the identity and returns the bare
+// string either way, so a test on the default render could never tell the
+// two apart. Same shape, and same reason, as the site.name/site.tagline
+// block just below.
+describe('nav.pagesLabel renders with no edit affordance, even under a real editing bundle', () => {
+  function renderEditing(route: string) {
+    const bundle: ContentBundle = {
+      ...defaultBundle,
+      renderText: (path, value) => <EditableText path={path} value={value} onCommit={() => {}} />,
+    };
+    return render(
+      <ContentProvider value={bundle}>
+        <MemoryRouter initialEntries={[route]}>
+          <AppRoutes />
+        </MemoryRouter>
+      </ContentProvider>,
+    );
+  }
+
+  // Mutation this guards: restoring
+  // `content.renderText('nav.pagesLabel', copy.nav.pagesLabel)` in
+  // NavBar.tsx -- confirmed red.
+  it('the pages disclosure shows the label as plain text, with no contentEditable on it or inside it', () => {
+    const { container } = renderEditing('/');
+
+    // Non-vacuous twice over. First: the disclosure really is on screen at
+    // all (it only renders once two or more pages are in the nav), so this
+    // is not passing by finding nothing.
+    const disclosure = screen.getByRole('button', { name: REAL_COPY.nav.pagesLabel });
+    expect(disclosure).toHaveTextContent(REAL_COPY.nav.pagesLabel);
+    // Second: this really IS the editing bundle -- a different leaf in the
+    // very same nav is editable on this same render, so "no affordance
+    // here" is a fact about this leaf, not about the bundle.
+    expect(container.querySelector('[data-editable-path="nav.wordmark"]')).not.toBeNull();
+
+    expect(disclosure).not.toHaveAttribute('contenteditable');
+    expect(disclosure.querySelector('[contenteditable="true"]')).toBeNull();
+    expect(disclosure.closest('[contenteditable="true"]')).toBeNull();
+  });
+
+  it('no route renders an edit affordance for it anywhere on the page', () => {
+    ['/', '/blogs', '/this-route-matches-nothing', ...defaultBundle.pages.filter((p) => p.enabled).map((p) => `/${p.slug}`)].forEach(
+      (route) => {
+        const { container } = renderEditing(route);
+        expect(container.querySelector('[data-editable-path="nav.pagesLabel"]')).toBeNull();
+      },
+    );
   });
 });
 

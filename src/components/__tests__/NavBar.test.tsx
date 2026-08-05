@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import Navbar from '../NavBar';
-import { copy, sections } from '../../content';
+import { copy, pages, sections } from '../../content';
 
 // Wrapped in a router because the nav now renders a real <Link> for every
 // page with `inNav && enabled` (NavBar.tsx's own `pageEntries`), and a Link
@@ -95,5 +95,107 @@ describe('Navbar', () => {
 
     const desktopLinks = screen.getByTestId('desktop-nav-links');
     expect(within(desktopLinks).getAllByRole('link').length).toBeGreaterThan(0);
+  });
+});
+
+// The pages disclosure ("Experiences"), which had no test of any kind until
+// its label was found advertising an edit affordance it could not honour
+// (see NavBar.tsx's own comment at that label, and the matching describe
+// block in src/admin/__tests__/editable-paths.test.tsx). The repair leaves
+// this control's behaviour exactly as it was, and that is precisely the
+// claim worth pinning: the label stops being a contentEditable, and the
+// button keeps opening by pointer AND by keyboard, and Escape keeps closing
+// it.
+describe("Navbar's pages disclosure", () => {
+  // Not vacuous by construction: the disclosure only exists once two or
+  // more pages carry `inNav && enabled` (NavBar.tsx's own GROUP_PAGES_FROM).
+  // Read off the real content rather than assumed, so if pages.json ever
+  // drops below that this fails HERE, naming the reason, instead of every
+  // test below failing on a missing button.
+  const navPages = pages.filter((page) => page.inNav && page.enabled);
+  if (navPages.length < 2) {
+    throw new Error('Fixture assumption broken: fewer than two pages.json entries are in the nav, so no disclosure renders');
+  }
+
+  function disclosure(): HTMLElement {
+    return screen.getByRole('button', { name: copy.nav.pagesLabel });
+  }
+
+  it("shows the label from copy.json as the button's own name", () => {
+    renderNav();
+    expect(disclosure()).toHaveAttribute('aria-expanded', 'false');
+    expect(disclosure()).toHaveAttribute('aria-haspopup', 'true');
+  });
+
+  // The hover path, isolated: a raw mouseenter on the group wrapper, with no
+  // activation of any kind.
+  // Mutation this guards: deleting `onMouseEnter` from that wrapper --
+  // confirmed red here and green in every other test in this block.
+  it('opens on hover', () => {
+    renderNav();
+    fireEvent.mouseEnter(disclosure().parentElement as HTMLElement);
+    expect(disclosure()).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  // The activation path, isolated the other way: a bare click event with no
+  // preceding pointer movement, so nothing has hovered anything.
+  // Mutation this guards: deleting `onClick` from that button -- confirmed
+  // red here (and in the keyboard test below), while the hover test above
+  // stays green, which is exactly the split that made this defect invisible
+  // for as long as it existed.
+  it('opens on a click alone, with no hover first', () => {
+    renderNav();
+    fireEvent.click(disclosure());
+    expect(disclosure()).toHaveAttribute('aria-expanded', 'true');
+
+    const group = screen.getByTestId('desktop-nav-group');
+    navPages.forEach((page) => {
+      expect(within(group).getByRole('link', { name: page.name })).toHaveAttribute('href', `/${page.slug}`);
+    });
+  });
+
+  // The real-world sequence, which is where this control was actually
+  // broken: a genuine pointer interaction fires mouseenter and then click,
+  // in that order -- a mouse moving onto the word, and equally a TAP on any
+  // touch device wide enough to be shown this nav, which dispatches the
+  // compatibility mouse events before the click. The wrapper's hover
+  // handler had already opened the menu by the time the click arrived, so a
+  // toggling click closed it again inside the same interaction.
+  //
+  // Mutation this guards: `onClick={() => setIsGroupOpen(true)}` reverted to
+  // `onClick={() => setIsGroupOpen((open) => !open)}` -- confirmed red here
+  // and green in both isolated tests above, which is why this one has to
+  // exist separately from either.
+  it('stays open through a real hover-then-click interaction (a tap produces exactly this)', async () => {
+    const user = userEvent.setup();
+    renderNav();
+    await user.click(disclosure());
+    expect(disclosure()).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByTestId('desktop-nav-group')).toBeInTheDocument();
+  });
+
+  // The keyboard path. A <button> activates on Enter by itself, which is
+  // exactly why the label had to stay INSIDE it -- lifting the label out to
+  // make it editable in place would have left this working only on the
+  // chevron beside it.
+  it('opens from the keyboard, with the label itself as the focused control', async () => {
+    const user = userEvent.setup();
+    renderNav();
+    disclosure().focus();
+    expect(document.activeElement).toBe(disclosure());
+    await user.keyboard('{Enter}');
+    expect(disclosure()).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  // Mutation this guards: removing the `keydown` listener's own
+  // `setIsGroupOpen(false)` (NavBar.tsx's Escape effect) -- confirmed red.
+  it('closes on Escape', async () => {
+    const user = userEvent.setup();
+    renderNav();
+    fireEvent.click(disclosure());
+    expect(disclosure()).toHaveAttribute('aria-expanded', 'true');
+    await user.keyboard('{Escape}');
+    expect(disclosure()).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByTestId('desktop-nav-group')).not.toBeInTheDocument();
   });
 });
