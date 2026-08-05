@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ExternalLink, Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useContent } from '../content/ContentContext';
+import { formatArticleDate } from '../content/article-date';
 
 const BlogsPage: React.FC = () => {
   const navigate = useNavigate();
@@ -84,11 +85,7 @@ const BlogsPage: React.FC = () => {
                   <div className="flex items-center space-x-2 mb-3">
                     <Calendar className="w-4 h-4 text-[#6B8B59]" />
                     <span className="font-['Open_Sans'] text-sm text-gray-500">
-                      {new Date(article.date).toLocaleDateString('en-US', { 
-                        year: 'numeric', 
-                        month: 'long', 
-                        day: 'numeric' 
-                      })}
+                      {formatArticleDate(article.date)}
                     </span>
                   </div>
                   

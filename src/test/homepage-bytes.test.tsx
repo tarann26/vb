@@ -49,6 +49,6 @@ describe('homepage byte count', () => {
         <AppRoutes />
       </MemoryRouter>,
     );
-    expect(new TextEncoder().encode(container.innerHTML).length).toBe(53485);
+    expect(new TextEncoder().encode(container.innerHTML).length).toBe(53486);
   });
 });
