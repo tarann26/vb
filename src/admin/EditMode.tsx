@@ -990,6 +990,19 @@ const EditMode: React.FC = () => {
         // restore-or-discard decision must not let the persistence effect
         // silently delete the very draft it names.
         holdDraftClear={pendingDraft !== null}
+        // Clears the real page's own fixed header. NavBar.tsx renders
+        // `fixed top-0 left-0 right-0 z-50` with an opaque background and
+        // measures 61px tall, and this bar renders at the very top of that
+        // same page -- so until this prop existed the bar's whole top row
+        // sat underneath it. Measured in a real Chromium at 390x844 and
+        // 1440x900: `document.elementFromPoint` at the Publish button's own
+        // centre returned the nav's "Menu" link at 1440px and the hamburger
+        // toggle's glyph at 390px, i.e. the button was not clickable at all
+        // on this surface. 72, not 61, so the clearance is real rather than
+        // exact; e2e/publish-confirm.spec.ts is what keeps it honest, since
+        // jsdom cannot hit-test. AdminApp deliberately passes nothing --
+        // /edit/manage has no fixed header and must not move.
+        offsetTop={72}
         problems={editValidationProblems}
         onUnauthenticated={(notice) => {
           setSignOutNotice(notice);

@@ -487,8 +487,52 @@ describe('dist/assets/ keeps admin code out of the entry chunk', () => {
 // 115-byte margin, matching this lineage's own tightened-margin precedent
 // rather than the older ~200-250-byte range, since this repo's own standing
 // rule is that CSS growth should be caught close to the moment it happens.
+// MISSING ENTRY, added late: commit 68a70ec ("group pages under one nav
+// entry and float the mobile menu") raised the assertion below from 34600
+// to 38700 and changed neither this comment nor the test's own NAME, which
+// went on claiming "stays under 34600 bytes" while asserting 38700. Both
+// are corrected here. Anyone reading this lineage before now would have
+// computed a margin against a number that had not been the ceiling for
+// several commits.
+//
+// Measured properly, the way this file's own standing rule requires -- a
+// rule-level postcss diff against a WORKTREE CHECKOUT of the true parent
+// commit (97d4675), never a stash: 34485 -> 38468 (+3983), FORTY-SIX rules
+// added and two removed. Every one traces to that commit's own NavBar.tsx
+// rebuild and the `scroll-padding-top` rule it added to src/index.css:
+// the floating mobile menu panel (`.w-[15rem]`, `.min-w-[13rem]`,
+// `.max-w-[15rem]`, `.max-w-[calc(100vw-2rem)]`, `.mx-5`, `.my-2`,
+// `.px-5`, `.py-2.5`, `.pt-3`, `.shadow-black/5`, `.shadow-black/10`,
+// `.ring-1`, `.ring-black/5`, `.backdrop-blur-md`, `.bg-white/90`), the
+// chevron that flips open (`.h-3.5`, `.w-3.5`, `.rotate-180`,
+// `.duration-200`), the staggered reveal keyframe declared in
+// tailwind.config.js (`@keyframes nav-in` plus `.animate-nav-in`), the
+// animated underline every nav link now carries (eleven `.after:*` rules
+// plus `.origin-left`, `.hover:after:scale-x-100`,
+// `.focus-visible:after:scale-x-100`, `.hover:text-[#6B8B59]`,
+// `.focus-visible:text-[#222]`), and the bar's scrolled/unscrolled border
+// swap (`.border-b`, `.border-t-2`, `.border-[#6B8B59]/15`,
+// `.border-[#6B8B59]/20`, `.border-transparent`, replacing
+// `.bg-transparent` and `.shadow-none`), with `.font-["Open_Sans"]`,
+// `.normal-case`, `.tracking-normal` and `.text-[#222]/80` from the new
+// link typography. No comment-scan leak among them. Confirmed by building
+// 68a70ec itself in the same worktree: byte-identical to the tree today,
+// same content hash, so nothing between that commit and this one moved the
+// stylesheet at all.
+//
+// Publish confirmation step (the bottom-docked confirm panel, the `offsetTop`
+// prop that makes /edit's Publish button clickable, and the time-expectation
+// line): 38468 -> 38468, ZERO bytes, byte-identical output down to the same
+// content hash. Designed for that: the panel reuses CollageTile.tsx's own
+// already-shipped panel class string character for character, its buttons
+// reuse the classes DraftBanner's Restore/Discard buttons already carry, and
+// the one piece of geometry that had no existing utility (a 72px offset
+// clearing a 61px fixed nav -- the largest top-margin rule in this
+// stylesheet is 48px) is an inline style, the escape hatch CollageTile.tsx
+// documents for exactly this ceiling. The real margin at the ceiling below
+// is 232 bytes, not the ~115 the pre-68a70ec text above implies.
 describe('dist/assets/ keeps the shared stylesheet under a byte ceiling', () => {
-  it.skipIf(!REQUIRED && !existsSync(DIST_ASSETS))('the entry CSS file stays under 34600 bytes', () => {
+  it.skipIf(!REQUIRED && !existsSync(DIST_ASSETS))('the entry CSS file stays under 38700 bytes', () => {
     const cssFiles = readdirSync(DIST_ASSETS).filter((n) => /^index-.*\.css$/.test(n));
     expect(cssFiles.length).toBeGreaterThan(0);
     const size = statSync(join(DIST_ASSETS, cssFiles[0])).size;

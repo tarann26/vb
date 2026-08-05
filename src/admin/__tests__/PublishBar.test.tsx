@@ -12,6 +12,7 @@ import { useContentRegistry, MAX_STAGED_PHOTOS_PER_PUBLISH } from '../publish';
 import { useStagedFiles } from '../staged';
 import type { ContentRegistry } from '../publish';
 import type { StagedFile, StagedFiles } from '../staged';
+import type { ContentFileName } from '../content';
 import { DRAFT_STORAGE_KEY } from '../drafts';
 
 afterEach(() => {
@@ -40,11 +41,19 @@ function Harness({
   onUnauthenticated = vi.fn(),
   pollClock,
   withTagsField = false,
+  // Which content file the tags input below commits into on blur. Defaults
+  // to the file every pre-existing test in this suite already assumes.
+  // Pointing it at a SECOND file is what lets a test prove the confirm
+  // panel's own section list is built from the flushed state rather than
+  // the pre-flush state -- with both edits landing in one file, "1 section
+  // edited" reads identically whether the flush happened or not.
+  tagsFile = 'dishes.json',
   holdDraftClear = false,
 }: {
   onUnauthenticated?: (notice: string) => void;
   pollClock?: { now: () => number; sleep: (ms: number) => Promise<void> };
   withTagsField?: boolean;
+  tagsFile?: ContentFileName;
   holdDraftClear?: boolean;
 }) {
   const registry = useContentRegistry();
@@ -72,7 +81,7 @@ function Harness({
           // submit reads it.
           onBlur={() =>
             registry.register(
-              'dishes.json',
+              tagsFile,
               [{ id: 'x', tags: tagsText.split(',').map((t) => t.trim()).filter(Boolean) }],
               'sha-1',
             )
@@ -81,6 +90,18 @@ function Harness({
       )}
     </PublishBar>
   );
+}
+
+// Every test that actually wants a POST now has to walk through the
+// confirmation -- a raw submit or a click on Publish only opens it. One
+// helper rather than three lines repeated twenty times.
+function acceptConfirm() {
+  fireEvent.click(screen.getByRole('button', { name: 'Yes, publish to the live site' }));
+}
+
+function clickPublishAndAccept() {
+  fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
+  acceptConfirm();
 }
 
 function dirty(registry: ContentRegistry, file: 'dishes.json' = 'dishes.json') {
@@ -169,13 +190,252 @@ describe('PublishBar: Step 1 carried requirement 2 -- flushes the focused field 
 
     const form = container.querySelector('form');
     expect(form).not.toBeNull();
+    // A raw form submit no longer POSTs -- it opens the confirmation (see
+    // this file's own "the confirmation step" describe block for why, and
+    // for the keystroke path that made it necessary). The flush this test
+    // exists for now runs at BOTH points: once here, when the panel opens,
+    // and again when accept is clicked. Accepting from inside the panel is
+    // what still makes this assertion about the real POST body.
     fireEvent.submit(form!);
+    acceptConfirm();
 
     await waitFor(() => expect(fetchImpl).toHaveBeenCalledWith('/api/publish', expect.anything()));
     const publishCall = fetchImpl.mock.calls.find(([url]) => url === '/api/publish')!;
     const body = JSON.parse((publishCall[1] as RequestInit).body as string) as { files: { path: string; content: string }[] };
     const dishesFile = body.files.find((f) => f.path === 'src/content/dishes.json')!;
     expect(JSON.parse(dishesFile.content)).toEqual([{ id: 'x', tags: ['a', 'b', 'c'] }]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The confirmation step. The reason it exists is not politeness: every
+// content section renders inside PublishBar's single <form> and the Publish
+// button is `type="submit"`, so before this, Enter in any text input
+// anywhere on the dashboard committed straight to the live branch. These
+// tests pin that the panel is the only way through, that what it SAYS is
+// true at the moment she reads it, and that what gets published is what the
+// registry holds when she accepts -- not what it held when the panel opened.
+describe('PublishBar: the confirmation step before anything is pushed', () => {
+  function neverResolvingFetch() {
+    return vi.fn(async () => new Promise<Response>(() => {}));
+  }
+
+  it('clicking Publish opens a dialog and sends nothing', () => {
+    const fetchImpl = neverResolvingFetch();
+    vi.stubGlobal('fetch', fetchImpl);
+    render(<Harness />);
+    dirty(captured!.registry);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
+
+    expect(screen.getByRole('dialog', { name: /publish/i })).toBeInTheDocument();
+    expect(fetchImpl).not.toHaveBeenCalledWith('/api/publish', expect.anything());
+  });
+
+  // The panel's WHAT-is-changing summary is derived live from the registry,
+  // never captured when the panel opened. Same property as the payload test
+  // below, on the display side: an upload that was in flight when she
+  // clicked Publish lands in the staged map while the panel is open, and a
+  // captured summary would keep telling her about the world as it was.
+  it('the summary and section list keep up with the registry while the panel is open', () => {
+    render(<Harness />);
+    dirty(captured!.registry);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
+    expect(screen.getByRole('dialog', { name: /publish/i })).toHaveTextContent('1 section edited — ready to publish.');
+    expect(screen.getByRole('dialog', { name: /publish/i })).toHaveTextContent('Changing: Dishes.');
+
+    // A second file becomes dirty while she is reading the panel.
+    act(() => {
+      captured!.registry.register('press.json', [{ id: 'p', title: '' }], 'sha-p');
+      captured!.registry.register('press.json', [{ id: 'p', title: 'Edited' }], 'sha-p');
+    });
+
+    const dialog = screen.getByRole('dialog', { name: /publish/i });
+    expect(dialog).toHaveTextContent('2 sections edited — ready to publish.');
+    expect(dialog).toHaveTextContent('Changing: Dishes, Press.');
+  });
+
+  // The flush that runs when the panel OPENS, proven the only way it can be
+  // proven from jsdom -- and reported honestly, because the first version of
+  // this test could not fail and had to be replaced.
+  //
+  // What was wrong with it: it asserted that the panel, opened while a tags
+  // field still held an uncommitted buffer, reads "2 sections edited". That
+  // is true either way. Moving focus into the dialog -- the focus trap's own
+  // opening act -- blurs whatever field was focused, which fires that
+  // field's onBlur and commits the buffer regardless of whether openConfirm
+  // blurred anything itself. Under jsdom the whole sequence collapses inside
+  // one `act`, so the settled DOM is identical with and without the line.
+  //
+  // What IS still true, and what this asserts: after a keyboard submit from
+  // a still-focused field, what the panel names must match what a publish
+  // would actually send. That is the user-visible guarantee; which of the
+  // two flushes delivers it in a given browser is not something this test
+  // needs to care about. Recorded in the source comment on openConfirm: in a
+  // real browser the open-time flush is what stops a single painted frame of
+  // stale summary, since passive effects run after paint -- a difference
+  // jsdom has no paint to show.
+  it('a keyboard submit from a still-focused field opens a panel that names that field\'s own section', () => {
+    render(<Harness withTagsField tagsFile="press.json" />);
+    act(() => captured!.registry.register('press.json', [{ id: 'x', tags: ['a', 'b'] }], 'sha-p'));
+    dirty(captured!.registry);
+
+    const tagsInput = screen.getByLabelText('tags') as HTMLInputElement;
+    tagsInput.focus();
+    fireEvent.change(tagsInput, { target: { value: 'a, b, c' } });
+    expect(document.activeElement).toBe(tagsInput);
+
+    fireEvent.submit(tagsInput.closest('form')!);
+
+    const dialog = screen.getByRole('dialog', { name: /publish/i });
+    expect(dialog).toHaveTextContent('2 sections edited — ready to publish.');
+    expect(dialog).toHaveTextContent('Changing: Dishes, Press.');
+  });
+
+  // The single most important correctness property here. An EditableImage
+  // upload that was in flight when she clicked Publish resolves into the
+  // staged map seconds later, while the panel is open -- a payload captured
+  // at open time would silently drop it.
+  it('publishes what the registry holds at ACCEPT, not what it held when the panel opened', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- second param exists only to keep the mock's call-tuple type two elements wide, matched against below
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
+      const url = String(input);
+      if (url === '/api/publish') return jsonResponse(200, { sha: 'commit-1' });
+      if (url.startsWith('/api/content')) return jsonResponse(200, { content: '[]', sha: 'sha-fresh' });
+      if (url.startsWith('/api/build-status')) return jsonResponse(200, { state: 'live', deploymentUrl: null, commitUrl: 'https://c' });
+      if (url === '/build-info.json') return jsonResponse(200, { sha: 'commit-1', builtAt: 'now' });
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchImpl);
+    render(<Harness pollClock={instantClock()} />);
+    dirty(captured!.registry);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
+    act(() => captured!.registry.updateData('dishes.json', [{ id: 'a', name: 'Typed while the panel was open' }]));
+    acceptConfirm();
+
+    await waitFor(() => expect(fetchImpl).toHaveBeenCalledWith('/api/publish', expect.anything()));
+    const call = fetchImpl.mock.calls.find(([url]) => url === '/api/publish')!;
+    const body = JSON.parse((call[1] as RequestInit).body as string) as { files: { path: string; content: string }[] };
+    const dishes = body.files.find((f) => f.path === 'src/content/dishes.json')!;
+    expect(JSON.parse(dishes.content)).toEqual([{ id: 'a', name: 'Typed while the panel was open' }]);
+  });
+
+  it('says, in so many words, that this is public, that there is no undo, and roughly how long it takes', () => {
+    render(<Harness />);
+    dirty(captured!.registry);
+    fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
+
+    expect(
+      screen.getByText('This puts your changes on the public website, where anyone visiting can see them.'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText('There is no undo button. To change something back, edit it again and publish again.'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText('It usually takes about 2-3 minutes for the site to show the change.'),
+    ).toBeInTheDocument();
+  });
+
+  it('Cancel closes it, sends nothing, and puts focus back on the Publish button', () => {
+    const fetchImpl = neverResolvingFetch();
+    vi.stubGlobal('fetch', fetchImpl);
+    render(<Harness />);
+    dirty(captured!.registry);
+    const trigger = screen.getByRole('button', { name: 'Publish' });
+
+    fireEvent.click(trigger);
+    // Non-vacuous: the panel moves focus into itself on open, so focus is
+    // demonstrably NOT on the trigger at the moment Cancel is clicked.
+    expect(document.activeElement).not.toBe(trigger);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(fetchImpl).not.toHaveBeenCalledWith('/api/publish', expect.anything());
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it('Escape closes it and sends nothing', () => {
+    const fetchImpl = neverResolvingFetch();
+    vi.stubGlobal('fetch', fetchImpl);
+    render(<Harness />);
+    dirty(captured!.registry);
+    fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
+
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(fetchImpl).not.toHaveBeenCalledWith('/api/publish', expect.anything());
+  });
+
+  // handlePublish's `plan.files.length === 0` early return is commented as
+  // defensive-only "because the button is disabled for this case". A panel
+  // that can stay open across a registry change is exactly what would
+  // falsify that, silently, if accept were not gated the same way.
+  it('accept is disabled if the registry goes clean while the panel is open', () => {
+    render(<Harness />);
+    dirty(captured!.registry);
+    fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
+    expect(screen.getByRole('button', { name: 'Yes, publish to the live site' })).toBeEnabled();
+
+    act(() => captured!.registry.updateData('dishes.json', [{ id: 'a', name: '' }]));
+
+    expect(screen.getByRole('button', { name: 'Yes, publish to the live site' })).toBeDisabled();
+  });
+
+  // Not cosmetic. This panel renders inside the same <form> the Publish
+  // button submits, so a `type="submit"` here re-fires that form's onSubmit
+  // -- which now OPENS this panel -- and never reaches handlePublish at all.
+  it('every button inside the dialog is type="button"', () => {
+    render(<Harness />);
+    dirty(captured!.registry);
+    fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
+
+    const buttons = [...screen.getByRole('dialog').querySelectorAll('button')];
+    expect(buttons.length).toBeGreaterThan(0);
+    expect(buttons.every((button) => button.getAttribute('type') === 'button')).toBe(true);
+  });
+});
+
+describe('PublishBar: the time expectation while she waits', () => {
+  it('polling shows BOTH the build state and the 2-3 minute line', async () => {
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/publish') return jsonResponse(200, { sha: 'commit-1' });
+      if (url.startsWith('/api/content')) return jsonResponse(200, { content: '[]', sha: 'sha-fresh' });
+      // Never resolves -- holds the bar at the first polling state
+      // (`buildState: 'queued'`), which is the sentence she actually reads
+      // first, before "building".
+      if (url.startsWith('/api/build-status')) return new Promise<Response>(() => {});
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchImpl);
+    render(<Harness pollClock={instantClock()} />);
+    dirty(captured!.registry);
+    clickPublishAndAccept();
+
+    await screen.findByText('Publishing… waiting for the build to start.');
+    expect(
+      screen.getByText(/This usually takes about 2-3 minutes\./),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/you can close this tab/)).toBeInTheDocument();
+  });
+
+  // Pinned to the phases where "already saved" is actually TRUE. During
+  // 'publishing' the POST is still in flight and nothing has landed
+  // anywhere, so the same sentence there would be a lie.
+  it('the 2-3 minute line is NOT shown while the request itself is still in flight', () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Promise<Response>(() => {})));
+    render(<Harness />);
+    dirty(captured!.registry);
+    clickPublishAndAccept();
+
+    // getByRole('status'), not getByText: the button's own busy label is
+    // also the literal string "Publishing…".
+    expect(screen.getByRole('status')).toHaveTextContent('Publishing…');
+    expect(screen.queryByText(/This usually takes about 2-3 minutes\./)).not.toBeInTheDocument();
   });
 });
 
@@ -188,7 +448,7 @@ describe('PublishBar: assembling the request', () => {
     act(() => captured!.registry.register('dishes.json', [{ id: 'a', name: '' }], 'sha-original'));
     act(() => captured!.registry.register('dishes.json', [{ id: 'a', name: 'Edited' }], 'sha-original'));
 
-    fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
+    clickPublishAndAccept();
     await waitFor(() => expect(fetchImpl).toHaveBeenCalled());
     const body = JSON.parse((fetchImpl.mock.calls[0][1] as RequestInit).body as string) as { files: { baseSha?: string }[] };
     expect(body.files[0].baseSha).toBe('sha-original');
@@ -216,7 +476,7 @@ describe('PublishBar: assembling the request', () => {
     fireEvent.change(tagsInput, { target: { value: 'a, b, c' } });
     tagsInput.focus();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
+    clickPublishAndAccept();
     await waitFor(() => expect(fetchImpl).toHaveBeenCalled());
     const body = JSON.parse((fetchImpl.mock.calls[0][1] as RequestInit).body as string) as { files: { path: string; content: string }[] };
     const dishesFile = body.files.find((f) => f.path === 'src/content/dishes.json')!;
@@ -230,7 +490,7 @@ describe('PublishBar: Step 5 translation table', () => {
     vi.stubGlobal('fetch', fetchImpl);
     render(<Harness pollClock={instantClock()} />);
     dirty(captured!.registry);
-    fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
+    clickPublishAndAccept();
     return screen.findByRole('alert');
   }
 
@@ -257,7 +517,7 @@ describe('PublishBar: Step 5 translation table', () => {
     vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('offline'); }));
     render(<Harness pollClock={instantClock()} />);
     dirty(captured!.registry);
-    fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
+    clickPublishAndAccept();
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent("Couldn't reach the server that stores your changes. Nothing was lost — try again in a minute.");
   });
@@ -285,7 +545,7 @@ describe('PublishBar: Step 5 translation table', () => {
     vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(401, { message: 'Not authenticated.' })));
     render(<Harness onUnauthenticated={onUnauthenticated} pollClock={instantClock()} />);
     dirty(captured!.registry);
-    fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
+    clickPublishAndAccept();
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent("You've been signed out. Log in and your changes will still be here.");
     expect(onUnauthenticated).toHaveBeenCalledTimes(1);
@@ -310,7 +570,7 @@ describe('PublishBar: Step 3 -- polling to live, confirmed against build-info.js
     vi.stubGlobal('fetch', fetchImpl);
     render(<Harness pollClock={instantClock()} />);
     dirty(captured!.registry);
-    fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
+    clickPublishAndAccept();
 
     await screen.findByText('Your changes are live.');
   });
@@ -327,7 +587,7 @@ describe('PublishBar: Step 3 -- polling to live, confirmed against build-info.js
     vi.stubGlobal('fetch', fetchImpl);
     render(<Harness pollClock={instantClock()} />);
     dirty(captured!.registry);
-    fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
+    clickPublishAndAccept();
 
     const alert = await screen.findByRole('alert', undefined, { timeout: 10_000 });
     expect(alert).toHaveTextContent('This is taking longer than it should.');
@@ -346,7 +606,7 @@ describe('PublishBar: Step 3 -- polling to live, confirmed against build-info.js
     vi.stubGlobal('fetch', fetchImpl);
     render(<Harness pollClock={instantClock()} />);
     dirty(captured!.registry);
-    fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
+    clickPublishAndAccept();
 
     const alert = await screen.findByRole('alert', undefined, { timeout: 10_000 });
     expect(alert).toHaveTextContent("Published, but the site hasn't picked it up yet.");
@@ -362,7 +622,7 @@ describe('PublishBar: Step 3 -- polling to live, confirmed against build-info.js
     vi.stubGlobal('fetch', fetchImpl);
     render(<Harness pollClock={instantClock()} />);
     dirty(captured!.registry);
-    fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
+    clickPublishAndAccept();
 
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent('Something went wrong publishing.');
@@ -395,7 +655,7 @@ describe('PublishBar: Step 3 -- polling to live, confirmed against build-info.js
     vi.stubGlobal('fetch', fetchImpl);
     render(<Harness onUnauthenticated={onUnauthenticated} pollClock={instantClock()} />);
     dirty(captured!.registry);
-    fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
+    clickPublishAndAccept();
 
     await waitFor(() => expect(onUnauthenticated).toHaveBeenCalledTimes(1));
     const alert = await screen.findByRole('alert');
@@ -423,7 +683,7 @@ describe('PublishBar: after a successful publish', () => {
       captured!.stagedFiles.stage('dishes.json:a:image', { path: 'assets-source/food/x.jpg', content: 'AAAA', encoding: 'base64', contentPath: '/food/x.webp' });
     });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
+    clickPublishAndAccept();
     await screen.findByText('Your changes are live.');
 
     expect(captured!.stagedFiles.files).toEqual({});
@@ -459,7 +719,7 @@ describe('PublishBar: after a successful publish', () => {
       captured!.stagedFiles.stage('dishes.json:a:image', { path: 'assets-source/food/x.jpg', content: 'AAAA', encoding: 'base64', contentPath: '/food/x.webp' });
     });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
+    clickPublishAndAccept();
     await waitFor(() => expect(fetchImpl).toHaveBeenCalledWith('/api/publish', expect.anything()));
     // She stages a SECOND photo, on a different field, WHILE the first
     // request is still in flight.
@@ -491,7 +751,7 @@ describe('PublishBar: after a successful publish', () => {
     vi.stubGlobal('fetch', fetchImpl);
     render(<Harness pollClock={instantClock()} />);
     dirty(captured!.registry);
-    fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
+    clickPublishAndAccept();
     await screen.findByText('Your changes are live.');
     expect(window.localStorage.getItem(DRAFT_STORAGE_KEY)).toBeNull();
   });

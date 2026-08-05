@@ -4,6 +4,7 @@
 // bad edit cannot break the site, the new failure mode is that her work
 // silently evaporates. She must be told."
 import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   buildPublishRequest,
   dirtyContentFiles,
@@ -21,7 +22,7 @@ import {
 } from './publish';
 import { clearDraft, formatRelativeTime, mostRecentSavedAt, saveDraft, type DraftMap, type DraftSurface } from './drafts';
 import type { StagedFiles } from './staged';
-import type { ContentFileName } from './content';
+import { CONTENT_FILE_LABELS, type ContentFileName } from './content';
 import type { ValidationProblem } from '../content/validate';
 
 // ---------------------------------------------------------------------------
@@ -89,6 +90,11 @@ export function DraftBanner({ draft, staleStagedCount, onRestore, onDiscard }: D
 
 type BarState =
   | { phase: 'idle' }
+  // She has asked to publish and is being told what that means before
+  // anything leaves the browser. NOT a busy phase (see BUSY_PHASES below):
+  // nothing is in flight yet, and the trigger button behind the panel is
+  // not "working", it is simply behind a dialog.
+  | { phase: 'confirm' }
   | { phase: 'publishing' }
   | { phase: 'polling'; buildState: BuildState }
   | { phase: 'confirming' }
@@ -283,6 +289,26 @@ export interface PublishBarProps {
   // show every one of these inline, next to the field, so it never passes
   // this prop.
   problems?: ValidationProblem[];
+  // How far down this bar's own wrapper starts, in pixels. Exists for one
+  // measured defect: on /edit this bar renders at the very top of the real
+  // homepage, and NavBar.tsx's own `<nav>` is `fixed top-0 left-0 right-0
+  // z-50` with an opaque background and a 61px height -- so the bar's whole
+  // top row, summary line and Publish button included, sat underneath it.
+  // Measured in a real Chromium at both 390x844 and 1440x900 before this
+  // prop existed: `document.elementFromPoint` at the Publish button's own
+  // centre returned the nav's "Menu" link at 1440px and the hamburger
+  // toggle's glyph at 390px -- the button could not be clicked at all.
+  // e2e/publish-confirm.spec.ts is what pins this now; jsdom has no layout
+  // engine and cannot hit-test, so no vitest test in this repo can.
+  //
+  // Applied as an inline style rather than a utility class, following
+  // CollageTile.tsx's own precedent for the reason it gives: the shared
+  // stylesheet carries a byte ceiling every admin-only class counts
+  // against, and no existing utility fits anyway -- the largest top margin
+  // with a rule in the shipped stylesheet today is 48px, which would leave
+  // 3px of clearance under a 61px nav. Defaulted to 0: /edit/manage has no
+  // fixed header of its own and must not move.
+  offsetTop?: number;
 }
 
 const REAL_CLOCK = { now: () => Date.now(), sleep: (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)) };
@@ -296,10 +322,16 @@ const PublishBar: React.FC<PublishBarProps> = ({
   pollClock = REAL_CLOCK,
   holdDraftClear = false,
   problems = [],
+  offsetTop = 0,
 }) => {
   const [state, setState] = useState<BarState>({ phase: 'idle' });
   const mountedRef = useRef(true);
   const abortRef = useRef<AbortController | null>(null);
+  // Where focus goes back to when she cancels the confirmation -- the exact
+  // control she opened it from, never "somewhere near it". A dialog that
+  // dumps focus back at the top of the document on Escape is worse than no
+  // dialog for anyone driving this from a keyboard.
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(
     () => () => {
@@ -374,6 +406,49 @@ const PublishBar: React.FC<PublishBarProps> = ({
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [isDirty]);
+
+  // What the form's own submit reaches now. The POST used to happen from
+  // here directly, which meant Enter in ANY text input anywhere on the
+  // dashboard published straight to the live site: every content section
+  // renders inside this one <form> (see PublishBarProps' `children`
+  // comment), and the button that submits it is `type="submit"`. That one
+  // keystroke is the whole reason this step exists, and the reason there is
+  // no "don't ask again" escape from it -- a checkbox is the single most
+  // likely thing to be clicked by someone making a dialog go away, and
+  // clicking it would permanently re-open that path with nothing to
+  // discover the way back.
+  //
+  // The blur flush runs HERE as well as in handlePublish. TagsInput
+  // (Field.tsx) and EditableText both commit a typed buffer only on blur,
+  // so a still-focused field's edit is otherwise missing from the very list
+  // she is being asked to approve.
+  //
+  // Recorded honestly, because a test was written for this line and had to
+  // be withdrawn: this flush is NOT independently observable from jsdom.
+  // Moving focus into the panel -- the focus trap's own opening act --
+  // blurs whatever field was focused and commits its buffer regardless, and
+  // under jsdom that whole sequence collapses into the same `act` as the
+  // open itself, so the settled DOM is identical with and without this
+  // line. What it still buys, in a real browser, is one frame: passive
+  // effects run AFTER paint, so without this the panel paints once with a
+  // stale summary ("1 section edited", naming the wrong sections) before
+  // the focus effect corrects it. Kept for that, and because it stops the
+  // panel's truthfulness from resting on an implementation detail of the
+  // focus trap -- not because a vitest test fails without it.
+  //
+  // The flush in handlePublish is a different matter and is genuinely
+  // load-bearing on its own: focus can move again while the panel is open,
+  // and a clicked <button> does not take focus in every browser (see that
+  // function's own comment).
+  function openConfirm() {
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    setState({ phase: 'confirm' });
+  }
+
+  function cancelConfirm() {
+    setState({ phase: 'idle' });
+    triggerRef.current?.focus();
+  }
 
   async function handlePublish() {
     // Step 1's carried requirement 2: TagsInput commits its typed buffer
@@ -464,10 +539,13 @@ const PublishBar: React.FC<PublishBarProps> = ({
     <form
       onSubmit={(event) => {
         event.preventDefault();
-        void handlePublish();
+        // Opens the confirmation; never publishes. handlePublish is reached
+        // from exactly one place now -- the panel's own accept button, which
+        // is `type="button"` precisely so it cannot re-enter this handler.
+        openConfirm();
       }}
     >
-      <div className="mx-auto mb-8 max-w-3xl rounded border border-gray-200 bg-white p-4">
+      <div className="mx-auto mb-8 max-w-3xl rounded border border-gray-200 bg-white p-4" style={{ marginTop: offsetTop }}>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="font-['Montserrat'] text-sm text-gray-600">{summaryMessage(dirtyFiles.length, stagedCount)}</p>
           {/* type="submit", not a plain onClick handler -- see PublishBarProps'
@@ -478,7 +556,14 @@ const PublishBar: React.FC<PublishBarProps> = ({
               wiring exists for -- handlePublish's own un-focus line is what
               makes a plain click safe too, since not every browser moves
               focus to a clicked button by default (Safari doesn't). */}
-          <button type="submit" disabled={!isDirty || busy || tooManyStaged} className={PUBLISH_BUTTON_CLASSNAME}>
+          <button
+            ref={triggerRef}
+            type="submit"
+            disabled={!isDirty || busy || tooManyStaged}
+            aria-haspopup="dialog"
+            aria-expanded={state.phase === 'confirm'}
+            className={PUBLISH_BUTTON_CLASSNAME}
+          >
             {busy ? 'Publishing…' : 'Publish'}
           </button>
         </div>
@@ -510,10 +595,196 @@ const PublishBar: React.FC<PublishBarProps> = ({
           </div>
         )}
       </div>
+      {state.phase === 'confirm' && (
+        <ConfirmPanel
+          dirtyFiles={dirtyFiles}
+          stagedCount={stagedCount}
+          problems={problems}
+          acceptDisabled={!isDirty || tooManyStaged}
+          // handlePublish sets 'publishing' itself, synchronously, before
+          // its first await -- so this panel unmounts in the same render
+          // the request goes out in. Deliberately NOT setting that phase
+          // here as well: handlePublish's two defensive early returns
+          // (a refused plan, an empty one) would then strand the bar at
+          // "Publishing…" with nothing in flight.
+          onAccept={() => void handlePublish()}
+          onCancel={cancelConfirm}
+        />
+      )}
       {children}
     </form>
   );
 };
+
+// ---------------------------------------------------------------------------
+// The confirmation itself. A bottom-docked panel, portaled to document.body,
+// used on BOTH surfaces -- not an expansion inside the bar and not a centred
+// modal.
+//
+// Not an inline expansion, because on /edit it would be unusable rather than
+// merely worse: the bar's own top row starts under a `fixed top-0 z-50` nav
+// (see `offsetTop`'s comment), so a panel anchored to it renders its top
+// half behind the nav. Not a centred modal, because /edit renders the real
+// homepage underneath and covering it is exactly what makes /edit worth
+// having; a centred layout also wants sizing and overflow utilities that
+// have no rule in the shipped stylesheet today, against a byte ceiling with
+// roughly two hundred bytes of headroom.
+//
+// The className below is CollageTile.tsx's own move/resize panel string,
+// character for character, so this whole feature adds no CSS rule at all.
+// `zIndex: 70` as an inline style, above that panel's own 50 and above
+// CollageTile's refusal toast at 60, so which of the three paints on top is
+// never decided by portal insertion order -- the same reasoning CollageTile
+// itself records for choosing 60 over 50.
+//
+// `aria-modal="true"` plus a real focus trap, not a non-modal dialog: a
+// dialog you can Tab straight past is not a stop. Known and deliberate
+// limitation -- the page behind is not marked `inert`, so a screen reader's
+// virtual cursor can still browse it. Doing that needs a ref to the page
+// root, which this component does not own on /edit (it receives the whole
+// homepage as opaque `children`). The keyboard path is trapped, and the
+// keyboard path is the one the accidental-Enter hazard runs through.
+const SECONDARY_BUTTON_CLASSNAME = 'border border-gray-300 text-[#222] hover:bg-gray-100';
+const PRIMARY_BUTTON_CLASSNAME = 'bg-[#6B8B59] text-white hover:bg-[#5a7349] disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500';
+
+function ConfirmPanel({
+  dirtyFiles,
+  stagedCount,
+  problems,
+  acceptDisabled,
+  onAccept,
+  onCancel,
+}: {
+  dirtyFiles: ContentFileName[];
+  stagedCount: number;
+  problems: ValidationProblem[];
+  acceptDisabled: boolean;
+  onAccept: () => void;
+  onCancel: () => void;
+}) {
+  const panelRef = useRef<HTMLDivElement | null>(null);
+
+  // Focus moves INTO the panel on open, once. useEffect, not
+  // useLayoutEffect: this runs after the portal's own nodes are in the
+  // document, and there is nothing to measure first.
+  useEffect(() => {
+    const first = panelRef.current?.querySelector<HTMLElement>('button:not([disabled])');
+    (first ?? panelRef.current)?.focus();
+  }, []);
+
+  // Escape cancels; Tab cycles within the panel. The trap is written
+  // against the panel's own focusable children rather than a general
+  // document walk because the panel contains exactly two buttons and
+  // nothing else focusable -- there is no case here where a wider notion of
+  // "focusable" would find something this misses.
+  function handleKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      onCancel();
+      return;
+    }
+    if (event.key !== 'Tab') return;
+    const focusable = [...(panelRef.current?.querySelectorAll<HTMLElement>('button:not([disabled])') ?? [])];
+    if (focusable.length === 0) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    const active = document.activeElement;
+    if (event.shiftKey && (active === first || active === panelRef.current)) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && active === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+
+  return createPortal(
+    <div
+      ref={panelRef}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="vb-publish-confirm-heading"
+      tabIndex={-1}
+      onKeyDown={handleKeyDown}
+      style={{ zIndex: 70 }}
+      className="fixed inset-x-0 bottom-0 z-50 border-t border-gray-200 bg-white px-4 py-3 shadow-[0_-4px_12px_rgba(0,0,0,0.15)]"
+    >
+      <div className="mx-auto max-w-3xl">
+        <p id="vb-publish-confirm-heading" className="mb-3 font-['Montserrat'] text-sm font-semibold text-[#222]">
+          Publish these changes to the live site?
+        </p>
+        {/* WHAT. Derived live from the same `dirtyFiles`/`stagedCount` the
+            summary line above the button already uses -- never a snapshot
+            taken when this opened, which would go stale the moment a photo
+            upload that was in flight when she clicked Publish finishes and
+            stages itself. */}
+        <p className="mb-3 font-['Montserrat'] text-sm text-[#222]">{summaryMessage(dirtyFiles.length, stagedCount)}</p>
+        {dirtyFiles.length > 0 && (
+          <p className="mb-3 font-['Montserrat'] text-sm text-[#222]">
+            {`Changing: ${dirtyFiles.map((file) => CONTENT_FILE_LABELS[file]).join(', ')}.`}
+          </p>
+        )}
+        {/* WHO SEES IT, then how permanent it is. "No undo button" rather
+            than "cannot be undone", because the latter is not true: the
+            Worker writes an ordinary single-parent commit, so a developer
+            can revert it. Overstating danger in the other direction is a
+            real failure mode for this bar -- it already carried a review
+            finding where one sentence promised "your changes will still be
+            here" in a case where that was actively false. */}
+        <p className="mb-3 font-['Montserrat'] text-sm text-[#222]">
+          This puts your changes on the public website, where anyone visiting can see them.
+        </p>
+        <p className="mb-3 font-['Montserrat'] text-sm text-[#222]">
+          There is no undo button. To change something back, edit it again and publish again.
+        </p>
+        {/* TIMING. "usually takes about", never a hard promise: the poll
+            this kicks off has a ten-minute ceiling and its own terminal
+            copy says "This is taking longer than it should" -- a firm
+            number here followed by that sentence is a contradiction she
+            would read. */}
+        <p className="mb-3 font-['Montserrat'] text-sm text-[#222]">
+          It usually takes about 2-3 minutes for the site to show the change.
+        </p>
+        {problems.length > 0 && (
+          <div className="mt-3 mb-3 font-['Montserrat'] text-sm text-amber-700">
+            <p>{`${problems.length} ${problems.length === 1 ? 'problem needs' : 'problems need'} fixing before this can publish:`}</p>
+            <ul className="list-disc pl-5">
+              {problems.map((problem, index) => (
+                <li key={index}>{problem.message}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {/* Both `type="button"`, and that is not cosmetic. This panel is
+            rendered inside the same <form> the Publish button submits, so a
+            `type="submit"` here would re-fire that form's onSubmit -- which
+            now opens this very panel -- and never reach handlePublish at
+            all. The same invariant PublishBarProps' `children` comment
+            already documents for every section button.
+
+            The accept button carries the SAME `!isDirty` gate the trigger
+            does. handlePublish's own `plan.files.length === 0` early return
+            is commented as defensive-only "because the button is disabled
+            for this case", and that stops being true the moment a panel can
+            stay open across a registry change. */}
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            disabled={acceptDisabled}
+            onClick={onAccept}
+            className={`${BANNER_BUTTON_CLASSNAME} ${PRIMARY_BUTTON_CLASSNAME}`}
+          >
+            Yes, publish to the live site
+          </button>
+          <button type="button" onClick={onCancel} className={`${BANNER_BUTTON_CLASSNAME} ${SECONDARY_BUTTON_CLASSNAME}`}>
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
 
 function CommitLink({ commitUrl, sha }: { commitUrl: string | null; sha: string }) {
   if (commitUrl) {
@@ -526,9 +797,39 @@ function CommitLink({ commitUrl, sha }: { commitUrl: string | null; sha: string 
   return <span>{sha || 'the commit that was just published'}</span>;
 }
 
+// The second line under the in-flight status, carrying the one number she
+// actually wants and permission to walk away. Rendered ONLY for 'polling'
+// and 'confirming', never for 'publishing' and never for 'success', because
+// the "already saved" half is only TRUE once the commit has landed: by
+// construction trackPublish runs only after requestPublish returned
+// success, whereas during 'publishing' the POST is still in flight and
+// nothing is saved anywhere yet.
+//
+// Hedged ("usually about"), for the same reason the confirmation panel's
+// own sentence is: the poll behind this has a ten-minute ceiling and its
+// terminal copy says "This is taking longer than it should".
+//
+// This line is also the ONLY thing telling her the tab is safe to close.
+// The beforeunload guard above is keyed on `isDirty`, which goes false at
+// markPublished -- so during exactly these two phases there is no
+// close-the-tab warning at all. That is correct (the commit already
+// landed), and it is why dropping this line would make the wait silent
+// again rather than merely quieter.
+function TimeExpectation() {
+  return (
+    <p className="mt-3 font-['Montserrat'] text-sm text-gray-600">
+      This usually takes about 2-3 minutes. Your changes are already saved — you can close this tab and they will
+      still go live.
+    </p>
+  );
+}
+
 function PublishStatus({ state }: { state: BarState }) {
   switch (state.phase) {
+    // Nothing in this slot while the confirmation is open -- the panel
+    // itself is what she is reading, and it repeats the summary.
     case 'idle':
+    case 'confirm':
       return null;
     case 'publishing':
       return (
@@ -538,15 +839,21 @@ function PublishStatus({ state }: { state: BarState }) {
       );
     case 'polling':
       return (
-        <p role="status" className="mt-3 font-['Montserrat'] text-sm text-gray-600">
-          {`Publishing… ${describeBuildState(state.buildState)}.`}
-        </p>
+        <>
+          <p role="status" className="mt-3 font-['Montserrat'] text-sm text-gray-600">
+            {`Publishing… ${describeBuildState(state.buildState)}.`}
+          </p>
+          <TimeExpectation />
+        </>
       );
     case 'confirming':
       return (
-        <p role="status" className="mt-3 font-['Montserrat'] text-sm text-gray-600">
-          Almost there — confirming the site picked it up.
-        </p>
+        <>
+          <p role="status" className="mt-3 font-['Montserrat'] text-sm text-gray-600">
+            Almost there — confirming the site picked it up.
+          </p>
+          <TimeExpectation />
+        </>
       );
     case 'success':
       return (

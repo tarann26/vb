@@ -779,6 +779,7 @@ describe('AdminApp: Critical review fix -- a restored draft cannot publish a pho
     await within(restoredSection).findByDisplayValue('Dish A Edited'); // the unrelated edit survived the scrub
 
     await user.click(screen.getByRole('button', { name: 'Publish' }));
+    await user.click(screen.getByRole('button', { name: 'Yes, publish to the live site' }));
     await waitFor(() => expect(publishBodies).toHaveLength(1));
     const dishesFile = publishBodies[0].files.find((f) => f.path === 'src/content/dishes.json');
     expect(dishesFile).toBeDefined();
@@ -904,6 +905,7 @@ describe('AdminApp: Task 10 review fix -- a 401 mid-edit does not destroy the dr
     await waitFor(() => expect(window.localStorage.getItem(DRAFT_STORAGE_KEY)).not.toBeNull());
 
     await user.click(screen.getByRole('button', { name: 'Publish' }));
+    await user.click(screen.getByRole('button', { name: 'Yes, publish to the live site' }));
     expect(await screen.findByText("You've been signed out. Log in and your changes will still be here.")).toBeInTheDocument();
     expect(getPublishCalls()).toBe(1);
 
@@ -947,6 +949,7 @@ describe('AdminApp: Task 10 review fix -- a 401 mid-edit does not destroy the dr
     await screen.findByText('1 section edited, 1 file staged — ready to publish.');
 
     await user.click(screen.getByRole('button', { name: 'Publish' }));
+    await user.click(screen.getByRole('button', { name: 'Yes, publish to the live site' }));
     expect(await screen.findByText("You've been signed out. Log in and your changes will still be here.")).toBeInTheDocument();
     expect(getPublishCalls()).toBe(1);
 

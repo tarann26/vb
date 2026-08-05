@@ -62,6 +62,41 @@ export const CONTENT_FILES = [
 
 export type ContentFileName = (typeof CONTENT_FILES)[number];
 
+// What each content file is CALLED when she reads it, as opposed to what it
+// is named on disk. PublishBar's confirmation panel is the only caller
+// today: it has to tell her which parts of the site a publish is about to
+// change, and "dishes.json, site.json" is the same mistake
+// PublishBar.tsx's own validation case already has a review finding
+// against -- that one put internal validator paths like "[0].name" in front
+// of her, and a filename with an extension is no more meaningful to someone
+// who has never seen this repository.
+//
+// Every string here is the heading AdminApp.tsx already uses for the
+// section that owns that file (its own SectionErrorBoundary `name`), so the
+// panel names the same things the dashboard does rather than inventing a
+// second vocabulary for the same ten files. site.json is the one that needs
+// saying out loud: the dashboard section that edits it is headed "Opening
+// hours", and that is what it is called here too.
+//
+// Typed as a TOTAL Record over ContentFileName, not a partial one or a
+// lookup with a fallback: an eleventh content file added to CONTENT_FILES
+// above without a name for it fails `tsc -b` here, which is the whole
+// point. A fallback string would instead let that file reach her screen
+// unnamed, or named by its filename, exactly the thing this map exists to
+// prevent.
+export const CONTENT_FILE_LABELS: Record<ContentFileName, string> = {
+  'site.json': 'Opening hours',
+  'galleries.json': 'Galleries',
+  'dishes.json': 'Dishes',
+  'drinks.json': 'Drinks',
+  'press.json': 'Press',
+  'story.json': 'Our Story',
+  'menus.json': 'Menus',
+  'copy.json': 'Page copy',
+  'sections.json': 'Homepage sections',
+  'pages.json': 'Pages',
+};
+
 // Maps each content file to the shape its `content` field parses into.
 // Purely a compile-time convenience for `fetchContent`'s generic `<K>`
 // below -- erases entirely, adds nothing to the bundle.

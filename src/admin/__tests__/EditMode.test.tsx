@@ -89,6 +89,14 @@ function unauthorizedResponse(): Response {
 // let a test break exactly one of the three files whose own malformed-shape
 // coverage this review added, without hand-rolling a whole new fetch stub
 // per test.
+// Publish opens a confirmation before anything is POSTed -- one panel,
+// portaled to document.body, used on BOTH surfaces (PublishBar.tsx). Every
+// test below that wants the real request has to walk through it, exactly
+// the way she does.
+function acceptPublishConfirm() {
+  fireEvent.click(screen.getByRole('button', { name: 'Yes, publish to the live site' }));
+}
+
 function stubFetch(overrides: {
   siteResponse?: Promise<Response> | Response;
   dishesResponse?: Promise<Response> | Response;
@@ -623,6 +631,7 @@ describe('Plan 6 Task 5: publishing a collage placement move rides the existing 
     const publishButton = await screen.findByRole('button', { name: 'Publish' });
     expect(publishButton).not.toBeDisabled();
     fireEvent.click(publishButton);
+    acceptPublishConfirm();
 
     expect(await screen.findByText('Your changes are live.')).toBeInTheDocument();
 
@@ -735,6 +744,7 @@ describe('Plan 6 Definition of Done: a tile moved AND photo-replaced in one sess
     const publishButton = await screen.findByRole('button', { name: 'Publish' });
     await waitFor(() => expect(publishButton).not.toBeDisabled());
     fireEvent.click(publishButton);
+    acceptPublishConfirm();
     expect(await screen.findByText('Your changes are live.')).toBeInTheDocument();
 
     const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
@@ -1725,6 +1735,7 @@ describe('Plan 5 Task 5: publishing from /edit', () => {
     const publishButton = await screen.findByRole('button', { name: 'Publish' });
     expect(publishButton).not.toBeDisabled();
     fireEvent.click(publishButton);
+    acceptPublishConfirm();
 
     expect(await screen.findByText('Your changes are live.')).toBeInTheDocument();
     expect(loadDraft('edit')).toBeNull();
@@ -1767,10 +1778,38 @@ describe('Plan 5 Task 5: publishing from /edit', () => {
     await editReserveButton();
     const publishButton = await screen.findByRole('button', { name: 'Publish' });
     fireEvent.click(publishButton);
+    acceptPublishConfirm();
 
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent(/This may already be published.*another tab or device, including one of your own/);
     expect(alert).not.toHaveTextContent(/someone else/i);
+  });
+
+  // The confirmation is wired into PublishBar itself, not into either
+  // caller -- so it cannot be live on one surface and missing on the
+  // other. This test is what makes that structural fact checkable: gating
+  // the confirm on `draftSurface === 'dashboard'` inside PublishBar leaves
+  // the whole dashboard suite green and turns exactly this one red, which
+  // is why it is worth having here as well as there.
+  //
+  // /edit is also the surface where the confirmation matters more, not
+  // less: this Publish button sits at the top of the real homepage, and it
+  // became reachable at all only once PublishBar's `offsetTop` prop cleared
+  // that page's own fixed nav (e2e/publish-confirm.spec.ts).
+  it('publishing from /edit goes through the same confirmation, and sends nothing until she accepts', async () => {
+    stubFetch();
+    render(
+      <MemoryRouter>
+        <EditMode />
+      </MemoryRouter>,
+    );
+
+    await editReserveButton();
+    fireEvent.click(await screen.findByRole('button', { name: 'Publish' }));
+
+    expect(screen.getByRole('dialog', { name: /publish/i })).toBeInTheDocument();
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+    expect(fetchMock.mock.calls.filter(([url]) => String(url) === '/api/publish')).toHaveLength(0);
   });
 
   // Task 5's own draft-restore offer for /edit (not required verbatim by
