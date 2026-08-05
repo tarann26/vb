@@ -82,8 +82,8 @@ function makeRecordingBundle(): { bundle: ContentBundle; textCalls: TextCall[]; 
 }
 
 // Every renderText path in this app is a dotted key straight into
-// `copy` (e.g. 'hero.logoName' -> copy.hero.logoName, 'drinks.wine' ->
-// copy.drinks.wine) -- the same flat shape CopyLeafShape (fields.ts)
+// `copy` (e.g. 'hero.logoName' -> copy.hero.logoName, 'drinks.intro' ->
+// copy.drinks.intro) -- the same flat shape CopyLeafShape (fields.ts)
 // declares. A path that does not resolve to a string (a typo, or a path
 // that points somewhere `copy` doesn't have) resolves to `undefined`,
 // which can never `.toBe()` the real string value a genuine call passed --
