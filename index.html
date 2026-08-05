@@ -2,7 +2,23 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!--
+      The real logo lockup, not a placeholder. Generated from the site's own
+      markup by `node scripts/favicons.mjs` -- see that file for why it is
+      rendered in a browser (the lockup is live text in Parisienne and
+      Montserrat, and a favicon cannot load a web font) and why the small
+      sizes carry a "VB" monogram instead of the full wordmark (a connected
+      script's strokes fall under one pixel at 32px and it renders as a
+      smudge -- checked directly).
+
+      Order matters: src/test/head.test.ts reads the FIRST `rel="icon"` and
+      asserts the file it points at exists with exact case, so the 32px PNG
+      leads. `sizes` lets the browser pick rather than downsampling the
+      largest one itself.
+    -->
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Via Bianca Pastificio & Ristorante - Authentic Italian dining in Greater Kailash, Delhi. Hand-crafted pastas, wood-fired classics, and a full bar by Chef Kamalika Anand." />
     <meta name="keywords" content="Italian restaurant Delhi, handmade pasta, Via Bianca, Greater Kailash dining, authentic Italian food, Chef Kamalika Anand" />

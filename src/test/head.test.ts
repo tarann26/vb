@@ -90,11 +90,21 @@ it('declares no canonical url, which every route would otherwise inherit', () =>
 // existsSync would answer this one on macOS's case-insensitive filesystem
 // and still 404 on Vercel's case-sensitive one, so the check is against a
 // readdir-built listing of public/ instead.
-it('points the favicon at a file that exists, with exact case', () => {
+// EVERY icon link, not just the first. An earlier version matched only the
+// first `rel="icon"` -- fine while there was exactly one, and silently
+// pointless the moment the favicon set grew to a 16px, a 32px and an Apple
+// touch icon: two of the three references were unchecked, and a typo in
+// either would 404 in the one place nobody looks at a network panel.
+it('points every icon link at a file that exists, with exact case', () => {
   const html = readFileSync('index.html', 'utf8');
-  const href = html.match(/<link rel="icon"[^>]*href="([^"]*)"/)?.[1];
-  expect(href).toBeTruthy();
-  expect(publicFiles.has(href!)).toBe(true);
+  const hrefs = [...html.matchAll(/<link rel="(?:icon|apple-touch-icon)"[^>]*href="([^"]*)"/g)].map((m) => m[1]);
+  // Guards the guard: a regex that matched nothing would make the loop below
+  // vacuous, which is exactly how the single-match version stopped meaning
+  // anything without failing.
+  expect(hrefs.length).toBeGreaterThanOrEqual(3);
+  for (const href of hrefs) {
+    expect(publicFiles.has(href), `${href} is referenced by index.html but not in public/`).toBe(true);
+  }
 });
 
 describe('share card', () => {

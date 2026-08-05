@@ -148,7 +148,7 @@ describe('content assets', () => {
   // which is the exact failure mode the scan was added to close.
   it('discovers the paths hardcoded outside src/content too', () => {
     expect(paths).toContain('/hero/brick.webp'); // Hero.tsx and src/index.css
-    expect(paths).toContain('/favicon.svg'); // index.html
+    expect(paths).toContain('/favicon-32.png'); // index.html (the placeholder SVG it replaced is gone)
     expect(paths).toContain('/team/kamalika-anand.webp'); // parked ChefGallery.tsx
     expect(paths).toContain('/menus/food-menu.pdf'); // parked SignatureMocktails.tsx
   });
