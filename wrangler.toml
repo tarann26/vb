@@ -26,7 +26,7 @@ GITHUB_BRANCH = "main"   # the branch Cloudflare Pages builds from
 # for) fails the test forever, on every push, the same way leaving it
 # unset does not. An invented or half-pasted value still fails, guarding
 # against build-status silently querying a nonexistent account/project.
-CLOUDFLARE_ACCOUNT_ID = "PLACEHOLDER-NOT-A-REAL-ACCOUNT-ID"
+CLOUDFLARE_ACCOUNT_ID = "e352283475b003efeab1a35e45932927"
 CLOUDFLARE_PAGES_PROJECT = "PLACEHOLDER-NOT-A-REAL-PAGES-PROJECT-NAME"
 
 # Hourly, but the `scheduled` handler (worker/index.ts) only actually calls
@@ -53,4 +53,4 @@ binding = "KV"
 # id) fails the test forever, on every push, exactly like never doing it at
 # all. An invented or half-pasted value still fails, guarding against the
 # Worker failing at runtime with an unbound KV.
-id = "PLACEHOLDER-NOT-A-REAL-NAMESPACE-ID"
+id = "3e90a6b54f83487995156291801dce95"
