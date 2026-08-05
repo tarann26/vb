@@ -38,6 +38,14 @@ import {
 // disagreed with Hero.test.tsx used to be able to pass the Worker's own
 // deploy gate, publish, and have Cloudflare refuse the build).
 import { GRID_SIZE, isOnGrid, parsePlacement, resolveLayout } from './placement';
+import {
+  MAX_COLLAGE_DEPTH,
+  MAX_COLLAGE_PHOTOS,
+  MIN_SPLIT_CHILDREN,
+  isCollageNodeKind,
+  isNormalizedSizes,
+  isSplitDirection,
+} from './collage';
 
 export type ValidationProblem = { field: string; message: string };
 
@@ -436,6 +444,131 @@ function validateGalleries(data: unknown): ValidationProblem[] {
         }
       });
     }
+  }
+  return problems;
+}
+
+// ---------------------------------------------------------------------------
+// galleries.json's heroCollage: the split tree.
+//
+// Named, owner-facing messages for exactly the rules `assertCollageTree`
+// (src/content/guards.ts) throws on -- built on that module rather than
+// re-deriving them, the same posture this file's own header comment sets out
+// for every other validator here. The difference is only in the audience and
+// the shape of the answer: the guard fails `npm run build` with one throw,
+// this refuses the WRITE with one problem per thing wrong, addressed to a
+// field.
+//
+// Field addressing, and why the two kinds differ: a problem about ONE PHOTO
+// is reported as `heroCollage[n].src`, where `n` is that photo's position in
+// document order -- the same order the dashboard's own hero-collage list
+// renders its rows in, so src/admin/problems.ts's existing `key[i].sub`
+// routing puts the message on the right row with no change at all. A problem
+// about the tree's STRUCTURE has no row to sit on (nothing in the dashboard
+// renders a split), so it is reported against the bare `heroCollage` field
+// and surfaces in that list's own banner.
+//
+// Not yet called by `validateGalleries` below -- deliberately. Switching the
+// galleries rule over to tree shapes and re-authoring `galleries.json` into a
+// tree are one atomic change with the renderer (Task 2), and a validator that
+// refused the committed content would fail every test in this repo in the
+// meantime. This function, its guard and its tests land first so that change
+// has something already proven to switch ONTO.
+export function collageTreeProblems(raw: unknown): ValidationProblem[] {
+  const problems: ValidationProblem[] = [];
+  // Document-order photo counter, shared across the whole recursion, so
+  // `heroCollage[n]` here means the same `n` `collagePhotos` (collage.ts)
+  // produces and the dashboard's own list renders.
+  let photoIndex = 0;
+  // Reported once, however many branches run past the ceiling -- a tree
+  // divided fifteen levels deep would otherwise produce one identical
+  // sentence per node down there, which is noise, not information.
+  let reportedTooDeep = false;
+
+  function walk(node: unknown, depth: number, ids: string[]): void {
+    // Checked FIRST, for every node rather than only for splits: the node
+    // that actually sits at the forbidden depth is usually a photo (a split
+    // one level above it is still legal), and checking only splits let a
+    // tree exactly one level over the limit through. Returning here is also
+    // what bounds this recursion on hostile input -- `validateContent` is
+    // called straight from an HTTP handler, so "walk whatever arrives" has
+    // to terminate on a tree built to be pathological.
+    if (depth > MAX_COLLAGE_DEPTH) {
+      if (!reportedTooDeep) {
+        reportedTooDeep = true;
+        problems.push(
+          problem('heroCollage', `this collage is divided more than ${MAX_COLLAGE_DEPTH} levels deep — some boxes are too small to see`),
+        );
+      }
+      return;
+    }
+    if (!node || typeof node !== 'object' || Array.isArray(node)) {
+      problems.push(problem('heroCollage', 'part of this collage is not a photo or a split'));
+      return;
+    }
+    const record = node as Record<string, unknown>;
+    if (!isCollageNodeKind(record.kind)) {
+      problems.push(problem('heroCollage', 'part of this collage is neither a photo nor a split'));
+      return;
+    }
+    if (typeof record.id !== 'string' || record.id.trim().length === 0) {
+      problems.push(problem('heroCollage', 'every photo and every split in this collage needs its own name'));
+    } else if (ids.includes(record.id)) {
+      problems.push(problem('heroCollage', `two parts of this collage share the name "${record.id}"`));
+    } else {
+      ids.push(record.id);
+    }
+
+    if (record.kind === 'photo') {
+      const index = photoIndex++;
+      if (isBlank(record.src)) {
+        problems.push(problem(`heroCollage[${index}].src`, `collage photo ${index + 1} needs an image`));
+      }
+      if (typeof record.alt !== 'string') {
+        problems.push(problem(`heroCollage[${index}].alt`, `collage photo ${index + 1} needs alt text, or an empty one`));
+      }
+      return;
+    }
+
+    if (!isSplitDirection(record.direction)) {
+      problems.push(problem('heroCollage', 'a split in this collage must divide it either across or down'));
+    }
+    const children = Array.isArray(record.children) ? record.children : null;
+    if (!children || children.length < MIN_SPLIT_CHILDREN) {
+      problems.push(problem('heroCollage', `a split in this collage needs at least ${MIN_SPLIT_CHILDREN} boxes in it`));
+      return;
+    }
+    const sizes = Array.isArray(record.sizes) ? record.sizes : null;
+    if (!sizes || sizes.length !== children.length) {
+      problems.push(problem('heroCollage', 'a split in this collage has a different number of sizes than boxes'));
+    } else if (!sizes.every((size) => typeof size === 'number' && Number.isFinite(size) && size > 0)) {
+      problems.push(problem('heroCollage', 'every box in this collage needs a size greater than zero'));
+    } else if (!isNormalizedSizes(sizes as number[])) {
+      problems.push(
+        problem('heroCollage', `the sizes of a split in this collage must add up to ${children.length}`),
+      );
+    }
+    children.forEach((child) => walk(child, depth + 1, ids));
+  }
+
+  walk(raw, 1, []);
+
+  // Counted from what the walk actually reached, so a malformed subtree that
+  // stopped the walk early cannot also produce a confusing "too many photos".
+  //
+  // Only the UPPER bound is checked here, and that is not an oversight: a
+  // tree with ZERO photos is unrepresentable by construction. Every node is
+  // either a photo or a split, every split carries at least
+  // MIN_SPLIT_CHILDREN children, and every branch therefore bottoms out at a
+  // photo -- so any tree that gets this far already has at least one. The
+  // reachable "no photos" state is having no tree at all, which is
+  // `validateGalleries`'s own MIN_COLLAGE_PHOTOS check on the `heroCollage`
+  // field itself, not this function's. A check here would be one that cannot
+  // fail, which this project counts as a defect rather than as caution.
+  if (problems.length === 0 && photoIndex > MAX_COLLAGE_PHOTOS) {
+    problems.push(
+      problem('heroCollage', `the collage has ${photoIndex} photos — ${MAX_COLLAGE_PHOTOS} is the most it can hold`),
+    );
   }
   return problems;
 }

@@ -77,6 +77,87 @@ export interface GalleryImage {
   alt: string;
 }
 
+// ---------------------------------------------------------------------------
+// The hero collage, as a tree of splits. See src/content/collage.ts for the
+// operations on it, the limits, and why a size is a number rather than a
+// class name.
+
+// 'row' lays a split's children out side by side (a vertical cut through the
+// box); 'column' stacks them (a horizontal cut). Named for the CSS
+// `flex-direction` each one renders as, so the data and the rendered layout
+// cannot drift apart in anybody's head.
+export type SplitDirection = 'row' | 'column';
+
+// `id` is the ONE thing about a photo that survives every edit -- it is not
+// derived from `src` (which she can replace) and not derived from position
+// (which a swap changes). Task 4's swap exchanges two photos' POSITIONS in
+// the tree, taking each photo's whole payload -- id, src and alt -- with it,
+// exactly as the owner described the gesture: "the photo fills the box it
+// travels to". So `galleries.heroCollage.<id>` names the same photograph
+// before and after a swap, and a replacement she staged for it follows it
+// across. A positional path (`heroCollage.5`, which is what this collage used
+// before) would name a DIFFERENT photo the instant two are swapped -- the
+// exact class of bug this project has hit repeatedly.
+//
+// `alt` may legitimately be empty, and is empty for all sixteen committed
+// photos: this collage is decorative background behind the hero's own <h1>,
+// tagline and phone numbers, and giving sixteen background photos alt text
+// would make a screen reader read sixteen descriptions before the
+// restaurant's name. `src` may not be blank -- see validate.ts.
+export interface CollagePhoto {
+  kind: 'photo';
+  id: string;
+  src: string;
+  alt: string;
+}
+
+// N-ary children with a parallel `sizes` array, not strictly binary splits.
+// Decided on what the editing gestures need, and the deciding case is Task
+// 5's divider drag:
+//
+//   Three boxes in a row, A | B | C. With BINARY splits that is
+//   `split(A, split(B, C))`, so the line the owner sees between A and B is
+//   the OUTER split's divider -- dragging it grows A against the whole (B,C)
+//   subtree, shrinking C as well, even though C is nowhere near the line she
+//   grabbed. Her requirement is exactly the opposite: dragging a photo's
+//   left edge to widen it must take that width from the box immediately to
+//   its left, and from that box only -- one box, the adjacent one. (Her own
+//   sentence is quoted verbatim in
+//   docs/superpowers/plans/2026-08-05-plan-9-collage-split-tree.md and
+//   deliberately paraphrased here: one of its words is also a real, bare,
+//   no-argument Tailwind utility with no rule in the shipped stylesheet
+//   today, and this repo's content scanner has no JS parser to tell a class
+//   name from prose inside a comment. Same hazard, same remedy, as
+//   validate.ts's own slug message and tailwind.config.js's `blocklist`.)
+//   With n-ary children a divider is (this split, the gap at index i) and
+//   resolves to `children[i]` and `children[i + 1]`, always exactly two
+//   adjacent boxes, and the drag moves size between exactly those two while
+//   conserving their total.
+//
+// It also keeps the tree shallow (the committed arrangement's middle band is
+// one five-child row split that binary would need four nested levels for),
+// which makes MAX_COLLAGE_DEPTH a meaningful limit rather than a formality,
+// and it makes Task 6's remove cheaper: dropping one child of a three-child
+// split needs no structural surgery at all, only a renormalise, where binary
+// would leave a redundant one-child split to collapse every single time.
+//
+// The property binary was supposed to buy -- "every divider is unambiguous"
+// -- is bought here by the sizes array instead, and more literally.
+export interface CollageSplit {
+  kind: 'split';
+  id: string;
+  direction: SplitDirection;
+  children: CollageNode[];
+  // Proportions, parallel to `children`, normalised to sum to
+  // `children.length` (src/content/collage.ts's `normalizeSizes`). A
+  // mismatched length is refused by both the build-time guard and the write
+  // boundary -- two positional arrays that can desync is precisely what a
+  // validator is for.
+  sizes: number[];
+}
+
+export type CollageNode = CollagePhoto | CollageSplit;
+
 export interface Galleries {
   atmosphere: GalleryImage[];
   ourStory: GalleryImage[];

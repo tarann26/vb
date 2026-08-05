@@ -1,4 +1,16 @@
+import {
+  MAX_COLLAGE_DEPTH,
+  MAX_COLLAGE_PHOTOS,
+  MIN_SPLIT_CHILDREN,
+  collageDepth,
+  collageNodeIds,
+  countCollagePhotos,
+  isCollageNodeKind,
+  isNormalizedSizes,
+  isSplitDirection,
+} from './collage';
 import type {
+  CollageNode,
   Hours,
   Copy,
   Section,
@@ -529,6 +541,108 @@ export function assertPages(raw: unknown): Page[] {
       sections: parsedSections,
     };
   });
+}
+
+// galleries.json's `heroCollage` is a tree of splits and photos, and the JSON
+// module's inferred type for it is useless in exactly the way `drinks.json`'s
+// `category` already is, only worse: `kind` and `direction` widen to plain
+// `string`, and a recursive `children` array does not infer as `CollageNode[]`
+// at all. A blind `as CollageNode` would accept a split with one child, a
+// `sizes` array of the wrong length, a zero size, a duplicate id or a photo
+// with no `src` -- every one of which either renders wrong or makes an
+// editing gesture (Tasks 4-6) address the wrong box. This guard narrows via
+// real runtime checks instead, so any of them throws at import time (and,
+// through validate.ts, is refused at the write boundary before it can ever
+// become a commit).
+//
+// `path` is a human-readable trail to the offending node ("root",
+// "root.children[2].children[0]") so a bad tree names WHERE it is bad, not
+// just that it is.
+function assertCollageNode(raw: unknown, path: string): CollageNode {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    throw new Error(`content/galleries.json: heroCollage ${path} is not an object`);
+  }
+  const node = raw as Record<string, unknown>;
+  if (!isCollageNodeKind(node.kind)) {
+    throw new Error(`content/galleries.json: heroCollage ${path} has an unknown kind "${String(node.kind)}"`);
+  }
+  if (typeof node.id !== 'string' || node.id.trim().length === 0) {
+    throw new Error(`content/galleries.json: heroCollage ${path} needs an id`);
+  }
+
+  if (node.kind === 'photo') {
+    if (typeof node.src !== 'string' || node.src.trim().length === 0) {
+      throw new Error(`content/galleries.json: heroCollage ${path} needs an image source`);
+    }
+    // `alt` must be PRESENT and a string, but may be empty -- see
+    // CollagePhoto's own comment (types.ts) for why every committed photo
+    // here has an empty one.
+    if (typeof node.alt !== 'string') {
+      throw new Error(`content/galleries.json: heroCollage ${path} needs alt text (an empty string is allowed)`);
+    }
+    return { kind: 'photo', id: node.id, src: node.src, alt: node.alt };
+  }
+
+  if (!isSplitDirection(node.direction)) {
+    throw new Error(
+      `content/galleries.json: heroCollage ${path} has an unknown direction "${String(node.direction)}"`,
+    );
+  }
+  if (!Array.isArray(node.children) || node.children.length < MIN_SPLIT_CHILDREN) {
+    throw new Error(
+      `content/galleries.json: heroCollage ${path} needs at least ${MIN_SPLIT_CHILDREN} children`,
+    );
+  }
+  if (!Array.isArray(node.sizes) || node.sizes.length !== node.children.length) {
+    throw new Error(
+      `content/galleries.json: heroCollage ${path} needs one size per child (${node.children.length})`,
+    );
+  }
+  const sizes = node.sizes.map((size, i) => {
+    if (typeof size !== 'number' || !Number.isFinite(size) || size <= 0) {
+      throw new Error(`content/galleries.json: heroCollage ${path} size[${i}] must be a positive number`);
+    }
+    return size;
+  });
+  // Normalisation is not cosmetic here: `validateContent` refuses an
+  // un-normalised write, so accepting one at build time would let the
+  // committed file and the write boundary disagree about what a valid tree
+  // is -- the exact divergence this module's own header comment exists to
+  // prevent.
+  if (!isNormalizedSizes(sizes)) {
+    throw new Error(
+      `content/galleries.json: heroCollage ${path} sizes must add up to ${node.children.length}`,
+    );
+  }
+  const children = node.children.map((child, i) => assertCollageNode(child, `${path}.children[${i}]`));
+  return { kind: 'split', id: node.id, direction: node.direction, children, sizes };
+}
+
+export function assertCollageTree(raw: unknown): CollageNode {
+  const tree = assertCollageNode(raw, 'root');
+  // Whole-tree rules, checked once at the top rather than re-derived at every
+  // level: an id that is unique among siblings can still collide with a
+  // cousin, and depth/photo counts are properties of the tree, not of a node.
+  const ids = collageNodeIds(tree);
+  const duplicate = ids.find((id, i) => ids.indexOf(id) !== i);
+  if (duplicate !== undefined) {
+    throw new Error(`content/galleries.json: heroCollage has two nodes with the id "${duplicate}"`);
+  }
+  // Upper bound only. A tree with zero photos is unrepresentable: every
+  // branch bottoms out at a photo, because a split needs at least
+  // MIN_SPLIT_CHILDREN children and every node is a photo or a split. The
+  // reachable "no photos" state is having no `heroCollage` at all, which is
+  // validate.ts's own check on the field, not this function's -- see
+  // `collageTreeProblems` there for the same reasoning written out in full.
+  const photos = countCollagePhotos(tree);
+  if (photos > MAX_COLLAGE_PHOTOS) {
+    throw new Error(`content/galleries.json: heroCollage has ${photos} photos, more than the ${MAX_COLLAGE_PHOTOS} allowed`);
+  }
+  const depth = collageDepth(tree);
+  if (depth > MAX_COLLAGE_DEPTH) {
+    throw new Error(`content/galleries.json: heroCollage is ${depth} levels deep, more than the ${MAX_COLLAGE_DEPTH} allowed`);
+  }
+  return tree;
 }
 
 // Recurses through the raw copy.json shape checking every string leaf for
