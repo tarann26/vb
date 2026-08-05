@@ -4,6 +4,13 @@ export interface EditableTextProps {
   path: string;
   value: string;
   onCommit: (path: string, next: string) => void;
+  // Set while a publish request is actually in flight (PublishBar's own
+  // `onPublishLockChange`). Renders the same element with the same
+  // className, only not editable -- deliberately NOT a fallback to the bare
+  // string, which would drop this span's own box and shift the layout of a
+  // 4800px page twice per publish, once when the pause starts and once when
+  // it ends.
+  locked?: boolean;
 }
 
 // A zero-width space, not an empty string, is what an otherwise-empty field
@@ -76,7 +83,7 @@ function stripPlaceholder(text: string): string {
 // no multi-line-aware rule for any of them, so blocking Enter outright loses
 // no real capability -- it only closes the one keyboard path that could ever
 // put DOM structure `.textContent` can't see back into this element.
-const EditableText: React.FC<EditableTextProps> = ({ path, value, onCommit }) => {
+const EditableText: React.FC<EditableTextProps> = ({ path, value, onCommit, locked = false }) => {
   const ref = useRef<HTMLSpanElement>(null);
   // The value at the moment this edit session started -- what Escape
   // restores, and what a blur compares against to decide whether anything
@@ -197,14 +204,19 @@ const EditableText: React.FC<EditableTextProps> = ({ path, value, onCommit }) =>
   return (
     <span
       ref={ref}
-      contentEditable
+      // The handlers come off with the editability, rather than staying
+      // wired to an element that can no longer be focused: a stale commit
+      // firing out of a paused editor is exactly the kind of write the
+      // pause exists to prevent. The className is byte-identical in both
+      // states so the element's box never changes.
+      contentEditable={!locked}
       suppressContentEditableWarning
       role="textbox"
       data-editable-path={path}
-      onFocus={handleFocus}
-      onBlur={handleBlur}
-      onKeyDown={handleKeyDown}
-      onPaste={handlePaste}
+      onFocus={locked ? undefined : handleFocus}
+      onBlur={locked ? undefined : handleBlur}
+      onKeyDown={locked ? undefined : handleKeyDown}
+      onPaste={locked ? undefined : handlePaste}
       // Persistently visible -- never hover-gated. The spec's own Risks
       // section rules this a mandate ("on phones she gets tap-to-select...
       // instead"): a hover-revealed affordance is invisible on a touchscreen,

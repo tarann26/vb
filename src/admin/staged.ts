@@ -60,6 +60,28 @@ export interface StagedFiles {
   // where the record's own `image` field may already point somewhere else
   // entirely.
   stage: (key: string, file: StagedFile | null) => void;
+  // Drops exactly the entries a finished publish actually SENT, matched by
+  // object identity rather than by key. `sent` is the map as it stood when
+  // the request was built.
+  //
+  // Why identity and not `stage(key, null)` per key, which is what the
+  // success path used to do: `stage` deletes whatever sits at that key NOW.
+  // If she re-picks a photo for a field that was already in the request
+  // while that request is still in flight, "now" is the NEW upload -- so
+  // the publish's own cleanup deleted bytes that had never been committed,
+  // while EditableImage's onReplace had already written the new
+  // contentPath into the registry. That leaves a content file naming an
+  // asset that exists nowhere: not staged any more, and never sent. The
+  // next publish commits the dangling path, and the deploy gate's own
+  // asset-existence check (src/content/__tests__/assets.test.ts) then fails
+  // every subsequent build until a developer hand-edits the JSON. Nothing
+  // in the UI reports any of it.
+  //
+  // `stage(key, null)` is deliberately left exactly as it is: PhotoField
+  // and EditableImage both depend on it for their own supersede contract
+  // ("fires with null the moment a NEW pick starts"), where deleting
+  // whatever is currently there is precisely the right behaviour.
+  clearSent: (sent: Record<string, StagedFile>) => void;
 }
 
 export function useStagedFiles(): StagedFiles {
@@ -85,7 +107,23 @@ export function useStagedFiles(): StagedFiles {
     });
   }, []);
 
-  return { files, stage };
+  // Same functional-updater posture as `stage`, and the same no-op-avoids-a-
+  // render check: a call that matches nothing returns `prev` untouched
+  // rather than a fresh object that would re-render every consumer for no
+  // change. `prev[key] === sent[key]` is a reference comparison on purpose
+  // -- a re-pick under the same key produces a genuinely different
+  // StagedFile object, which is exactly the case that must survive.
+  const clearSent = useCallback((sent: Record<string, StagedFile>) => {
+    setFiles((prev) => {
+      const doomed = Object.keys(sent).filter((key) => prev[key] === sent[key]);
+      if (doomed.length === 0) return prev;
+      const next = { ...prev };
+      doomed.forEach((key) => delete next[key]);
+      return next;
+    });
+  }, []);
+
+  return { files, stage, clearSent };
 }
 
 // Two small, shared conversions from what PhotoField/PdfField's own

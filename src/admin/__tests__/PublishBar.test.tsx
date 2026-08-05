@@ -49,12 +49,14 @@ function Harness({
   // edited" reads identically whether the flush happened or not.
   tagsFile = 'dishes.json',
   holdDraftClear = false,
+  onPublishLockChange,
 }: {
   onUnauthenticated?: (notice: string) => void;
   pollClock?: { now: () => number; sleep: (ms: number) => Promise<void> };
   withTagsField?: boolean;
   tagsFile?: ContentFileName;
   holdDraftClear?: boolean;
+  onPublishLockChange?: (locked: boolean) => void;
 }) {
   const registry = useContentRegistry();
   const stagedFiles = useStagedFiles();
@@ -69,6 +71,7 @@ function Harness({
       onUnauthenticated={onUnauthenticated}
       pollClock={pollClock}
       holdDraftClear={holdDraftClear}
+      onPublishLockChange={onPublishLockChange}
     >
       {withTagsField && (
         <input
@@ -439,6 +442,46 @@ describe('PublishBar: the time expectation while she waits', () => {
   });
 });
 
+// The ordering that makes the editing pause safe to ship. Disabling a
+// fieldset blurs whatever is focused inside it, so if the pause engaged
+// BEFORE the flush, a still-buffered field's value would be gone by the
+// time the payload was read -- silently, with a green "live" at the end of
+// it. handlePublish flushes first and sets 'publishing' after, and this is
+// what pins that order.
+describe('PublishBar: the flush happens before the pause, never after', () => {
+  it('a value typed but never blurred away from is in the payload, and the field is paused afterwards', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- second param exists only to keep the mock's call-tuple type two elements wide, matched against below
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
+      const url = String(input);
+      if (url === '/api/publish') return new Promise<Response>(() => {});
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchImpl);
+
+    const lockStates: boolean[] = [];
+    render(<Harness withTagsField onPublishLockChange={(value) => lockStates.push(value)} />);
+    dirty(captured!.registry);
+
+    const tagsInput = screen.getByLabelText('tags') as HTMLInputElement;
+    tagsInput.focus();
+    fireEvent.change(tagsInput, { target: { value: 'a, b, c' } });
+    expect(document.activeElement).toBe(tagsInput);
+
+    fireEvent.submit(tagsInput.closest('form')!);
+    acceptConfirm();
+
+    await waitFor(() => expect(fetchImpl).toHaveBeenCalledWith('/api/publish', expect.anything()));
+    const call = fetchImpl.mock.calls.find(([url]) => url === '/api/publish')!;
+    const body = JSON.parse((call[1] as RequestInit).body as string) as { files: { path: string; content: string }[] };
+    const dishes = body.files.find((f) => f.path === 'src/content/dishes.json')!;
+    expect(JSON.parse(dishes.content)).toEqual([{ id: 'x', tags: ['a', 'b', 'c'] }]);
+
+    // ...and the pause really did engage, so the assertion above is about
+    // ordering rather than about a pause that never happened.
+    expect(lockStates).toContain(true);
+  });
+});
+
 describe('PublishBar: assembling the request', () => {
   it('attaches baseSha to a dirty content file (carried requirement 1)', async () => {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars -- both params exist only to keep the mock's call-tuple type two elements wide, matched against below
@@ -737,6 +780,64 @@ describe('PublishBar: after a successful publish', () => {
     // taken the mid-flight one down with it). Either way, only a clear
     // scoped to exactly `plan.stagedKeys` leaves this assertion green.
     expect(captured!.stagedFiles.files).toEqual({ 'drinks.json:x:image': midFlightFile });
+  });
+
+  // The same-key case, which the mid-flight test above does NOT cover: it
+  // stages a SECOND file under a DIFFERENT key ('drinks.json:x:image'), so
+  // it proves only that an unrelated key survives. Re-picking a photo for
+  // the field that was already in the request is a different and much worse
+  // shape, and it was live on the deployed site.
+  //
+  // What went wrong: the success path cleared by KEY
+  // (`plan.stagedKeys.forEach((key) => stage(key, null))`) through a
+  // functional updater, so it deleted whatever sat at that key AT THAT
+  // MOMENT -- the NEW upload, not the one that was published. Meanwhile
+  // EditableImage's onReplace had already written the new contentPath into
+  // the registry. The result is a content file naming an asset whose bytes
+  // exist nowhere: not staged any more, and never committed. dirtyDraftMap
+  // cannot catch it either -- scrubStagedReferences only scrubs paths that
+  // are CURRENTLY staged, and this one no longer is -- so the dangling path
+  // reaches localStorage too. The next publish commits it, and
+  // src/content/__tests__/assets.test.ts then fails every Cloudflare build
+  // from that point on until someone hand-edits the JSON.
+  //
+  // `clearSent` clears by IDENTITY instead: a key whose value is no longer
+  // the object that was actually sent is left alone.
+  it('re-picking a photo for the SAME field mid-flight keeps the new bytes -- only what was sent is cleared', async () => {
+    let resolvePublish!: (response: Response) => void;
+    const publishResponse = new Promise<Response>((resolve) => {
+      resolvePublish = resolve;
+    });
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/publish') return publishResponse;
+      if (url.startsWith('/api/content')) return jsonResponse(200, { content: JSON.stringify([{ id: 'a', name: 'Edited' }]), sha: 'sha-fresh' });
+      if (url.startsWith('/api/build-status')) return jsonResponse(200, { state: 'live', deploymentUrl: null, commitUrl: 'https://c' });
+      if (url === '/build-info.json') return jsonResponse(200, { sha: 'commit-1', builtAt: 'now' });
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchImpl);
+    render(<Harness pollClock={instantClock()} />);
+    dirty(captured!.registry);
+
+    const KEY = 'dishes.json:a:image';
+    const fileA: StagedFile = { path: 'assets-source/food/a.jpg', content: 'AAAA', encoding: 'base64', contentPath: '/food/a.webp' };
+    const fileB: StagedFile = { path: 'assets-source/food/b.jpg', content: 'BBBB', encoding: 'base64', contentPath: '/food/b.webp' };
+    act(() => captured!.stagedFiles.stage(KEY, fileA));
+
+    clickPublishAndAccept();
+    await waitFor(() => expect(fetchImpl).toHaveBeenCalledWith('/api/publish', expect.anything()));
+
+    // She taps the same camera badge again while the request is in flight.
+    // EditableImage fires onStaged(null) the instant a new pick starts, then
+    // onStaged(theNewFile) once it has uploaded -- both reproduced here.
+    act(() => captured!.stagedFiles.stage(KEY, null));
+    act(() => captured!.stagedFiles.stage(KEY, fileB));
+
+    resolvePublish(jsonResponse(200, { sha: 'commit-1' }));
+    await screen.findByText('Your changes are live.');
+
+    expect(captured!.stagedFiles.files).toEqual({ [KEY]: fileB });
   });
 
   it('clears the localStorage draft on a 200', async () => {

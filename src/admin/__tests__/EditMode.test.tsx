@@ -1785,6 +1785,88 @@ describe('Plan 5 Task 5: publishing from /edit', () => {
     expect(alert).not.toHaveTextContent(/someone else/i);
   });
 
+  // ---------------------------------------------------------------------
+  // The editing pause, from /edit's side. No <fieldset> here: it would also
+  // disable NavBar's hamburger (the one navigation affordance this file
+  // carves out for phones) and put the UA sheet's `min-inline-size:
+  // min-content` against the real homepage's layout. Three targeted gates
+  // in buildBundle instead, each falling back to a render path that already
+  // exists. These are presence/attribute assertions rather than hit-tests,
+  // which is why they belong here and need no browser: the affordances are
+  // REMOVED while paused, not covered.
+  describe('editing on /edit is paused while a publish request is in flight', () => {
+    // Takes a real edit as far as the POST, and holds it there.
+    async function publishAndHang() {
+      stubFetch({ publishResponse: new Promise<Response>(() => {}) });
+      render(
+        <MemoryRouter>
+          <EditMode />
+        </MemoryRouter>,
+      );
+      await editReserveButton();
+      fireEvent.click(await screen.findByRole('button', { name: 'Publish' }));
+      acceptPublishConfirm();
+    }
+
+    it('text stops being editable while paused, and is editable at idle', async () => {
+      stubFetch();
+      const { unmount } = render(
+        <MemoryRouter>
+          <EditMode />
+        </MemoryRouter>,
+      );
+      await screen.findByRole('button', { name: COPY.hero.reserveButton });
+      expect(document.querySelector('[data-editable-path="hero.logoName"]')?.getAttribute('contenteditable')).toBe('true');
+      unmount();
+      vi.unstubAllGlobals();
+
+      await publishAndHang();
+      await waitFor(() =>
+        expect(document.querySelector('[data-editable-path="hero.logoName"]')?.getAttribute('contenteditable')).toBe('false'),
+      );
+    });
+
+    // The camera badge is the one that carries a correctness stake, not just
+    // a cosmetic one: it is the entry point to the same-key re-stage race
+    // that destroys an upload's bytes mid-publish.
+    it('the photo-replace badge is gone while paused, and present at idle', async () => {
+      stubFetch();
+      const { unmount } = render(
+        <MemoryRouter>
+          <EditMode />
+        </MemoryRouter>,
+      );
+      expect(await screen.findAllByLabelText(/^Replace /)).not.toHaveLength(0);
+      unmount();
+      vi.unstubAllGlobals();
+
+      await publishAndHang();
+      await waitFor(() => expect(screen.queryByLabelText(/^Replace /)).toBeNull());
+    });
+
+    it('the collage move/resize control is gone while paused, and present at idle', async () => {
+      stubFetch();
+      const { unmount } = render(
+        <MemoryRouter>
+          <EditMode />
+        </MemoryRouter>,
+      );
+      expect(await screen.findAllByLabelText(/Move or change the size of photo/)).not.toHaveLength(0);
+      unmount();
+      vi.unstubAllGlobals();
+
+      await publishAndHang();
+      await waitFor(() => expect(screen.queryByLabelText(/Move or change the size of photo/)).toBeNull());
+    });
+
+    // On this surface the affordances vanish entirely, so the sentence is
+    // not decoration -- without it the page reads as "my editing broke".
+    it('names the pause in the status line she is already reading', async () => {
+      await publishAndHang();
+      expect(await screen.findByText('Publishing… editing on this page is paused for a moment.')).toBeInTheDocument();
+    });
+  });
+
   // The confirmation is wired into PublishBar itself, not into either
   // caller -- so it cannot be live on one surface and missing on the
   // other. This test is what makes that structural fact checkable: gating

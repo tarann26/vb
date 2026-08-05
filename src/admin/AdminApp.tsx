@@ -74,13 +74,18 @@ const AdminApp: React.FC = () => {
   // unconditionally, before either early return below, the same as
   // `useSession()` already is -- React's own rule that hooks can't run
   // conditionally, not a new constraint this task introduces.
-  const { files: stagedFiles, stage } = useStagedFiles();
+  const { files: stagedFiles, stage, clearSent } = useStagedFiles();
   // publish.ts's own registry: the one place every section's current
   // data/sha is visible at once, which is what makes a single POST
   // /api/publish across all nine content files possible at all -- see that
   // module's own header comment.
   const registry = useContentRegistry();
-  const stagedFilesApi = { files: stagedFiles, stage };
+  const stagedFilesApi = { files: stagedFiles, stage, clearSent };
+  // True only while the publish REQUEST itself is in flight -- seconds, not
+  // the whole build. PublishBar owns the decision and reports it here; see
+  // its `onPublishLockChange` prop for why the poll window deliberately
+  // does not lock anything.
+  const [publishLocked, setPublishLocked] = useState(false);
 
   // Task 10 Step 4: `pendingDraft` is the decision she hasn't made yet;
   // `restoreDraft` is populated ONLY once she clicks Restore, and is what
@@ -212,6 +217,7 @@ const AdminApp: React.FC = () => {
             registry={registry}
             stagedFiles={stagedFilesApi}
             draftSurface="dashboard"
+            onPublishLockChange={setPublishLocked}
             onUnauthenticated={(notice) => {
               // Set BEFORE logOut -- both are plain setState calls in the
               // same synchronous handler, batched into the one re-render
@@ -238,6 +244,41 @@ const AdminApp: React.FC = () => {
                 identically against the same bad file. One boundary per
                 section is what limits one bad file to costing one
                 section. */}
+            {/* One <fieldset>, not a `disabled` prop threaded through
+                thirteen editor components. The native disabled cascade
+                covers every form control underneath it -- Field inputs,
+                RecordList's Add/Remove/Move, SectionList's toggles,
+                HoursField, StoryForm, GalleryList, PageList, the template
+                forms, PhotoField and PdfField -- without touching any of
+                them. A partial lock would be worse than none: a page where
+                three of six controls respond reads as broken, not as busy.
+
+                Inline style rather than classes, so this costs nothing
+                against the stylesheet's byte ceiling (the precedent is
+                CollageTile.tsx, which chose an inline style over a class
+                string for exactly that reason). `minInlineSize: 0` is
+                required, not decorative: the UA stylesheet gives every
+                fieldset `min-inline-size: min-content`, which visibly
+                changes this layout at narrow widths, and `minWidth: 0` is
+                not a reliable override for it. The border/padding/margin
+                resets are the same story.
+
+                The opacity is what says "this area is busy" as one thing.
+                Per-control disabled styling would be the wrong lever:
+                RecordList's move buttons document that they have no
+                disabled variant at all, so they would look live and do
+                nothing -- precisely the broken reading -- and adding
+                variants across the editors would cost real CSS for a state
+                that lasts seconds.
+
+                The DraftBanner branch of the ternary above can never be
+                inside this: it renders INSTEAD of PublishBar, so there is
+                no lock to report while it is up. */}
+            <fieldset
+              disabled={publishLocked}
+              aria-busy={publishLocked}
+              style={{ border: 0, padding: 0, margin: 0, minInlineSize: 0, opacity: publishLocked ? 0.6 : undefined }}
+            >
             <SectionErrorBoundary name="Dishes">
               <ArraySection<Dish>
                 file="dishes.json"
@@ -301,6 +342,7 @@ const AdminApp: React.FC = () => {
             <SectionErrorBoundary name="Page copy">
               <CopySection registry={registry} restoreDraft={restoreDraft} />
             </SectionErrorBoundary>
+            </fieldset>
           </PublishBar>
         )}
       </div>

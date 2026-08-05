@@ -26,6 +26,7 @@ import menusJson from '../../content/menus.json';
 import storyJson from '../../content/story.json';
 import copyJson from '../../content/copy.json';
 import { DRAFT_STORAGE_KEY, DRAFT_STAGED_COUNT_KEY, saveDraft } from '../drafts';
+import { LOCK_TIMEOUT_MS } from '../PublishBar';
 
 function dish(id: string, name: string): Dish {
   return { id, name, description: `${name}, described.`, image: `/food/${id}.webp`, tags: [] };
@@ -985,5 +986,122 @@ describe('AdminApp: Minor -- a pre-existing /edit draft is mentioned, never rest
 
     await screen.findByRole('heading', { name: 'Via Bianca Dashboard' });
     expect(screen.queryByText(/unpublished changes saved on the live-page editor/i)).not.toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The editing pause, from the dashboard's side. PublishBar decides when it is
+// on; AdminApp applies it as one <fieldset disabled> around every section.
+// These tests assert against a REAL section input rather than the fieldset
+// element, because the fieldset is only interesting if the native disabled
+// cascade actually reaches the controls underneath it.
+describe('AdminApp: editing is paused while a publish request is in flight', () => {
+  // A publish that never comes back -- the whole point is to observe the
+  // window while the POST is still open.
+  function stubFetchWithPublish(publish: () => Promise<Response>) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url === '/api/wa') return WA_RESPONSE();
+        if (url === '/api/publish') return publish();
+        if (url.startsWith('/api/build-status')) {
+          return new Response(JSON.stringify({ state: 'queued', deploymentUrl: null, commitUrl: 'https://c' }), { status: 200 });
+        }
+        if (url === '/build-info.json') return new Response(JSON.stringify({ sha: 'x', builtAt: 'now' }), { status: 200 });
+        if (url.includes('dishes.json')) return contentResponse(DISHES, 'sha-dishes');
+        if (url.includes('drinks.json')) return contentResponse(DRINKS, 'sha-drinks');
+        if (url.includes('press.json')) return contentResponse(PRESS, 'sha-press');
+        if (url.includes('sections.json')) return contentResponse(SECTIONS, 'sha-sections');
+        if (url.includes('site.json')) return contentResponse(SITE, 'sha-site');
+        if (url.includes('galleries.json')) return contentResponse(GALLERIES, 'sha-galleries');
+        if (url.includes('menus.json')) return contentResponse(MENUS, 'sha-menus');
+        if (url.includes('story.json')) return contentResponse(STORY, 'sha-story');
+        if (url.includes('copy.json')) return contentResponse(COPY, 'sha-copy');
+        if (url.includes('pages.json')) return contentResponse([], 'sha-pages');
+        throw new Error(`AdminApp.test.tsx: unexpected fetch to ${url}`);
+      }),
+    );
+  }
+
+  // Dirties dishes.json through the real UI and takes the publish as far as
+  // the POST, returning the Dish A name input to assert against.
+  async function publishAndGetDishInput(user: ReturnType<typeof userEvent.setup>) {
+    render(<AdminApp />);
+    const input = await screen.findByDisplayValue('Dish A');
+    await user.type(input, '!');
+    await user.click(screen.getByRole('button', { name: 'Publish' }));
+    await user.click(screen.getByRole('button', { name: 'Yes, publish to the live site' }));
+    return input as HTMLInputElement;
+  }
+
+  it('a real section input is disabled, and refuses typing, while the POST is open', async () => {
+    const user = userEvent.setup();
+    stubFetchWithPublish(() => new Promise<Response>(() => {}));
+    const input = await publishAndGetDishInput(user);
+
+    await waitFor(() => expect(input).toBeDisabled());
+    const before = input.value;
+    await user.type(input, 'nope');
+    expect(input.value).toBe(before);
+  });
+
+  // The failure path the whole design turns on: every terminal state must
+  // release the pause on its own, with no bookkeeping to forget.
+  it('a 409 releases it -- she is never stranded behind a failed publish', async () => {
+    const user = userEvent.setup();
+    stubFetchWithPublish(async () => new Response(JSON.stringify({ message: 'stale' }), { status: 409 }));
+    const input = await publishAndGetDishInput(user);
+
+    await screen.findByText(/This may already be published/);
+    expect(input).not.toBeDisabled();
+  });
+
+  // The deliberate scope limit. The build poll can run for ten minutes on a
+  // flaky connection while the commit is already live; freezing the page for
+  // that would be a worse failure than the confusion it prevents.
+  it('the build-poll window does NOT pause anything, even though the bar still says Publishing…', async () => {
+    const user = userEvent.setup();
+    stubFetchWithPublish(async () => new Response(JSON.stringify({ sha: 'commit-1' }), { status: 200 }));
+    const input = await publishAndGetDishInput(user);
+
+    await screen.findByText('Publishing… waiting for the build to start.');
+    expect(input).not.toBeDisabled();
+  });
+
+  // `requestPublish` has no timeout and cannot be aborted, so the pause has
+  // to be able to fail open. This is her manual way out.
+  it('"Keep editing" releases the editors without letting a second publish race the first', async () => {
+    const user = userEvent.setup();
+    stubFetchWithPublish(() => new Promise<Response>(() => {}));
+    const input = await publishAndGetDishInput(user);
+    await waitFor(() => expect(input).toBeDisabled());
+
+    await user.click(screen.getByRole('button', { name: 'Keep editing' }));
+
+    expect(input).not.toBeDisabled();
+    // Still in flight, still reported, and still not publishable again.
+    expect(screen.getByRole('button', { name: 'Publishing…' })).toBeDisabled();
+  });
+
+  // The automatic way out, for a request that simply never returns -- a
+  // phone that lost signal partway through a large upload.
+  it('the pause lifts itself after the cap, with the request still open', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      stubFetchWithPublish(() => new Promise<Response>(() => {}));
+      const input = await publishAndGetDishInput(user);
+      await waitFor(() => expect(input).toBeDisabled());
+
+      await act(async () => {
+        vi.advanceTimersByTime(LOCK_TIMEOUT_MS);
+      });
+
+      expect(input).not.toBeDisabled();
+      expect(screen.getByRole('button', { name: 'Publishing…' })).toBeDisabled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

@@ -122,3 +122,49 @@ describe('fromStagedPhoto / fromStagedMenuPdf: pick path/content/encoding/conten
     expect(fromStagedMenuPdf(null)).toBeNull();
   });
 });
+
+// `clearSent` is what a finished publish uses to drop what it actually sent.
+// Matching by object identity rather than by key is the whole point: a
+// re-pick under the SAME key while the request was in flight produces a
+// genuinely different StagedFile, and clearing by key would delete its bytes
+// while the registry kept naming its contentPath -- a content file pointing
+// at an asset that exists nowhere, which the deploy gate then fails on every
+// build until someone hand-edits the JSON.
+describe('useStagedFiles: clearSent drops what a publish sent, by identity', () => {
+  const fileA = { path: 'assets-source/food/a.jpg', content: 'YQ==', encoding: 'base64' as const, contentPath: '/food/a.webp' };
+  const fileB = { path: 'assets-source/food/b.jpg', content: 'Yg==', encoding: 'base64' as const, contentPath: '/food/b.webp' };
+
+  it('drops exactly the entries that were sent', () => {
+    const { result } = renderHook(() => useStagedFiles());
+    act(() => {
+      result.current.stage('k1', fileA);
+      result.current.stage('k2', fileB);
+    });
+    const sent = { k1: fileA };
+    act(() => result.current.clearSent(sent));
+    expect(result.current.files).toEqual({ k2: fileB });
+  });
+
+  it('leaves a key alone when its value is no longer the object that was sent', () => {
+    const { result } = renderHook(() => useStagedFiles());
+    act(() => result.current.stage('k1', fileA));
+    const sent = { ...result.current.files };
+    // She re-picks for the same field while the request is still open.
+    act(() => result.current.stage('k1', null));
+    act(() => result.current.stage('k1', fileB));
+
+    act(() => result.current.clearSent(sent));
+
+    expect(result.current.files).toEqual({ k1: fileB });
+  });
+
+  it('is a no-op that does not replace the map when nothing matches', () => {
+    const { result } = renderHook(() => useStagedFiles());
+    act(() => result.current.stage('k1', fileA));
+    const before = result.current.files;
+    act(() => result.current.clearSent({ k9: fileB }));
+    // Same object, not an equal copy -- the same posture `stage` already
+    // takes for a removal that removes nothing.
+    expect(result.current.files).toBe(before);
+  });
+});

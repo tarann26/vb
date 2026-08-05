@@ -3,7 +3,7 @@
 // spec's own reason this exists: "Step 5 exists because of step 4. Once a
 // bad edit cannot break the site, the new failure mode is that her work
 // silently evaporates. She must be told."
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   buildPublishRequest,
@@ -309,9 +309,45 @@ export interface PublishBarProps {
   // 3px of clearance under a 61px nav. Defaulted to 0: /edit/manage has no
   // fixed header of its own and must not move.
   offsetTop?: number;
+  // Fired whenever the "editing is paused" window opens or closes, so a
+  // caller can stop its own editors from being touched while a publish
+  // request is actually in flight. A callback OUT of this component rather
+  // than a prop drilled IN, because `children` here is an opaque ReactNode
+  // -- this bar cannot reach into what it renders -- and because EditMode
+  // builds its whole affordance surface ABOVE this component in the tree,
+  // where a context provider placed inside this bar could never reach it.
+  // Each surface applies the boolean the way its own DOM allows.
+  //
+  // Deliberately NOT driven by BUSY_PHASES. The lock covers 'publishing'
+  // alone -- the seconds while the POST is in flight, which is the one
+  // window where the payload has been read and she has no way to know it.
+  // Once the request returns, the commit is immutable and nothing she types
+  // can corrupt it; markPublished already keeps a mid-flight edit dirty so
+  // it goes in the next publish. Extending the lock into 'polling' would
+  // hand a ten-minute timeout the power to freeze her page over a flaky
+  // connection, for a commit that has probably already gone live.
+  onPublishLockChange?: (locked: boolean) => void;
 }
 
 const REAL_CLOCK = { now: () => Date.now(), sleep: (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)) };
+
+// How long the editing pause is allowed to last before it lifts itself,
+// whatever the request is doing. This is not a nicety -- it is what makes
+// the lock safe to ship at all. `requestPublish` has no timeout and is not
+// abortable: `abortRef`'s controller is created AFTER the POST resolves, so
+// it only ever covers the build poll. A phone that loses signal partway
+// through a payload that can reach tens of megabytes leaves the phase at
+// 'publishing' indefinitely. Today that costs one disabled button; with a
+// lock it would freeze the whole editing surface with no way out.
+//
+// Deliberately paired with releasing the UI rather than aborting the
+// request: cancelling a POST the Worker may already have turned into a
+// commit would report failure for a publish that actually succeeded, and
+// the retry would then 409 into a message about another tab or device that
+// misdescribes what happened. 60 seconds matches CONFIRM_TIMEOUT_MS, a
+// number this codebase already treats as "a normal window, not evidence of
+// a problem".
+export const LOCK_TIMEOUT_MS = 60_000;
 
 const PublishBar: React.FC<PublishBarProps> = ({
   registry,
@@ -323,8 +359,13 @@ const PublishBar: React.FC<PublishBarProps> = ({
   holdDraftClear = false,
   problems = [],
   offsetTop = 0,
+  onPublishLockChange,
 }) => {
   const [state, setState] = useState<BarState>({ phase: 'idle' });
+  // Her own way out of the pause, and the 60-second cap's way out too. Reset
+  // at the top of every publish attempt so releasing one attempt never
+  // silently disarms the next one.
+  const [lockReleased, setLockReleased] = useState(false);
   const mountedRef = useRef(true);
   const abortRef = useRef<AbortController | null>(null);
   // Where focus goes back to when she cancels the confirmation -- the exact
@@ -350,6 +391,33 @@ const PublishBar: React.FC<PublishBarProps> = ({
   // own 'too-many-staged-files' case) BEFORE she ever clicks Publish, not
   // only after a refused attempt.
   const tooManyStaged = stagedCount > MAX_STAGED_PHOTOS_PER_PUBLISH;
+  // 'publishing' alone, never BUSY_PHASES -- see `onPublishLockChange`'s own
+  // comment for why the poll window must not freeze anything. Every terminal
+  // state (conflict, validation, server-error, network-error, build-failed,
+  // stalled, mismatch, unauthenticated, success) therefore releases this on
+  // its own, with no extra bookkeeping to get wrong.
+  const locked = state.phase === 'publishing' && !lockReleased;
+
+  // The cap. Releases the editors WITHOUT touching the request or the
+  // Publish button's own disabled state, so a hung POST can never strand
+  // her -- see LOCK_TIMEOUT_MS.
+  useEffect(() => {
+    if (!locked) return;
+    const timer = setTimeout(() => setLockReleased(true), LOCK_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+  }, [locked]);
+
+  // useLayoutEffect, not useEffect, so the pause lands in the same paint as
+  // the "Publishing…" line rather than one frame later -- the same reasoning
+  // EditableText gives for its own resync. The cleanup fires `false` on
+  // unmount as well as on release, so a bar torn down mid-publish (the
+  // dashboard's own 401 -> Login path does exactly that) can never leave a
+  // parent stuck holding `true` with no component left to clear it.
+  useLayoutEffect(() => {
+    onPublishLockChange?.(locked);
+    return () => onPublishLockChange?.(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [locked]);
 
   // Step 4: every dirty content file, written to localStorage with a
   // timestamp, on every change -- `registry.version` is the one plain
@@ -451,6 +519,10 @@ const PublishBar: React.FC<PublishBarProps> = ({
   }
 
   async function handlePublish() {
+    // A fresh attempt re-arms the pause: releasing it once (the 60s cap, or
+    // her own "Keep editing") must not leave every later publish in this
+    // session unprotected.
+    setLockReleased(false);
     // Step 1's carried requirement 2: TagsInput commits its typed buffer
     // only when it loses focus. Unconditional, not skipped for the mouse
     // path on the assumption a click already moved focus away -- a review
@@ -463,7 +535,12 @@ const PublishBar: React.FC<PublishBarProps> = ({
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
 
     const entries = registry.getEntries();
-    const plan = buildPublishRequest(entries, stagedFiles.files);
+    // The staged map exactly as this request is about to be built from --
+    // captured so the success path below can clear what it actually SENT
+    // rather than whatever happens to sit under those keys by then. See
+    // staged.ts's `clearSent` for the data loss the by-key version caused.
+    const sentStaged = stagedFiles.files;
+    const plan = buildPublishRequest(entries, sentStaged);
     // Refused before a single byte left the browser -- MAX_STAGED_PHOTOS_
     // PER_PUBLISH (PhotoField.tsx), enforced here per the review finding
     // that nothing previously imported it. Unreachable through the ordinary
@@ -489,14 +566,17 @@ const PublishBar: React.FC<PublishBarProps> = ({
       return;
     }
 
-    // Success: the commit landed. Clear exactly the staged keys THIS
-    // request included (never the whole live map -- a photo staged after
-    // this request was built must survive), clear the draft (Step 4: "clear
-    // on a 200"), and refresh baseSha for every content file just published
-    // so a second publish later in this session isn't refused with a false
-    // conflict against her own prior write (see publish.ts's
-    // refreshBaseShas comment).
-    plan.stagedKeys.forEach((key) => stagedFiles.stage(key, null));
+    // Success: the commit landed. Clear exactly the staged files THIS
+    // request included -- by identity, not by key. `plan.stagedKeys` is
+    // `Object.keys` of this same map (publish.ts), so this covers the
+    // identical set, filtered down to entries that are still the very
+    // objects that were sent. A photo staged after this request was built
+    // survives whether it landed on a new key or replaced one of these.
+    // Then clear the draft (Step 4: "clear on a 200") and refresh baseSha
+    // for every content file just published, so a second publish later in
+    // this session isn't refused with a false conflict against her own
+    // prior write (see publish.ts's refreshBaseShas comment).
+    stagedFiles.clearSent(sentStaged);
     clearDraft(draftSurface);
 
     const publishedFiles = Object.keys(plan.contentSnapshots) as ContentFileName[];
@@ -572,7 +652,7 @@ const PublishBar: React.FC<PublishBarProps> = ({
             {`You have ${stagedCount} photos or PDFs staged; only ${MAX_STAGED_PHOTOS_PER_PUBLISH} can publish at once. Remove some before publishing.`}
           </p>
         ) : (
-          <PublishStatus state={state} />
+          <PublishStatus state={state} locked={locked} onKeepEditing={() => setLockReleased(true)} />
         )}
         {/* I8: client-side validation, informational only -- never disables
             the button above (see `problems` prop's own comment). Shown only
@@ -824,7 +904,15 @@ function TimeExpectation() {
   );
 }
 
-function PublishStatus({ state }: { state: BarState }) {
+function PublishStatus({
+  state,
+  locked,
+  onKeepEditing,
+}: {
+  state: BarState;
+  locked: boolean;
+  onKeepEditing: () => void;
+}) {
   switch (state.phase) {
     // Nothing in this slot while the confirmation is open -- the panel
     // itself is what she is reading, and it repeats the summary.
@@ -832,10 +920,37 @@ function PublishStatus({ state }: { state: BarState }) {
     case 'confirm':
       return null;
     case 'publishing':
+      // The pause is named in the sentence she is already looking at, not
+      // signalled only by controls going grey. On /edit that matters more
+      // than anywhere else: the affordances there (dashed text boxes,
+      // camera badges, move handles) disappear entirely for this window, so
+      // without a sentence the page reads as broken rather than as busy.
+      // "on this page" deliberately, never "nobody can edit" -- two
+      // surfaces can be open at once with independent registries, and this
+      // bar knows nothing about the other one.
       return (
-        <p role="status" className="mt-3 font-['Montserrat'] text-sm text-gray-600">
-          Publishing…
-        </p>
+        <>
+          <p role="status" className="mt-3 font-['Montserrat'] text-sm text-gray-600">
+            {locked ? 'Publishing… editing on this page is paused for a moment.' : 'Publishing…'}
+          </p>
+          {/* The escape hatch, always offered while the pause is on.
+              `requestPublish` has no timeout and cannot be aborted, so a
+              request that never comes back must never be able to trap her
+              -- see LOCK_TIMEOUT_MS. Releases the editors only: the Publish
+              button stays disabled by `busy`, so this can never let a
+              second publish race the first. */}
+          {locked && (
+            <p className="mt-3">
+              <button
+                type="button"
+                onClick={onKeepEditing}
+                className={`${BANNER_BUTTON_CLASSNAME} border border-gray-300 text-[#222] hover:bg-gray-100`}
+              >
+                Keep editing
+              </button>
+            </p>
+          )}
+        </>
       );
     case 'polling':
       return (

@@ -411,6 +411,20 @@ function setItemImage<T extends { id: string; image: string | null }>(items: T[]
 // only one panel may be open at a time. A plain closure-captured pair, the
 // same shape `stage` already is, not a new React Context: nothing else on
 // this page needs to read it.
+// `locked` (Plan: lock editing while a publish is in flight) is OPTIONAL and
+// defaults to unlocked. Optional for two reasons, both real: this file's own
+// test suite calls buildBundle directly at a dozen sites, and a required
+// parameter would break every one of them under `tsc -b`; and unlocked is
+// the correct fail-open default anyway -- a caller that forgets to pass it
+// gets the editable page it had before, never a permanently frozen one.
+//
+// /edit gets three targeted gates rather than the single <fieldset> the
+// dashboard uses. A fieldset here would also disable NavBar's own hamburger
+// -- the one navigation affordance this file deliberately carves out for
+// phones -- and would put the UA sheet's `min-inline-size: min-content`
+// against the real homepage's grid and flex layout. All three gates fall
+// back to render paths that already exist, are already tested, and are
+// already documented as layout-neutral.
 // eslint-disable-next-line react-refresh/only-export-components
 export function buildBundle(
   entries: ContentEntries,
@@ -418,6 +432,7 @@ export function buildBundle(
   stage: (key: string, file: StagedFile | null) => void,
   selectedTileIndex: number | null,
   onSelectTile: (index: number | null) => void,
+  locked = false,
 ): ContentBundle {
   const copy = pick(entries, 'copy.json', EMPTY_COPY);
   const galleries = pick(entries, 'galleries.json', EMPTY_GALLERIES);
@@ -575,7 +590,11 @@ export function buildBundle(
     // failure `copyLoaded`'s own comment already guards against elsewhere.
     renderText: (path, value) => {
       const loaded = parseSectionContentPath(path) ? sectionsLoaded : copyLoaded;
-      return loaded ? <EditableText path={path} value={value} onCommit={commitText} /> : value;
+      // `locked` is passed through rather than falling back to the plain
+      // string: EditableText keeps its own box and className in both
+      // states, and swapping it for bare text would shift the layout of a
+      // 4800px page twice per publish.
+      return loaded ? <EditableText path={path} value={value} onCommit={commitText} locked={locked} /> : value;
     },
     // Task 4: images become editable in place, exactly like renderText
     // above -- a path this file knows how to resolve, whose own content
@@ -585,7 +604,11 @@ export function buildBundle(
     // with no provider mounted at all.
     renderImage: (path, props) => {
       const target = resolveImageTarget(path);
-      if (!target || !targetLoaded(target)) return <img {...props} />;
+      // The same fallback an unresolvable path already takes. Removing the
+      // camera badge (rather than covering it) is what actually closes the
+      // same-key re-stage race from this surface: there is no file input
+      // left to reach while the request is in flight.
+      if (locked || !target || !targetLoaded(target)) return <img {...props} />;
       // The stage key's own file prefix names WHICH content file this
       // upload's `contentPath` will be written into (galleries.json for a
       // gallery target, dishes/drinks/press.json for an item one,
@@ -617,7 +640,7 @@ export function buildBundle(
     // hasn't loaded yet renders exactly as it would with no provider
     // mounted at all, not as something broken.
     renderCollageTile: (_path, index, className, image) =>
-      galleriesLoaded ? (
+      galleriesLoaded && !locked ? (
         <CollageTile
           key={index}
           index={index}
@@ -713,6 +736,10 @@ const EditMode: React.FC = () => {
   // move/size-change panel -- see `buildBundle`'s own comment on why this lives
   // here rather than as local state inside each CollageTile instance.
   const [selectedTileIndex, setSelectedTileIndex] = useState<number | null>(null);
+  // True only while the publish REQUEST itself is in flight. PublishBar owns
+  // the decision and reports it here; see its `onPublishLockChange` prop for
+  // why the build-poll window deliberately locks nothing.
+  const [publishLocked, setPublishLocked] = useState(false);
 
   // Post-review Fix 1 (Critical): on every transition into 'in' -- the
   // first load AND any later out->in cycle caused by a 401 below -- refetch
@@ -838,7 +865,7 @@ const EditMode: React.FC = () => {
     return null;
   }
 
-  const bundle = buildBundle(entries, registry, staged.stage, selectedTileIndex, setSelectedTileIndex);
+  const bundle = buildBundle(entries, registry, staged.stage, selectedTileIndex, setSelectedTileIndex, publishLocked);
   const erroredFiles = Object.keys(fileErrors) as ContentFileName[];
   const loadedOrErroredCount = CONTENT_FILES.filter(
     (file) => entries[file] !== undefined || fileErrors[file] !== undefined,
@@ -989,6 +1016,7 @@ const EditMode: React.FC = () => {
         // own comment (PublishBar.tsx) for exactly why an unresolved
         // restore-or-discard decision must not let the persistence effect
         // silently delete the very draft it names.
+        onPublishLockChange={setPublishLocked}
         holdDraftClear={pendingDraft !== null}
         // Clears the real page's own fixed header. NavBar.tsx renders
         // `fixed top-0 left-0 right-0 z-50` with an opaque background and
