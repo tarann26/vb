@@ -111,18 +111,50 @@ async function mockEditBackend(page: Page): Promise<void> {
 // badge's own scroll (the camera's, bottom-right of the tile) from moving
 // the page out from under an EARLIER badge's already-measured coordinates
 // (the select button's, top-left) before it's hit-tested.
-async function hitTestLabel(page: Page, locator: Locator): Promise<string | null> {
+async function hitTestLabel(locator: Locator): Promise<string | null> {
   await locator.scrollIntoViewIfNeeded();
-  const box = await locator.boundingBox();
-  if (!box) throw new Error('hitTestLabel: element has no bounding box');
-  return page.evaluate(
-    ([x, y]) => {
-      const el = document.elementFromPoint(x, y);
-      const labelled = el?.closest('[aria-label]');
-      return labelled ? labelled.getAttribute('aria-label') : null;
-    },
-    [box.x + box.width / 2, box.y + box.height / 2] as [number, number],
-  );
+  // Measure and hit-test in ONE evaluate, inside the page, so both read the
+  // same frame. The previous version took the box over one round trip
+  // (`locator.boundingBox()`) and hit-tested over another
+  // (`page.evaluate(elementFromPoint)`), leaving a window in which layout
+  // could move underneath the already-measured coordinates -- collage images
+  // are `loading: 'lazy'`, so scrolling a tile into view starts loads that
+  // resize things a moment later. That made this spec FLAKY rather than
+  // wrong: the same commit passed and failed on alternate CI runs, and a test
+  // that fails at random teaches everyone to ignore it, which costs more than
+  // the regression it was written to catch.
+  return locator.evaluate((el) => {
+    const rect = el.getBoundingClientRect();
+    const hit = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
+    const labelled = hit?.closest('[aria-label]');
+    return labelled ? labelled.getAttribute('aria-label') : null;
+  });
+}
+
+// Every collage image finished loading, and no scroll still animating. Both
+// change layout after the fact, which is the other half of the flake above.
+async function settleLayout(page: Page): Promise<void> {
+  await page.addStyleTag({ content: 'html { scroll-behavior: auto !important; }' });
+  await page.evaluate(async () => {
+    // Every wait here is bounded. An unbounded `await` on an image that never
+    // fires load OR error -- one still queued behind `loading="lazy"`, for
+    // instance -- hangs the whole spec until Playwright's 30s timeout, which
+    // is a worse failure than the flake it was added to fix (confirmed
+    // directly: the first version of this helper did exactly that).
+    const bounded = <T>(p: Promise<T>, ms: number) =>
+      Promise.race([p, new Promise((r) => setTimeout(r, ms))]);
+    await bounded(document.fonts.ready, 3000);
+    const images = [...document.querySelectorAll('img')].filter((img) => !img.complete);
+    await bounded(
+      Promise.all(
+        images.map((img) => new Promise((r) => {
+          img.addEventListener('load', r, { once: true });
+          img.addEventListener('error', r, { once: true });
+        })),
+      ),
+      5000,
+    );
+  });
 }
 
 const VIEWPORTS = [
@@ -143,6 +175,7 @@ for (const viewport of VIEWPORTS) {
       // the same "sixteen real entries" invariant placement.test.ts's own
       // round-trip describe block pins.
       await expect(tiles).toHaveCount(16);
+      await settleLayout(page);
 
       for (let i = 0; i < 16; i++) {
         const tile = page.locator(`[data-collage-tile-index="${i}"]`);
@@ -163,12 +196,12 @@ for (const viewport of VIEWPORTS) {
         await expect(selectButton).toBeVisible();
         await expect(cameraLabel).toBeVisible();
 
-        const selectHit = await hitTestLabel(page, selectButton);
+        const selectHit = await hitTestLabel(selectButton);
         expect(selectHit, `tile ${i}: select badge is occluded (hit something with no matching aria-label)`).toMatch(
           /^(Move or change the size of photo|Stop moving photo) \d+$/,
         );
 
-        const cameraHit = await hitTestLabel(page, cameraLabel);
+        const cameraHit = await hitTestLabel(cameraLabel);
         expect(cameraHit, `tile ${i}: camera badge is occluded (hit something with no matching aria-label)`).toBe(
           'Replace this photo',
         );
