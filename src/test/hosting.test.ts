@@ -41,7 +41,21 @@ describe('cloudflare hosting config', () => {
     // rather than each independently agreeing with a typo.
     const domain = new URL(site.seo.url).host;
     expect(pattern![1]).toBe(`${domain}/api/*`);
-    expect(zoneName![1]).toBe(domain);
+
+    // `zone_name` is the ZONE the route is registered in, which is not always
+    // the site's own host: a site served from a subdomain (e.g. the
+    // vb.aionxxxi.uk test host used before the real domain was bought) lives
+    // inside the aionxxxi.uk zone, and Cloudflare rejects a route whose
+    // zone_name is not a real zone on the account. An earlier version of this
+    // test asserted `zoneName === domain`, which silently encoded "the site is
+    // always at its zone apex" -- true of viabiancadelhi.com, false the moment
+    // a subdomain was used, and it failed a correct configuration.
+    //
+    // The property actually worth pinning is unchanged: the route is scoped to
+    // the zone that CONTAINS the site's host, so it cannot drift to some other
+    // domain and quietly stop covering /api/*.
+    const zone = zoneName![1];
+    expect(domain === zone || domain.endsWith(`.${zone}`)).toBe(true);
   });
 
   // Scoped to the /assets/* block specifically, not matched against the

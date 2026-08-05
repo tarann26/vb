@@ -5,7 +5,7 @@ compatibility_date = "2026-01-01"
 # Same-origin: /api/* must be served by this Worker, not by the SPA catch-all in
 # public/_redirects. A cross-origin Worker would drop the SameSite=Strict session
 # cookie on every fetch and make sendBeacon('/api/wa') a silent no-op.
-routes = [{ pattern = "viabiancadelhi.com/api/*", zone_name = "viabiancadelhi.com" }]
+routes = [{ pattern = "vb.aionxxxi.uk/api/*", zone_name = "aionxxxi.uk" }]
 
 [vars]
 GITHUB_OWNER = "tarann26"
