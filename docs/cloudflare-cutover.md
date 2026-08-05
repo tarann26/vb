@@ -379,21 +379,37 @@ part of this cutover:
 This is the same reason the Workers Rate Limiting binding was rejected in favour of hand-rolled KV
 counters above — that binding can't express a 15-minute window either, so it was never a substitute
 for this edge rule, only for the in-Worker bookkeeping.
+**Changing the password signs out every existing session, immediately.** This used to be false, and
+was fixed after the owner asked the obvious question: *"then what would I even accomplish if I
+change the password if a hacker got in?"* Nothing, was the honest answer — an attacker holding a
+live cookie kept full write access to this site's GitHub repository for up to another seven days,
+because a session's validity came from an HMAC over `TOKEN_SECRET` alone and the token said nothing
+about which password produced it. Documenting that behaviour (as this section previously did) is
+not the same as defending it: the workaround only worked for someone who knew to read this page
+first, and "I changed my password and was not logged out" is not a thing any human expects.
 
-**Rotating the password does not, on its own, invalidate sessions already issued.** A session
-cookie's validity comes entirely from `verifyToken`'s HMAC check against `TOKEN_SECRET` (see
-`worker/auth.ts`), not from whether the password that produced it is still current — so changing
-only `ADMIN_PASSWORD_HASH` leaves every outstanding 7-day cookie valid until it naturally expires.
-If the point of rotating the password is to lock out anyone who already holds a session (a leaked
-password, a lost or stolen device), **rotate `TOKEN_SECRET` too, in the same sitting**:
+`worker/auth.ts` now derives the signing key from **`TOKEN_SECRET` bound to the current
+`ADMIN_PASSWORD_HASH`** (`sessionKey()`). Change the password and every signature ever issued stops
+verifying — with no extra byte in the cookie, no storage added, and no lookup added to a request.
+So this alone is enough to lock out anyone already holding a session:
 
 ```bash
-openssl rand -base64 24 | tee /dev/tty | node scripts/hash-password.mjs | npx wrangler secret put ADMIN_PASSWORD_HASH
-openssl rand -base64 32 | npx wrangler secret put TOKEN_SECRET
+node scripts/hash-password.mjs <<< 'your new password' | npx wrangler secret put ADMIN_PASSWORD_HASH
 ```
 
-Rotating `TOKEN_SECRET` signs out every existing session immediately, including whoever is doing
-the rotation — they will need to log in again with the new password right after.
+It logs out whoever runs it too; log back in with the new password right after. Takes effect
+immediately — a Worker secret, not something baked into the build, so no deploy is needed.
+
+`worker/__tests__/index.test.ts`'s login test pins this directly: the same token, the same
+`TOKEN_SECRET`, a different password hash, and it must not verify. Reverting `sessionKey()` to
+return `secret` alone turns that test red with *"expected true to be false"* — confirmed.
+
+Rotating `TOKEN_SECRET` as well is still available and still valid; it is simply no longer required
+to achieve revocation:
+
+```bash
+openssl rand -base64 32 | npx wrangler secret put TOKEN_SECRET
+```
 
 ## 12. Set up the scheduled-rebuild cron and build-status reporting (Task 8, separate from Steps 1–11)
 
