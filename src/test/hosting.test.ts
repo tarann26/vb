@@ -2,6 +2,27 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync, existsSync } from 'node:fs';
 import { site } from '../content';
 
+
+// `_headers` allows `#` comments, and this file has substantial ones. Every
+// block check below reads the RULES only -- an earlier version split the raw
+// file on blank lines and matched `startsWith('/assets/')`, which silently
+// stopped finding the assets block the moment a comment was written directly
+// above it (the block then started with `#`), and simultaneously swept that
+// block into the "unhashed" list, failing three tests for a reason that had
+// nothing to do with caching.
+function headerBlocks(): string[] {
+  return readFileSync('public/_headers', 'utf8')
+    .split(/\n\s*\n/)
+    .map((block) =>
+      block
+        .split('\n')
+        .filter((line) => !line.trim().startsWith('#'))
+        .join('\n')
+        .trim(),
+    )
+    .filter(Boolean);
+}
+
 describe('cloudflare hosting config', () => {
   it('rewrites every unmatched route to the SPA entry point', () => {
     expect(existsSync('public/_redirects')).toBe(true);
@@ -65,12 +86,17 @@ describe('cloudflare hosting config', () => {
   // rules below and vice versa. That exact swap was built and run against
   // the old whole-file version of these two tests, and both passed.
   it('caches hashed bundles immutably', () => {
-    const headers = readFileSync('public/_headers', 'utf8');
-    const blocks = headers.trim().split(/\n\s*\n/);
+    const blocks = headerBlocks();
     const assetsBlock = blocks.find((b) => b.startsWith('/assets/'));
     expect(assetsBlock).toBeDefined();
     expect(assetsBlock).toMatch(/max-age=31536000/);
     expect(assetsBlock).toMatch(/immutable/);
+    // The edge gets a much shorter TTL than the browser. Without this, a
+    // response cached at a content-hashed URL during a deploy's propagation
+    // window is held for a year and never revalidated -- which is how this
+    // site served a stylesheet as text/html to every browser. See
+    // public/_headers' own comment.
+    expect(assetsBlock).toMatch(/s-maxage=86400/);
   });
 
   // Scoped to each unhashed-asset block, for the same reason: a whole-file
@@ -87,8 +113,7 @@ describe('cloudflare hosting config', () => {
   // test about the general unhashed-asset policy rather than conflating it
   // with build-info.json's deliberately different one.
   it('caches unhashed public assets for a week, revalidating', () => {
-    const headers = readFileSync('public/_headers', 'utf8');
-    const blocks = headers.trim().split(/\n\s*\n/);
+    const blocks = headerBlocks();
     const unhashed = blocks.filter((b) => !b.startsWith('/assets/') && !/no-store/.test(b));
     expect(unhashed.length).toBeGreaterThan(0);
     unhashed.forEach((block) => {
@@ -98,8 +123,7 @@ describe('cloudflare hosting config', () => {
   });
 
   it('never marks unhashed assets immutable', () => {
-    const headers = readFileSync('public/_headers', 'utf8');
-    const blocks = headers.trim().split(/\n\s*\n/);
+    const blocks = headerBlocks();
     const unhashed = blocks.filter((b) => !b.startsWith('/assets/') && !/no-store/.test(b));
     expect(unhashed.length).toBeGreaterThan(0);
     unhashed.forEach((block) => expect(block).not.toContain('immutable'));
@@ -111,8 +135,7 @@ describe('cloudflare hosting config', () => {
   // worse than no stamp at all, since it reports success on a deploy that
   // hasn't actually landed yet.
   it('marks /build-info.json no-store, not cached like the other unhashed assets', () => {
-    const headers = readFileSync('public/_headers', 'utf8');
-    const blocks = headers.trim().split(/\n\s*\n/);
+    const blocks = headerBlocks();
     const buildInfoBlock = blocks.find((b) => b.startsWith('/build-info.json'));
     expect(buildInfoBlock).toBeDefined();
     expect(buildInfoBlock).toMatch(/no-store/);

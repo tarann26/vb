@@ -1,5 +1,26 @@
+# `s-maxage` bounds the EDGE separately from the browser, and that split is
+# the whole point. These filenames are content-hashed, so a browser can hold
+# one forever and `max-age=31536000, immutable` says so. Cloudflare's edge is
+# the part that cannot be trusted to hold one forever: a request that lands
+# while a deploy is still propagating gets index.html back with a 200 (the SPA
+# catch-all in _redirects answers anything Pages cannot serve as a file), and
+# whatever the edge caches at a content-hashed URL is never revalidated,
+# because the filename never changes. Observed live, twice: once as an
+# unstyled site (a stylesheet served as text/html) and once on two favicons
+# from a single deploy.
+#
+# 24 hours turns "poisoned until a human notices and purges" into "poisoned
+# until tomorrow at worst", at no cost worth measuring -- the edge simply
+# re-fetches from Pages, which is free, fast, and same-datacentre. Browsers
+# still never re-ask.
+#
+# A URL purge is NOT a reliable fix for this, checked directly: purging the
+# exact URL left the poisoned response in place three times running, and only
+# `purge_everything` cleared it. The bad entry is keyed on the `Origin` header
+# a browser sends and curl does not, so a single-file purge clears a different
+# variant than the one being served.
 /assets/*
-  Cache-Control: public, max-age=31536000, immutable
+  Cache-Control: public, max-age=31536000, immutable, s-maxage=86400
 
 /*.webp
   Cache-Control: public, max-age=604800, must-revalidate
