@@ -38,13 +38,21 @@ function isValidHexIdOrPlaceholder(value: string, placeholder: string): boolean 
 }
 
 // Cloudflare Pages project names: lower-case letters, digits and hyphens,
-// starting with a letter and ending with a letter or digit, at least 4
-// characters long. Loose enough to accept any real slug (e.g.
-// "via-bianca-admin"), tight enough to still reject a bare "abc" or a
-// half-edited "PLACEHOLDER-partially-edited" -- the latter fails structurally
-// (it starts with an uppercase letter) rather than needing a special-cased
-// string comparison against the placeholder text.
-const PAGES_PROJECT_SHAPE = /^[a-z][a-z0-9-]{2,61}[a-z0-9]$/;
+// starting with a letter and ending with a letter or digit, up to 58
+// characters. A half-edited "PLACEHOLDER-partially-edited" fails
+// structurally (it starts with an upper-case letter) rather than needing a
+// special-cased string comparison against the placeholder text.
+//
+// An earlier version of this pattern demanded at least FOUR characters, on
+// the reasoning that a bare "abc" was more likely a typo than a real slug.
+// That was a guess about what a real project name looks like, and it was
+// wrong: Cloudflare accepts names from one character up, and the real
+// project created for this site during the cutover is "vb", which this
+// check then rejected -- a passing test blocking a correct value. The
+// length floor never contributed to the property this guard exists for
+// (catching an unedited or half-pasted placeholder), which the upper-case
+// leading character already decides on its own.
+const PAGES_PROJECT_SHAPE = /^[a-z]([a-z0-9-]{0,56}[a-z0-9])?$/;
 
 function isValidPagesProjectOrPlaceholder(value: string): boolean {
   return value === PAGES_PROJECT_PLACEHOLDER || PAGES_PROJECT_SHAPE.test(value);
@@ -93,9 +101,17 @@ describe('wrangler.toml Cloudflare Pages identifiers', () => {
   it('accepts a real project name and the placeholder, rejects an invented or half-pasted value', () => {
     expect(isValidPagesProjectOrPlaceholder('via-bianca-admin')).toBe(true);
     expect(isValidPagesProjectOrPlaceholder(PAGES_PROJECT_PLACEHOLDER)).toBe(true);
-    expect(isValidPagesProjectOrPlaceholder('abc')).toBe(false);
+    // The real project name this site's cutover created. An earlier
+    // four-character floor rejected it; see PAGES_PROJECT_SHAPE's comment.
+    expect(isValidPagesProjectOrPlaceholder('vb')).toBe(true);
     expect(isValidPagesProjectOrPlaceholder('')).toBe(false);
     expect(isValidPagesProjectOrPlaceholder('PLACEHOLDER-partially-edited')).toBe(false);
+    // Still rejects the shapes Cloudflare itself refuses, so relaxing the
+    // floor did not turn this into a check that passes on anything.
+    expect(isValidPagesProjectOrPlaceholder('9lives')).toBe(false);
+    expect(isValidPagesProjectOrPlaceholder('trailing-')).toBe(false);
+    expect(isValidPagesProjectOrPlaceholder('Has-Capitals')).toBe(false);
+    expect(isValidPagesProjectOrPlaceholder('has spaces')).toBe(false);
   });
 });
 
