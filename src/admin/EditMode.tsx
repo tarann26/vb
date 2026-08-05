@@ -1066,6 +1066,50 @@ const EditMode: React.FC = () => {
             unmounts -- still holds: this is a sibling INSERTION next to the
             page's own wrapper div below, not a restructuring of it, so
             React never tears that subtree down to make room for this. */}
+        {/* The way out of /edit. Until this existed the two admin surfaces
+            were one-way: /edit/manage is where nine of the ten content
+            files are genuinely editable (menus, opening hours, the story
+            paragraphs, every copy leaf including the one NavBar.tsx now
+            declines to offer in place), and the only route to it was
+            typing the URL. Rendered here, above the real page, so it is the
+            first thing under the Publish bar at every width -- no `md:`
+            variant, no hover reveal, nothing that a phone would never show
+            (the same tap-not-hover mandate every other affordance in this
+            codebase follows).
+
+            A plain <a>, deliberately, not a router <Link>. A client-side
+            transition would unmount this component and take its in-memory
+            ContentRegistry and every staged photo's bytes with it, with
+            nothing said about it; a real navigation goes through
+            PublishBar's own `beforeunload` guard, which is already armed
+            whenever anything is unpublished, so she gets the browser's own
+            "leave site?" prompt exactly when leaving would cost her
+            something. The draft itself survives either way (PublishBar
+            persists every dirty file to localStorage on every change), so
+            the worst case after confirming is the restore banner on her way
+            back.
+
+            Outside the `onClickCapture` guard below, so that guard never
+            needs a fifth carve-out for it -- it wraps the real page and
+            nothing else. (Phrased that way rather than with the obvious
+            one-word verb: that word is also a real, bare Tailwind utility,
+            and this project's content scan has no JS parser, so writing it
+            here emits an unused rule. Measured, not guessed -- the first
+            draft of this comment added exactly that rule, caught by the
+            rule-level build diff this repo's standing instruction
+            requires.) */}
+        <p className="mx-auto mb-4 max-w-3xl px-4 font-['Montserrat'] text-sm text-gray-600">
+          {/* The link text is deliberately short, and what it leads to is
+              said in plain prose beside it rather than inside it. Measured
+              at 390px in real Chromium (e2e/edit-dashboard-link.spec.ts):
+              the whole sentence as one anchor wrapped onto two lines, and a
+              two-line inline link on a phone is both a worse tap target and
+              a worse read than a short one with its explanation after it. */}
+          <a href="/edit/manage" className="text-[#6B8B59] underline transition-colors duration-300 hover:text-[#222]">
+            Open the dashboard
+          </a>
+          {' — menus, opening hours, page text and everything else.'}
+        </p>
         {pendingDraft && (
           <div className="mx-auto mb-4 max-w-3xl px-4">
             <DraftBanner

@@ -182,6 +182,71 @@ describe('the /edit route', () => {
   });
 });
 
+// The owner's own report: "there is no way to reach /edit/manage from
+// /edit." The dashboard is where nine of the ten content files are actually
+// editable, and the only route to it was typing the URL by hand.
+describe('EditMode: the dashboard is reachable from /edit', () => {
+  // Mutation this guards: deleting the `<a href="/edit/manage">` from
+  // EditMode.tsx -- confirmed red.
+  it('renders a link to /edit/manage', async () => {
+    stubFetch();
+    render(
+      <MemoryRouter>
+        <EditMode />
+      </MemoryRouter>,
+    );
+    await screen.findByRole('heading', { level: 1 });
+    const link = screen.getByRole('link', { name: /dashboard/i });
+    expect(link).toHaveAttribute('href', '/edit/manage');
+  });
+
+  // Two properties jsdom CAN check about "visible on phone and desktop",
+  // both of them class-level (it applies no CSS and evaluates no media
+  // query, so the real proof is e2e/edit-dashboard-link.spec.ts, which
+  // measures it at 390px and 1440px in real Chromium).
+  //
+  // Mutation this guards: adding `hidden md:inline` to that anchor --
+  // confirmed red. The same tap-not-hover mandate every other affordance in
+  // this codebase follows: a control that only exists above a breakpoint,
+  // or only on hover, does not exist on the phone she actually uses.
+  it('does not gate that link behind a breakpoint or a hover state', async () => {
+    stubFetch();
+    render(
+      <MemoryRouter>
+        <EditMode />
+      </MemoryRouter>,
+    );
+    await screen.findByRole('heading', { level: 1 });
+    const className = screen.getByRole('link', { name: /dashboard/i }).className;
+    expect(className).not.toMatch(/(^|\s)(hidden|invisible|opacity-0)(\s|$)/);
+    expect(className).not.toMatch(/(^|\s)(sm|md|lg|xl):/);
+    expect(className).not.toMatch(/(^|\s)group-hover:/);
+  });
+
+  // It must not be swallowed by the capture-phase guard that stops the real
+  // page's own links firing (EditMode's `handleCaptureClick`). It sits
+  // OUTSIDE the wrapper that guard is attached to, which is why no fifth
+  // carve-out was needed -- this pins that placement rather than the
+  // reasoning about it.
+  //
+  // Mutation this guards: moving the anchor inside the
+  // `<div onClickCapture={handleCaptureClick}>` -- confirmed red, the guard
+  // then cancels its default because it navigates off this page.
+  it('is not cancelled by the guard that stops the real page\'s own links', async () => {
+    stubFetch();
+    render(
+      <MemoryRouter>
+        <EditMode />
+      </MemoryRouter>,
+    );
+    await screen.findByRole('heading', { level: 1 });
+    const link = screen.getByRole('link', { name: /dashboard/i });
+    const event = new MouseEvent('click', { bubbles: true, cancelable: true });
+    link.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(false);
+  });
+});
+
 describe('EditMode renders live content, not the build-time snapshot', () => {
   it('shows the fetched site name, not whatever src/content/index.ts has baked in', async () => {
     stubFetch();
