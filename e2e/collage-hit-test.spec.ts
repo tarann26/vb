@@ -1,6 +1,5 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import { mockEditBackend } from './edit-backend';
 
 // I-B review finding: this spec is the committed, re-runnable version of
 // the reviewer's own manual proof -- "the select badge and camera badge are
@@ -25,66 +24,6 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 // inside a real click's own hit-test, proves the identical fact --
 // "reachable by a real click" -- without either side effect.
 
-const CONTENT_FILES = [
-  'site.json',
-  'galleries.json',
-  'dishes.json',
-  'drinks.json',
-  'press.json',
-  'story.json',
-  'menus.json',
-  'copy.json',
-  'sections.json',
-  // Plan 7, Task 1: the tenth real content file -- EditMode.tsx's own
-  // CONTENT_FILES (src/admin/content.ts) now fetches it too, and without a
-  // mocked route for it here, the mock below answers 404, which surfaces
-  // as a "Could not load pages.json" banner above the real page content.
-  'pages.json',
-];
-
-// The real, committed content -- not a hand-built fixture. `galleries.json`
-// in particular is what makes this exercise the real sixteen tiles at their
-// real positions, the same content src/content/__tests__/placement.test.ts's
-// own "the real, repaired galleries.json" describe block pins numerically.
-function realContentJson(name: string): string {
-  return readFileSync(join(process.cwd(), 'src', 'content', name), 'utf8');
-}
-
-// EditMode.tsx's own `useSession` treats a 200 JSON response from GET
-// /api/wa as "logged in" -- it doubles as the session probe (see that
-// hook's own header comment for why), so faking that one response is
-// enough to reach the real, authenticated /edit screen without a real
-// Worker, a real KV namespace, or a real login POST anywhere in this test.
-// GET /api/content?path=src/content/<name> is the only other network call
-// EditMode makes before first paint (one per file in CONTENT_FILES) --
-// faked here from the real files on disk so the page renders the actual
-// production content, not a stand-in.
-async function mockEditBackend(page: Page): Promise<void> {
-  await page.route('**/api/wa', async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
-  });
-  // `**/api/content**` -- the trailing double star, not a single one:
-  // Playwright's glob route patterns treat a bare `*` as "any characters
-  // except `/`", and this request's own query string
-  // (`?path=src/content/<name>`) contains slashes, so a single-star
-  // pattern here silently never matches at all (confirmed directly -- the
-  // route handler's own body never ran, and every one of the nine files
-  // failed to load with no other explanation on screen).
-  await page.route('**/api/content**', async (route) => {
-    const url = new URL(route.request().url());
-    const path = url.searchParams.get('path') ?? '';
-    const name = path.replace('src/content/', '');
-    if (!CONTENT_FILES.includes(name)) {
-      await route.fulfill({ status: 404, body: 'not found' });
-      return;
-    }
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({ content: realContentJson(name), sha: 'e2e-test-sha' }),
-    });
-  });
-}
 
 // `.closest('[aria-label]')`, not a direct element match: the icon glyph
 // each badge wraps (CollageTile's `<Move>` SVG, EditableImage's

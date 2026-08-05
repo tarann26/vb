@@ -105,6 +105,139 @@ describe('EditableImage', () => {
     expect(container.querySelector('[data-editable-image-path="dishes.margherita.image"]')).not.toBeNull();
   });
 
+  // The repair for "Our Story's photos are invisible at /edit". jsdom has no
+  // layout engine, so nothing here can measure a collapsed box -- what IS
+  // checkable here, and is the whole mechanism, is WHICH element carries the
+  // classes the parent lays out by. e2e/our-story-carousel.spec.ts measures
+  // the real boxes in real Chromium; these pin the class plumbing that makes
+  // those measurements come out right, and fail far faster.
+  describe('the wrapper is laid out as the image would have been (flex/grid parents size THIS element, not the img)', () => {
+    function wrapperOf(className: string, overrides: Partial<Parameters<typeof EditableImage>[0]> = {}): HTMLElement {
+      const { container } = renderImage({ className, ...overrides });
+      return container.querySelector('[data-editable-image-path]') as HTMLElement;
+    }
+
+    // Every distinct className shape the eight real `content.renderImage`
+    // call sites pass today, copied verbatim from those files -- not a
+    // hand-invented fixture. The first row is OurStory.tsx's, the one that
+    // was actually broken on the live site.
+    const REAL_CALL_SITES: { site: string; className: string; layout: string[]; visualOnly: string[] }[] = [
+      {
+        site: 'OurStory.tsx (flex carousel track -- the reported bug)',
+        className: 'w-full flex-shrink-0 object-cover h-[400px]',
+        layout: ['w-full', 'flex-shrink-0', 'h-[400px]'],
+        visualOnly: ['object-cover'],
+      },
+      {
+        site: 'PlaceGallery.tsx / GallerySection.tsx carousel',
+        className: 'w-full h-full object-cover',
+        layout: ['w-full', 'h-full'],
+        visualOnly: ['object-cover'],
+      },
+      {
+        site: 'Hero.tsx collage tile',
+        className: 'w-full h-full object-cover opacity-90 hover:opacity-100 transition-opacity duration-500',
+        layout: ['w-full', 'h-full'],
+        // `opacity-90` in particular must NOT reach the wrapper: an opacity
+        // below 1 makes an element a stacking context, which would trap the
+        // camera badge's own z-20 inside it and re-open the hit-testing bug
+        // CONTROL_LABEL_CLASSNAME's comment records.
+        visualOnly: ['object-cover', 'opacity-90', 'hover:opacity-100', 'transition-opacity', 'duration-500'],
+      },
+      {
+        site: 'FoodGallery / Drinks / BlogTeaser / BlogsPage / ItemListSection',
+        className: 'w-full h-full object-cover group-hover:scale-110 transition-transform duration-500',
+        layout: ['w-full', 'h-full'],
+        visualOnly: ['object-cover', 'group-hover:scale-110', 'transition-transform', 'duration-500'],
+      },
+      {
+        site: "GallerySection.tsx layout: 'grid' (logo row -- the second flex-parent instance)",
+        className: 'max-h-full max-w-full object-contain',
+        layout: ['max-h-full', 'max-w-full'],
+        visualOnly: ['object-contain'],
+      },
+    ];
+
+    // Mutation this guards: `className={wrapper}` (EditableImage.tsx, both
+    // the locked and unlocked returns) reverted to
+    // `className={WRAPPER_CLASSNAME}` -- i.e. the pre-repair component.
+    // Confirmed red on every row below.
+    REAL_CALL_SITES.forEach(({ site, className, layout, visualOnly }) => {
+      it(`copies the layout classes, and only those, up from ${site}`, () => {
+        const wrapper = wrapperOf(className);
+        layout.forEach((token) => expect(wrapper.className.split(' ')).toContain(token));
+        visualOnly.forEach((token) => expect(wrapper.className.split(' ')).not.toContain(token));
+        // Still the badge's containing block, and now a real box for the
+        // copied sizing to actually apply to (width/height do not apply to a
+        // non-replaced inline element at all).
+        expect(wrapper.className.split(' ')).toContain('relative');
+        expect(wrapper.className.split(' ')).toContain('inline-block');
+      });
+
+      // Mutation this guards: making the copy a MOVE (deleting the layout
+      // classes from `imgProps.className` on the way past) -- confirmed red,
+      // the image then has nothing left to fill the wrapper with.
+      it(`leaves ${site}'s own img className completely untouched`, () => {
+        const { container } = renderImage({ className });
+        expect((container.querySelector('img') as HTMLImageElement).className).toBe(className);
+      });
+    });
+
+    // Mutation this guards: dropping the `layout.length === 0` early return,
+    // so every wrapper gains `inline-block` unconditionally -- confirmed red.
+    // A call site that never had this problem must not acquire a new box.
+    it('an image with no layout class at all leaves the wrapper exactly as it was', () => {
+      expect(wrapperOf('rounded-full shadow').className).toBe('relative');
+    });
+
+    it('an image with no className at all leaves the wrapper exactly as it was', () => {
+      const { container } = render(
+        <EditableImage path="galleries.ourStory.0" category="our_story" src="/x.webp" alt="x" onStaged={() => {}} onReplace={() => {}} />,
+      );
+      expect((container.querySelector('[data-editable-image-path]') as HTMLElement).className).toBe('relative');
+    });
+
+    // Mutation this guards: `if (base.startsWith('!')) base = base.slice(1)`
+    // deleted from baseUtility -- confirmed red on `!h-full` below.
+    it('recognises a layout class through responsive/state variants and an important marker', () => {
+      const classes = wrapperOf('md:w-1/2 -mt-2 !h-full focus:max-h-4 hover:bg-white').className.split(' ');
+      expect(classes).toContain('md:w-1/2');
+      expect(classes).toContain('!h-full');
+      expect(classes).toContain('focus:max-h-4');
+      // A margin is laid out by the parent too, but copying it (rather than
+      // moving it) would double the gap -- see LAYOUT_UTILITY_PREFIXES.
+      expect(classes).not.toContain('-mt-2');
+      expect(classes).not.toContain('hover:bg-white');
+    });
+
+    // Mutation this guards: replacing baseUtility's bracket-aware scan with
+    // a plain `token.split(':').pop()` -- confirmed red on the data-type
+    // hint below, Tailwind's own documented syntax for an arbitrary value
+    // whose type the scanner cannot infer. The naive form splits at the
+    // colon INSIDE the brackets, comes back with `var(--slide)]`, and drops
+    // a real width off the wrapper.
+    it("recognises a layout class whose arbitrary value carries Tailwind's own data-type hint", () => {
+      const classes = wrapperOf('md:w-[length:var(--slide)] object-cover').className.split(' ');
+      expect(classes).toContain('md:w-[length:var(--slide)]');
+      expect(classes).not.toContain('object-cover');
+    });
+
+    // The pause must not undo the repair: `locked` returns from a different
+    // branch of this component, and an earlier draft updated only the other
+    // one -- so a publish in flight would have collapsed the carousel again
+    // for exactly as long as it lasted.
+    // Mutation this guards: reverting ONLY the locked return's `className`
+    // to `WRAPPER_CLASSNAME` -- confirmed red here and green everywhere else
+    // in this file.
+    it('keeps the wrapper laid out while a publish is in flight (locked)', () => {
+      const classes = wrapperOf('w-full flex-shrink-0 object-cover h-[400px]', { locked: true }).className.split(' ');
+      expect(classes).toContain('w-full');
+      expect(classes).toContain('flex-shrink-0');
+      expect(classes).toContain('h-[400px]');
+      expect(classes).toContain('inline-block');
+    });
+  });
+
   describe('tap, not hover -- the affordance is persistently visible', () => {
     // jsdom applies no real CSS -- checked at the source level, the same
     // established pattern EditableText.test.tsx's own identical describe

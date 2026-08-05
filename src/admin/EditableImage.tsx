@@ -52,26 +52,200 @@ export interface EditableImageProps extends ImgHTMLAttributes<HTMLImageElement> 
 
 type Status = { kind: 'idle' } | { kind: 'uploading'; percent: number } | { kind: 'error'; message: string };
 
-// `<span className="relative">` -- deliberately `display: inline` (the bare
-// default for a <span>, no `inline-block`), not merely "a wrapper that
-// happens to work." Every one of the seven real call sites styles its own
-// <img> with classes that size it against ITS OWN containing block (several
-// with `w-full h-full`, e.g. Drinks.tsx) -- an `inline-block` wrapper WOULD
-// insert itself as a new containing block (CSS's own definition: an
-// inline-block element establishes one for its children), leaving the img's
-// percentage sizing resolving against an EMPTY box with nothing to size
-// itself from, a circular collapse. A plain `inline` element does not
-// establish a containing block for width/height percentages at all -- the
+// `<span className="relative">` -- `position: relative` is what makes this
+// element the containing block for the ABSOLUTELY positioned camera badge
+// below, and that part has always been right. What was wrong, until the
+// repair recorded in the next comment, was leaving it at a <span>'s bare
+// `display: inline` and nothing else.
+//
+// The reasoning this replaces went: an inline element does not establish a
+// containing block for its children's percentage width/height at all -- the
 // spec routes that lookup straight through to the nearest actual block
-// ancestor, exactly as if this span were not there -- while `position:
-// relative` on ANY display value, inline included, still makes it the
-// containing block for its own ABSOLUTELY positioned children, which is
-// all the overlay control below needs. Confirmed directly: the homepage
-// byte test never mounts this component at all (its provider is never
-// used outside /edit), so this reasoning is what stands in for that proof
-// here -- see this component's own tests for the same guarantee checked
-// against a real box.
+// ancestor, exactly as if this span were not there -- so an <img> styled
+// `w-full h-full` by its call site resolves those percentages against the
+// same box it would have without this wrapper. That is true, and it is why
+// six of the eight real call sites were unaffected: each puts the image
+// inside a BLOCK element it has already sized itself (PlaceGallery's
+// `w-full h-full` div, BlogTeaser/BlogsPage's `h-48` div, FoodGallery/
+// Drinks/ItemListSection's `relative w-full h-full` div, Hero's own collage
+// tile). The percentages resolve against that div whether this span is in
+// the way or not.
+//
+// It is false the moment the call site's sizing classes are on the IMAGE
+// and the parent is a FLEX or GRID container, because then the box the
+// parent lays out is THIS span, not the image -- and a span with no width
+// of its own collapses. OurStory.tsx is the live instance: a seven-slide
+// (six today) flex track whose slides are sized by `w-full flex-shrink-0
+// h-[400px]` on the image, so at /edit every slide became a zero-width flex
+// item, the whole track collapsed, and the carousel translated across blank
+// space with no photo ever on screen. GallerySection.tsx's `layout: 'grid'`
+// branch is the same shape (`max-h-full max-w-full` on the image, inside a
+// `flex h-24` box); it renders on a page that is switched off today, which
+// is the only reason it was not a second visible bug.
 const WRAPPER_CLASSNAME = 'relative';
+
+// The repair, and why it is this one of the three candidates.
+//
+// (a) The wrapper inherits the layout-affecting classes -- chosen. The box
+//     the parent lays out becomes the same box the image was asking for,
+//     so a flex/grid parent sizes the wrapper exactly as it would have
+//     sized a bare <img>, and the image then fills it (its own `w-full
+//     h-full` now resolves against a wrapper with a real, definite box
+//     instead of against the grandparent -- the same number either way).
+//     Nothing is REMOVED from the image's own className: only the families
+//     below are copied up, and every one of them is idempotent when it
+//     appears on both boxes at once. The visual families deliberately stay
+//     on the image alone -- copying `opacity-90` or `group-hover:scale-110`
+//     up would double-apply them, and worse, an opacity below 1 on this
+//     element would make it a stacking context and re-break the camera
+//     badge's `z-20` (see CONTROL_LABEL_CLASSNAME below for the hit-testing
+//     bug that `z-20` exists to fix).
+//
+// (b) Making this element generate no box at all, so the image becomes the
+//     parent's flex/grid item directly. Rejected on two independent counts.
+//     The fatal one is mechanical: an element that generates no box cannot
+//     be a containing block, so `position: relative` here would stop
+//     meaning anything and every camera badge would position itself against
+//     the nearest positioned ancestor instead -- on OurStory that is the
+//     one carousel viewport, so all six badges would pile into a single
+//     corner. The second is the accessibility caveat, checked rather than
+//     assumed before rejecting: the value's own history is a string of
+//     browser bugs that dropped the element AND ITS SUBTREE out of the
+//     accessibility tree (Chromium and WebKit both shipped that for years),
+//     and while a bare <span> carries no implicit role to lose, this
+//     wrapper is also the ancestor of the `role="status"` and `role="alert"`
+//     announcements below, which is exactly the subtree that used to
+//     vanish. Not worth relying on for an editor whose whole point is that
+//     the affordance is reachable.
+//
+// (c) Every call site wraps its own image in a sized element instead.
+//     Rejected: it fixes each site once and leaves the next one to
+//     rediscover the bug, and it is not free on the PUBLIC page -- with no
+//     provider mounted, `renderImage` is the identity and returns a bare
+//     <img> (src/content/ContentContext.ts), so the extra wrapper divs
+//     would ship to every visitor and move the pinned homepage byte count
+//     (src/test/homepage-bytes.test.tsx) to pay for an /edit-only defect.
+//     (a) lives entirely in this component, which never renders outside
+//     /edit, so it costs the public page nothing at all.
+//
+// The families copied are exactly the ones that describe how a box is SIZED
+// AND PLACED BY ITS PARENT -- self-sizing, plus flex-item and grid-item
+// participation. Prefixes only, all ending in a dash, so none of these
+// strings is itself a complete utility name Tailwind's content scan could
+// emit a rule for (this project's own standing WATCH: that scan has no JS
+// parser, and bare one-word utility names have leaked real rules out of
+// prose comments here more than once). Tailwind's two one-word flex-factor
+// aliases are deliberately NOT matched: no call site uses either, and
+// naming them in this file would be exactly such a leak -- their `flex-`
+// prefixed spellings, which every real call site here actually uses
+// (`flex-shrink-0` in OurStory.tsx), are covered by `flex-` below.
+//
+// Margins are deliberately absent. They are laid out by the parent too, but
+// unlike every family below they are NOT idempotent across two nested
+// boxes: copying `mt-4` up without removing it from the image would double
+// the gap. No call site sets a margin on an image today; one that wanted to
+// would need this list to move the class rather than copy it.
+// Positioning (`absolute`/`inset-*`/`z-*`) is absent for a different
+// reason: this element must stay `relative` for the badge, and a second
+// position utility copied in here would be resolved by stylesheet order
+// rather than by class order -- a coin flip. An image positioned by its own
+// className is already broken today for an unrelated reason (it would
+// resolve against this span's own inline box), and is out of scope here.
+const LAYOUT_UTILITY_PREFIXES = [
+  'w-',
+  'h-',
+  'min-w-',
+  'min-h-',
+  'max-w-',
+  'max-h-',
+  'size-',
+  'aspect-',
+  'flex-',
+  'basis-',
+  'order-',
+  'self-',
+  'justify-self-',
+  'place-self-',
+  'col-',
+  'row-',
+] as const;
+
+// Strips a Tailwind candidate down to the utility name a prefix can be
+// matched against: every responsive/state variant (`md:`, `focus:`,
+// `group-hover:`, an arbitrary `[&:hover]:`, and any stack of them) plus a
+// leading `!` important marker.
+//
+// Bracket depth is tracked rather than taking `split(':').pop()`, and that
+// is a real difference, not defensive noise: Tailwind's own data-type hint
+// syntax puts a colon INSIDE the arbitrary value -- the documented
+// `<type>:` prefix a value carries when the scanner cannot infer its type
+// on its own. The naive form cuts such a class at the wrong colon, comes
+// back with the tail of the value, matches no prefix, and silently leaves a
+// real width off the wrapper -- exactly the collapse this whole repair
+// exists to stop, reintroduced for one class shape. (Deliberately not
+// spelling a complete example class out here: this project's Tailwind
+// content scan has no JS parser, so a real candidate written in prose gets
+// a rule emitted for it -- confirmed the hard way while writing this file,
+// the first draft of this very comment did exactly that, and the build
+// warned about the typehint it had just been handed.)
+//
+// No negation handling: nothing in LAYOUT_UTILITY_PREFIXES above has a
+// negative form (Tailwind's negatives are margins, insets and transforms,
+// all deliberately excluded there), so stripping a leading `-` here would
+// be unreachable code pretending to be a guarantee. A family that does take
+// negatives has to add it back, with a test that can see it.
+function baseUtility(token: string): string {
+  let depth = 0;
+  let lastSeparator = -1;
+  for (let i = 0; i < token.length; i += 1) {
+    const character = token[i];
+    if (character === '[') depth += 1;
+    else if (character === ']') depth -= 1;
+    else if (character === ':' && depth === 0) lastSeparator = i;
+  }
+  const base = token.slice(lastSeparator + 1);
+  return base.startsWith('!') ? base.slice(1) : base;
+}
+
+// The wrapper's own className: `relative`, plus -- only when the image
+// actually carries layout classes -- `inline-block` and a copy of those
+// classes.
+//
+// `inline-block` rather than the block-level display: it is the smaller
+// change. Today the <img> is an inline replaced element sitting on a line
+// box inside this inline span, and an inline-block wrapper reproduces that
+// line box exactly (same baseline, same descender gap, same relationship to
+// whatever text could sit beside it), where a block-level wrapper would
+// remove it. It also earns back what the old comment above rightly warned
+// about: an inline-block DOES establish a containing block for its
+// children's percentages, but that is now harmless precisely BECAUSE this
+// element carries the same sizing classes the image does, so the box the
+// image resolves against is definite rather than empty. In a flex or grid
+// parent the value is blockified by the parent anyway, so it only ever
+// matters on the block-parent call sites, where it is a no-op.
+//
+// When the image carries NO layout class at all, nothing is added and this
+// element stays exactly what it was -- a bare inline span -- so no call
+// site that never had this problem can acquire a new one from the repair.
+// Not exported: `react-refresh/only-export-components` warns on a .tsx file
+// that exports both a component and a plain value (ContentContext.ts's own
+// header comment documents the same rule from the other side), and this
+// project runs eslint at zero warnings. Every test below reaches this
+// through the rendered DOM instead, which is the stronger check anyway --
+// what matters is the class string that actually lands on the element the
+// parent lays out.
+function wrapperClassName(imgClassName: string | undefined): string {
+  if (!imgClassName) return WRAPPER_CLASSNAME;
+  const layout = imgClassName
+    .split(/\s+/)
+    .filter((token) => token.length > 0)
+    .filter((token) => {
+      const base = baseUtility(token);
+      return LAYOUT_UTILITY_PREFIXES.some((prefix) => base.startsWith(prefix));
+    });
+  if (layout.length === 0) return WRAPPER_CLASSNAME;
+  return `${WRAPPER_CLASSNAME} inline-block ${layout.join(' ')}`;
+}
 
 // Persistently visible -- never hover-gated, the same mandate
 // EditableText's own affordance follows (the spec's Risks section: "on
@@ -184,6 +358,12 @@ const EditableImage: React.FC<EditableImageProps> = ({ path, category, onStaged,
   // own comment gives for the identical choice.
   const src = previewUrl ?? imgProps.src;
 
+  // Computed from the props THIS render was handed, not captured once: a
+  // call site is free to vary its className between renders (a responsive
+  // branch, a selected state), and the wrapper has to keep matching it or
+  // the parent goes back to laying out a box of the wrong size.
+  const wrapper = wrapperClassName(imgProps.className);
+
   // The pause: same wrapper, same <img>, same `src` (preview included) --
   // only the affordance goes. Returning early rather than conditionally
   // rendering the label keeps the mounted-ness of this component, which is
@@ -191,14 +371,14 @@ const EditableImage: React.FC<EditableImageProps> = ({ path, category, onStaged,
   // focusable or pickable behind.
   if (locked) {
     return (
-      <span className={WRAPPER_CLASSNAME} data-editable-image-path={path}>
+      <span className={wrapper} data-editable-image-path={path}>
         <img {...imgProps} src={src} />
       </span>
     );
   }
 
   return (
-    <span className={WRAPPER_CLASSNAME} data-editable-image-path={path}>
+    <span className={wrapper} data-editable-image-path={path}>
       <img {...imgProps} src={src} />
       <label
         htmlFor={inputId}

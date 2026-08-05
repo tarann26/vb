@@ -1,0 +1,76 @@
+// The /edit backend mock, extracted so the three specs that need it share
+// one copy instead of three. It was written twice already (collage-hit-test
+// and publish-confirm each carried a byte-identical copy of CONTENT_FILES,
+// realContentJson and mockEditBackend); the third spec is what made that a
+// list to keep in sync by hand rather than a coincidence -- Plan 7's own
+// tenth content file, pages.json, had to be added to two separate arrays
+// when it landed, and a spec that missed it would have shown a "Could not
+// load pages.json" banner over the page it was measuring.
+//
+// Not a `.spec.ts`: playwright.config.ts's `testDir: './e2e'` picks up
+// every file it considers a test, and a helper module with no `test()` call
+// in it is reported as an empty suite. The plain `.ts` extension keeps it a
+// module the specs import.
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import type { Page } from '@playwright/test';
+
+// Every file src/admin/content.ts's own CONTENT_FILES fetches. A name
+// missing here is answered 404 by the route below, which surfaces on screen
+// as a "Could not load <file>" banner ABOVE the real page content -- i.e. it
+// shifts everything a spec is about to measure.
+export const CONTENT_FILES = [
+  'site.json',
+  'galleries.json',
+  'dishes.json',
+  'drinks.json',
+  'press.json',
+  'story.json',
+  'menus.json',
+  'copy.json',
+  'sections.json',
+  'pages.json',
+];
+
+// The real, committed content -- not a hand-built fixture, so every spec
+// built on this measures the same photos, the same collage placements and
+// the same counts the deployed site has.
+export function realContentJson(name: string): string {
+  return readFileSync(join(process.cwd(), 'src', 'content', name), 'utf8');
+}
+
+// EditMode.tsx's own `useSession` treats a 200 JSON response from GET
+// /api/wa as "logged in" -- it doubles as the session probe (see that
+// hook's own header comment for why), so faking that one response is
+// enough to reach the real, authenticated /edit screen without a real
+// Worker, a real KV namespace, or a real login POST anywhere in these
+// tests. GET /api/content?path=src/content/<name> is the only other network
+// call EditMode makes before first paint (one per file in CONTENT_FILES) --
+// faked here from the real files on disk so the page renders the actual
+// production content, not a stand-in.
+export async function mockEditBackend(page: Page): Promise<void> {
+  await page.route('**/api/wa', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+  });
+  // `**/api/content**` -- the trailing double star, not a single one:
+  // Playwright's glob route patterns treat a bare `*` as "any characters
+  // except `/`", and this request's own query string
+  // (`?path=src/content/<name>`) contains slashes, so a single-star pattern
+  // here silently never matches at all (confirmed directly -- the route
+  // handler's own body never ran, and every one of the files failed to load
+  // with no other explanation on screen).
+  await page.route('**/api/content**', async (route) => {
+    const url = new URL(route.request().url());
+    const path = url.searchParams.get('path') ?? '';
+    const name = path.replace('src/content/', '');
+    if (!CONTENT_FILES.includes(name)) {
+      await route.fulfill({ status: 404, body: 'not found' });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ content: realContentJson(name), sha: 'e2e-test-sha' }),
+    });
+  });
+}

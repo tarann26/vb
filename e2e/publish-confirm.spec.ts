@@ -1,6 +1,5 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import { mockEditBackend } from './edit-backend';
 
 // The one claim in this whole feature that no vitest test in this repo can
 // make. jsdom has no layout engine: every element it renders reports a zero
@@ -38,53 +37,6 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 //      That is what check 3 does, and it is red the moment the inline
 //      z-index goes.
 
-const CONTENT_FILES = [
-  'site.json',
-  'galleries.json',
-  'dishes.json',
-  'drinks.json',
-  'press.json',
-  'story.json',
-  'menus.json',
-  'copy.json',
-  'sections.json',
-  'pages.json',
-];
-
-function realContentJson(name: string): string {
-  return readFileSync(join(process.cwd(), 'src', 'content', name), 'utf8');
-}
-
-// Identical to collage-hit-test.spec.ts's own mock, and for the identical
-// reason: GET /api/wa doubles as EditMode's session probe, and
-// GET /api/content?path=src/content/<name> is the only other call /edit
-// makes before first paint. `**/api/content**` needs the trailing double
-// star -- a bare `*` never matches a query string containing slashes.
-async function mockEditBackend(page: Page): Promise<void> {
-  await page.route('**/api/wa', async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
-  });
-  await page.route('**/api/content**', async (route) => {
-    const url = new URL(route.request().url());
-    const path = url.searchParams.get('path') ?? '';
-    const name = path.replace('src/content/', '');
-    if (!CONTENT_FILES.includes(name)) {
-      await route.fulfill({ status: 404, body: 'not found' });
-      return;
-    }
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({ content: realContentJson(name), sha: 'e2e-test-sha' }),
-    });
-  });
-  // A publish must never actually leave this test. Nothing here clicks
-  // accept, but a stray submit reaching a real POST would be a far more
-  // confusing failure than a refused route.
-  await page.route('**/api/publish', async (route) => {
-    await route.fulfill({ status: 500, contentType: 'application/json', body: '{"message":"not in this test"}' });
-  });
-}
 
 // Measure and hit-test inside ONE page evaluation so both read the same
 // frame -- collage-hit-test.spec.ts's own note on why splitting them made
