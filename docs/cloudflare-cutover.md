@@ -496,3 +496,59 @@ either way.
 
 This check cannot be automated — `src/test/hosting.test.ts` proves only that *this document*
 describes the safe order, never that the dashboard agrees with it. Do it manually.
+
+---
+
+## 14. Current state: running on a test host, not the real domain
+
+`viabiancadelhi.com` **was never registered** — checked against Verisign during the cutover
+(`whois -h whois.verisign-grs.com viabiancadelhi.com` → *"No match"*), so there was no zone to
+put the Worker route on and no host to point DNS at. Everything below therefore runs on
+`vb.aionxxxi.uk`, a subdomain of a zone that already existed on the account.
+
+**Live now:**
+
+| | |
+|---|---|
+| Pages project | `vb`, Git-connected to `tarann26/vb`, production branch `main` |
+| Site | `https://vb.aionxxxi.uk` (and `https://vb-c7r.pages.dev`) |
+| Worker | `via-bianca-admin`, route `vb.aionxxxi.uk/api/*`, zone `aionxxxi.uk`, hourly cron |
+| KV | `3e90a6b54f83487995156291801dce95`, bound as `KV` |
+| Secrets | `ADMIN_PASSWORD_HASH`, `TOKEN_SECRET`, `GITHUB_TOKEN` all set |
+
+**To switch to the real domain, change ONE value and let everything derive from it.**
+`src/content/site.json`'s `seo.url` is the single source; these five follow it and each has a
+test that fails if they drift:
+
+1. `public/robots.txt` — the `Sitemap:` line (`src/test/crawlers.test.ts`)
+2. `public/sitemap.xml` — the `<loc>` entries (same test)
+3. `index.html` — `og:url`, `og:image`, `twitter:image` (`src/test/head.test.ts`)
+4. `wrangler.toml` — the route `pattern` and `zone_name` (`src/test/hosting.test.ts`)
+5. The Pages custom domain and its CNAME
+
+Then add the zone to Cloudflare, add the custom domain, `npx wrangler deploy`, and re-point DNS.
+
+**`zone_name` is not always the site's host.** A site on a subdomain lives inside the parent
+zone, and Cloudflare rejects a route whose `zone_name` is not a real zone on the account. An
+earlier version of `hosting.test.ts` asserted `zone_name === host`, which silently encoded "the
+site is always at its zone apex" — true of an apex domain, false here, and it failed a correct
+configuration. It now asserts the route is scoped to the zone that *contains* the host.
+
+**Two things Cloudflare Pages does that are worth knowing:**
+
+- **It reads `wrangler.toml` and warns.** Build log: *"A Wrangler configuration file was found but
+  it does not appear to be valid. Did you mean to use wrangler.toml to configure Pages?"* It
+  continues, so nothing is broken today, but Pages and the Worker are sharing one file name. The
+  clean fix is `worker/wrangler.toml` plus `wrangler deploy -c worker/wrangler.toml`.
+- **The build-log API returns only the FIRST 1000 lines.** A failure at the end of a 2000-test run
+  is past the cap and invisible. To see it, temporarily set the build command to use a quiet
+  reporter (`npx vitest run --reporter=dot --silent`) and re-trigger — that is how the one-byte
+  timezone failure below was found.
+
+**The failure that blocked this cutover was a real bug, not an environment quirk.** The build died
+on `homepage-bytes.test.tsx`: 53486 on Cloudflare, 53485 locally. Cause: `new Date(article.date)`
+in `BlogTeaser` and `BlogsPage`. A date-only ISO string parses as UTC midnight, and
+`toLocaleDateString` then renders it in the *runtime's* zone — so every press article showed a day
+early for any visitor west of UTC, and a two-digit day becoming one digit is exactly one byte. Now
+rendered with `timeZone: 'UTC'` (`src/content/article-date.ts`), and the homepage byte count is
+identical in UTC, New York and Delhi, which it never was before.
