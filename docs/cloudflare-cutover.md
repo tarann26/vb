@@ -416,13 +416,43 @@ openssl rand -base64 32 | npx wrangler secret put TOKEN_SECRET
 no ordering dependency on Steps 1-11, but it needs the Pages project from Step 1 to already exist.
 
 There is no deploy hook to create and no `DEPLOY_HOOK_URL` secret to set. This Worker exports no
-`scheduled` handler and `wrangler.toml` declares no cron triggers: publishing is instantaneous, and
+`scheduled` handler and `wrangler.toml` declares `crons = []`: publishing is instantaneous, and
 every build is triggered by Cloudflare's own build-on-push integration. If a `DEPLOY_HOOK_URL`
 secret was set on this Worker by an earlier revision of this runbook, delete it -- nothing reads it:
 
 ```bash
 npx wrangler secret delete DEPLOY_HOOK_URL
 ```
+
+### 12a. The cron: why `crons = []` and not a missing `[triggers]` section
+
+An earlier revision of this Worker registered an hourly `0 * * * *` trigger. When the scheduling
+subsystem was removed, `wrangler.toml`'s `[triggers]` section was deleted with it — and that did
+**not** unregister the cron. Cloudflare stores a Worker's schedules on the script, and `wrangler
+deploy` only ever clears them by issuing `PUT /accounts/<id>/workers/scripts/<name>/schedules`,
+which its own code guards behind `if (crons)`. A missing section normalises to `crons: undefined`,
+which is falsy, so no request is made and the existing schedule survives every deploy.
+
+The consequence was live and observable: the trigger kept firing hourly against a script with no
+`scheduled` export, 24 failed invocations a day, forever. Checked read-only against the account
+while the section was missing:
+
+```bash
+curl -H "Authorization: Bearer <token>" \
+  https://api.cloudflare.com/client/v4/accounts/<account id>/workers/scripts/via-bianca-admin/schedules
+# -> {"result":{"schedules":[{"cron":"0 * * * *", ...}]},"success":true}
+```
+
+`[triggers]` / `crons = []` is the fix: `[]` is truthy, so the clearing PUT fires with an empty
+list. **Leave it in place.** Deleting it once the schedule is gone puts this Worker straight back
+into the state above, where re-adding a `scheduled` export for an unrelated reason silently starts
+an hourly job. `src/test/wrangler-config.test.ts` pins that the section exists and that the list is
+empty, so neither can drift silently again.
+
+**This does not take effect on a push.** Cloudflare Pages builds the site from `main`; the Worker
+is deployed by hand (Step 6). Until someone runs `npx wrangler deploy` from the repo root, the
+hourly trigger is still registered and still firing. Verify it afterwards with the same read-only
+`GET .../schedules` call above — `{"schedules":[]}` is the state this section is claiming.
 
 ### 12b. Create a Pages-scoped API token, and fill in the account/project identifiers
 
@@ -511,7 +541,7 @@ put the Worker route on and no host to point DNS at. Everything below therefore 
 |---|---|
 | Pages project | `vb`, Git-connected to `tarann26/vb`, production branch `main` |
 | Site | `https://vb.aionxxxi.uk` (and `https://vb-c7r.pages.dev`) |
-| Worker | `via-bianca-admin`, route `vb.aionxxxi.uk/api/*`, zone `aionxxxi.uk`, no cron |
+| Worker | `via-bianca-admin`, route `vb.aionxxxi.uk/api/*`, zone `aionxxxi.uk`; cron `0 * * * *` still registered until the next `npx wrangler deploy` — see §12a |
 | KV | `3e90a6b54f83487995156291801dce95`, bound as `KV` |
 | Secrets | `ADMIN_PASSWORD_HASH`, `TOKEN_SECRET`, `GITHUB_TOKEN` all set |
 

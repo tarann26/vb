@@ -1055,17 +1055,6 @@ const EditMode: React.FC = () => {
           logOut();
         }}
       >
-        {/* C2 fix: was rendered as a SIBLING after `</PublishBar>` -- i.e.
-            after the entire homepage, Footer included. Measured on the real
-            page in a real browser: six viewports below the fold on a
-            4800px-tall page -- an offer she would never scroll far enough
-            to see. Moved here, as the FIRST thing inside this bar's own
-            children, so it renders directly under the Publish button/status
-            area (already the top of the page) instead of past the very
-            bottom of it. Task 2's own invariant -- the real page never
-            unmounts -- still holds: this is a sibling INSERTION next to the
-            page's own wrapper div below, not a restructuring of it, so
-            React never tears that subtree down to make room for this. */}
         {/* The way out of /edit. Until this existed the two admin surfaces
             were one-way: /edit/manage is where nine of the ten content
             files are genuinely editable (menus, opening hours, the story
@@ -1110,6 +1099,31 @@ const EditMode: React.FC = () => {
           </a>
           {' — menus, opening hours, page text and everything else.'}
         </p>
+        {/* C2 fix: was rendered as a SIBLING after `</PublishBar>` -- i.e.
+            after the entire homepage, Footer included. Measured on the real
+            page in a real browser: six viewports below the fold on a
+            4800px-tall page -- an offer she would never scroll far enough to
+            see. Moved here, into this bar's own children, so it renders
+            directly under the Publish button/status area (already the top of
+            the page) instead of past the very bottom of it.
+
+            Review finding (Minor): this comment used to say the banner was
+            the FIRST thing in those children, and used to sit up there
+            saying so. It is the second -- the /edit/manage link paragraph
+            above was inserted ahead of it afterwards, moving the banner down
+            by one 18px line and one 16px margin (measured at 390px and
+            1440px: the link at y=251, the banner immediately below it). That
+            is fine, and it is what this comment now records, because the
+            property the C2 fix was actually about is that the banner sits
+            near the TOP of a 4800px page rather than six viewports below the
+            fold -- not that nothing precedes it. Anyone inserting here
+            should keep it that way rather than reading "first" as a rule to
+            preserve. EditMode.test.tsx pins the ordering directly.
+
+            Task 2's own invariant -- the real page never unmounts -- still
+            holds: this is a sibling INSERTION next to the page's own wrapper
+            div below, not a restructuring of it, so React never tears that
+            subtree down to make room for this. */}
         {pendingDraft && (
           <div className="mx-auto mb-4 max-w-3xl px-4">
             <DraftBanner

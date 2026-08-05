@@ -245,41 +245,26 @@ const AdminApp: React.FC = () => {
                 identically against the same bad file. One boundary per
                 section is what limits one bad file to costing one
                 section. */}
-            {/* One <fieldset>, not a `disabled` prop threaded through
-                thirteen editor components. The native disabled cascade
-                covers every form control underneath it -- Field inputs,
-                RecordList's Add/Remove/Move, SectionList's toggles,
-                HoursField, StoryForm, GalleryList, PageList, the template
-                forms, PhotoField and PdfField -- without touching any of
-                them. A partial lock would be worse than none: a page where
-                three of six controls respond reads as broken, not as busy.
+            {/* `publishLocked` is the editing pause, while a publish POST is
+                open. It is applied as a `disabled` <fieldset> per section,
+                inside CollapsibleSection, rather than as one wrapper around
+                every section here -- see that component's own comment for
+                why, and for everything the fieldset itself is doing.
 
-                Inline style rather than classes, so this costs nothing
-                against the stylesheet's byte ceiling (the precedent is
-                CollageTile.tsx, which chose an inline style over a class
-                string for exactly that reason). `minInlineSize: 0` is
-                required, not decorative: the UA stylesheet gives every
-                fieldset `min-inline-size: min-content`, which visibly
-                changes this layout at narrow widths, and `minWidth: 0` is
-                not a reliable override for it. The border/padding/margin
-                resets are the same story.
+                In short (review finding, Minor): a wrapper here also
+                swallowed each section's fold TOGGLE, which is a <button> and
+                therefore a form control the disabled cascade reaches, so
+                every heading on this page went inert for the length of the
+                request. The pause is about editing; folding is navigation,
+                and the marker CollapsibleSection shows on a folded section
+                with a problem tells her to open it.
 
-                The opacity is what says "this area is busy" as one thing.
-                Per-control disabled styling would be the wrong lever:
-                RecordList's move buttons document that they have no
-                disabled variant at all, so they would look live and do
-                nothing -- precisely the broken reading -- and adding
-                variants across the editors would cost real CSS for a state
-                that lasts seconds.
+                Still one `disabled` prop on one component, not thirteen
+                editors each learning about publishing.
 
                 The DraftBanner branch of the ternary above can never be
-                inside this: it renders INSTEAD of PublishBar, so there is
-                no lock to report while it is up. */}
-            <fieldset
-              disabled={publishLocked}
-              aria-busy={publishLocked}
-              style={{ border: 0, padding: 0, margin: 0, minInlineSize: 0, opacity: publishLocked ? 0.6 : undefined }}
-            >
+                locked at all: it renders INSTEAD of PublishBar, so there is
+                no publish in flight while it is up. */}
             {/* Every section folds now (CollapsibleSection.tsx) -- the
                 owner's report: "every section renders fully expanded, so
                 reaching the last one means scrolling past every dish, drink
@@ -300,7 +285,7 @@ const AdminApp: React.FC = () => {
                 that cannot render is an invitation to open it and find
                 nothing. */}
             <SectionErrorBoundary name="Dishes">
-              <CollapsibleSection id="dishes" heading="Dishes">
+              <CollapsibleSection id="dishes" heading="Dishes" locked={publishLocked}>
                 <ArraySection<Dish>
                   file="dishes.json"
                   load={() => fetchContent('dishes.json')}
@@ -316,7 +301,7 @@ const AdminApp: React.FC = () => {
               </CollapsibleSection>
             </SectionErrorBoundary>
             <SectionErrorBoundary name="Drinks">
-              <CollapsibleSection id="drinks" heading="Drinks">
+              <CollapsibleSection id="drinks" heading="Drinks" locked={publishLocked}>
                 <ArraySection<Drink>
                   file="drinks.json"
                   load={() => fetchContent('drinks.json')}
@@ -332,7 +317,7 @@ const AdminApp: React.FC = () => {
               </CollapsibleSection>
             </SectionErrorBoundary>
             <SectionErrorBoundary name="Press">
-              <CollapsibleSection id="press" heading="Press">
+              <CollapsibleSection id="press" heading="Press" locked={publishLocked}>
                 <ArraySection<Article>
                   file="press.json"
                   load={() => fetchContent('press.json')}
@@ -348,41 +333,40 @@ const AdminApp: React.FC = () => {
               </CollapsibleSection>
             </SectionErrorBoundary>
             <SectionErrorBoundary name="Homepage sections">
-              <CollapsibleSection id="sections" heading="Homepage sections">
+              <CollapsibleSection id="sections" heading="Homepage sections" locked={publishLocked}>
                 <SectionsSection registry={registry} restoreDraft={restoreDraft} stage={stage} />
               </CollapsibleSection>
             </SectionErrorBoundary>
             <SectionErrorBoundary name="Pages">
-              <CollapsibleSection id="pages" heading="Pages">
+              <CollapsibleSection id="pages" heading="Pages" locked={publishLocked}>
                 <PagesSection registry={registry} restoreDraft={restoreDraft} stage={stage} />
               </CollapsibleSection>
             </SectionErrorBoundary>
             <SectionErrorBoundary name="Opening hours">
-              <CollapsibleSection id="hours" heading="Opening hours">
+              <CollapsibleSection id="hours" heading="Opening hours" locked={publishLocked}>
                 <HoursSection registry={registry} restoreDraft={restoreDraft} />
               </CollapsibleSection>
             </SectionErrorBoundary>
             <SectionErrorBoundary name="Menus">
-              <CollapsibleSection id="menus" heading="Menus">
+              <CollapsibleSection id="menus" heading="Menus" locked={publishLocked}>
                 <MenusSection stage={stage} registry={registry} restoreDraft={restoreDraft} />
               </CollapsibleSection>
             </SectionErrorBoundary>
             <SectionErrorBoundary name="Galleries">
-              <CollapsibleSection id="galleries" heading="Galleries">
+              <CollapsibleSection id="galleries" heading="Galleries" locked={publishLocked}>
                 <GallerySection stage={stage} registry={registry} restoreDraft={restoreDraft} />
               </CollapsibleSection>
             </SectionErrorBoundary>
             <SectionErrorBoundary name="Our Story">
-              <CollapsibleSection id="story" heading="Our Story">
+              <CollapsibleSection id="story" heading="Our Story" locked={publishLocked}>
                 <StorySection registry={registry} restoreDraft={restoreDraft} />
               </CollapsibleSection>
             </SectionErrorBoundary>
             <SectionErrorBoundary name="Page copy">
-              <CollapsibleSection id="copy" heading="Page copy">
+              <CollapsibleSection id="copy" heading="Page copy" locked={publishLocked}>
                 <CopySection registry={registry} restoreDraft={restoreDraft} />
               </CollapsibleSection>
             </SectionErrorBoundary>
-            </fieldset>
           </PublishBar>
         )}
       </div>

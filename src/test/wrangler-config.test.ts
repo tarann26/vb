@@ -114,3 +114,42 @@ describe('wrangler.toml Cloudflare Pages identifiers', () => {
     expect(isValidPagesProjectOrPlaceholder('has spaces')).toBe(false);
   });
 });
+
+// Review finding (Important): the descheduling commit deleted wrangler.toml's
+// `[triggers]` section along with the rest of the scheduling subsystem, and
+// deleted this file's old cron-cadence test with it, on the reasoning that
+// the subject no longer existed. It did: Cloudflare stores a Worker's
+// schedules on the script, not in this file, and `wrangler deploy` only ever
+// clears them by issuing a PUT that its own code guards behind `if (crons)`.
+// An absent section normalises to `crons: undefined`, which is falsy, so the
+// hourly `0 * * * *` trigger stayed registered on the live Worker -- and the
+// file, the commit message and docs/cloudflare-cutover.md's "Live now" table
+// all asserted a production state that was false, with nothing left in the
+// repo that could notice. `crons = []` is truthy, so the clearing PUT fires.
+//
+// Both halves matter and both are pinned below, because they fail
+// differently: the section going missing is the original defect returning,
+// and a non-empty list is a cron being registered again -- 720-744 Pages
+// builds a month against a 500-build cap, on a Worker with no `scheduled`
+// export to run.
+describe('wrangler.toml cron triggers', () => {
+  it('declares an explicit EMPTY crons list -- the only form that clears the live schedule', () => {
+    const toml = readFileSync('wrangler.toml', 'utf8');
+    const match = toml.match(/^\s*crons\s*=\s*\[([^\]]*)\]/m);
+    expect(match, 'wrangler.toml declares no `crons` at all -- see its own [triggers] comment').not.toBeNull();
+    const crons = match![1].split(',').map((c) => c.trim().replace(/^"|"$/g, '')).filter(Boolean);
+    expect(crons).toEqual([]);
+  });
+
+  // The section header itself, separately: `crons = []` sitting under some
+  // other table would parse as that table's key and register nothing, and
+  // the regex above cannot tell the difference.
+  it('declares that empty list under [triggers], not under some other table', () => {
+    const toml = readFileSync('wrangler.toml', 'utf8');
+    const afterHeader = toml.split(/^\[triggers\]\s*$/m)[1];
+    expect(afterHeader, 'wrangler.toml has no [triggers] table').toBeDefined();
+    // Up to the next table header -- what TOML itself scopes to [triggers].
+    const body = afterHeader.split(/^\[/m)[0];
+    expect(body).toMatch(/^\s*crons\s*=\s*\[\s*\]\s*$/m);
+  });
+});

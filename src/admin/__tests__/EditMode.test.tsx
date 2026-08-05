@@ -2125,4 +2125,35 @@ describe('Plan 5 Task 5: publishing from /edit', () => {
     // document -- i.e. the banner is the earlier of the two.
     expect(banner.compareDocumentPosition(footer!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
+
+  // Review finding (Minor). The C2 comment in EditMode.tsx went on saying
+  // the banner was "the FIRST thing inside this bar's own children" for the
+  // whole life of the /edit/manage link paragraph that was later inserted
+  // ahead of it. Nothing failed, and nothing could: the test above pins only
+  // the far end of the move (banner before Footer), and no test anywhere
+  // asserted what PRECEDES the banner -- so the one written record of why
+  // this placement matters was free to describe a position the element no
+  // longer occupied, and a later edit reasoning from it ("it's already
+  // first, I can safely insert above it") would have been reasoning from a
+  // false premise.
+  //
+  // The comment now records the real order. This is what keeps it that way:
+  // reordering these two blocks turns this red instead of quietly making
+  // another sentence false. Order only, not adjacency -- a third thing
+  // legitimately inserted between them is not a defect, and pinning
+  // `nextElementSibling` would report one.
+  it('the /edit/manage link comes before the draft banner, which is what the C2 comment records', async () => {
+    saveDraft('edit', { 'copy.json': { data: COPY, savedAt: 5_000 } });
+    stubFetch();
+    render(
+      <MemoryRouter>
+        <EditMode />
+      </MemoryRouter>,
+    );
+
+    const banner = await screen.findByRole('alert', { name: '' });
+    const link = screen.getByRole('link', { name: 'Open the dashboard' });
+
+    expect(link.compareDocumentPosition(banner) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
 });

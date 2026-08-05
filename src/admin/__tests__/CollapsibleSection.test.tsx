@@ -333,3 +333,59 @@ describe('CollapsibleSection: a bare click activates it', () => {
     expect(toggleFor('Dishes')).toHaveAttribute('aria-expanded', 'true');
   });
 });
+
+// Review finding (Minor). The editing pause used to be one <fieldset
+// disabled> in AdminApp wrapping all ten sections, which meant it also
+// wrapped all ten fold TOGGLES -- and a <button> under a disabled fieldset
+// is disabled by the native cascade, so for the length of a publish POST
+// (up to PublishBar's own 60s cap) no heading on the dashboard would open.
+// The fieldset moved in here, around `children` only, and `locked` is what
+// drives it. AdminApp.test.tsx proves the same property through the real
+// publish flow; this pins the component's own contract, which is where the
+// distinction actually lives.
+describe('CollapsibleSection: the publish pause reaches the content, never the heading', () => {
+  function renderLocked(locked: boolean) {
+    window.localStorage.setItem(`${SECTION_OPEN_KEY_PREFIX}dishes`, '1');
+    render(
+      <CollapsibleSection id="dishes" heading="Dishes" locked={locked}>
+        <input aria-label="Dish name" defaultValue="Dish A" />
+      </CollapsibleSection>,
+    );
+  }
+
+  it('disables a control inside it while locked, and dims and announces the region', () => {
+    renderLocked(true);
+    const input = screen.getByLabelText('Dish name');
+    expect(input).toBeDisabled();
+    const fieldset = input.closest('fieldset') as HTMLFieldSetElement;
+    expect(fieldset).toHaveAttribute('aria-busy', 'true');
+    expect(fieldset.style.opacity).toBe('0.6');
+  });
+
+  // The other half, and the actual finding: locked must not reach the
+  // toggle. `not.toBeDisabled()` resolves the fieldset ancestor, so this is
+  // a real statement about the cascade and not just about the attribute.
+  it('leaves the fold toggle live while locked, so she can still open a section', async () => {
+    const user = userEvent.setup();
+    renderLocked(true);
+    const toggle = toggleFor('Dishes');
+    expect(toggle).not.toBeDisabled();
+
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  // Non-vacuous: unlocked, nothing is disabled and neither signal is on, so
+  // the assertions above are about `locked` and not about the fieldset
+  // simply existing.
+  it('disables nothing, dims nothing and announces nothing when unlocked', () => {
+    renderLocked(false);
+    const input = screen.getByLabelText('Dish name');
+    expect(input).not.toBeDisabled();
+    const fieldset = input.closest('fieldset') as HTMLFieldSetElement;
+    expect(fieldset).not.toHaveAttribute('aria-busy', 'true');
+    expect(fieldset.style.opacity).toBe('');
+  });
+});

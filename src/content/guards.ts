@@ -3,6 +3,7 @@ import type {
   Copy,
   Section,
   BespokeSection,
+  TemplateSection,
   TemplateType,
   TemplateContent,
   TemplateWhatsAppButton,
@@ -12,8 +13,96 @@ import type {
   DetailBlockTemplateContent,
   Page,
   SectionId,
+  Dish,
   Drink,
+  Article,
 } from './types';
+
+// ---------------------------------------------------------------------------
+// The key each record type is allowed to carry, one set per type.
+//
+// `Record<keyof T, true>` rather than a hand-maintained `string[]`: if `Dish`
+// gains a field, this object stops compiling until the field is listed here
+// too, so a set can never quietly fall behind the type it describes. That is
+// the same compile-time completeness `SECTION_ID_SET` below already relies
+// on.
+//
+// They live in this module, exported, because TWO places need the identical
+// answer and had already given different ones. `shape.test.ts` uses them to
+// fail the BUILD when a committed content file carries a key its type does
+// not have; `validate.ts` uses them to refuse that same key at the WRITE
+// boundary, before the Worker can commit it. Removing the scheduling
+// subsystem is what exposed the gap: it made `publishAt` unknown to the
+// build gate while leaving it silently accepted by the validator, so a
+// dashboard tab still running the old code could publish a `publishAt`, be
+// told the commit landed, and leave `main` failing its own deploy gate --
+// after which every later publish of anything else failed too, with no
+// control anywhere in the dashboard able to clear the field. One definition
+// consulted by both ends is what makes that divergence unreachable rather
+// than merely fixed once.
+export const DISH_KEYS: Record<keyof Dish, true> = {
+  id: true,
+  name: true,
+  description: true,
+  image: true,
+  tags: true,
+};
+
+export const DRINK_KEYS: Record<keyof Drink, true> = {
+  id: true,
+  name: true,
+  description: true,
+  category: true,
+  image: true,
+};
+
+export const ARTICLE_KEYS: Record<keyof Article, true> = {
+  id: true,
+  title: true,
+  publication: true,
+  date: true,
+  excerpt: true,
+  url: true,
+  image: true,
+};
+
+export const BESPOKE_SECTION_KEYS: Record<keyof BespokeSection, true> = {
+  kind: true,
+  id: true,
+  enabled: true,
+};
+
+// `keyof` a union is the INTERSECTION of its members' keys, and
+// `TemplateSection` is a mapped type distributed over `TemplateType` whose
+// four members all carry exactly these five -- so this stays complete
+// however many templates exist, and a template variant that ever gained a
+// key of its own would make this stop compiling rather than silently start
+// accepting nothing new.
+export const TEMPLATE_SECTION_KEYS: Record<keyof TemplateSection, true> = {
+  kind: true,
+  id: true,
+  enabled: true,
+  template: true,
+  content: true,
+};
+
+export const PAGE_KEYS: Record<keyof Page, true> = {
+  slug: true,
+  name: true,
+  inNav: true,
+  enabled: true,
+  seo: true,
+  sections: true,
+};
+
+// `hasOwnProperty.call`, not `key in knownKeys`: every one of the sets above
+// is an object literal, so `'toString' in DISH_KEYS` is true through the
+// prototype chain and an `in` check would wave a `toString` key through as
+// known. An earlier copy of this helper (in shape.test.ts, before it moved
+// here) used `in` for exactly that reason -- it read as equivalent.
+export function unknownKeys(item: object, knownKeys: Record<string, true>): string[] {
+  return Object.keys(item).filter((key) => !Object.prototype.hasOwnProperty.call(knownKeys, key));
+}
 
 const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/; // 24-hour "HH:MM"
 

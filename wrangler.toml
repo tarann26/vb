@@ -29,12 +29,37 @@ GITHUB_BRANCH = "main"   # the branch Cloudflare Pages builds from
 CLOUDFLARE_ACCOUNT_ID = "e352283475b003efeab1a35e45932927"
 CLOUDFLARE_PAGES_PROJECT = "vb"
 
-# No `[triggers]` block, deliberately: publishing is instantaneous, so there
-# is no future-dated content for a cron to wake up and notice, and
-# worker/index.ts exports no `scheduled` handler for one to call. Adding a
-# cron back here would be a standing charge against Pages Free's 500-build
-# cap (an unconditional hourly hook is 720-744 builds/month on its own) in
-# exchange for nothing.
+# An EXPLICIT empty list, not a deleted `[triggers]` section. Those are not
+# the same thing to `wrangler deploy`, and the difference is the whole reason
+# this stays here.
+#
+# Publishing is instantaneous, so there is no future-dated content for a cron
+# to wake up and notice, and worker/index.ts exports no `scheduled` handler
+# for one to call. But an hourly `0 * * * *` trigger was once registered on
+# the deployed `via-bianca-admin` Worker from here, and simply removing the
+# lines that registered it does not remove the registration -- Cloudflare
+# stores schedules on the script, not in this file. Read straight out of
+# wrangler's own deploy path (node_modules/wrangler/wrangler-dist/cli.js): an
+# absent section normalises to `{ crons: undefined }`, `deploy` forwards that
+# as `crons`, and the only call that can clear a schedule is guarded by
+# `if (crons) { ... PUT ${workerUrl}/schedules ... }`. `undefined` is falsy,
+# so no request is issued and whatever Cloudflare already has survives every
+# future deploy. `[]` is truthy, so the PUT fires with an empty list and
+# actually clears it. Confirmed against the live Worker while the section was
+# missing: its `/schedules` endpoint still reported `0 * * * *`, hours after
+# the removal, with 24 failed invocations a day against a script that no
+# longer had a handler to run.
+#
+# So: keep this. Deleting it later, once the schedule is gone, is not a
+# tidy-up -- it returns this Worker to the state where a `scheduled` export
+# added for some unrelated reason silently starts firing hourly again, and it
+# takes the only thing in the repo that records the cleared state with it.
+# src/test/wrangler-config.test.ts pins both halves (the section is present,
+# and the list is empty). Putting a real cadence back would also be a
+# standing charge against Pages Free's 500-build cap -- an unconditional
+# hourly hook is 720-744 builds/month on its own.
+[triggers]
+crons = []
 
 [[kv_namespaces]]
 binding = "KV"

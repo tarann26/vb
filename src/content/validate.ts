@@ -11,7 +11,22 @@
 // one direction -- guards.ts changes and this file doesn't notice -- never
 // the other way around (this file inventing a second, competing definition
 // of "valid" that quietly drifts from what the build actually enforces).
-import { assertCopy, assertDrinkCategory, assertHours, assertSections, isSectionId, isTemplateType, isUrlSafeSlug } from './guards';
+import {
+  ARTICLE_KEYS,
+  BESPOKE_SECTION_KEYS,
+  DISH_KEYS,
+  DRINK_KEYS,
+  PAGE_KEYS,
+  TEMPLATE_SECTION_KEYS,
+  assertCopy,
+  assertDrinkCategory,
+  assertHours,
+  assertSections,
+  isSectionId,
+  isTemplateType,
+  isUrlSafeSlug,
+  unknownKeys,
+} from './guards';
 // Task 1 (Plan 6): the hero collage's own tiny layout language --
 // `heroCollage[i].className` is a Tailwind grid-placement string this
 // module now actually understands, not merely checks for non-blankness.
@@ -66,6 +81,49 @@ const RETIRED_DRINK_NAMES = ['Bicerin', 'Espresso Tonic', 'Signor Bianca', 'Samb
 // in copy.json's prose, so that is where this checks.
 const RETIRED_DRINK_PHRASES = ['basil-lime spritz', 'rosemary-grapefruit fizz', 'espresso-orange tonic'];
 
+// Review finding (Important): a record carrying a key its own type does not
+// have used to sail through here and then fail `main`'s deploy gate forever.
+//
+// The two ends had drifted. `shape.test.ts` fails the BUILD on any key
+// outside `Dish`/`Drink`/`Article`; this file, the WRITE boundary, checked
+// only that the fields it knew about were well-formed and said nothing at
+// all about the ones it did not. So a publish carrying an extra key returned
+// 200, committed, and only then failed `npm run test:deploy` -- on `main`,
+// where the bad key now lives, so every SUBSEQUENT publish of any other file
+// failed the same gate too, and no control in the dashboard could clear it.
+// Exactly the poisoned-`main` shape the site.json rule at the bottom of this
+// file describes, reached through a different door.
+//
+// Reachable, not hypothetical. Removing the scheduling subsystem turned
+// `publishAt` into precisely such a key while the deployed dashboard was
+// still rendering a "Publish on" date input for every dish, drink and press
+// row; RecordForm's set path is `{ ...value, [key]: next }` and drafts are
+// stored as opaque `unknown`, so an open tab or a restored draft carries the
+// field straight into the next publish, after the code that could have
+// removed it is gone.
+//
+// The key sets come from guards.ts, the same ones shape.test.ts asserts
+// with, for the reason this file's header comment gives for building on
+// guards.ts generally: a second, local list of "the fields a dish has" is
+// how these two ends drifted apart in the first place.
+function validateKnownKeys(
+  raw: unknown,
+  knownKeys: Record<string, true>,
+  path: string,
+  subject: string,
+): ValidationProblem[] {
+  return unknownKeys(asRecord(raw), knownKeys).map((key) =>
+    problem(
+      `${path}.${key}`,
+      // Written for her, like every other message here. She cannot edit this
+      // key -- no control renders it -- so the only recoveries are a reload
+      // (which drops a stale tab's in-memory copy) and declining the draft
+      // that would put it straight back.
+      `"${subject}" carries "${key}", which this site does not use -- reload this page, decline any draft it offers to restore, and make the edit again`,
+    ),
+  );
+}
+
 // ---------------------------------------------------------------------------
 // dishes.json
 
@@ -107,6 +165,7 @@ function validateDish(raw: unknown, index: number): ValidationProblem[] {
   if (!Array.isArray(dish.tags)) {
     problems.push(problem(`[${index}].tags`, `"${String(dish.name ?? 'this dish')}" needs a tags list`));
   }
+  problems.push(...validateKnownKeys(dish, DISH_KEYS, `[${index}]`, String(dish.name ?? 'this dish')));
   return problems;
 }
 
@@ -147,6 +206,7 @@ function validateDrink(raw: unknown, index: number): ValidationProblem[] {
   } catch (error) {
     problems.push(problem(`[${index}].category`, error instanceof Error ? error.message : String(error)));
   }
+  problems.push(...validateKnownKeys(drink, DRINK_KEYS, `[${index}]`, String(drink.name ?? 'this drink')));
   return problems;
 }
 
@@ -189,6 +249,7 @@ function validateArticle(raw: unknown, index: number): ValidationProblem[] {
   if (!hasNoUrl && (typeof article.url !== 'string' || !/^https?:\/\//.test(article.url))) {
     problems.push(problem(`[${index}].url`, `"${String(article.title ?? 'this article')}" needs a real destination, or null`));
   }
+  problems.push(...validateKnownKeys(article, ARTICLE_KEYS, `[${index}]`, String(article.title ?? 'this article')));
   return problems;
 }
 
@@ -506,6 +567,17 @@ function validateSectionEntry(raw: unknown, path: string, seenIds: Set<string>):
     if (typeof enabled !== 'boolean') {
       problems.push(problem(`${path}.enabled`, 'this section needs to say whether it is shown'));
     }
+    // Review finding (Minor): the descheduling commit deleted this branch's
+    // one-line "a built-in section cannot be scheduled" rule and the bespoke
+    // branch's `publishAt` format check, and replaced neither -- so
+    // sections.json and pages.json were the half of the old guard's reach
+    // that nothing picked up (`assertSectionEntry` in guards.ts rebuilds
+    // each entry from named keys, so a stray key never reaches runtime, and
+    // shape.test.ts's own unknown-key sweep covered dish/drink/article
+    // only). The generic rule on the next line covers `publishAt` and
+    // everything else in the same breath, so this cannot need a fresh
+    // one-off rule the next time a field is retired.
+    problems.push(...validateKnownKeys(entry, BESPOKE_SECTION_KEYS, path, String(id ?? 'this section')));
     return problems;
   }
 
@@ -538,6 +610,7 @@ function validateSectionEntry(raw: unknown, path: string, seenIds: Set<string>):
   } else {
     problems.push(...validateTemplateContentFields(entry.template, entry.content, `${path}.content`));
   }
+  problems.push(...validateKnownKeys(entry, TEMPLATE_SECTION_KEYS, path, String(id ?? 'this section')));
   return problems;
 }
 
@@ -625,6 +698,7 @@ function validatePage(raw: unknown, index: number, seenSlugs: Set<string>): Vali
       problems.push(...validateSectionEntry(entry, `[${index}].sections[${si}]`, seenSectionIds));
     });
   }
+  problems.push(...validateKnownKeys(page, PAGE_KEYS, `[${index}]`, String(page.name ?? 'this page')));
   return problems;
 }
 

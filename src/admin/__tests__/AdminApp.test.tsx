@@ -1105,6 +1105,45 @@ describe('AdminApp: editing is paused while a publish request is in flight', () 
     expect(fieldset.style.opacity).toBe('');
   });
 
+  // Review finding (Minor). The pause is about EDITING, and folding a
+  // section is not editing -- it is how she navigates a ten-section page.
+  // Until the fieldset moved inside CollapsibleSection, every fold toggle
+  // was a form control inside the disabled fieldset and went inert for the
+  // whole request, up to the 60s PublishBar cap. That is worse than merely
+  // annoying, because it is precisely when a section has something to say:
+  // a file that fails its own load while folded renders CollapsibleSection's
+  // "Something in this section needs attention — open it to see" under the
+  // heading, and the heading it names refused to open.
+  //
+  // `not.toBeDisabled()` and a real `user.click` both, deliberately: jest-dom
+  // resolves the fieldset ancestor, and userEvent honours the disabled state
+  // the way a real tap does, so the click assertion fails on the regression
+  // even if someone teaches the toggle to look enabled. (`fireEvent.click`
+  // would NOT catch it -- it bypasses the check and flips the state
+  // regardless, which is how this stayed invisible.)
+  it('a section heading still folds while the POST is open -- it is navigation, not editing', async () => {
+    const user = userEvent.setup();
+    stubFetchWithPublish(() => new Promise<Response>(() => {}));
+    render(<AdminApp />);
+    const input = (await screen.findByDisplayValue('Dish A')) as HTMLInputElement;
+    const toggle = screen.getByRole('button', { name: 'Dishes' });
+
+    // Non-vacuous: it starts folded and opens normally with no publish in
+    // flight, so the assertion below is about the lock and nothing else.
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+
+    await user.type(input, '!');
+    await user.click(screen.getByRole('button', { name: 'Publish' }));
+    await user.click(screen.getByRole('button', { name: 'Yes, publish to the live site' }));
+    await waitFor(() => expect(input).toBeDisabled());
+
+    expect(toggle).not.toBeDisabled();
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  });
+
   // The failure path the whole design turns on: every terminal state must
   // release the pause on its own, with no bookkeeping to forget.
   it('a 409 releases it -- she is never stranded behind a failed publish', async () => {

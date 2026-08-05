@@ -47,6 +47,10 @@ export interface CollapsibleSectionProps {
   // had open. Never derived from `heading` for that reason.
   id: string;
   heading: string;
+  // The editing pause, while a publish POST is open (AdminApp's
+  // `publishLocked`). It reaches the <fieldset> around `children` below and
+  // deliberately NOT the fold toggle -- see that element's own comment.
+  locked?: boolean;
   children: React.ReactNode;
 }
 
@@ -61,7 +65,7 @@ export interface CollapsibleSectionProps {
 // scroll.
 const HEADING_CLASSNAME = "font-['Montserrat'] text-lg uppercase tracking-wide text-[#222]";
 
-const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({ id, heading, children }) => {
+const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({ id, heading, locked, children }) => {
   // Lazy initializer: read once, on the very first render, so the section
   // paints in the state she left it in rather than opening and then folding
   // a frame later.
@@ -108,7 +112,25 @@ const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({ id, heading, ch
             submits (see PublishBarProps' own `children` comment), and an
             unlabelled <button> inside a form defaults to `type="submit"` --
             so folding a section would have opened the publish confirmation
-            instead. */}
+            instead.
+
+            Review finding (Minor): this toggle sits OUTSIDE the `locked`
+            fieldset below, and the fieldset lives here rather than as one
+            wrapper around all ten sections in AdminApp for exactly that
+            reason. It used to be inside that wrapper, and the native
+            disabled cascade reaches every form control under a disabled
+            fieldset -- including a <button> -- so for the length of a
+            publish POST (up to PublishBar's own 60s cap) every heading on
+            this dashboard was inert. The one carve-out HTML offers is the
+            disabled fieldset's own first <legend>, which cannot hold ten
+            headings, so the fieldset had to move rather than the toggle.
+
+            That is not a hole in the pause: the pause exists so an edit
+            cannot be typed into a file whose publish is already in flight,
+            and folding a section changes only what she can SEE. It is also
+            the moment it matters most -- a section whose file fails to load
+            while folded renders the "needs attention — open it to see"
+            marker below, naming an action the heading was refusing. */}
         <button
           type="button"
           aria-expanded={open}
@@ -137,7 +159,40 @@ const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({ id, heading, ch
         </p>
       )}
       <div id={panelId} ref={contentRef} hidden={!open}>
-        {children}
+        {/* One <fieldset> per section, not a `disabled` prop threaded
+            through thirteen editor components. The native disabled cascade
+            covers every form control underneath it -- Field inputs,
+            RecordList's Add/Remove/Move, SectionList's toggles, HoursField,
+            StoryForm, GalleryList, PageList, the template forms, PhotoField
+            and PdfField -- without touching any of them. A partial lock
+            would be worse than none: a page where three of six controls
+            respond reads as broken, not as busy.
+
+            Ten of these rather than one around all ten sections, so the
+            heading above stays live; the visible result is that what dims
+            is exactly what stopped responding, and the headings she can
+            still use do not. Inline style rather than classes, so this
+            costs nothing against the stylesheet's byte ceiling (the
+            precedent is CollageTile.tsx, which chose an inline style over a
+            class string for exactly that reason). `minInlineSize: 0` is
+            required, not decorative: the UA stylesheet gives every fieldset
+            `min-inline-size: min-content`, which visibly changes this
+            layout at narrow widths, and `minWidth: 0` is not a reliable
+            override for it. The border/padding/margin resets are the same
+            story.
+
+            The opacity is what says "this area is busy"; per-control
+            disabled styling would be the wrong lever, since RecordList's
+            move buttons document that they have no disabled variant at all
+            and would look live while doing nothing. `aria-busy` is the same
+            statement for a screen reader. */}
+        <fieldset
+          disabled={locked}
+          aria-busy={locked}
+          style={{ border: 0, padding: 0, margin: 0, minInlineSize: 0, opacity: locked ? 0.6 : undefined }}
+        >
+          {children}
+        </fieldset>
       </div>
     </section>
   );

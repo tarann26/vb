@@ -760,3 +760,125 @@ describe('validateContent: site.json refuses a change to a developer-owned field
     expect(validateContent('site.json', validSite, [])).toEqual([]);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Review finding (Important). The write boundary and the build gate must
+// refuse the same keys, because the write boundary is the only one that can
+// still say no: shape.test.ts runs during `npm run test:deploy`, on `main`,
+// after the commit. A key this file lets through is a red build that the
+// dashboard cannot undo -- and, since the bad key is then committed, a red
+// build for every subsequent publish of every other file too, until a
+// developer hand-edits the JSON.
+//
+// `publishAt` is the one that actually opened this window and gets its own
+// tests: removing the scheduling subsystem deleted `validatePublishAt` from
+// this module and made `publishAt` an unknown key to shape.test.ts in the
+// same commit, while the DEPLOYED dashboard (origin/main, live at the time)
+// still rendered a "Publish on" date input on every dish, drink and press
+// row. A tab left open on that version, or a draft restored from it, carries
+// the field into the next publish with nothing left able to remove it.
+describe('validateContent: a key the type does not have is refused at the write boundary', () => {
+  it('refuses publishAt on a dish, naming the field and the key', () => {
+    const problems = validateContent('dishes.json', [{ ...validDish, publishAt: '2099-01-01' }]);
+    expect(problems.some((p) => p.field === '[0].publishAt')).toBe(true);
+    expect(messages(problems)).toMatch(/carries "publishAt", which this site does not use/);
+  });
+
+  // The malformed-date habit ("01-09-2026" for 1 September) that the deleted
+  // validator existed for. It is refused now for a stronger reason than
+  // being malformed: the field does not exist at all, so no shape of it is
+  // acceptable and there is no date format left to get wrong.
+  it('refuses a malformed publishAt just the same -- the field itself is gone, not just bad dates', () => {
+    const problems = validateContent('dishes.json', [{ ...validDish, publishAt: '01-09-2026' }]);
+    expect(problems.some((p) => p.field === '[0].publishAt')).toBe(true);
+  });
+
+  it('refuses publishAt on a drink', () => {
+    const problems = validateContent('drinks.json', [{ ...validDrink, publishAt: '2099-01-01' }]);
+    expect(problems.some((p) => p.field === '[0].publishAt')).toBe(true);
+  });
+
+  it('refuses publishAt on a press article', () => {
+    const problems = validateContent('press.json', [{ ...newerArticle, publishAt: '2099-01-01' }, olderArticle]);
+    expect(problems.some((p) => p.field === '[0].publishAt')).toBe(true);
+  });
+
+  // The other half of the same repair (review finding, Minor): sections.json
+  // and pages.json lost the bespoke-section `publishAt` rejection and its
+  // template-section format check and got nothing back, so this is where the
+  // old guard's reach is restored -- generically, so the next retired field
+  // needs no new rule.
+  it('refuses publishAt on a built-in homepage section', () => {
+    const [hero, ...rest] = validSections;
+    const problems = validateContent('sections.json', [{ ...hero, publishAt: '2099-01-01' }, ...rest]);
+    expect(problems.some((p) => p.field === '[0].publishAt')).toBe(true);
+  });
+
+  it('refuses publishAt on a template section, on the homepage and inside a page alike', () => {
+    const templateSection = {
+      kind: 'template',
+      id: 'a-note',
+      enabled: true,
+      template: 'text',
+      content: { heading: 'A note', paragraphs: ['One.'], whatsapp: null },
+      publishAt: '2099-01-01',
+    };
+    const homepage = validateContent('sections.json', [...validSections, templateSection]);
+    expect(homepage.some((p) => p.field === '[7].publishAt')).toBe(true);
+
+    const page = validateContent('pages.json', [
+      {
+        slug: 'our-menu',
+        name: 'Our Menu',
+        inNav: true,
+        enabled: true,
+        seo: { title: 'Our Menu', description: 'A short description.' },
+        sections: [templateSection],
+      },
+    ]);
+    expect(page.some((p) => p.field === '[0].sections[0].publishAt')).toBe(true);
+  });
+
+  it('refuses publishAt on a page itself', () => {
+    const problems = validateContent('pages.json', [
+      {
+        slug: 'our-menu',
+        name: 'Our Menu',
+        inNav: true,
+        enabled: true,
+        seo: { title: 'Our Menu', description: 'A short description.' },
+        sections: [],
+        publishAt: '2099-01-01',
+      },
+    ]);
+    expect(problems.some((p) => p.field === '[0].publishAt')).toBe(true);
+  });
+
+  // Not a `publishAt` special case: the rule is "keys this type does not
+  // have", so the typo that shape.test.ts's own header comment is about
+  // ("publishedAt" for "publishAt") is refused by the identical path, and so
+  // is anything else a future removal leaves behind.
+  it('refuses an invented key, and names every one of them separately', () => {
+    const problems = validateContent('dishes.json', [{ ...validDish, publishedAt: '2099-01-01', spiceLevel: 3 }]);
+    expect(problems.map((p) => p.field).sort()).toEqual(['[0].publishedAt', '[0].spiceLevel']);
+  });
+
+  // Non-vacuous in the direction that matters: a rule that refused
+  // everything would pass every test above while breaking every real
+  // publish. Asserted against this file's own hand-built fixtures, not
+  // against the committed JSON, for the reason its header comment gives.
+  it('accepts a record carrying exactly the keys its type declares', () => {
+    expect(validateContent('dishes.json', [validDish])).toEqual([]);
+    expect(validateContent('drinks.json', [validDrink])).toEqual([]);
+    expect(validateContent('press.json', [newerArticle, olderArticle])).toEqual([]);
+    expect(validateContent('sections.json', validSections)).toEqual([]);
+  });
+
+  // `Object.prototype`'s own keys are not "known" -- guards.ts's
+  // `unknownKeys` uses hasOwnProperty rather than `in` for exactly this, and
+  // an `in` check would wave this through.
+  it('refuses a key that merely exists on Object.prototype', () => {
+    const problems = validateContent('dishes.json', [{ ...validDish, toString: 'not a function' }]);
+    expect(problems.some((p) => p.field === '[0].toString')).toBe(true);
+  });
+});

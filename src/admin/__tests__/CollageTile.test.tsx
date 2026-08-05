@@ -268,6 +268,73 @@ describe("CollageTile: the panel shows the photo it is moving", () => {
     expect(screen.queryByRole('region', { name: 'Moving or resizing photo 1' })).not.toBeInTheDocument();
     expect(document.querySelector('img[data-collage-panel-thumbnail]')).toBeNull();
   });
+
+  // Review finding (Minor). Every test above renders ONE tile, so the
+  // property that actually matters -- the panel reads THIS tile's photo,
+  // not simply the first photo on the page -- was structurally uncoverable
+  // here: replacing CollageTile's `tileEl.querySelector('img')` with
+  // `document.querySelector('img')` left the entire vitest suite green,
+  // this file's own 37 tests included. Only
+  // e2e/collage-panel-thumbnail.spec.ts caught it, and e2e is part of
+  // neither `npm run build` nor `npm run test:deploy`, so that regression
+  // would have shipped on a green pipeline.
+  //
+  // What it looks like when it does: on a 390px phone -- the case this
+  // feature exists for, where the panel is docked to the bottom of the
+  // viewport and the tile is a ~60px cell scrolled off screen -- the panel
+  // confidently shows her one photo while eight arrows move another.
+  //
+  // Two tiles is the whole fix. The scoping is only observable when a photo
+  // that is NOT this tile's exists earlier in the document.
+  function renderTwoTiles() {
+    const onSelect = vi.fn();
+    const onCommit = vi.fn();
+    return render(
+      <>
+        <CollageTile
+          index={0}
+          className={CLASS_NAMES[0]}
+          classNames={CLASS_NAMES}
+          image={<img src="/hero/brick.webp" alt="" />}
+          selected={false}
+          onSelect={onSelect}
+          onCommit={onCommit}
+        />
+        <CollageTile
+          index={1}
+          className={CLASS_NAMES[1]}
+          classNames={CLASS_NAMES}
+          image={<img src="/hero/oven.webp" alt="" />}
+          selected
+          onSelect={onSelect}
+          onCommit={onCommit}
+        />
+      </>,
+    );
+  }
+
+  it("shows the SELECTED tile's own photo, not simply the first photo on the page", () => {
+    renderTwoTiles();
+
+    // Non-vacuous, and the exact reason this needs two tiles: a different
+    // photo genuinely precedes the selected tile's in document order, so
+    // `document.querySelector('img')` and `tileEl.querySelector('img')`
+    // return different elements here and the same one in every other test
+    // in this file.
+    expect(document.querySelectorAll('img')[0]).toHaveAttribute('src', '/hero/brick.webp');
+
+    const region = screen.getByRole('region', { name: 'Moving or resizing photo 2' });
+    expect(region.querySelector('img[data-collage-panel-thumbnail]')).toHaveAttribute('src', '/hero/oven.webp');
+  });
+
+  // The same property from the other side: the tile that is NOT selected
+  // contributes no panel, so a passing assertion above cannot be an
+  // accident of two panels both being present and getByRole picking one.
+  it('renders exactly one panel across the two tiles -- the selected one', () => {
+    renderTwoTiles();
+    expect(screen.queryByRole('region', { name: 'Moving or resizing photo 1' })).not.toBeInTheDocument();
+    expect(document.querySelectorAll('img[data-collage-panel-thumbnail]')).toHaveLength(1);
+  });
 });
 
 describe('CollageTile: Escape dismisses the panel', () => {
