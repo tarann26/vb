@@ -10,6 +10,7 @@ import {
   loadUndoRecord,
   rememberPublish,
   requestUndo,
+  UNDO_MAX_AGE_MS,
   type UndoRecord,
 } from '../undo';
 import { CONTENT_FILES, CONTENT_FILE_LABELS } from '../content';
@@ -18,18 +19,51 @@ afterEach(() => {
   window.localStorage.clear();
 });
 
-const RECORD: UndoRecord = { sha: 'commit-1', at: 1_700_000_000_000, paths: ['src/content/dishes.json'] };
+// A fixed instant, with every read below given an explicit `now` relative to
+// it -- the record now carries an age bound (UNDO_MAX_AGE_MS), so a fixture
+// pinned to a literal past timestamp and read against the real wall clock
+// would be permanently expired.
+const AT = 1_700_000_000_000;
+const RECORD: UndoRecord = { sha: 'commit-1', at: AT, paths: ['src/content/dishes.json'] };
 
 describe('the undo record store', () => {
   it('round-trips a record', () => {
     rememberPublish(RECORD);
-    expect(loadUndoRecord()).toEqual(RECORD);
+    expect(loadUndoRecord(undefined, AT)).toEqual(RECORD);
+  });
+
+  // Review finding (Minor): there was no age bound at all, and
+  // `rememberPublish` overwrites on every publish, so the first publish from
+  // a browser made "Undo my last publish" a permanent fixture of both
+  // surfaces -- an offer to revert a four-day-old change, described to her
+  // as "the change you published", which a single-owner site's untouched
+  // `main` would let the server actually carry out.
+  //
+  // Mutation this guards: deleting the `now - at > UNDO_MAX_AGE_MS` check in
+  // loadUndoRecord.
+  it('an offer older than the window reads as no offer', () => {
+    rememberPublish(RECORD);
+    expect(loadUndoRecord(undefined, AT + UNDO_MAX_AGE_MS + 1)).toBeNull();
+    // Non-vacuous: one millisecond earlier, the same stored record is still
+    // returned -- so this is a boundary, not "always null".
+    expect(loadUndoRecord(undefined, AT + UNDO_MAX_AGE_MS)).toEqual(RECORD);
+  });
+
+  // A device whose clock is briefly behind (a laptop waking with a stale
+  // time) must not silently destroy the offer -- and must not be able to
+  // make one look infinitely fresh either; it simply reads as not expired.
+  it('a record timestamped in the future is not treated as expired', () => {
+    rememberPublish(RECORD);
+    expect(loadUndoRecord(undefined, AT - 60_000)).toEqual(RECORD);
   });
 
   it('clearing it makes the offer unreachable, not merely refused', () => {
     rememberPublish(RECORD);
+    // Non-vacuous: read at an instant where the age bound would NOT have
+    // hidden it anyway, so the null below is the clear and nothing else.
+    expect(loadUndoRecord(undefined, AT)).not.toBeNull();
     clearUndoRecord();
-    expect(loadUndoRecord()).toBeNull();
+    expect(loadUndoRecord(undefined, AT)).toBeNull();
   });
 
   it('a corrupted or half-shaped value reads as no offer, never as a throw', () => {

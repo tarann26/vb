@@ -479,7 +479,7 @@ describe('restoreBlobs: putting blob shas back as a forward commit', () => {
   it('refuses a path outside the allowlist before making a single network call', async () => {
     const stub = makeGitHubStub();
     const env = envWith(stub);
-    await expect(restoreBlobs(env, [{ path: '.github/workflows/deploy.yml', sha: 'abc' }], 'msg')).rejects.toBeInstanceOf(
+    await expect(restoreBlobs(env, [{ path: '.github/workflows/deploy.yml', sha: 'abc' }], 'msg', BASE_COMMIT_SHA)).rejects.toBeInstanceOf(
       DisallowedPathError,
     );
     // Nothing written, and nothing even read -- a request with one bad path
@@ -491,7 +491,7 @@ describe('restoreBlobs: putting blob shas back as a forward commit', () => {
     const stub = makeGitHubStub();
     const env = envWith(stub);
     await expect(
-      restoreBlobs(env, [{ path: 'src/content/dishes.json', sha: 'a' }, { path: 'wrangler.toml', sha: 'b' }], 'msg'),
+      restoreBlobs(env, [{ path: 'src/content/dishes.json', sha: 'a' }, { path: 'wrangler.toml', sha: 'b' }], 'msg', BASE_COMMIT_SHA),
     ).rejects.toBeInstanceOf(DisallowedPathError);
     expect(stub.calls).toHaveLength(0);
   });
@@ -502,7 +502,7 @@ describe('restoreBlobs: putting blob shas back as a forward commit', () => {
   it('bases its tree on the CURRENT head tree, never the reverted commit\'s parent tree', async () => {
     const stub = makeGitHubStub();
     const env = envWith(stub);
-    await restoreBlobs(env, [{ path: 'src/content/dishes.json', sha: 'parent-blob-dishes' }], 'msg');
+    await restoreBlobs(env, [{ path: 'src/content/dishes.json', sha: 'parent-blob-dishes' }], 'msg', BASE_COMMIT_SHA);
 
     const treeBody = stub.bodies.find((b) => b.tree !== undefined)!;
     expect(treeBody.base_tree).toBe(BASE_TREE_SHA);
@@ -512,7 +512,7 @@ describe('restoreBlobs: putting blob shas back as a forward commit', () => {
   it('commits on top of the current head, so this is a forward commit and not a history rewrite', async () => {
     const stub = makeGitHubStub();
     const env = envWith(stub);
-    const result = await restoreBlobs(env, [{ path: 'src/content/dishes.json', sha: 'parent-blob-dishes' }], 'msg');
+    const result = await restoreBlobs(env, [{ path: 'src/content/dishes.json', sha: 'parent-blob-dishes' }], 'msg', BASE_COMMIT_SHA);
 
     const commitBody = stub.bodies.find((b) => b.parents !== undefined)!;
     expect(commitBody.parents).toEqual([BASE_COMMIT_SHA]);
@@ -532,6 +532,7 @@ describe('restoreBlobs: putting blob shas back as a forward commit', () => {
         { path: 'public/menus/food-menu.pdf', sha: 'parent-blob-menu' },
       ],
       'msg',
+      BASE_COMMIT_SHA,
     );
 
     const treeBody = stub.bodies.find((b) => b.tree !== undefined)!;
@@ -549,14 +550,47 @@ describe('restoreBlobs: putting blob shas back as a forward commit', () => {
   it('uploads no blobs -- it only re-points existing ones', async () => {
     const stub = makeGitHubStub();
     const env = envWith(stub);
-    await restoreBlobs(env, [{ path: 'src/content/dishes.json', sha: 'parent-blob-dishes' }], 'msg');
+    await restoreBlobs(env, [{ path: 'src/content/dishes.json', sha: 'parent-blob-dishes' }], 'msg', BASE_COMMIT_SHA);
     expect(stub.calls.filter((call) => call.url.endsWith('/git/blobs'))).toHaveLength(0);
+  });
+
+  // Review finding (Important). This function used to read the branch head
+  // itself, three subrequests after handleUndo had already read it and
+  // refused anything that was not the commit she asked to put back -- so a
+  // commit landing in that window was silently built on: the restore was
+  // parented on the interloper, which made the ref PATCH an ordinary
+  // fast-forward GitHub accepts, and the interloper's changes to the same
+  // paths were overwritten under a "your site is back to how it was".
+  // Building on the sha the CALLER validated is what makes the non-force
+  // PATCH a real guard, and this is the assertion that keeps it that way:
+  // the head the ref reports is deliberately NOT the sha passed in.
+  it('never re-reads the branch head -- it builds on the sha it was handed', async () => {
+    const stub = makeGitHubStub({ refSha: 'someone-elses-commit-cccc' });
+    const env = envWith(stub);
+    await restoreBlobs(env, [{ path: 'src/content/dishes.json', sha: 'parent-blob-dishes' }], 'msg', BASE_COMMIT_SHA)
+      .catch(() => undefined);
+
+    expect(stub.calls.filter((call) => /\/git\/ref\/heads\//.test(call.url))).toHaveLength(0);
+    expect(stub.bodies.find((b) => b.parents !== undefined)!.parents).toEqual([BASE_COMMIT_SHA]);
+    expect(stub.bodies.find((b) => b.tree !== undefined)!.base_tree).toBe(BASE_TREE_SHA);
+  });
+
+  // ... and the consequence of the above: because the commit is parented on a
+  // sha that is no longer the head, the PATCH is a non-fast-forward and the
+  // existing 422 mapping fires. Before the fix this same scenario returned
+  // successfully, having quietly absorbed the other commit.
+  it('a head that moved after the caller checked it is a conflict, not a silent absorb', async () => {
+    const stub = makeGitHubStub({ refSha: 'someone-elses-commit-cccc' });
+    const env = envWith(stub);
+    await expect(
+      restoreBlobs(env, [{ path: 'src/content/dishes.json', sha: 'parent-blob-dishes' }], 'msg', BASE_COMMIT_SHA),
+    ).rejects.toBeInstanceOf(PublishConflictError);
   });
 
   it('a 422 on the ref update surfaces as PublishConflictError, same as a publish', async () => {
     const stub = makeGitHubStub({ failOn: '/git/refs/heads/main', failStatus: 422 });
     const env = envWith(stub);
-    await expect(restoreBlobs(env, [{ path: 'src/content/dishes.json', sha: 'x' }], 'msg')).rejects.toBeInstanceOf(
+    await expect(restoreBlobs(env, [{ path: 'src/content/dishes.json', sha: 'x' }], 'msg', BASE_COMMIT_SHA)).rejects.toBeInstanceOf(
       PublishConflictError,
     );
   });

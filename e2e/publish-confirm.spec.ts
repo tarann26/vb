@@ -21,10 +21,22 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 //      the hamburger toggle at 390px. A confirmation step behind a button
 //      that cannot be clicked would be real on /edit/manage only.
 //   2. Once the confirmation panel is open, the accept button's own centre
-//      pixel resolves to the accept button. The panel is portaled to
-//      document.body at a z-index above both the nav (50) and CollageTile's
-//      own refusal toast (60), and that ordering is exactly the kind of
-//      claim a class-name assertion cannot check.
+//      pixel resolves to the accept button -- nothing is painted over the
+//      one control this whole step exists to put in front of her.
+//   3. The panel's own COMPUTED z-index really is above the nav's, read off
+//      both elements in the same browser. Recorded honestly, because the
+//      comment that used to sit here claimed check 2 pinned that ordering
+//      and it did not: nothing else is bottom-docked in the scenario this
+//      spec drives, so portal insertion order alone carried the hit test,
+//      and removing `style={{ zIndex: 70 }}` from PublishBar left it green
+//      at both viewports. A probe that opened CollageTile's own bottom-
+//      docked move/resize panel first was green either way too, so no
+//      hit-test formulation was found that discriminates. What CAN be
+//      checked, and is only checkable in a real browser (jsdom computes no
+//      styles at all), is the resolved z-index of both elements as the
+//      engine actually sees them -- inline style, class, cascade and all.
+//      That is what check 3 does, and it is red the moment the inline
+//      z-index goes.
 
 const CONTENT_FILES = [
   'site.json',
@@ -164,6 +176,23 @@ for (const viewport of VIEWPORTS) {
         acceptHit.self,
         `the confirm panel's accept button is occluded -- ${acceptHit.hit} is on top of it`,
       ).toBe(true);
+
+      // Check 3. Both read as the ENGINE resolves them, in the same frame --
+      // an assertion against the class string or the inline style attribute
+      // would prove neither, since the panel carries a z-50 class as well as
+      // its inline override and only the cascade decides which wins.
+      const panelZ = await dialog.evaluate((el) => Number.parseInt(getComputedStyle(el).zIndex, 10));
+      const navZ = await page
+        .locator('nav')
+        .first()
+        .evaluate((el) => Number.parseInt(getComputedStyle(el).zIndex, 10));
+      expect(navZ, 'the nav should still be the z-50 this ordering was chosen against').toBe(50);
+      expect(panelZ, `the confirm panel resolved to z-index ${panelZ}, at or below the nav's ${navZ}`).toBeGreaterThan(navZ);
+      // CollageTile's own refusal toast is a fixed 60 (CollageTile.tsx), and
+      // its move/resize panel is bottom-docked at 50 -- the same edge this
+      // panel occupies. Above both, so which paints on top is never decided
+      // by portal insertion order.
+      expect(panelZ, `the confirm panel resolved to z-index ${panelZ}, at or below CollageTile's toast (60)`).toBeGreaterThan(60);
     });
   });
 }

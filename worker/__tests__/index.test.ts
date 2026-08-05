@@ -5,6 +5,7 @@ import {
   makeGitHubStub,
   utf8,
   BASE_COMMIT_SHA,
+  BASE_TREE_SHA,
   NEW_COMMIT_SHA,
   PARENT_COMMIT_SHA,
   PARENT_TREE_SHA,
@@ -1176,6 +1177,25 @@ describe('POST /api/undo', () => {
     stubWith({ failOn: '/git/refs/heads/main', failStatus: 422 });
     const response = await worker.fetch(undoRequest({ sha: BASE_COMMIT_SHA }, await cookie()), env);
     expect(response.status).toBe(409);
+  });
+
+  // Review finding (Important), and the reason step 3's guard is not enough
+  // on its own: three subrequests separate it from the write. A commit
+  // landing in that window -- her second device finishing a publish, a
+  // developer's push -- used to be absorbed in silence, because restoreBlobs
+  // re-read the head itself and built on whatever it found: the ref PATCH
+  // was then a plain fast-forward, GitHub accepted it, and the interloper's
+  // changes to the very paths being restored were overwritten while she was
+  // told "your site is back to how it was".
+  it('a commit landing between the head check and the restore is 409, never absorbed', async () => {
+    stubWith({ refSha: 'someone-elses-commit-cccc' });
+    const response = await worker.fetch(undoRequest({ sha: BASE_COMMIT_SHA }, await cookie()), env);
+
+    expect(response.status).toBe(409);
+    // Whatever it built, it built on the sha the guard validated -- never on
+    // the commit that landed since.
+    expect(stub.bodies.find((b) => b.parents !== undefined)!.parents).toEqual([BASE_COMMIT_SHA]);
+    expect(stub.bodies.find((b) => b.tree !== undefined)!.base_tree).toBe(BASE_TREE_SHA);
   });
 
   it('a GitHub outage on the tree read is 502, not 409', async () => {

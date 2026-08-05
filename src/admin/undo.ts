@@ -62,7 +62,24 @@ export function rememberPublish(record: UndoRecord, storage?: Storage): void {
   }
 }
 
-export function loadUndoRecord(storage?: Storage): UndoRecord | null {
+// How long a publish stays undoable. Review finding: there was no bound at
+// all, and `rememberPublish` overwrites on every publish, so the very first
+// publish from a browser made "Undo my last publish" a permanent fixture of
+// both surfaces -- contradicting PublishBar's own description of it as "a
+// two-minute safety net, not a time machine" that "vanishes". Left alone,
+// she could open the dashboard on Friday and be offered an undo of Monday's
+// publish; on a single-owner site nothing else will have moved `main`, so
+// the server would accept it and four days of live content would revert on
+// one click, described to her as "the change you published".
+//
+// One hour, not two minutes: a publish takes two to three minutes to go
+// live, so a literal two-minute window would expire before she could even
+// look at the result. An hour covers "publish, look at the site, notice the
+// mistake, put it back" with room for an interruption, and is short enough
+// that anything it offers is still something she was doing today.
+export const UNDO_MAX_AGE_MS = 60 * 60 * 1000;
+
+export function loadUndoRecord(storage?: Storage, now: number = Date.now()): UndoRecord | null {
   const store = safeStorage(storage);
   if (!store) return null;
   try {
@@ -74,6 +91,11 @@ export function loadUndoRecord(storage?: Storage): UndoRecord | null {
     if (typeof sha !== 'string' || sha.length === 0) return null;
     if (typeof at !== 'number' || !Number.isFinite(at)) return null;
     if (!Array.isArray(paths) || !paths.every((p): p is string => typeof p === 'string')) return null;
+    // Read as "no offer", not removed: a clock that is briefly wrong (a
+    // laptop waking with a stale time, a timezone-confused device) must not
+    // be able to destroy a record another tab is legitimately holding. The
+    // key is overwritten by the next publish anyway.
+    if (now - at > UNDO_MAX_AGE_MS) return null;
     return { sha, at, paths };
   } catch {
     return null;
@@ -103,15 +125,16 @@ const CONTENT_PATH_PREFIX = 'src/content/';
 // rather than by filename -- she replaced "a menu PDF", not
 // 'public/menus/food-menu.pdf'.
 //
-// A photo is deliberately NOT listed, and that is a correctness point
+// A photo is deliberately NOT listed here, and that is a correctness point
 // rather than brevity. Photo paths are content-addressed, so a photo
 // publish is always an ADD at a brand-new path, and an undo skips added
 // paths entirely -- it puts back the JSON that POINTS at a photo, never the
-// photo file. Listing "a photo" here would promise something this does not
-// do; `describesAddedPhoto` below says the honest negative instead. A menu
-// PDF is the opposite case and must be listed: its path is name-based, so
-// replacing one leaves menus.json unchanged and the blob restore is the
-// only thing that puts the old PDF back.
+// photo file. Listing "a photo" alongside "Dishes" would suggest the file
+// itself is being rolled back; what actually happens to the photo she can
+// SEE is said separately by `describesAddedPhoto` below. A menu PDF is the
+// opposite case and must be listed: its path is name-based, so replacing
+// one leaves menus.json unchanged and the blob restore is the only thing
+// that puts the old PDF back.
 export function describePaths(paths: string[]): string {
   const labels: string[] = [];
   let sawMenu = false;
@@ -135,11 +158,19 @@ export function describePaths(paths: string[]): string {
   return labels.join(' and ');
 }
 
-// The honest negative. An undo puts the words and choices back; it does not
-// remove a photo file she uploaded, which stays in the repository
-// unreferenced and invisible on the site. That gap is exactly the thing a
-// non-technical owner would otherwise assume was covered, so it is said out
-// loud rather than left to be discovered.
+// Whether this publish added a photo -- i.e. whether the undo she is about
+// to confirm will visibly take a photo off the site.
+//
+// Review finding (Important): the sentence this drives used to promise the
+// opposite of what happens. It said the uploaded photo would not be deleted,
+// which is true of the FILE (an added path is absent from the parent tree,
+// so the restore skips it and the blob stays in the repository) and false of
+// everything she can see: the content JSON that points at it is restored, so
+// the dish goes back to its previous photo, or to no photo at all if this
+// was the first one. An unreferenced blob in a git repository is not
+// something a restaurant owner has a concept of, and "your photo is safe" is
+// not a claim worth making about it. PublishBar's confirmation now says what
+// she will actually watch happen.
 export function describesAddedPhoto(paths: string[]): boolean {
   return paths.some((path) => path.startsWith('assets-source/'));
 }

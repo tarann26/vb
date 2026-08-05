@@ -450,10 +450,12 @@ export async function commitFiles(
 }
 
 // ---------------------------------------------------------------------------
-// Undo. Three reads plus one restore, 8 subrequests total regardless of how
+// Undo. Three reads plus one restore, 7 subrequests total regardless of how
 // many files are involved, against the 50-per-invocation ceiling documented
 // above: getHeadCommit (1) + getCommitTreeSha on the parent (1) +
-// getTreeBlobShas (1) + restoreBlobs' own five.
+// getTreeBlobShas (1) + restoreBlobs' own four. Four, not five, because
+// restoreBlobs no longer re-reads the branch head -- it is handed the sha
+// getHeadCommit already validated (see that function's own comment).
 
 export interface HeadCommit {
   sha: string;
@@ -549,22 +551,35 @@ export async function getTreeBlobShas(env: GitHubEnv, treeSha: string): Promise<
 // and would let a session that may only write content JSON roll back a
 // security fix in worker/auth.ts if that fix happened to be the last commit.
 //
-// `base_tree` is the CURRENT head's tree, never the reverted commit's
-// parent's. Using the parent's would delete every file changed since, and
-// that failure is invisible to a call counter -- only the request body shows
-// it. `parents` is the current head, so this is an ordinary commit on top of
-// the branch, not a history rewrite; the non-force ref PATCH inherits
-// updateBranchHead's own 422 -> PublishConflictError mapping unchanged,
-// which covers the few hundred milliseconds inside this request that no
-// read-then-check ever can.
+// `base_tree` is the tree of `headSha`, never the reverted commit's parent's.
+// Using the parent's would delete every file changed since, and that failure
+// is invisible to a call counter -- only the request body shows it.
+// `parents` is `headSha` too, so this is an ordinary commit on top of the
+// branch, not a history rewrite.
+//
+// `headSha` is a PARAMETER, not a fresh read, and that is the whole
+// concurrency guard. Review finding (Important): this function used to call
+// `getBranchHeadSha` itself, three subrequests after handleUndo had already
+// read the head and refused a head that was not the commit being undone --
+// so a commit landing in that window was silently absorbed. The tree was
+// based on it, the commit was parented on it, and the ref PATCH was
+// therefore a plain FAST-FORWARD that GitHub accepts with 200: the
+// interloper's changes to the reverted paths were overwritten and she was
+// told "your site is back to how it was". The comment that used to sit here
+// claimed the non-force PATCH's own 422 covered that window; it provably
+// could not, because the PATCH moved the ref from the very sha this
+// function had just re-read. Building on the sha the CALLER validated is
+// what makes the 422 real: if anything moved the branch in between, the new
+// commit is not a descendant of the current head, GitHub answers 422, and
+// updateBranchHead's existing PublishConflictError -> 409 mapping fires.
 export async function restoreBlobs(
   env: GitHubEnv,
   entries: { path: string; sha: string }[],
   message: string,
+  headSha: string,
 ): Promise<{ sha: string }> {
   entries.forEach((entry) => assertAllowedPath(entry.path));
 
-  const headSha = await getBranchHeadSha(env);
   const baseTreeSha = await getCommitTreeSha(env, headSha);
   const treeSha = await createTree(env, baseTreeSha, entries);
   const commitSha = await createCommit(env, treeSha, headSha, message);

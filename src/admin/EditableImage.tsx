@@ -25,6 +25,29 @@ export interface EditableImageProps extends ImgHTMLAttributes<HTMLImageElement> 
   // press.json by id) -- EditMode's own commitImage, mirroring EditableText's
   // commitText.
   onReplace: (contentPath: string) => void;
+  // Set while a publish request is actually in flight (PublishBar's own
+  // `onPublishLockChange`). Takes the camera badge and its file input off
+  // the page -- there is no input left to reach, which is what actually
+  // closes the same-key re-stage race from this surface -- while KEEPING
+  // this component mounted, and with it the local preview of a photo she
+  // picked seconds ago.
+  //
+  // Review finding (Important): /edit used to drop this component entirely
+  // for the pause, returning a bare <img>. That destroyed `previewUrl` and
+  // ran the unmount cleanup's `URL.revokeObjectURL`, so the <img> fell back
+  // to the content-supplied `src` -- a derivative path like
+  // /images/atmosphere/<hash>.webp that only exists once the Cloudflare
+  // build finishes, minutes later. The photo she had just placed turned
+  // into a broken image the instant she confirmed the publish, and stayed
+  // broken for the rest of the session, because the revoked object URL and
+  // the state holding it were both gone by the time the pause lifted. The
+  // natural reading is "my photo failed" and the natural response is to
+  // re-pick it, uploading a second copy of the same file and staging a
+  // second, unreferenced asset. The bytes were never at risk -- an upload
+  // that lands during the pause still reaches the staged map -- this was
+  // display only, and the fix is to keep the component rather than the
+  // affordance.
+  locked?: boolean;
 }
 
 type Status = { kind: 'idle' } | { kind: 'uploading'; percent: number } | { kind: 'error'; message: string };
@@ -88,7 +111,7 @@ const ERROR_CONTROL_LABEL_CLASSNAME =
 // public/ and trip the deploy gate's own asset-existence check.
 const CAMERA_GLYPH = '\u{1F4F7}';
 
-const EditableImage: React.FC<EditableImageProps> = ({ path, category, onStaged, onReplace, ...imgProps }) => {
+const EditableImage: React.FC<EditableImageProps> = ({ path, category, onStaged, onReplace, locked = false, ...imgProps }) => {
   const [status, setStatus] = useState<Status>({ kind: 'idle' });
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const objectUrlRef = useRef<string | null>(null);
@@ -160,6 +183,19 @@ const EditableImage: React.FC<EditableImageProps> = ({ path, category, onStaged,
   // "never show a not-yet-live path as if it were" reasoning PhotoField.tsx's
   // own comment gives for the identical choice.
   const src = previewUrl ?? imgProps.src;
+
+  // The pause: same wrapper, same <img>, same `src` (preview included) --
+  // only the affordance goes. Returning early rather than conditionally
+  // rendering the label keeps the mounted-ness of this component, which is
+  // the entire point (see `locked`'s own comment), while leaving nothing
+  // focusable or pickable behind.
+  if (locked) {
+    return (
+      <span className={WRAPPER_CLASSNAME} data-editable-image-path={path}>
+        <img {...imgProps} src={src} />
+      </span>
+    );
+  }
 
   return (
     <span className={WRAPPER_CLASSNAME} data-editable-image-path={path}>

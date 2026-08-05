@@ -604,11 +604,7 @@ export function buildBundle(
     // with no provider mounted at all.
     renderImage: (path, props) => {
       const target = resolveImageTarget(path);
-      // The same fallback an unresolvable path already takes. Removing the
-      // camera badge (rather than covering it) is what actually closes the
-      // same-key re-stage race from this surface: there is no file input
-      // left to reach while the request is in flight.
-      if (locked || !target || !targetLoaded(target)) return <img {...props} />;
+      if (!target || !targetLoaded(target)) return <img {...props} />;
       // The stage key's own file prefix names WHICH content file this
       // upload's `contentPath` will be written into (galleries.json for a
       // gallery target, dishes/drinks/press.json for an item one,
@@ -619,12 +615,23 @@ export function buildBundle(
       // (`${file}:${listName}:${index}:src`).
       const stageFile =
         target.kind === 'gallery' ? 'galleries.json' : target.kind === 'section' ? 'sections.json' : `${target.collection}.json`;
+      // `locked` is passed THROUGH rather than swapping this component for a
+      // bare <img>, for the same reason `renderText` above passes it to
+      // EditableText: the swap unmounts. Here that cost more than a layout
+      // shift -- review finding (Important): unmounting destroyed the local
+      // preview of a photo she had just picked and revoked its object URL,
+      // so the <img> fell back to a derivative path the Cloudflare build has
+      // not written yet and stayed visibly broken for the rest of the
+      // session. EditableImage takes the camera badge and its file input off
+      // the page itself while locked, so the re-stage race this used to
+      // close is still closed: there is no input left to reach.
       return (
         <EditableImage
           path={path}
           category={target.category}
           onStaged={(staged) => stage(`${stageFile}:${path}`, fromStagedPhoto(staged))}
           onReplace={(contentPath) => commitImage(path, contentPath)}
+          locked={locked}
           {...props}
         />
       );
@@ -639,8 +646,18 @@ export function buildBundle(
     // (byte-identical -- confirmed directly), so a collage tile whose file
     // hasn't loaded yet renders exactly as it would with no provider
     // mounted at all, not as something broken.
+    // `locked` is passed THROUGH, not used to pick the fallback branch --
+    // review finding (Important), the collage half of the same defect
+    // renderImage above carries. Swapping this component for the plain <div>
+    // below is an element-TYPE change at the same position, so React
+    // unmounts the whole tile, `image` included: a collage photo she had
+    // just replaced lost its local preview and got its object URL revoked
+    // the instant the pause engaged, and came back as the not-yet-built
+    // derivative path. CollageTile takes its own controls off while locked
+    // (see that component's `locked` prop), so the affordances still vanish
+    // -- nothing is left to click -- without anything being torn down.
     renderCollageTile: (_path, index, className, image) =>
-      galleriesLoaded && !locked ? (
+      galleriesLoaded ? (
         <CollageTile
           key={index}
           index={index}
@@ -650,6 +667,7 @@ export function buildBundle(
           selected={selectedTileIndex === index}
           onSelect={onSelectTile}
           onCommit={commitCollagePlacement}
+          locked={locked}
         />
       ) : (
         <div key={index} className={`${className} relative overflow-hidden`}>

@@ -30,6 +30,7 @@ import {
   loadUndoRecord,
   rememberPublish,
   requestUndo,
+  UNDO_MAX_AGE_MS,
   type UndoRecord,
 } from './undo';
 import type { ValidationProblem } from '../content/validate';
@@ -119,7 +120,12 @@ type BarState =
   | { phase: 'mismatch' }
   | { phase: 'conflict' }
   | { phase: 'validation'; problems: ValidationProblem[] }
-  | { phase: 'server-error'; message: string }
+  // No `message`. Review finding (Minor): it carried one for both flows and
+  // PublishStatus never read it, so `'Could not put that change back.'` --
+  // written specially for a failed undo -- was dead code that read as if it
+  // were live. What she actually reads is picked from `flow` at render time,
+  // the same as every other sentence that differs between the two.
+  | { phase: 'server-error' }
   | { phase: 'network-error' }
   // `notice` carries the EXACT sentence also handed to `onUnauthenticated`
   // (see that prop's own comment, and PRE_PUBLISH/POST_PUBLISH_
@@ -144,8 +150,23 @@ const BUSY_PHASES = new Set<BarState['phase']>(['publishing', 'polling', 'confir
 // the same fallback build-failed/stalled already give when there's no
 // commitUrl to link.
 const PRE_PUBLISH_UNAUTHENTICATED_NOTICE = "You've been signed out. Log in and your changes will still be here.";
+// The undo's own pre-request 401. Nothing was sent, so there is no "your
+// changes" to reassure her about -- what she needs to know is that the thing
+// she pressed did not happen.
+const PRE_UNDO_UNAUTHENTICATED_NOTICE = "You've been signed out. Nothing was put back — log in and try again.";
 function postPublishUnauthenticatedNotice(sha: string): string {
   return `Your changes were already published (commit ${sha}). We couldn't confirm the build finished before you were signed out — log in and check back in a minute.`;
+}
+// Review finding (Important): the sentence above, reached from an UNDO's own
+// build poll, told her the opposite of what she had just asked for -- "your
+// changes were already published", in the middle of taking a change OFF the
+// site, with no way to tell whether the undo had happened. Picked at the
+// source rather than branched on at render time, because this exact string
+// is also handed to `onUnauthenticated` and shown on the login screen after
+// this component unmounts; a render-time branch would fix the bar and leave
+// the login screen still saying it.
+function postUndoUnauthenticatedNotice(sha: string): string {
+  return `The change has already been put back (commit ${sha}). We couldn't confirm the site finished updating before you were signed out — log in and check back in a minute.`;
 }
 
 function describeBuildState(state: BuildState): string {
@@ -165,7 +186,7 @@ function describeBuildState(state: BuildState): string {
 // (success, and a request that never reached the Worker at all). Every
 // sentence below is exactly what she reads -- never a raw status code,
 // never GitHub's or Cloudflare's own wording.
-function progressToBarState(progress: PublishProgress, sha: string): BarState {
+function progressToBarState(progress: PublishProgress, sha: string, flow: 'publish' | 'undo'): BarState {
   switch (progress.phase) {
     case 'polling':
       return { phase: 'polling', buildState: progress.state };
@@ -180,11 +201,15 @@ function progressToBarState(progress: PublishProgress, sha: string): BarState {
     case 'mismatch':
       return { phase: 'mismatch' };
     case 'unauthenticated':
-      // Only ever reached from trackPublish, which only ever runs AFTER
-      // requestPublish has already returned success -- see this file's own
-      // POST_PUBLISH_UNAUTHENTICATED_NOTICE comment for why that makes this
-      // a different sentence than the one on the publish REQUEST's own 401.
-      return { phase: 'unauthenticated', notice: postPublishUnauthenticatedNotice(sha) };
+      // Only ever reached from trackPublish, which only ever runs AFTER the
+      // request it is tracking has already returned success -- see this
+      // file's own post-publish/post-undo notice comments for why that makes
+      // this a different sentence than the one on the REQUEST's own 401, and
+      // why the two flows need different sentences again.
+      return {
+        phase: 'unauthenticated',
+        notice: flow === 'undo' ? postUndoUnauthenticatedNotice(sha) : postPublishUnauthenticatedNotice(sha),
+      };
   }
 }
 
@@ -195,10 +220,25 @@ function resultToBarState(result: Exclude<PublishRequestResult, { status: 'succe
     case 'validation':
       return { phase: 'validation', problems: result.problems };
     case 'server-error':
-      return { phase: 'server-error', message: result.message };
+      return { phase: 'server-error' };
     case 'network-error':
       return { phase: 'network-error' };
   }
+}
+
+// The heading over a list of client-side validation problems, in the bar and
+// in the confirmation panel alike.
+//
+// Review finding (Minor): this used to read "N problems need fixing before
+// this can publish:", directly above a Publish button that is deliberately
+// still ENABLED -- useValidation's own contract is that its result may never
+// decide what a publish is ALLOWED to send, only tell her sooner what the
+// server would say. So the old sentence described the button as blocked when
+// it was not, and clicking it landed her on a 422 she had just been told was
+// impossible to get past. This names the server's refusal instead, which is
+// both true and consistent with a live button.
+function validationHeading(count: number): string {
+  return `Publishing will be refused until ${count === 1 ? 'this is' : 'these are'} fixed:`;
 }
 
 function summaryMessage(dirtyCount: number, stagedCount: number): string {
@@ -415,6 +455,24 @@ const PublishBar: React.FC<PublishBarProps> = ({
     },
     [],
   );
+
+  // The offer ages out while she is looking at it, not only across a
+  // reload. `undoRecord` is read once at mount (see its own comment), so
+  // without this a tab left open past the window keeps showing a button
+  // `loadUndoRecord` would already refuse to return -- and the dashboard is
+  // exactly the kind of page that stays open all afternoon. Armed for
+  // whatever is left of this record's own window; re-armed by the
+  // setUndoRecord a fresh publish does.
+  useEffect(() => {
+    if (undoRecord === null) return;
+    const remaining = undoRecord.at + UNDO_MAX_AGE_MS - Date.now();
+    if (remaining <= 0) {
+      setUndoRecord(null);
+      return;
+    }
+    const timer = setTimeout(() => setUndoRecord(null), remaining);
+    return () => clearTimeout(timer);
+  }, [undoRecord]);
 
   const dirtyFiles = dirtyContentFiles(registry.getEntries());
   const stagedCount = Object.keys(stagedFiles.files).length;
@@ -653,11 +711,11 @@ const PublishBar: React.FC<PublishBarProps> = ({
         signal: controller.signal,
       },
       (progress) => {
-        if (mountedRef.current) setState(progressToBarState(progress, result.sha));
+        if (mountedRef.current) setState(progressToBarState(progress, result.sha, 'publish'));
       },
     );
     if (!mountedRef.current) return;
-    const nextState = progressToBarState(outcome, result.sha);
+    const nextState = progressToBarState(outcome, result.sha, 'publish');
     setState(nextState);
     if (nextState.phase === 'unauthenticated') onUnauthenticated(nextState.notice);
   }
@@ -674,8 +732,8 @@ const PublishBar: React.FC<PublishBarProps> = ({
     if (!mountedRef.current) return;
 
     if (result.status === 'unauthenticated') {
-      setState({ phase: 'unauthenticated', notice: PRE_PUBLISH_UNAUTHENTICATED_NOTICE });
-      onUnauthenticated(PRE_PUBLISH_UNAUTHENTICATED_NOTICE);
+      setState({ phase: 'unauthenticated', notice: PRE_UNDO_UNAUTHENTICATED_NOTICE });
+      onUnauthenticated(PRE_UNDO_UNAUTHENTICATED_NOTICE);
       return;
     }
     if (result.status === 'conflict') {
@@ -688,7 +746,7 @@ const PublishBar: React.FC<PublishBarProps> = ({
       return;
     }
     if (result.status !== 'success') {
-      setState({ phase: 'server-error', message: 'Could not put that change back.' });
+      setState({ phase: 'server-error' });
       return;
     }
 
@@ -708,11 +766,11 @@ const PublishBar: React.FC<PublishBarProps> = ({
         signal: controller.signal,
       },
       (progress) => {
-        if (mountedRef.current) setState(progressToBarState(progress, result.sha));
+        if (mountedRef.current) setState(progressToBarState(progress, result.sha, 'undo'));
       },
     );
     if (!mountedRef.current) return;
-    const nextState = progressToBarState(outcome, result.sha);
+    const nextState = progressToBarState(outcome, result.sha, 'undo');
     setState(nextState);
     if (nextState.phase === 'unauthenticated') onUnauthenticated(nextState.notice);
     // Gated on the build actually reporting live, never on the POST alone --
@@ -754,11 +812,14 @@ const PublishBar: React.FC<PublishBarProps> = ({
           </button>
         </div>
         {/* The undo offer. Not a permanent fixture of the dashboard: it
-            exists only while a publish of HERS is on record and vanishes the
-            moment it is used or superseded. A button that is always there is
-            an invitation to find out what it does; one that appears right
-            after she publishes and then leaves reads as what it is -- a
-            two-minute safety net, not a time machine.
+            exists only while a publish of HERS is on record, and it goes the
+            moment that record is used, superseded, or older than
+            UNDO_MAX_AGE_MS (undo.ts -- the review finding that made this
+            paragraph true rather than merely intended). A button that is
+            always there is an invitation to find out what it does; one that
+            appears right after she publishes and then leaves reads as what
+            it is -- a safety net for the thing she just did, not a time
+            machine.
 
             Gated on `!isDirty` as well: offering to put back the last
             publish while she has fresh unpublished edits on screen would
@@ -782,8 +843,18 @@ const PublishBar: React.FC<PublishBarProps> = ({
               {`Undo the change you published ${formatRelativeTime(state.record.at)}? This puts ${describePaths(
                 state.record.paths,
               )} back the way it was.`}
+              {/* Review finding (Important): this used to say "It will not
+                  delete the photo you uploaded." -- written from the
+                  developer's frame (the blob really does stay in the
+                  repository) and read, in hers, as a promise that the new
+                  photo stays on the dish. It does not: the undo restores the
+                  JSON that POINTS at it, so the dish reverts to its previous
+                  photo, or to none at all if this was the first. The only
+                  thing that survives is an unreferenced file in a git
+                  repository, a thing she has no concept of and cannot see.
+                  What she will actually watch happen, said plainly. */}
               {describesAddedPhoto(state.record.paths)
-                ? ' It will not delete the photo you uploaded.'
+                ? ' The photo you added comes off the site as well.'
                 : ''}
             </p>
             <div className="flex flex-wrap items-center gap-3">
@@ -809,7 +880,13 @@ const PublishBar: React.FC<PublishBarProps> = ({
             {`You have ${stagedCount} photos or PDFs staged; only ${MAX_STAGED_PHOTOS_PER_PUBLISH} can publish at once. Remove some before publishing.`}
           </p>
         ) : (
-          <PublishStatus state={state} flow={flow} locked={locked} onKeepEditing={() => setLockReleased(true)} />
+          <PublishStatus
+            state={state}
+            flow={flow}
+            locked={locked}
+            surface={draftSurface}
+            onKeepEditing={() => setLockReleased(true)}
+          />
         )}
         {/* I8: client-side validation, informational only -- never disables
             the button above (see `problems` prop's own comment). Shown only
@@ -823,7 +900,7 @@ const PublishBar: React.FC<PublishBarProps> = ({
             against this project's own CSS byte ceiling. */}
         {!tooManyStaged && state.phase === 'idle' && problems.length > 0 && (
           <div role="status" className="mt-3 font-['Montserrat'] text-sm text-amber-700">
-            <p>{`${problems.length} ${problems.length === 1 ? 'problem needs' : 'problems need'} fixing before this can publish:`}</p>
+            <p>{validationHeading(problems.length)}</p>
             <ul className="list-disc pl-5">
               {problems.map((problem, index) => (
                 <li key={index}>{problem.message}</li>
@@ -961,18 +1038,29 @@ function ConfirmPanel({
             {`Changing: ${dirtyFiles.map((file) => CONTENT_FILE_LABELS[file]).join(', ')}.`}
           </p>
         )}
-        {/* WHO SEES IT, then how permanent it is. "No undo button" rather
-            than "cannot be undone", because the latter is not true: the
-            Worker writes an ordinary single-parent commit, so a developer
-            can revert it. Overstating danger in the other direction is a
-            real failure mode for this bar -- it already carried a review
-            finding where one sentence promised "your changes will still be
-            here" in a case where that was actively false. */}
+        {/* WHO SEES IT, then what she can do about it afterwards.
+            Review finding (Critical): this used to read "There is no undo
+            button. To change something back, edit it again and publish
+            again." That was written as a deliberate safety promise, and the
+            undo feature falsified it without anyone touching the sentence --
+            a button literally labelled "Undo my last publish" renders in
+            this same bar seconds after she accepts. Two real costs: she
+            publishes more fearfully than she needs to (or avoids publishing
+            at all, believing a typo is permanent), and when the undo button
+            does appear she has just been told it does not exist, so she will
+            not trust it.
+            Hedged rather than promised, because the offer is genuinely
+            conditional: it is withdrawn the moment she has fresh unpublished
+            edits, it ages out (undo.ts's own UNDO_MAX_AGE_MS), and the
+            server refuses it outright once anything else has moved the
+            branch. "For a little while" is the honest shape of all three
+            without teaching her three rules she cannot act on. */}
         <p className="mb-3 font-['Montserrat'] text-sm text-[#222]">
           This puts your changes on the public website, where anyone visiting can see them.
         </p>
         <p className="mb-3 font-['Montserrat'] text-sm text-[#222]">
-          There is no undo button. To change something back, edit it again and publish again.
+          Afterwards you&apos;ll be offered one undo, for a little while. Once that has gone, changing something back
+          means editing it again and publishing again.
         </p>
         {/* TIMING. "usually takes about", never a hard promise: the poll
             this kicks off has a ten-minute ceiling and its own terminal
@@ -984,7 +1072,7 @@ function ConfirmPanel({
         </p>
         {problems.length > 0 && (
           <div className="mt-3 mb-3 font-['Montserrat'] text-sm text-amber-700">
-            <p>{`${problems.length} ${problems.length === 1 ? 'problem needs' : 'problems need'} fixing before this can publish:`}</p>
+            <p>{validationHeading(problems.length)}</p>
             <ul className="list-disc pl-5">
               {problems.map((problem, index) => (
                 <li key={index}>{problem.message}</li>
@@ -1052,11 +1140,20 @@ function CommitLink({ commitUrl, sha }: { commitUrl: string | null; sha: string 
 // close-the-tab warning at all. That is correct (the commit already
 // landed), and it is why dropping this line would make the wait silent
 // again rather than merely quieter.
-function TimeExpectation() {
+//
+// Review finding (Important): this used to render one sentence for both
+// flows, so an UNDO in flight told her "your changes are already saved and
+// will go live" -- about the very change she had just asked to take off the
+// site. At the one moment she most needs to know she pressed the right
+// button, that reads as "the undo didn't work, it's publishing my mistake
+// anyway". The reassurance itself is still true in the undo case, but it is
+// about a different thing, so it names that thing instead.
+function TimeExpectation({ undoing }: { undoing: boolean }) {
   return (
     <p className="mt-3 font-['Montserrat'] text-sm text-gray-600">
-      This usually takes about 2-3 minutes. Your changes are already saved — you can close this tab and they will
-      still go live.
+      {undoing
+        ? 'This usually takes about 2-3 minutes. The change has already been put back — the site will catch up even if you close this tab.'
+        : 'This usually takes about 2-3 minutes. Your changes are already saved — you can close this tab and they will still go live.'}
     </p>
   );
 }
@@ -1065,15 +1162,27 @@ function PublishStatus({
   state,
   flow,
   locked,
+  surface,
   onKeepEditing,
 }: {
   state: BarState;
   // Picks the wording only. An undo drives the identical phases, so this is
-  // the one thing that has to differ -- in particular the post-publish
-  // signed-out sentence, which must not tell her "your changes were already
-  // published" in the middle of putting a change BACK.
+  // the one thing that has to differ: every sentence naming what just
+  // happened -- the pause, the build states, mismatch, build-failed,
+  // server/network failure, conflict, success -- has an undo form here. The
+  // signed-out sentence is the exception, and deliberately so: it is picked
+  // upstream in `progressToBarState`, because that exact string is also
+  // handed to `onUnauthenticated` for the login screen, and a branch here
+  // would have fixed only the half of it she sees for a second.
   flow: 'publish' | 'undo';
   locked: boolean;
+  // Which surface this bar is on. Used for exactly one sentence: the 422's
+  // "the fields marked in red" only describes /edit/manage. /edit makes
+  // emptying a field a first-class action and has no per-field marking
+  // anywhere on the real page (see the `problems` prop's own comment), so
+  // sending her there to look for red would send her looking for something
+  // that does not exist.
+  surface: DraftSurface;
   onKeepEditing: () => void;
 }) {
   const undoing = flow === 'undo';
@@ -1096,8 +1205,18 @@ function PublishStatus({
       return (
         <>
           <p role="status" className="mt-3 font-['Montserrat'] text-sm text-gray-600">
+            {/* Review finding (Important): the "editing on this page is
+                paused" half used to be publish-only, but an undo sets the
+                same phase and resets the same `lockReleased`, so the whole
+                surface greyed out with nothing explaining it -- and then an
+                unexplained "Keep editing" button appeared under a sentence
+                that never mentioned a pause. The pause copy exists precisely
+                so a greyed page reads as busy rather than broken; both flows
+                grey it, so both flows say so. */}
             {undoing
-              ? 'Putting it back…'
+              ? locked
+                ? 'Putting it back… editing on this page is paused for a moment.'
+                : 'Putting it back…'
               : locked
                 ? 'Publishing… editing on this page is paused for a moment.'
                 : 'Publishing…'}
@@ -1127,7 +1246,7 @@ function PublishStatus({
           <p role="status" className="mt-3 font-['Montserrat'] text-sm text-gray-600">
             {undoing ? `Putting it back… ${describeBuildState(state.buildState)}.` : `Publishing… ${describeBuildState(state.buildState)}.`}
           </p>
-          <TimeExpectation />
+          <TimeExpectation undoing={undoing} />
         </>
       );
     case 'confirming':
@@ -1136,7 +1255,7 @@ function PublishStatus({
           <p role="status" className="mt-3 font-['Montserrat'] text-sm text-gray-600">
             Almost there — confirming the site picked it up.
           </p>
-          <TimeExpectation />
+          <TimeExpectation undoing={undoing} />
         </>
       );
     case 'success':
@@ -1146,15 +1265,22 @@ function PublishStatus({
         </p>
       );
     case 'mismatch':
+      // Review finding (Important): "Published, ..." after she pressed
+      // "Yes, undo it" names the opposite of the action she took, and she
+      // cannot press it again -- the record was cleared before polling
+      // started -- so the old wording left her with an amber warning about
+      // something she did not do and no route forward.
       return (
         <p role="alert" className="mt-3 font-['Montserrat'] text-sm text-amber-700">
-          Published, but the site hasn&apos;t picked it up yet.
+          {undoing ? "Put back, but the site hasn't caught up yet." : "Published, but the site hasn't picked it up yet."}
         </p>
       );
     case 'build-failed':
       return (
         <p role="alert" className="mt-3 font-['Montserrat'] text-sm text-red-600">
-          {'Something went wrong publishing. Here’s the commit — send this link to your developer: '}
+          {undoing
+            ? 'Something went wrong putting that back. Here’s the commit — send this link to your developer: '
+            : 'Something went wrong publishing. Here’s the commit — send this link to your developer: '}
           <CommitLink commitUrl={state.commitUrl} sha={state.sha} />
         </p>
       );
@@ -1187,9 +1313,15 @@ function PublishStatus({
       );
     case 'server-error':
     case 'network-error':
+      // The second half differs by flow and is the load-bearing part:
+      // "nothing was lost" answers the publish question ("is my work gone?"),
+      // and answers the wrong question entirely for an undo, where what she
+      // needs to know is that the change she wanted removed is still up.
       return (
         <p role="alert" className="mt-3 font-['Montserrat'] text-sm text-red-600">
-          Couldn&apos;t reach the server that stores your changes. Nothing was lost — try again in a minute.
+          {undoing
+            ? "Couldn't reach the server that stores your changes. Nothing was put back — try again in a minute."
+            : "Couldn't reach the server that stores your changes. Nothing was lost — try again in a minute."}
         </p>
       );
     case 'unauthenticated':
@@ -1207,7 +1339,7 @@ function PublishStatus({
               the dish or article it belongs to (validate.ts's own
               messages), and Task 6 already routes every one of these
               problems inline, next to the field it describes, in red. */}
-          <p>Fix the fields marked in red below.</p>
+          <p>{surface === 'edit' ? 'Fix these, then publish again.' : 'Fix the fields marked in red below.'}</p>
           <ul className="list-disc pl-5">
             {state.problems.map((problem, index) => (
               <li key={index}>{problem.message}</li>

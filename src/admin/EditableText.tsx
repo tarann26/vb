@@ -5,8 +5,8 @@ export interface EditableTextProps {
   value: string;
   onCommit: (path: string, next: string) => void;
   // Set while a publish request is actually in flight (PublishBar's own
-  // `onPublishLockChange`). Renders the same element with the same
-  // className, only not editable -- deliberately NOT a fallback to the bare
+  // `onPublishLockChange`). Renders the same element, only not editable and
+  // without the affordance -- deliberately NOT a fallback to the bare
   // string, which would drop this span's own box and shift the layout of a
   // 4800px page twice per publish, once when the pause starts and once when
   // it ends.
@@ -31,6 +31,12 @@ const ZWSP = '\u200b';
 function displayTextFor(value: string): string {
   return value === '' ? ZWSP : value;
 }
+
+// The two appearances. See the className comment at the bottom of this file
+// for why they differ and why the paused one is a strict subset.
+const EDITABLE_CLASSNAME =
+  'inline-block min-h-[1em] min-w-[1ch] cursor-text rounded-sm outline-dashed outline-1 outline-offset-2 outline-[#6B8B59]/50 focus:bg-[#6B8B59]/10 focus:outline-2 focus:outline-[#6B8B59]';
+const LOCKED_CLASSNAME = 'inline-block min-h-[1em] min-w-[1ch] rounded-sm';
 
 // Strips any ZWSP the placeholder above may have left behind before a value
 // is compared or committed -- a caret that lands before/after/inside the
@@ -207,11 +213,14 @@ const EditableText: React.FC<EditableTextProps> = ({ path, value, onCommit, lock
       // The handlers come off with the editability, rather than staying
       // wired to an element that can no longer be focused: a stale commit
       // firing out of a paused editor is exactly the kind of write the
-      // pause exists to prevent. The className is byte-identical in both
-      // states so the element's box never changes.
+      // pause exists to prevent.
       contentEditable={!locked}
       suppressContentEditableWarning
       role="textbox"
+      // Announced as unavailable, not merely un-typeable. Without this a
+      // screen reader still reads a paused box as an editable textbox and
+      // says nothing about why typing does nothing.
+      aria-disabled={locked || undefined}
       data-editable-path={path}
       onFocus={locked ? undefined : handleFocus}
       onBlur={locked ? undefined : handleBlur}
@@ -239,7 +248,23 @@ const EditableText: React.FC<EditableTextProps> = ({ path, value, onCommit, lock
       // this file, via the rule-level build diff this project's own
       // standing instruction requires: an early draft of this very comment
       // emitted an unused rule this way.)
-      className="inline-block min-h-[1em] min-w-[1ch] cursor-text rounded-sm outline-dashed outline-1 outline-offset-2 outline-[#6B8B59]/50 focus:bg-[#6B8B59]/10 focus:outline-2 focus:outline-[#6B8B59]"
+      //
+      // The paused string keeps the BOX and drops the AFFORDANCE. Review
+      // finding (Important): both states used to share one byte-identical
+      // string, so a paused box looked exactly as editable as a live one --
+      // same dashed edge, same caret cursor -- and silently refused every
+      // click. That is the worst possible reading of the pause: /edit
+      // removes the camera badges and the collage handles outright, so half
+      // the affordances vanished while these stayed, which reads as "my
+      // editing broke", not as "this is busy for a moment". The dashboard is
+      // protected from that reading by its one dimmed fieldset
+      // (AdminApp.tsx); /edit has no equivalent, and this is what stands in
+      // for it. Sizing, display and corner utilities are repeated verbatim
+      // so the element's own box is unchanged in both states -- a 4800px
+      // page must not reflow twice per publish -- and the paused string is a
+      // strict SUBSET of the live one, so the stylesheet's byte ceiling
+      // (src/test/bundle.post-build.test.ts) sees no new rule at all.
+      className={locked ? LOCKED_CLASSNAME : EDITABLE_CLASSNAME}
     />
   );
 };

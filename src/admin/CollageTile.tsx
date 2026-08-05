@@ -63,6 +63,31 @@ export interface CollageTileProps {
   // "photo replaced this session AND moved" guarantee `EditableImage`'s own
   // index-keyed staging already provides, untouched by this component.
   onCommit: (index: number, nextClassName: string) => void;
+  // Set while a publish request is actually in flight (PublishBar's own
+  // `onPublishLockChange`, threaded through EditMode's buildBundle). Takes
+  // every control off -- the select button, the drag handlers, the corner
+  // grip and the move/resize panel -- while leaving this component, and
+  // therefore `image` and everything under it, MOUNTED.
+  //
+  // ("corner grip", not the obvious word for what that control does, and
+  // that is not a style preference: this project's Tailwind scan has no JS
+  // parser, so that word standing alone in a comment emits a real rule into
+  // the shipped stylesheet. Measured, not guessed -- the first draft of this
+  // very comment added exactly one 20-byte rule, caught by the rule-level
+  // build diff this project's standing instruction requires. Same hazard
+  // tailwind.config.js's own `blocklist` comment documents, and the same one
+  // EditableText.tsx's className comment records having hit.)
+  //
+  // Review finding (Important): /edit used to express the pause by swapping
+  // this component for a plain <div> with the same classes. React sees two
+  // different element types at the same position and unmounts the whole
+  // subtree, `image` included -- which for a collage photo she had just
+  // replaced meant EditableImage's local preview was destroyed and its
+  // object URL revoked, leaving a broken image (the not-yet-built derivative
+  // path) for the rest of the session. Keeping the component and dropping
+  // only the affordances gives the same "nothing here responds" result
+  // without tearing anything down.
+  locked?: boolean;
 }
 
 type Action = { kind: 'move'; direction: MoveDirection } | { kind: 'span'; axis: ResizeAxis; delta: number };
@@ -275,7 +300,7 @@ function getFocusable(container: HTMLElement): HTMLElement[] {
 // 390px, nowhere near enough room for eight real, tappable buttons plus a
 // status line. Rendered via `createPortal` into `document.body` so its own
 // size is never constrained by the tiny grid cell it was opened from.
-const CollageTile: React.FC<CollageTileProps> = ({ index, className, classNames, image, selected, onSelect, onCommit }) => {
+const CollageTile: React.FC<CollageTileProps> = ({ index, className, classNames, image, selected, onSelect, onCommit, locked = false }) => {
   const [refusedMessage, setRefusedMessage] = useState<string | null>(null);
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
   // The tile's own placement WHILE a drag is live -- null the rest of the
@@ -587,31 +612,43 @@ const CollageTile: React.FC<CollageTileProps> = ({ index, className, classNames,
       // ruled out the alternatives.
       onDragStart={(event) => event.preventDefault()}
       tabIndex={-1}
-      onKeyDown={handleTileKeyDown}
+      onKeyDown={locked ? undefined : handleTileKeyDown}
     >
+      {/* While locked: no pointer handlers and no grab cursor, so this reads
+          as an ordinary photo rather than as a control that ignores her --
+          the same reasoning the select button below and EditableText's own
+          paused appearance follow. `touchAction` is left alone: it only
+          decides whether the browser scrolls the page under a touch, and
+          taking scrolling away from a paused page would be a regression of
+          its own. */}
       <div
         className="absolute inset-0 select-none"
-        style={{ touchAction: isCoarsePointer() ? 'auto' : 'none', cursor: isCoarsePointer() ? undefined : 'grab' }}
-        onPointerDown={handleMovePointerDown}
-        onPointerMove={handleMovePointerMove}
-        onPointerUp={handleMovePointerUp}
-        onPointerCancel={handleMovePointerCancel}
+        style={{
+          touchAction: isCoarsePointer() ? 'auto' : 'none',
+          cursor: locked || isCoarsePointer() ? undefined : 'grab',
+        }}
+        onPointerDown={locked ? undefined : handleMovePointerDown}
+        onPointerMove={locked ? undefined : handleMovePointerMove}
+        onPointerUp={locked ? undefined : handleMovePointerUp}
+        onPointerCancel={locked ? undefined : handleMovePointerCancel}
       >
         {image}
       </div>
-      <button
-        ref={selectButtonRef}
-        type="button"
-        {...CONTROL_ATTR}
-        aria-pressed={selected}
-        aria-label={controlLabel}
-        title={controlLabel}
-        onClick={() => onSelect(selected ? null : index)}
-        className={selected ? SELECTED_BUTTON_CLASSNAME : SELECT_BUTTON_CLASSNAME}
-      >
-        <Move className="h-4 w-4" aria-hidden="true" />
-      </button>
-      {selected && !isCoarsePointer() && (
+      {!locked && (
+        <button
+          ref={selectButtonRef}
+          type="button"
+          {...CONTROL_ATTR}
+          aria-pressed={selected}
+          aria-label={controlLabel}
+          title={controlLabel}
+          onClick={() => onSelect(selected ? null : index)}
+          className={selected ? SELECTED_BUTTON_CLASSNAME : SELECT_BUTTON_CLASSNAME}
+        >
+          <Move className="h-4 w-4" aria-hidden="true" />
+        </button>
+      )}
+      {selected && !locked && !isCoarsePointer() && (
         <div
           {...CONTROL_ATTR}
           role="presentation"
@@ -673,7 +710,7 @@ const CollageTile: React.FC<CollageTileProps> = ({ index, className, classNames,
           </div>,
           document.body,
         )}
-      {selected &&
+      {selected && !locked &&
         createPortal(
           <div
             ref={panelRef}

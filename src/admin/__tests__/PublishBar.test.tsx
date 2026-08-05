@@ -13,8 +13,9 @@ import { useStagedFiles } from '../staged';
 import type { ContentRegistry } from '../publish';
 import type { StagedFile, StagedFiles } from '../staged';
 import type { ContentFileName } from '../content';
-import { DRAFT_STORAGE_KEY } from '../drafts';
-import { UNDO_STORAGE_KEY, loadUndoRecord, rememberPublish } from '../undo';
+import type { ValidationProblem } from '../../content/validate';
+import { DRAFT_STORAGE_KEY, type DraftSurface } from '../drafts';
+import { UNDO_MAX_AGE_MS, UNDO_STORAGE_KEY, loadUndoRecord, rememberPublish } from '../undo';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -52,6 +53,8 @@ function Harness({
   holdDraftClear = false,
   onPublishLockChange,
   reload,
+  problems,
+  draftSurface = 'dashboard',
 }: {
   onUnauthenticated?: (notice: string) => void;
   pollClock?: { now: () => number; sleep: (ms: number) => Promise<void> };
@@ -60,6 +63,11 @@ function Harness({
   holdDraftClear?: boolean;
   onPublishLockChange?: (locked: boolean) => void;
   reload?: () => void;
+  // Only /edit passes these for real (EditMode wires useValidation into
+  // them); AdminApp shows every one of them inline next to its own field.
+  problems?: ValidationProblem[];
+  // Defaults to what every pre-existing test in this suite already assumed.
+  draftSurface?: DraftSurface;
 }) {
   const registry = useContentRegistry();
   const stagedFiles = useStagedFiles();
@@ -70,12 +78,13 @@ function Harness({
     <PublishBar
       registry={registry}
       stagedFiles={stagedFiles}
-      draftSurface="dashboard"
+      draftSurface={draftSurface}
       onUnauthenticated={onUnauthenticated}
       pollClock={pollClock}
       holdDraftClear={holdDraftClear}
       onPublishLockChange={onPublishLockChange}
       reload={reload}
+      problems={problems}
     >
       {withTagsField && (
         <input
@@ -329,7 +338,7 @@ describe('PublishBar: the confirmation step before anything is pushed', () => {
     expect(JSON.parse(dishes.content)).toEqual([{ id: 'a', name: 'Typed while the panel was open' }]);
   });
 
-  it('says, in so many words, that this is public, that there is no undo, and roughly how long it takes', () => {
+  it('says, in so many words, that this is public, what she can undo afterwards, and roughly how long it takes', () => {
     render(<Harness />);
     dirty(captured!.registry);
     fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
@@ -338,11 +347,83 @@ describe('PublishBar: the confirmation step before anything is pushed', () => {
       screen.getByText('This puts your changes on the public website, where anyone visiting can see them.'),
     ).toBeInTheDocument();
     expect(
-      screen.getByText('There is no undo button. To change something back, edit it again and publish again.'),
+      screen.getByText(
+        "Afterwards you'll be offered one undo, for a little while. Once that has gone, changing something back means editing it again and publishing again.",
+      ),
     ).toBeInTheDocument();
     expect(
       screen.getByText('It usually takes about 2-3 minutes for the site to show the change.'),
     ).toBeInTheDocument();
+  });
+
+  // Review finding (Critical). The panel used to state, on every single
+  // publish, "There is no undo button. To change something back, edit it
+  // again and publish again." -- and then a button labelled exactly "Undo my
+  // last publish" rendered in this same bar seconds later. Both strings were
+  // reachable in one session, and the false one was pinned by a getByText,
+  // so it could not drift out on its own.
+  //
+  // Mutation this guards: putting that sentence back. This test asserts the
+  // two facts together, in one session, which is the only shape that catches
+  // it -- either sentence read alone is unremarkable.
+  it('never promises there is no undo, given the undo button appears seconds later', async () => {
+    let liveSha = 'commit-1';
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url === '/api/publish') return jsonResponse(200, { sha: 'commit-1' });
+        if (url.startsWith('/api/content')) return jsonResponse(200, { content: '[]', sha: 'sha-fresh' });
+        if (url.startsWith('/api/build-status')) return jsonResponse(200, { state: 'live', deploymentUrl: null, commitUrl: 'https://c' });
+        if (url === '/build-info.json') return jsonResponse(200, { sha: liveSha, builtAt: 'now' });
+        throw new Error(`unexpected fetch ${url}`);
+      }),
+    );
+    liveSha = 'commit-1';
+    render(<Harness pollClock={instantClock()} />);
+    dirty(captured!.registry);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
+    const dialog = screen.getByRole('dialog', { name: /publish/i });
+    expect(dialog).not.toHaveTextContent('There is no undo button');
+    expect(dialog).not.toHaveTextContent(/no undo/i);
+
+    acceptConfirm();
+    await screen.findByText('Your changes are live.');
+    // The thing the old sentence denied, on screen in the same session.
+    expect(screen.getByRole('button', { name: 'Undo my last publish' })).toBeInTheDocument();
+  });
+
+  // Review finding (Minor): this whole block had no test at all. /edit passes
+  // real `problems` from useValidation, and the panel is meant to warn her
+  // about what the server would refuse with a 422 in the same place she is
+  // about to click Publish -- deleting the block left her reading only
+  // "ready to publish" and learning about the emptied field after the round
+  // trip.
+  //
+  // Mutation this guards: removing the `{problems.length > 0 && (...)}` block
+  // from ConfirmPanel.
+  it('the panel lists the client-side problems the server would refuse, without claiming the button is blocked', () => {
+    render(
+      <Harness
+        problems={[
+          { field: 'hero.logoName', message: 'The restaurant name cannot be empty.' },
+          { field: 'hero.tagline', message: 'The tagline cannot be empty.' },
+        ]}
+      />,
+    );
+    dirty(captured!.registry);
+    fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
+
+    const dialog = screen.getByRole('dialog', { name: /publish/i });
+    expect(dialog).toHaveTextContent('Publishing will be refused until these are fixed:');
+    expect(dialog).toHaveTextContent('The restaurant name cannot be empty.');
+    expect(dialog).toHaveTextContent('The tagline cannot be empty.');
+    // Deliberately still clickable -- useValidation's result may never decide
+    // what a publish is ALLOWED to send -- so the sentence above must not
+    // describe it as blocked.
+    expect(screen.getByRole('button', { name: 'Yes, publish to the live site' })).toBeEnabled();
+    expect(dialog).not.toHaveTextContent(/before this can publish/);
   });
 
   it('Cancel closes it, sends nothing, and puts focus back on the Publish button', () => {
@@ -352,9 +433,18 @@ describe('PublishBar: the confirmation step before anything is pushed', () => {
     dirty(captured!.registry);
     const trigger = screen.getByRole('button', { name: 'Publish' });
 
+    // Focused explicitly first. Reported honestly, because the comment that
+    // used to sit here claimed this assertion was non-vacuous "because the
+    // panel moves focus into itself on open" -- it was not: jsdom's
+    // fireEvent.click never focuses the trigger to begin with, so the
+    // assertion passed identically with the focus effect deleted, proving
+    // only that .focus() was called on cancel starting from document.body.
+    // Starting from a genuinely focused trigger is what makes the return
+    // trip below mean something. (The focus effect itself has its own test.)
+    trigger.focus();
+    expect(document.activeElement).toBe(trigger);
+
     fireEvent.click(trigger);
-    // Non-vacuous: the panel moves focus into itself on open, so focus is
-    // demonstrably NOT on the trigger at the moment Cancel is clicked.
     expect(document.activeElement).not.toBe(trigger);
 
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
@@ -390,6 +480,53 @@ describe('PublishBar: the confirmation step before anything is pushed', () => {
     act(() => captured!.registry.updateData('dishes.json', [{ id: 'a', name: '' }]));
 
     expect(screen.getByRole('button', { name: 'Yes, publish to the live site' })).toBeDisabled();
+  });
+
+  // Review finding (Important): the focus effect and the Tab trap were both
+  // entirely un-failable -- the whole admin suite stayed green through
+  // deleting each of them. That matters here more than in an ordinary
+  // dialog: this panel exists BECAUSE Enter in any text field used to submit
+  // straight to the live site, so `aria-modal="true"` with focus left behind
+  // in the field she was typing in is a lie about the one hazard it was
+  // built for.
+  //
+  // Mutation this guards: replacing the body of ConfirmPanel's focus
+  // useEffect with a comment.
+  it('a keyboard submit lands focus INSIDE the panel, not back in the field she was typing in', () => {
+    render(<Harness withTagsField />);
+    dirty(captured!.registry);
+    const tagsInput = screen.getByLabelText('tags') as HTMLInputElement;
+    tagsInput.focus();
+    expect(document.activeElement).toBe(tagsInput);
+
+    fireEvent.submit(tagsInput.closest('form')!);
+
+    const dialog = screen.getByRole('dialog', { name: /publish/i });
+    expect(dialog.contains(document.activeElement)).toBe(true);
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Yes, publish to the live site' }));
+  });
+
+  // Mutation this guards: `return;` inserted immediately after
+  // `if (event.key !== 'Tab') return;` in ConfirmPanel's handleKeyDown --
+  // i.e. the trap removed while the dialog still claims aria-modal.
+  it('Tab cycles within the panel instead of walking the page underneath', () => {
+    render(<Harness />);
+    dirty(captured!.registry);
+    fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
+
+    const dialog = screen.getByRole('dialog', { name: /publish/i });
+    const accept = screen.getByRole('button', { name: 'Yes, publish to the live site' });
+    const cancel = screen.getByRole('button', { name: 'Cancel' });
+
+    // Forward off the LAST focusable wraps to the first, rather than moving
+    // on to whatever the page behind happens to render next.
+    cancel.focus();
+    fireEvent.keyDown(dialog, { key: 'Tab' });
+    expect(document.activeElement).toBe(accept);
+
+    // ...and backward off the first wraps to the last.
+    fireEvent.keyDown(dialog, { key: 'Tab', shiftKey: true });
+    expect(document.activeElement).toBe(cancel);
   });
 
   // Not cosmetic. This panel renders inside the same <form> the Publish
@@ -585,6 +722,26 @@ describe('PublishBar: Step 5 translation table', () => {
   it('a problem whose field matches no rendered input still appears on screen', async () => {
     const alert = await publishAndGetAlert(422, { problems: [{ field: 'an-unrendered-field', message: 'Something obscure is wrong.' }] });
     expect(alert).toHaveTextContent('Something obscure is wrong.');
+  });
+
+  // Review finding (Minor), the second half of it: "the fields marked in red
+  // below" describes /edit/manage, where every problem really is routed
+  // inline next to its field in red. /edit makes emptying a field a
+  // first-class action and has no per-field marking anywhere on the real
+  // page, so on that surface the same sentence sent her looking for
+  // something that does not exist.
+  //
+  // Mutation this guards: rendering the dashboard sentence unconditionally.
+  it('on /edit the 422 does NOT send her looking for red fields that surface has none of', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(422, { problems: [{ field: '[0].name', message: 'Name is required.' }] })));
+    render(<Harness draftSurface="edit" pollClock={instantClock()} />);
+    dirty(captured!.registry);
+    clickPublishAndAccept();
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Fix these, then publish again.');
+    expect(alert).toHaveTextContent('Name is required.');
+    expect(alert).not.toHaveTextContent('marked in red');
   });
 
   it('401 on the publish itself -> the pre-publish signed-out sentence, and onUnauthenticated fires with it', async () => {
@@ -1063,11 +1220,18 @@ describe('PublishBar: undo my last publish', () => {
 
   // The honest negative -- the one thing a non-technical owner would
   // otherwise assume was covered.
-  it('says out loud that an uploaded photo is not deleted, when one was uploaded', () => {
+  // Review finding (Important): this sentence used to read "It will not
+  // delete the photo you uploaded." -- true of the blob in the repository,
+  // and the exact opposite of what she watches happen. The undo restores the
+  // JSON that POINTS at the photo, so the dish reverts to its previous
+  // photo, or to none at all if this was the first one.
+  it('says out loud that the photo she added comes off the site too', () => {
     rememberPublish({ ...RECORD, paths: ['src/content/dishes.json', 'assets-source/food/abc.jpg'] });
     render(<Harness />);
     fireEvent.click(screen.getByRole('button', { name: 'Undo my last publish' }));
-    expect(screen.getByRole('alert')).toHaveTextContent('It will not delete the photo you uploaded.');
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveTextContent('The photo you added comes off the site as well.');
+    expect(alert).not.toHaveTextContent('will not delete the photo');
   });
 
   it('a successful publish writes the record, and a successful undo clears it', async () => {
@@ -1202,5 +1366,263 @@ describe('PublishBar: undo my last publish', () => {
     window.localStorage.setItem(UNDO_STORAGE_KEY, 'not json');
     render(<Harness />);
     expect(screen.queryByRole('button', { name: 'Undo my last publish' })).not.toBeInTheDocument();
+  });
+
+  // Review finding (Minor): loadUndoRecord had no age bound and
+  // rememberPublish overwrites on every publish, so from the very first
+  // publish onward this button was a permanent fixture of both surfaces --
+  // offering, weeks later, to revert a change she has long since forgotten
+  // the details of, and (on a single-owner site, where nothing else has
+  // moved `main`) actually succeeding.
+  it('an offer older than the window is not made at all', () => {
+    rememberPublish({ ...RECORD, at: Date.now() - UNDO_MAX_AGE_MS - 1 });
+    render(<Harness />);
+    expect(screen.queryByRole('button', { name: 'Undo my last publish' })).not.toBeInTheDocument();
+  });
+
+  // ...and it ages out while she is looking at it, not only across a reload:
+  // `undoRecord` is read once at mount, and the dashboard is exactly the kind
+  // of page that stays open all afternoon.
+  //
+  // Mutation this guards: deleting the expiry effect in PublishBar.
+  it('the offer withdraws itself on a tab that stays open past the window', async () => {
+    vi.useFakeTimers();
+    try {
+      rememberPublish({ ...RECORD, at: Date.now() - UNDO_MAX_AGE_MS + 5_000 });
+      render(<Harness />);
+      expect(screen.getByRole('button', { name: 'Undo my last publish' })).toBeInTheDocument();
+
+      await act(async () => {
+        vi.advanceTimersByTime(6_000);
+      });
+
+      expect(screen.queryByRole('button', { name: 'Undo my last publish' })).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // Review finding (Important): the line that records uploaded photo/PDF
+  // paths into the undo record had ZERO coverage -- deleting it left all
+  // 2131 tests green. Both tests that exercise the sentence it feeds
+  // hand-build the record with rememberPublish({...paths}) instead of
+  // publishing, so neither could ever reach the production line that
+  // assembles it.
+  //
+  // Mutation this guards: deleting
+  // `...plan.files.filter((file) => file.encoding === 'base64').map((file) => file.path)`
+  // from handlePublish.
+  it('a real publish records the uploaded photo path too, not just the content JSON', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url === '/api/publish') return jsonResponse(200, { sha: 'commit-1' });
+        if (url.startsWith('/api/content')) return jsonResponse(200, { content: '[]', sha: 'sha-fresh' });
+        if (url.startsWith('/api/build-status')) return jsonResponse(200, { state: 'live', deploymentUrl: null, commitUrl: 'https://c' });
+        if (url === '/build-info.json') return jsonResponse(200, { sha: 'commit-1', builtAt: 'now' });
+        throw new Error(`unexpected fetch ${url}`);
+      }),
+    );
+    render(<Harness pollClock={instantClock()} />);
+    dirty(captured!.registry);
+    act(() => {
+      captured!.stagedFiles.stage('dishes.json:a:image', {
+        path: 'assets-source/food/9f2c1a4b7e03.jpg',
+        content: 'AAAA',
+        encoding: 'base64',
+        contentPath: '/food/9f2c1a4b7e03.webp',
+      });
+    });
+
+    clickPublishAndAccept();
+    await screen.findByText('Your changes are live.');
+
+    expect(loadUndoRecord()!.paths).toEqual(
+      expect.arrayContaining(['src/content/dishes.json', 'assets-source/food/9f2c1a4b7e03.jpg']),
+    );
+    // ...and that is what makes the honest sentence appear for a publish she
+    // actually made, rather than only for a hand-built fixture.
+    fireEvent.click(screen.getByRole('button', { name: 'Undo my last publish' }));
+    expect(screen.getByRole('alert')).toHaveTextContent('The photo you added comes off the site as well.');
+  });
+
+  // ---------------------------------------------------------------------
+  // Review findings (Important): every sentence an undo can reach used to be
+  // written for a publish. She is taking a change OFF the site, and the bar
+  // told her it was going ON.
+  describe('an undo never describes itself as a publish', () => {
+    it('the pause is named, so a greyed page reads as busy rather than broken', () => {
+      rememberPublish(RECORD);
+      vi.stubGlobal('fetch', undoFetch(() => new Promise<Response>(() => {})));
+      const lockLog: boolean[] = [];
+      render(<Harness onPublishLockChange={(locked) => lockLog.push(locked)} />);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Undo my last publish' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Yes, undo it' }));
+
+      // Non-vacuous: the surface really is locked, which is what makes the
+      // missing sentence a defect rather than a nicety.
+      expect(lockLog[lockLog.length - 1]).toBe(true);
+      expect(screen.getByRole('status')).toHaveTextContent('Putting it back… editing on this page is paused for a moment.');
+      // The escape hatch is offered, and now belongs to a sentence.
+      expect(screen.getByRole('button', { name: 'Keep editing' })).toBeInTheDocument();
+    });
+
+    it('the 2-3 minute line talks about putting back, never about changes going live', async () => {
+      rememberPublish(RECORD);
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (input: RequestInfo | URL) => {
+          const url = String(input);
+          if (url === '/api/undo') return jsonResponse(200, { sha: 'undo-commit' });
+          if (url.startsWith('/api/build-status')) return jsonResponse(200, { state: 'building', deploymentUrl: null, commitUrl: 'https://c' });
+          if (url === '/build-info.json') return jsonResponse(200, { sha: 'nothing-yet', builtAt: 'now' });
+          throw new Error(`unexpected fetch ${url}`);
+        }),
+      );
+      const heldClock = { now: () => 0, sleep: () => new Promise<void>((resolve) => setTimeout(resolve, 0)) };
+      render(<Harness pollClock={heldClock} reload={vi.fn()} />);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Undo my last publish' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Yes, undo it' }));
+
+      await screen.findByText('Putting it back… building.');
+      expect(
+        screen.getByText(
+          'This usually takes about 2-3 minutes. The change has already been put back — the site will catch up even if you close this tab.',
+        ),
+      ).toBeInTheDocument();
+      expect(screen.queryByText(/your changes are already saved/i)).not.toBeInTheDocument();
+    });
+
+    it('a build that never confirms says "put back", not "Published"', async () => {
+      rememberPublish(RECORD);
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (input: RequestInfo | URL) => {
+          const url = String(input);
+          if (url === '/api/undo') return jsonResponse(200, { sha: 'undo-commit' });
+          if (url.startsWith('/api/build-status')) return jsonResponse(200, { state: 'live', deploymentUrl: null, commitUrl: 'https://c' });
+          // Never catches up to the undo commit -> trackPublish times out
+          // into 'mismatch'.
+          if (url === '/build-info.json') return jsonResponse(200, { sha: 'some-older-commit', builtAt: 'now' });
+          throw new Error(`unexpected fetch ${url}`);
+        }),
+      );
+      render(<Harness pollClock={instantClock()} reload={vi.fn()} />);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Undo my last publish' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Yes, undo it' }));
+
+      const alert = await screen.findByText("Put back, but the site hasn't caught up yet.");
+      expect(alert).toBeInTheDocument();
+      expect(screen.queryByText(/^Published, but/)).not.toBeInTheDocument();
+    });
+
+    it('a failed build says "putting that back went wrong", not "publishing"', async () => {
+      rememberPublish(RECORD);
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (input: RequestInfo | URL) => {
+          const url = String(input);
+          if (url === '/api/undo') return jsonResponse(200, { sha: 'undo-commit' });
+          if (url.startsWith('/api/build-status')) return jsonResponse(200, { state: 'failed', deploymentUrl: null, commitUrl: 'https://c' });
+          if (url === '/build-info.json') return jsonResponse(200, { sha: 'some-older-commit', builtAt: 'now' });
+          throw new Error(`unexpected fetch ${url}`);
+        }),
+      );
+      render(<Harness pollClock={instantClock()} reload={vi.fn()} />);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Undo my last publish' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Yes, undo it' }));
+
+      const alert = await screen.findByRole('alert');
+      expect(alert).toHaveTextContent('Something went wrong putting that back.');
+      expect(alert).not.toHaveTextContent('Something went wrong publishing.');
+    });
+
+    // Review finding (Important): the one branch of PublishStatus that never
+    // consulted `flow`. Her 7-day session expiring during the build poll of
+    // an undo told her -- in the bar AND, via onUnauthenticated, on the login
+    // screen afterwards -- "Your changes were already published", the exact
+    // sentence the flow prop's own comment says must never appear here.
+    it('a 401 mid-poll never says "your changes were already published"', async () => {
+      rememberPublish(RECORD);
+      let statusCalls = 0;
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (input: RequestInfo | URL) => {
+          const url = String(input);
+          if (url === '/api/undo') return jsonResponse(200, { sha: 'undo-commit' });
+          if (url.startsWith('/api/build-status')) {
+            statusCalls += 1;
+            if (statusCalls >= 2) return jsonResponse(401, { message: 'Not authenticated.' });
+            return jsonResponse(200, { state: 'building', deploymentUrl: null, commitUrl: 'https://c' });
+          }
+          if (url === '/build-info.json') return jsonResponse(200, { sha: 'nothing-yet', builtAt: 'now' });
+          throw new Error(`unexpected fetch ${url}`);
+        }),
+      );
+      const onUnauthenticated = vi.fn();
+      render(<Harness pollClock={instantClock()} onUnauthenticated={onUnauthenticated} reload={vi.fn()} />);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Undo my last publish' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Yes, undo it' }));
+
+      const alert = await screen.findByText(/put back \(commit undo-commit\)/);
+      expect(alert).toHaveTextContent('The change has already been put back (commit undo-commit).');
+      expect(alert).not.toHaveTextContent('Your changes were already published');
+      // The login screen gets the same corrected sentence, not the bar's own
+      // corrected copy of a wrong one.
+      expect(onUnauthenticated).toHaveBeenCalledWith(expect.stringContaining('has already been put back'));
+      expect(onUnauthenticated).not.toHaveBeenCalledWith(expect.stringContaining('already published'));
+    });
+
+    it('a 500 on the undo itself says nothing was put back, never "nothing was lost"', async () => {
+      rememberPublish(RECORD);
+      vi.stubGlobal('fetch', undoFetch(async () => jsonResponse(500, { message: 'boom' })));
+      render(<Harness reload={vi.fn()} />);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Undo my last publish' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Yes, undo it' }));
+
+      const alert = await screen.findByRole('alert');
+      expect(alert).toHaveTextContent("Nothing was put back — try again in a minute.");
+      expect(alert).not.toHaveTextContent('Nothing was lost');
+    });
+
+    // Review finding (Minor): `flow` is component state and nothing reloads
+    // the page after a refused undo, so without handlePublish's own
+    // setFlow('publish') the NEXT publish -- a brand-new change she just
+    // pushed live -- was reported as "Your site is back to how it was."
+    //
+    // Mutation this guards: deleting `setFlow('publish');` from handlePublish.
+    it('a publish AFTER a failed undo is reported as a publish', async () => {
+      rememberPublish(RECORD);
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (input: RequestInfo | URL) => {
+          const url = String(input);
+          if (url === '/api/undo') return jsonResponse(409, { message: 'Something else has been published since.' });
+          if (url === '/api/publish') return jsonResponse(200, { sha: 'commit-2' });
+          if (url.startsWith('/api/content')) return jsonResponse(200, { content: '[]', sha: 'sha-fresh' });
+          if (url.startsWith('/api/build-status')) return jsonResponse(200, { state: 'live', deploymentUrl: null, commitUrl: 'https://c' });
+          if (url === '/build-info.json') return jsonResponse(200, { sha: 'commit-2', builtAt: 'now' });
+          throw new Error(`unexpected fetch ${url}`);
+        }),
+      );
+      render(<Harness pollClock={instantClock()} reload={vi.fn()} />);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Undo my last publish' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Yes, undo it' }));
+      await screen.findByText(/Something else has been published since/);
+
+      dirty(captured!.registry);
+      clickPublishAndAccept();
+
+      expect(await screen.findByText('Your changes are live.')).toBeInTheDocument();
+      expect(screen.queryByText('Your site is back to how it was.')).not.toBeInTheDocument();
+    });
   });
 });

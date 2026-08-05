@@ -13,7 +13,6 @@
 // this component's own focus/blur/commit contract. Setting `textContent`
 // directly and firing the same focus/blur events a real tap produces is
 // what this component actually listens for.
-import { readFileSync } from 'node:fs';
 import { useLayoutEffect, useRef, useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
@@ -264,10 +263,12 @@ describe('EditableText: uncontrolled, buffered on focus, committed on blur', () 
     // `"opacity-0 hover:opacity-100 outline-dashed ..."` (a hover-reveal) --
     // confirmed red against that exact string.
     it('the persistent className carries no hover: variant and no hidden-by-default utility', () => {
-      const source = readFileSync('src/admin/EditableText.tsx', 'utf8');
-      const match = source.match(/className="([^"]*)"/);
-      expect(match).not.toBeNull();
-      const className = match![1];
+      // Read off the RENDERED element, not scraped out of the source: there
+      // are two class strings in this file now (see the paused-appearance
+      // test below), and a source regex would silently pin whichever
+      // happened to appear first.
+      render(<EditableText path="hero.logoName" value="Via Bianca" onCommit={vi.fn()} />);
+      const className = screen.getByText('Via Bianca').className;
       expect(className).not.toMatch(/\bhover:/);
       expect(className).not.toMatch(/\b(opacity-0|invisible|hidden)\b/);
       // And a real, persistent visual marker IS there unconditionally --
@@ -506,6 +507,38 @@ describe('Task 3 review Finding C1: the DOM never permanently diverges from the 
 });
 
 // ---------------------------------------------------------------------------
+// Review finding (Important). The publish pause takes /edit's camera badges
+// and collage handles off the page entirely, and these boxes used to keep a
+// byte-identical editable appearance while silently refusing every click --
+// half the affordances gone, the other half still inviting a tap that does
+// nothing. That is "reads as broken, not as busy", the exact reading the
+// pause exists to avoid, and the dashboard is protected from it by its one
+// dimmed fieldset while /edit had no equivalent cue on text at all.
+describe('the publish pause: a paused box must not still look editable', () => {
+  // Mutations this guards, each confirmed red on its own: the className
+  // reverted to one string for both states, and `aria-disabled` dropped.
+  it('drops the dashed edge and the caret cursor, and announces itself as unavailable', () => {
+    const { unmount } = render(<EditableText path="hero.logoName" value="Via Bianca" onCommit={vi.fn()} />);
+    const live = screen.getByText('Via Bianca');
+    const liveClassName = live.className;
+    // Non-vacuous: the live state really does carry both cues, so the
+    // absence asserted below is a difference, not an empty class list.
+    expect(liveClassName).toMatch(/\boutline-dashed\b/);
+    expect(liveClassName).toMatch(/\bcursor-text\b/);
+    expect(live).not.toHaveAttribute('aria-disabled');
+    unmount();
+
+    render(<EditableText path="hero.logoName" value="Via Bianca" onCommit={vi.fn()} locked />);
+    const paused = screen.getByText('Via Bianca');
+    expect(paused).toHaveAttribute('contenteditable', 'false');
+    expect(paused.className).not.toMatch(/\boutline-dashed\b/);
+    expect(paused.className).not.toMatch(/\bcursor-text\b/);
+    expect(paused.className).not.toBe(liveClassName);
+    expect(paused).toHaveAttribute('aria-disabled', 'true');
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Task 3 review Finding C2: an emptied field becomes untappable. Measured in
 // a real Chromium browser: select-all, Delete, tap away -- the now-completely-
 // empty <span> measures {w: 0, h: 0} (`getBoundingClientRect()`), so nothing
@@ -522,14 +555,20 @@ describe('Task 3 review Finding C1: the DOM never permanently diverges from the 
 describe('Task 3 review Finding C2: an emptied field stays tappable', () => {
   // Mutation this guards: removing `inline-block`/`min-h-[1em]`/`min-w-[1ch]`
   // from the className -- confirmed red against each token individually.
-  it('the className guarantees a minimum box even when the element is empty', () => {
-    const source = readFileSync('src/admin/EditableText.tsx', 'utf8');
-    const match = source.match(/className="([^"]*)"/);
-    expect(match).not.toBeNull();
-    const className = match![1];
-    expect(className).toMatch(/\binline-block\b/);
-    expect(className).toMatch(/\bmin-h-\[1em\]/);
-    expect(className).toMatch(/\bmin-w-\[1ch\]/);
+  // Asserted in BOTH states: the paused appearance drops the affordance but
+  // must keep the box, or a page pausing for a publish would reflow twice.
+  it('the className guarantees a minimum box even when the element is empty, paused or not', () => {
+    const { unmount } = render(<EditableText path="hero.logoName" value="Via Bianca" onCommit={vi.fn()} />);
+    const live = screen.getByText('Via Bianca').className;
+    unmount();
+    render(<EditableText path="hero.logoName" value="Via Bianca" onCommit={vi.fn()} locked />);
+    const paused = screen.getByText('Via Bianca').className;
+
+    [live, paused].forEach((className) => {
+      expect(className).toMatch(/\binline-block\b/);
+      expect(className).toMatch(/\bmin-h-\[1em\]/);
+      expect(className).toMatch(/\bmin-w-\[1ch\]/);
+    });
   });
 
   // Uses CommitHarness (see its own comment above) because this checks the

@@ -85,11 +85,23 @@ export function makeGitHubStub(
     // settable so a test can prove a partial response is refused rather
     // than turned into a partial revert.
     trees?: Record<string, { tree?: { path: string; sha: string; type: string }[]; truncated?: boolean }>;
+    // What GET /git/ref/heads/{branch} reports the branch head to be, when a
+    // test needs that to DIFFER from the commit the request was authorised
+    // against -- i.e. someone else's commit landed mid-request. Setting this
+    // also turns on the PATCH branch's non-fast-forward modelling below,
+    // which is the only thing that makes "the ref moved" observable as
+    // anything other than a different sha in a body. Left undefined by
+    // default so nothing already written changes behaviour.
+    refSha?: string;
   } = {},
 ): GitHubStub {
   const calls: RecordedCall[] = [];
   const bodies: Record<string, unknown>[] = [];
   let blobCount = 0;
+  // The parent of the most recent POST /git/commits, so the PATCH below can
+  // answer the way GitHub actually does: a ref update to a commit that does
+  // not descend from the current head is a non-fast-forward, 422.
+  let lastCommitParent: string | null = null;
 
   const fetchStub = vi.fn(async (input: unknown, init: RequestInit = {}): Promise<Response> => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : (input as Request).url;
@@ -162,9 +174,10 @@ export function makeGitHubStub(
 
     // GET /git/ref/heads/{branch} -- singular "ref", the read side.
     if (method === 'GET' && /\/git\/ref\/heads\/[^/]+$/.test(url)) {
-      return new Response(JSON.stringify({ object: opts.malformedRefSha ? {} : { sha: BASE_COMMIT_SHA } }), {
-        status: 200,
-      });
+      return new Response(
+        JSON.stringify({ object: opts.malformedRefSha ? {} : { sha: opts.refSha ?? BASE_COMMIT_SHA } }),
+        { status: 200 },
+      );
     }
 
     // GET /git/commits/{sha} -- fetches the base commit's tree sha.
@@ -175,6 +188,14 @@ export function makeGitHubStub(
       const requested = url.split('/git/commits/')[1];
       if (requested === PARENT_COMMIT_SHA) {
         return new Response(JSON.stringify({ sha: PARENT_COMMIT_SHA, tree: { sha: PARENT_TREE_SHA } }), { status: 200 });
+      }
+      // Any OTHER commit answers with a tree sha derived from its own sha,
+      // for the same reason PARENT_COMMIT_SHA has a distinct one: a test
+      // that moves the branch head has to be able to tell "built on the sha
+      // the caller validated" apart from "built on whatever the ref says
+      // now", and that difference is only visible in `base_tree`.
+      if (requested !== BASE_COMMIT_SHA) {
+        return new Response(JSON.stringify({ sha: requested, tree: { sha: `tree-of-${requested}` } }), { status: 200 });
       }
       return new Response(
         JSON.stringify({ sha: BASE_COMMIT_SHA, tree: opts.malformedTreeSha ? {} : { sha: BASE_TREE_SHA } }),
@@ -192,11 +213,20 @@ export function makeGitHubStub(
     }
 
     if (method === 'POST' && url.endsWith('/git/commits')) {
+      const parents = (body as { parents?: unknown } | undefined)?.parents;
+      lastCommitParent = Array.isArray(parents) && typeof parents[0] === 'string' ? parents[0] : null;
       return new Response(JSON.stringify({ sha: NEW_COMMIT_SHA }), { status: 201 });
     }
 
     // PATCH /git/refs/heads/{branch} -- plural "refs", the write side.
     if (method === 'PATCH' && /\/git\/refs\/heads\/[^/]+$/.test(url)) {
+      // GitHub's own concurrency guard, modelled only for tests that have
+      // actually moved the head (`refSha`): a non-force update to a commit
+      // whose parent is not the current head is not a fast-forward, and
+      // answers 422 rather than quietly accepting it.
+      if (opts.refSha !== undefined && lastCommitParent !== opts.refSha) {
+        return new Response(JSON.stringify({ message: 'Update is not a fast forward' }), { status: 422 });
+      }
       return new Response(JSON.stringify({ object: { sha: NEW_COMMIT_SHA } }), { status: 200 });
     }
 

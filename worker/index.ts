@@ -831,7 +831,18 @@ async function handleUndo(request: Request, env: Env): Promise<Response> {
       throw new UndoNotPossibleError('there is nothing to put back');
     }
 
-    const result = await restoreBlobs(env, entries, 'Put back the previous version');
+    // `head.sha` -- the sha step 3 just checked against what she asked to
+    // undo -- is handed straight through as the commit this builds on.
+    // Review finding (Important): letting restoreBlobs read the head again
+    // reopened the window step 3 exists to close. Three subrequests separate
+    // that check from the write, and a commit landing in between (her second
+    // device finishing a publish, a developer's push) was silently absorbed:
+    // the restore was parented on it and the ref PATCH was an ordinary
+    // fast-forward, so the other change to the same paths was overwritten and
+    // she was told her site was back to how it was. Passing the validated sha
+    // turns that case into a non-fast-forward PATCH, GitHub's own 422, and
+    // the 409 below.
+    const result = await restoreBlobs(env, entries, 'Put back the previous version', head.sha);
     return json(200, { sha: result.sha });
   } catch (error) {
     if (error instanceof DisallowedPathError) {

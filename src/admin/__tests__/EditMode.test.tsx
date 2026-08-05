@@ -1865,6 +1865,99 @@ describe('Plan 5 Task 5: publishing from /edit', () => {
       await publishAndHang();
       expect(await screen.findByText('Publishing… editing on this page is paused for a moment.')).toBeInTheDocument();
     });
+
+    // Review finding (Important). The pause used to swap EditableImage for a
+    // bare <img>, which UNMOUNTS it -- destroying the local preview of a
+    // photo she had picked seconds earlier and running the cleanup that
+    // revokes its object URL. The <img> then fell back to the
+    // content-supplied path, a derivative that only exists once the
+    // Cloudflare build finishes minutes later, so the photo she had just
+    // placed turned into a broken image the instant she confirmed the
+    // publish -- and stayed broken after the pause lifted, because both the
+    // object URL and the state holding it were already gone.
+    //
+    // Mutation this catches: EditMode.tsx's renderImage returning
+    // `<img {...props} />` when `locked` (or EditableImage's own `locked`
+    // branch dropping the preview from `src`).
+    it('a photo she picked keeps its preview through the pause, and its object URL is never revoked', async () => {
+      // A third local XHR fake, for the same scope reason the two above
+      // give: each is declared inside its own describe callback.
+      class FakeXHR {
+        static instances: FakeXHR[] = [];
+        status = 0;
+        responseText = '';
+        upload: { onprogress: ((event: { lengthComputable: boolean; loaded: number; total: number }) => void) | null } = { onprogress: null };
+        onload: (() => void) | null = null;
+        onerror: (() => void) | null = null;
+        constructor() {
+          FakeXHR.instances.push(this);
+        }
+        open() {}
+        send() {}
+        respond(status: number, body: unknown) {
+          this.status = status;
+          this.responseText = JSON.stringify(body);
+          this.onload?.();
+        }
+      }
+      vi.stubGlobal('XMLHttpRequest', FakeXHR as unknown as typeof XMLHttpRequest);
+      const revoke = vi.spyOn(URL, 'revokeObjectURL');
+      try {
+        // The POST is held open, so the pause never lifts on its own.
+        stubFetch({ publishResponse: new Promise<Response>(() => {}) });
+        render(
+          <MemoryRouter>
+            <EditMode />
+          </MemoryRouter>,
+        );
+
+        const tileEl = (await waitFor(() => {
+          const el = document.querySelector('[data-collage-tile-index="0"]');
+          expect(el).not.toBeNull();
+          return el;
+        })) as HTMLElement;
+        const input = within(tileEl).getByTitle('Replace this photo').querySelector('input[type="file"]') as HTMLInputElement;
+        Object.defineProperty(input, 'files', {
+          value: [new File([new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 0, 0, 0])], 'new-scene.jpg', { type: 'image/jpeg' })],
+          configurable: true,
+        });
+        fireEvent.change(input);
+        await waitFor(() => expect(FakeXHR.instances.length).toBeGreaterThan(0));
+        FakeXHR.instances[FakeXHR.instances.length - 1].respond(200, {
+          path: 'assets-source/atmosphere/reviewer-abc123.jpg',
+          // The derivative path -- what the <img> falls back to the moment
+          // the preview is lost, and what does not exist on the site until
+          // the Cloudflare build finishes two or three minutes later.
+          contentPath: '/images/atmosphere/reviewer-abc123.webp',
+        });
+
+        // Queried off the DOCUMENT, never off a node captured earlier: the
+        // failure being pinned is a REMOUNT, so any element reference taken
+        // before the pause is exactly what a broken version would leave
+        // detached and still passing.
+        const previewImg = () => document.querySelector('img[src^="blob:"]');
+        const unbuiltImg = () => document.querySelector('img[src="/images/atmosphere/reviewer-abc123.webp"]');
+        await waitFor(() => expect(previewImg()).not.toBeNull());
+        const previewSrc = previewImg()!.getAttribute('src')!;
+        expect(unbuiltImg()).toBeNull();
+
+        const publishButton = await screen.findByRole('button', { name: 'Publish' });
+        await waitFor(() => expect(publishButton).not.toBeDisabled());
+        fireEvent.click(publishButton);
+        acceptPublishConfirm();
+
+        // Non-vacuous: the pause really is on -- every camera badge on the
+        // page has gone, exactly as it did before this fix.
+        await waitFor(() => expect(document.querySelectorAll('[title^="Replace "]')).toHaveLength(0));
+
+        // ...and the photo she is looking at is still the one she picked.
+        expect(document.querySelector(`img[src="${previewSrc}"]`)).not.toBeNull();
+        expect(unbuiltImg()).toBeNull();
+        expect(revoke).not.toHaveBeenCalled();
+      } finally {
+        revoke.mockRestore();
+      }
+    });
   });
 
   // The confirmation is wired into PublishBar itself, not into either

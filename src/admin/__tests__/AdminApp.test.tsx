@@ -1046,6 +1046,41 @@ describe('AdminApp: editing is paused while a publish request is in flight', () 
     expect(input.value).toBe(before);
   });
 
+  // Review finding (Minor): the pause tests all asserted `toBeDisabled()` on
+  // an input and never the FEEDBACK, so dropping `aria-busy` and the 0.6
+  // opacity left the whole section going dead-but-normal-looking during a
+  // publish -- controls stopping without dimming, and no busy signal for a
+  // screen reader at all. AdminApp's own comment argues at length that the
+  // opacity is what says "this area is busy" as one thing, and that
+  // per-control disabled styling was rejected in its favour; this is what
+  // makes that argument checkable.
+  //
+  // Mutation this guards: replacing the fieldset's style/aria-busy with
+  // `style={{ border: 0, padding: 0, margin: 0, minInlineSize: 0 }}`.
+  it('the whole section dims and reports itself busy, not just dead', async () => {
+    const user = userEvent.setup();
+    stubFetchWithPublish(() => new Promise<Response>(() => {}));
+    render(<AdminApp />);
+    const input = (await screen.findByDisplayValue('Dish A')) as HTMLInputElement;
+    const fieldset = input.closest('fieldset')!;
+
+    // Non-vacuous: neither signal is on before the publish starts.
+    expect(fieldset).not.toHaveAttribute('aria-busy', 'true');
+    expect(fieldset.style.opacity).toBe('');
+
+    await user.type(input, '!');
+    await user.click(screen.getByRole('button', { name: 'Publish' }));
+    await user.click(screen.getByRole('button', { name: 'Yes, publish to the live site' }));
+
+    await waitFor(() => expect(fieldset).toHaveAttribute('aria-busy', 'true'));
+    expect(fieldset.style.opacity).toBe('0.6');
+
+    // ...and both come back off with the pause.
+    await user.click(screen.getByRole('button', { name: 'Keep editing' }));
+    expect(fieldset).not.toHaveAttribute('aria-busy', 'true');
+    expect(fieldset.style.opacity).toBe('');
+  });
+
   // The failure path the whole design turns on: every terminal state must
   // release the pause on its own, with no bookkeeping to forget.
   it('a 409 releases it -- she is never stranded behind a failed publish', async () => {
