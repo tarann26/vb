@@ -11,6 +11,7 @@ import HoursField from './HoursField';
 import GalleryList from './GalleryList';
 import StoryForm from './StoryForm';
 import SectionErrorBoundary from './SectionErrorBoundary';
+import CollapsibleSection from './CollapsibleSection';
 import Field from './Field';
 import PdfField from './PdfField';
 import { ARTICLE_FIELDS, DISH_FIELDS, DRINK_FIELDS, MENU_FIELDS, COPY_FIELDS } from './fields';
@@ -279,68 +280,107 @@ const AdminApp: React.FC = () => {
               aria-busy={publishLocked}
               style={{ border: 0, padding: 0, margin: 0, minInlineSize: 0, opacity: publishLocked ? 0.6 : undefined }}
             >
+            {/* Every section folds now (CollapsibleSection.tsx) -- the
+                owner's report: "every section renders fully expanded, so
+                reaching the last one means scrolling past every dish, drink
+                and article."
+
+                The heading moved OUT of each section component and up to
+                here, because it is now the control rather than a label, and
+                because these ten components each render a bare `<p>` while
+                loading or after a failed fetch -- states that used to have
+                no heading at all. There is one heading per section now, in
+                one place, in every state.
+
+                CollapsibleSection sits INSIDE each SectionErrorBoundary,
+                never outside it. A section whose content file is malformed
+                enough to throw mid-render must disappear entirely, heading
+                included, and be replaced by the boundary's own named
+                fallback -- a foldable heading left standing over a subtree
+                that cannot render is an invitation to open it and find
+                nothing. */}
             <SectionErrorBoundary name="Dishes">
-              <ArraySection<Dish>
-                file="dishes.json"
-                load={() => fetchContent('dishes.json')}
-                heading="Dishes"
-                noun="dish"
-                fields={DISH_FIELDS}
-                itemLabel={(dish) => dish.name || 'Untitled dish'}
-                makeBlank={blankDish}
-                stage={stage}
-                registry={registry}
-                restoreDraft={restoreDraft}
-              />
+              <CollapsibleSection id="dishes" heading="Dishes">
+                <ArraySection<Dish>
+                  file="dishes.json"
+                  load={() => fetchContent('dishes.json')}
+                  heading="Dishes"
+                  noun="dish"
+                  fields={DISH_FIELDS}
+                  itemLabel={(dish) => dish.name || 'Untitled dish'}
+                  makeBlank={blankDish}
+                  stage={stage}
+                  registry={registry}
+                  restoreDraft={restoreDraft}
+                />
+              </CollapsibleSection>
             </SectionErrorBoundary>
             <SectionErrorBoundary name="Drinks">
-              <ArraySection<Drink>
-                file="drinks.json"
-                load={() => fetchContent('drinks.json')}
-                heading="Drinks"
-                noun="drink"
-                fields={DRINK_FIELDS}
-                itemLabel={(drink) => drink.name || 'Untitled drink'}
-                makeBlank={blankDrink}
-                stage={stage}
-                registry={registry}
-                restoreDraft={restoreDraft}
-              />
+              <CollapsibleSection id="drinks" heading="Drinks">
+                <ArraySection<Drink>
+                  file="drinks.json"
+                  load={() => fetchContent('drinks.json')}
+                  heading="Drinks"
+                  noun="drink"
+                  fields={DRINK_FIELDS}
+                  itemLabel={(drink) => drink.name || 'Untitled drink'}
+                  makeBlank={blankDrink}
+                  stage={stage}
+                  registry={registry}
+                  restoreDraft={restoreDraft}
+                />
+              </CollapsibleSection>
             </SectionErrorBoundary>
             <SectionErrorBoundary name="Press">
-              <ArraySection<Article>
-                file="press.json"
-                load={() => fetchContent('press.json')}
-                heading="Press"
-                noun="article"
-                fields={ARTICLE_FIELDS}
-                itemLabel={(article) => article.title || 'Untitled article'}
-                makeBlank={blankArticle}
-                stage={stage}
-                registry={registry}
-                restoreDraft={restoreDraft}
-              />
+              <CollapsibleSection id="press" heading="Press">
+                <ArraySection<Article>
+                  file="press.json"
+                  load={() => fetchContent('press.json')}
+                  heading="Press"
+                  noun="article"
+                  fields={ARTICLE_FIELDS}
+                  itemLabel={(article) => article.title || 'Untitled article'}
+                  makeBlank={blankArticle}
+                  stage={stage}
+                  registry={registry}
+                  restoreDraft={restoreDraft}
+                />
+              </CollapsibleSection>
             </SectionErrorBoundary>
             <SectionErrorBoundary name="Homepage sections">
-              <SectionsSection registry={registry} restoreDraft={restoreDraft} stage={stage} />
+              <CollapsibleSection id="sections" heading="Homepage sections">
+                <SectionsSection registry={registry} restoreDraft={restoreDraft} stage={stage} />
+              </CollapsibleSection>
             </SectionErrorBoundary>
             <SectionErrorBoundary name="Pages">
-              <PagesSection registry={registry} restoreDraft={restoreDraft} stage={stage} />
+              <CollapsibleSection id="pages" heading="Pages">
+                <PagesSection registry={registry} restoreDraft={restoreDraft} stage={stage} />
+              </CollapsibleSection>
             </SectionErrorBoundary>
             <SectionErrorBoundary name="Opening hours">
-              <HoursSection registry={registry} restoreDraft={restoreDraft} />
+              <CollapsibleSection id="hours" heading="Opening hours">
+                <HoursSection registry={registry} restoreDraft={restoreDraft} />
+              </CollapsibleSection>
             </SectionErrorBoundary>
             <SectionErrorBoundary name="Menus">
-              <MenusSection stage={stage} registry={registry} restoreDraft={restoreDraft} />
+              <CollapsibleSection id="menus" heading="Menus">
+                <MenusSection stage={stage} registry={registry} restoreDraft={restoreDraft} />
+              </CollapsibleSection>
             </SectionErrorBoundary>
             <SectionErrorBoundary name="Galleries">
-              <GallerySection stage={stage} registry={registry} restoreDraft={restoreDraft} />
+              <CollapsibleSection id="galleries" heading="Galleries">
+                <GallerySection stage={stage} registry={registry} restoreDraft={restoreDraft} />
+              </CollapsibleSection>
             </SectionErrorBoundary>
             <SectionErrorBoundary name="Our Story">
-              <StorySection registry={registry} restoreDraft={restoreDraft} />
+              <CollapsibleSection id="story" heading="Our Story">
+                <StorySection registry={registry} restoreDraft={restoreDraft} />
+              </CollapsibleSection>
             </SectionErrorBoundary>
             <SectionErrorBoundary name="Page copy">
-              <CopySection registry={registry} restoreDraft={restoreDraft} />
+              <CollapsibleSection id="copy" heading="Page copy">
+                <CopySection registry={registry} restoreDraft={restoreDraft} />
+              </CollapsibleSection>
             </SectionErrorBoundary>
             </fieldset>
           </PublishBar>
@@ -485,8 +525,7 @@ function ArraySection<Item extends { id: string }>({
   }
 
   return (
-    <section className="mb-10">
-      <h2 className="mb-4 font-['Montserrat'] text-lg uppercase tracking-wide text-[#222]">{heading}</h2>
+    <>
       <RecordList<Item>
         fields={fields}
         items={items}
@@ -516,7 +555,7 @@ function ArraySection<Item extends { id: string }>({
         // ArraySection on this page.
         scope={file.replace('.json', '')}
       />
-    </section>
+    </>
   );
 }
 
@@ -600,8 +639,7 @@ function SectionsSection({
   const templateItems = items.filter((item): item is TemplateSection => item.kind === 'template');
 
   return (
-    <section className="mb-10">
-      <h2 className="mb-4 font-['Montserrat'] text-lg uppercase tracking-wide text-[#222]">Homepage sections</h2>
+    <>
       <SectionList
         items={bespokeItems}
         onChange={(index, next) => commit([...replaceAt(bespokeItems, index, next), ...templateItems])}
@@ -627,7 +665,7 @@ function SectionsSection({
         idPrefix="section"
         stage={stage}
       />
-    </section>
+    </>
   );
 }
 
@@ -700,10 +738,9 @@ function PagesSection({
   }
 
   return (
-    <section className="mb-10">
-      <h2 className="mb-4 font-['Montserrat'] text-lg uppercase tracking-wide text-[#222]">Pages</h2>
+    <>
       <PageList items={items} onChange={commit} problems={problems} stage={stage} />
-    </section>
+    </>
   );
 }
 
@@ -779,8 +816,7 @@ function HoursSection({ registry, restoreDraft }: { registry: ContentRegistry; r
   }
 
   return (
-    <section className="mb-10">
-      <h2 className="mb-4 font-['Montserrat'] text-lg uppercase tracking-wide text-[#222]">Opening hours</h2>
+    <>
       <HoursField
         value={state.data.hours}
         onChange={(next) => {
@@ -790,7 +826,7 @@ function HoursSection({ registry, restoreDraft }: { registry: ContentRegistry; r
         }}
         problems={problems}
       />
-    </section>
+    </>
   );
 }
 
@@ -899,8 +935,7 @@ function MenusSection({
   });
 
   return (
-    <section className="mb-10">
-      <h2 className="mb-4 font-['Montserrat'] text-lg uppercase tracking-wide text-[#222]">Menus</h2>
+    <>
       {banner.length > 0 && (
         <div
           role="alert"
@@ -943,7 +978,7 @@ function MenusSection({
           </li>
         ))}
       </ul>
-    </section>
+    </>
   );
 }
 
@@ -1002,8 +1037,7 @@ function GallerySection({
   }
 
   return (
-    <section className="mb-10">
-      <h2 className="mb-4 font-['Montserrat'] text-lg uppercase tracking-wide text-[#222]">Galleries</h2>
+    <>
       <GalleryList
         value={state.data}
         onChange={(next) => {
@@ -1013,7 +1047,7 @@ function GallerySection({
         problems={problems}
         stage={stage}
       />
-    </section>
+    </>
   );
 }
 
@@ -1063,8 +1097,7 @@ function StorySection({ registry, restoreDraft }: { registry: ContentRegistry; r
   }
 
   return (
-    <section className="mb-10">
-      <h2 className="mb-4 font-['Montserrat'] text-lg uppercase tracking-wide text-[#222]">Our Story</h2>
+    <>
       <StoryForm
         value={state.data}
         onChange={(next) => {
@@ -1073,7 +1106,7 @@ function StorySection({ registry, restoreDraft }: { registry: ContentRegistry; r
         }}
         problems={problems}
       />
-    </section>
+    </>
   );
 }
 
@@ -1250,8 +1283,7 @@ function CopySection({ registry, restoreDraft }: { registry: ContentRegistry; re
   const banner = problems.filter((p) => !matched.has(p));
 
   return (
-    <section className="mb-10">
-      <h2 className="mb-4 font-['Montserrat'] text-lg uppercase tracking-wide text-[#222]">Page copy</h2>
+    <>
       {banner.length > 0 && (
         <div
           role="alert"
@@ -1286,7 +1318,7 @@ function CopySection({ registry, restoreDraft }: { registry: ContentRegistry; re
           ))}
         </div>
       ))}
-    </section>
+    </>
   );
 }
 

@@ -148,10 +148,27 @@ describe('AdminApp: fetches each content file once logged in, loading state firs
     expect(screen.getByDisplayValue('Article Q')).toBeInTheDocument();
   });
 
-  it('shows a retrievable error message, not a blank section, when a fetch fails', async () => {
+  // Every section starts folded now (CollapsibleSection.tsx), which would
+  // have quietly hidden this message: a dishes.json that failed to load
+  // looked exactly like a dishes.json she had simply not opened yet. The
+  // header marker is the answer, and it is what this test now checks FIRST
+  // -- the message itself still has to be there, one click away, which is
+  // the second half.
+  //
+  // Mutation this guards: deleting the `hasProblem && !open` marker from
+  // CollapsibleSection.tsx -- confirmed red on the first assertion, while
+  // the rest of this test stays green, which is exactly the gap
+  // default-folded opened.
+  it('marks the folded section as needing attention, and shows the real message once opened', async () => {
     stubFetch(new Response(null, { status: 401 }));
     render(<AdminApp />);
-    expect(await screen.findByRole('alert')).toHaveTextContent(/could not load dishes/i);
+    expect(await screen.findByText(/needs attention/i)).toBeInTheDocument();
+
+    const section = await dishesSection();
+    expect(within(section).getByRole('alert')).toHaveTextContent(/could not load dishes/i);
+    // ...and the marker goes once the message it stood in for is readable.
+    expect(within(section).queryByText(/needs attention/i)).not.toBeInTheDocument();
+
     // The other two sections are unaffected by one file's failure.
     expect(await screen.findByDisplayValue('Drink X')).toBeInTheDocument();
   });
@@ -169,16 +186,32 @@ describe('AdminApp: fetches each content file once logged in, loading state firs
 // single-content-type harness (useValidation.test.tsx's DishesHarness)
 // never had to do, because it only ever rendered one RecordList.
 async function dishesSection(): Promise<HTMLElement> {
-  const heading = await screen.findByRole('heading', { name: 'Dishes' });
-  const section = heading.closest('section');
-  if (!section) throw new Error('Dishes heading is not inside a <section>');
-  return section as HTMLElement;
+  return sectionByHeading('Dishes');
 }
 
+// Finds a dashboard section by its heading AND opens it if it is folded.
+//
+// Every section starts folded now (CollapsibleSection.tsx), and folded means
+// the `hidden` attribute on its content -- which is exactly what
+// `getByRole`/`getAllByRole` refuse to match, by design: an element inside a
+// `hidden` subtree is out of the accessibility tree, and a query that found
+// it anyway would be claiming she can reach something she cannot. So a test
+// that drives a control inside a section has to open that section first, the
+// same as she does. Done here, once, rather than at each of the dozen call
+// sites.
+//
+// Note what is NOT done here: nothing is unmounted or remounted by opening
+// or folding a section (see CollapsibleSection.tsx's own comment on why that
+// would overwrite her unpublished edits with the committed content), so
+// `findByDisplayValue` and `findByText` -- neither of which filters on
+// visibility -- keep working against a folded section, and several tests
+// below deliberately still use them without opening anything.
 async function sectionByHeading(name: string): Promise<HTMLElement> {
   const heading = await screen.findByRole('heading', { name });
   const section = heading.closest('section');
   if (!section) throw new Error(`"${name}" heading is not inside a <section>`);
+  const toggle = within(section as HTMLElement).getByRole('button', { name });
+  if (toggle.getAttribute('aria-expanded') === 'false') fireEvent.click(toggle);
   return section as HTMLElement;
 }
 
@@ -339,8 +372,7 @@ describe('AdminApp: the real "Homepage sections" screen', () => {
   it('fetches sections.json and renders all seven, in the order the file gave them', async () => {
     stubFetch();
     render(<AdminApp />);
-    const heading = await screen.findByRole('heading', { name: 'Homepage sections' });
-    const section = heading.closest('section') as HTMLElement;
+    const section = await sectionByHeading('Homepage sections');
     expect(within(section).getAllByText(/^(Hero|Our Story|Atmosfera|Menu|Drinks|Stories|Visit Us)$/)).toHaveLength(7);
   });
 
@@ -348,8 +380,7 @@ describe('AdminApp: the real "Homepage sections" screen', () => {
     stubFetch();
     const user = userEvent.setup();
     render(<AdminApp />);
-    const heading = await screen.findByRole('heading', { name: 'Homepage sections' });
-    const section = heading.closest('section') as HTMLElement;
+    const section = await sectionByHeading('Homepage sections');
     await within(section).findByText('Hero');
 
     await user.click(within(section).getByRole('button', { name: 'Move Hero down' }));
@@ -365,8 +396,7 @@ describe('AdminApp: the real "Homepage sections" screen', () => {
     stubFetch();
     const user = userEvent.setup();
     render(<AdminApp />);
-    const heading = await screen.findByRole('heading', { name: 'Homepage sections' });
-    const section = heading.closest('section') as HTMLElement;
+    const section = await sectionByHeading('Homepage sections');
     await within(section).findByText('Hero');
 
     const heroToggle = within(section).getAllByLabelText('Shown on homepage')[0];
@@ -383,8 +413,7 @@ describe('AdminApp: the real "Homepage sections" screen', () => {
     stubFetch();
     const user = userEvent.setup();
     render(<AdminApp />);
-    const heading = await screen.findByRole('heading', { name: 'Homepage sections' });
-    const section = heading.closest('section') as HTMLElement;
+    const section = await sectionByHeading('Homepage sections');
     await within(section).findByText('Hero');
 
     await user.click(within(section).getByRole('button', { name: 'Add a text section' }));
@@ -400,8 +429,7 @@ describe('AdminApp: the real "Pages" screen', () => {
   it('fetches pages.json and offers "Add a page"', async () => {
     stubFetch();
     render(<AdminApp />);
-    const heading = await screen.findByRole('heading', { name: 'Pages' });
-    const section = heading.closest('section') as HTMLElement;
+    const section = await sectionByHeading('Pages');
     expect(within(section).getByRole('button', { name: 'Add a page' })).toBeInTheDocument();
   });
 
@@ -409,8 +437,7 @@ describe('AdminApp: the real "Pages" screen', () => {
     stubFetch();
     const user = userEvent.setup();
     render(<AdminApp />);
-    const heading = await screen.findByRole('heading', { name: 'Pages' });
-    const section = heading.closest('section') as HTMLElement;
+    const section = await sectionByHeading('Pages');
 
     await user.click(within(section).getByRole('button', { name: 'Add a page' }));
     await user.click(within(section).getByRole('button', { name: 'Edit' }));
@@ -425,8 +452,7 @@ describe('AdminApp: the real "Opening hours" screen', () => {
   it('fetches site.json and renders its hours row', async () => {
     stubFetch();
     render(<AdminApp />);
-    const heading = await screen.findByRole('heading', { name: 'Opening hours' });
-    const section = heading.closest('section') as HTMLElement;
+    const section = await sectionByHeading('Opening hours');
     expect(within(section).getByDisplayValue('12:00')).toBeInTheDocument();
     expect(within(section).getByDisplayValue('23:00')).toBeInTheDocument();
   });
@@ -434,8 +460,7 @@ describe('AdminApp: the real "Opening hours" screen', () => {
   it('a past-midnight close, entered on the real screen, produces no validation problem', async () => {
     stubFetch();
     render(<AdminApp />);
-    const heading = await screen.findByRole('heading', { name: 'Opening hours' });
-    const section = heading.closest('section') as HTMLElement;
+    const section = await sectionByHeading('Opening hours');
     await within(section).findByDisplayValue('23:00');
 
     const closesInput = within(section).getByDisplayValue('23:00');
@@ -464,8 +489,7 @@ describe('AdminApp: the real "Opening hours" screen', () => {
   it('(companion to the above) a malformed opens time on the real screen DOES surface an alert after the same wait', async () => {
     stubFetch();
     render(<AdminApp />);
-    const heading = await screen.findByRole('heading', { name: 'Opening hours' });
-    const section = heading.closest('section') as HTMLElement;
+    const section = await sectionByHeading('Opening hours');
     await within(section).findByDisplayValue('12:00');
 
     const opensInput = within(section).getByDisplayValue('12:00');
