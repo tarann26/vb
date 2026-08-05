@@ -3,10 +3,32 @@ import { readFileSync, existsSync } from 'node:fs';
 import { site } from '../content';
 
 describe('cloudflare hosting config', () => {
-  it('rewrites every unmatched route to the SPA entry point', () => {
+  it('rewrites single-segment routes to the SPA entry point, and the dashboard', () => {
     expect(existsSync('public/_redirects')).toBe(true);
     const redirects = readFileSync('public/_redirects', 'utf8');
-    expect(redirects).toMatch(/^\/\*\s+\/index\.html\s+200$/m);
+    expect(redirects).toMatch(/^\/:page\s+\/index\.html\s+200$/m);
+    expect(redirects).toMatch(/^\/edit\/manage\s+\/index\.html\s+200$/m);
+    expect(redirects).toMatch(/^\/edit\/manage\/\*\s+\/index\.html\s+200$/m);
+  });
+
+  // The whole point of the rules above: an asset path must NOT be rewritten to
+  // index.html. A bare `/*` sent `/assets/index-<hash>.css` to the SPA with a
+  // 200, and `_headers` then cached that HTML at a content-hashed URL for a
+  // year as `immutable` -- observed live as an unstyled site. This is the
+  // regression check for that, pinned on the file rather than on a deployed
+  // response, so it fails before a deploy rather than after one.
+  it('never rewrites an asset path to the SPA entry point', () => {
+    const redirects = readFileSync('public/_redirects', 'utf8');
+    const rules = redirects
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line && !line.startsWith('#'));
+    expect(rules.length).toBeGreaterThan(0);
+    for (const rule of rules) {
+      const [from] = rule.split(/\s+/);
+      expect(from, `"${rule}" would swallow /assets/* and can poison an asset URL`).not.toBe('/*');
+      expect(from.startsWith('/assets')).toBe(false);
+    }
   });
 
   // public/_redirects cannot keep /api/* out of this catch-all: Cloudflare

@@ -83,7 +83,7 @@ describe('.gitignore', () => {
   // pattern) never touches in the first place -- pinned here so a future
   // edit that widens the pattern to catch files too doesn't silently start
   // ignoring these.
-  it.each(['_headers', '_redirects', 'favicon.svg', 'robots.txt', 'sitemap.xml'])(
+  it.each(['_headers', '_redirects', 'favicon-32.png', 'robots.txt', 'sitemap.xml'])(
     'does not ignore the loose committed file public/%s',
     (file) => {
       expect(isIgnored(join('public', file))).toBe(false);
