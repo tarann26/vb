@@ -6,6 +6,7 @@ import { defaultBundle, ContentProvider, type ContentBundle } from '../../conten
 import type { Copy, Galleries } from '../../content/types';
 import { AppRoutes } from '../../App';
 import { COPY_FIELDS } from '../fields';
+import { parseSectionContentPath, findTemplateSection } from '../template-section-paths';
 import { EDITABLE_TEXT_PATHS, setCopyText } from '../editable-paths';
 import EditableText from '../EditableText';
 // Real, committed copy.json -- the same "real content, not a hand-typed
@@ -81,14 +82,35 @@ function makeRecordingBundle(): { bundle: ContentBundle; textCalls: TextCall[]; 
   return { bundle, textCalls, imageCalls };
 }
 
-// Every renderText path in this app is a dotted key straight into
-// `copy` (e.g. 'hero.logoName' -> copy.hero.logoName, 'drinks.intro' ->
-// copy.drinks.intro) -- the same flat shape CopyLeafShape (fields.ts)
-// declares. A path that does not resolve to a string (a typo, or a path
-// that points somewhere `copy` doesn't have) resolves to `undefined`,
-// which can never `.toBe()` the real string value a genuine call passed --
-// that mismatch is what catches a typo like 'visit.headingTYPO'.
+// renderText paths come in TWO families, and conflating them is what an
+// earlier version of this file did:
+//
+//   1. a dotted key straight into `copy` ('hero.logoName' ->
+//      copy.hero.logoName) -- the flat shape CopyLeafShape (fields.ts)
+//      declares, and the only family that existed before template sections;
+//   2. `sections.<id>.content.<rest>' -- a template section's own content,
+//      which lives in sections.json, not copy.json.
+//
+// Family 2 was unreachable until sections.json actually carried a template
+// section, so every assertion below about "the recorded paths" was true of
+// family 1 alone and silently untested for family 2. Enabling the first
+// template section is what surfaced it.
+//
+// A path that resolves to `undefined` (a typo, or a path pointing somewhere
+// its own store does not have) can never `.toBe()` the real string a genuine
+// call passed -- that mismatch is what catches 'visit.headingTYPO'.
 function resolveTextValue(bundle: ContentBundle, path: string): unknown {
+  const section = parseSectionContentPath(path);
+  if (section) {
+    // Parsed by the SAME production function the app routes edits through
+    // (src/admin/template-section-paths.ts), so this test and the commit path
+    // cannot disagree about what a section content path means.
+    const found = findTemplateSection(bundle.sections, section.sectionId);
+    if (!found) return undefined;
+    return section.rest.split('.').reduce<unknown>((node, key) => {
+      return node && typeof node === 'object' && key in node ? (node as Record<string, unknown>)[key] : undefined;
+    }, found.content);
+  }
   return path.split('.').reduce<unknown>((node, key) => {
     return node && typeof node === 'object' && key in node ? (node as Record<string, unknown>)[key] : undefined;
   }, bundle.copy);
@@ -143,10 +165,27 @@ describe('every renderText/renderImage call site passes a path that really point
     expect(imageCalls.length).toBeGreaterThan(0);
   });
 
-  it('the recorded renderText paths are exactly EDITABLE_TEXT_PATHS (src/admin/editable-paths.ts) -- no missing, no extra', () => {
+  it('the recorded copy.json paths are exactly EDITABLE_TEXT_PATHS (src/admin/editable-paths.ts) -- no missing, no extra', () => {
     expect(EDITABLE_TEXT_PATHS).toHaveLength(28);
-    const recorded = new Set(textCalls.map((call) => call.path));
-    expect([...recorded].sort()).toEqual([...EDITABLE_TEXT_PATHS].sort());
+    // Partitioned, not filtered-and-forgotten: EDITABLE_TEXT_PATHS is derived
+    // from COPY_FIELDS and therefore describes copy.json ONLY, so a template
+    // section's `sections.<id>.content.*` path is legitimately not a member.
+    // The next test asserts every path of BOTH families resolves, so nothing
+    // is dropped here in the name of tidying -- it just goes to its own store.
+    const recorded = textCalls.map((call) => call.path);
+    const copyPaths = new Set(recorded.filter((p) => !parseSectionContentPath(p)));
+    expect([...copyPaths].sort()).toEqual([...EDITABLE_TEXT_PATHS].sort());
+  });
+
+  it('the enabled template sections really do render text through the same channel, so the partition above is not vacuous', () => {
+    // Without this, the filter above would still pass if template sections
+    // stopped rendering entirely -- which is exactly the state this whole
+    // file was silently in before sections.json carried one.
+    const sectionPaths = textCalls.map((c) => c.path).filter((p) => parseSectionContentPath(p));
+    expect(sectionPaths.length).toBeGreaterThan(0);
+    const ids = new Set(sectionPaths.map((p) => parseSectionContentPath(p)!.sectionId));
+    const enabled = bundle.sections.filter((s) => s.kind === 'template' && s.enabled).map((s) => s.id);
+    expect([...ids].sort()).toEqual([...enabled].sort());
   });
 
   // Kills both the typo ('visit.heading' -> 'visit.headingTYPO') and a
@@ -336,7 +375,27 @@ describe('the real element-substitution boundary: renderText returning actual el
       });
     });
 
-    expect([...reachedPaths].sort()).toEqual([...EDITABLE_TEXT_PATHS].sort());
+    // Partitioned for the same reason as the describe block above:
+    // EDITABLE_TEXT_PATHS describes copy.json only, and a template section's
+    // `sections.<id>.content.*` path is a legitimate second family that lives
+    // in sections.json. Both halves are asserted, so nothing is quietly
+    // dropped -- and the "[object Object]" check above already ran across
+    // every rendered path of BOTH families, which is the leak this test is
+    // actually named for.
+    const reached = [...reachedPaths];
+    const reachedCopy = reached.filter((p) => !parseSectionContentPath(p));
+    expect(reachedCopy.sort()).toEqual([...EDITABLE_TEXT_PATHS].sort());
+
+    // Every enabled template section is reachable through the same channel.
+    // Without this, the filter above would pass even if template sections
+    // rendered nothing at all.
+    const reachedSections = new Set(
+      reached.map((p) => parseSectionContentPath(p)?.sectionId).filter((id): id is string => Boolean(id)),
+    );
+    const enabledSections = defaultBundle.sections
+      .filter((s) => s.kind === 'template' && s.enabled)
+      .map((s) => s.id);
+    expect([...reachedSections].sort()).toEqual([...enabledSections].sort());
   });
 });
 
