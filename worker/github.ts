@@ -104,6 +104,16 @@ export class DisallowedPathError extends Error {}
 // module is a genuine "could not talk to GitHub" case, not a conflict.
 export class PublishConflictError extends Error {}
 
+// Distinguishable from a generic Error so worker/index.ts's handleUndo can
+// map "this commit cannot be put back" to a 409 -- the same status this
+// codebase already uses for every "the state you were looking at is not the
+// state that is there now" case -- rather than the 502 an unrecognised
+// throw would get. Raised for a commit that has no single parent (a merge,
+// or the very first commit), for a file list GitHub may have paginated, and
+// for a commit that only ADDED files, where there is genuinely nothing in
+// the parent to restore.
+export class UndoNotPossibleError extends Error {}
+
 // Exported so `GET /api/content` (worker/index.ts's handleGetContent, Task
 // 3) can restrict *reads* to exactly the same path shape assertAllowedPath
 // below already restricts *writes* to -- built on the same CONTENT_PATH
@@ -188,7 +198,12 @@ async function getBranchHeadSha(env: GitHubEnv): Promise<string> {
 
 // GET /git/commits/{sha} -- the commit's tree sha, which is what "create a
 // tree"'s `base_tree` actually needs (a tree sha, not a commit sha).
-async function getCommitTreeSha(env: GitHubEnv, commitSha: string): Promise<string> {
+//
+// Exported for handleUndo, which needs the tree of the commit BEFORE the one
+// being undone -- i.e. the state to put back. Exported rather than
+// duplicated so its malformed-body guard below is shared, not reimplemented
+// slightly differently in a second place.
+export async function getCommitTreeSha(env: GitHubEnv, commitSha: string): Promise<string> {
   const url = repoUrl(env, `/git/commits/${commitSha}`);
   const res = await fetch(url, { headers: ghHeaders(env) });
   if (!res.ok) {
@@ -428,6 +443,130 @@ export async function commitFiles(
   }
 
   const treeSha = await createTree(env, baseTreeSha, blobs);
+  const commitSha = await createCommit(env, treeSha, headSha, message);
+  await updateBranchHead(env, commitSha);
+
+  return { sha: commitSha };
+}
+
+// ---------------------------------------------------------------------------
+// Undo. Three reads plus one restore, 8 subrequests total regardless of how
+// many files are involved, against the 50-per-invocation ceiling documented
+// above: getHeadCommit (1) + getCommitTreeSha on the parent (1) +
+// getTreeBlobShas (1) + restoreBlobs' own five.
+
+export interface HeadCommit {
+  sha: string;
+  parentSha: string;
+  changedPaths: string[];
+}
+
+// GitHub's per-page cap on the `files` array of a commit response. A
+// TRUNCATED file list must never become a partial revert -- putting half a
+// commit back is worse than refusing, because it looks like it worked.
+const COMMIT_FILES_PAGE_CAP = 300;
+
+// GET /repos/{owner}/{repo}/commits/{branch} -- the REST Commits API, which
+// this module otherwise does not use (everything else here is the Git Data
+// and Contents APIs). One call answers all three things an undo needs: what
+// the head sha actually is, what its single parent is, and which paths it
+// touched.
+//
+// Guarded the same way getBranchHeadSha and getCommitTreeSha guard a
+// 200-OK-but-malformed body, plus two refusals specific to undo. A commit
+// without exactly one parent is either a merge or the repository's first
+// commit, and "the state before it" is not a single well-defined thing in
+// either case. A file list at the page cap may be incomplete.
+export async function getHeadCommit(env: GitHubEnv): Promise<HeadCommit> {
+  const url = repoUrl(env, `/commits/${env.GITHUB_BRANCH}`);
+  const res = await fetch(url, { headers: ghHeaders(env) });
+  if (!res.ok) {
+    throw new Error(`could not read the latest commit on ${env.GITHUB_BRANCH} (GitHub returned ${res.status})${await describeFailure(res)}`);
+  }
+  const body = (await res.json()) as { sha?: unknown; parents?: unknown; files?: unknown };
+  if (typeof body.sha !== 'string' || body.sha.length === 0) {
+    throw new Error(`could not read the latest commit on ${env.GITHUB_BRANCH} -- GitHub's response had no commit sha`);
+  }
+  if (!Array.isArray(body.parents) || body.parents.length !== 1) {
+    throw new UndoNotPossibleError('that change cannot be put back automatically');
+  }
+  const parentSha = (body.parents[0] as { sha?: unknown }).sha;
+  if (typeof parentSha !== 'string' || parentSha.length === 0) {
+    throw new Error(`could not read the latest commit on ${env.GITHUB_BRANCH} -- GitHub's response had no parent sha`);
+  }
+  if (!Array.isArray(body.files)) {
+    throw new Error(`could not read the latest commit on ${env.GITHUB_BRANCH} -- GitHub's response listed no files`);
+  }
+  if (body.files.length >= COMMIT_FILES_PAGE_CAP) {
+    throw new UndoNotPossibleError('that change touched too many files to put back automatically');
+  }
+  const changedPaths = body.files
+    .map((file) => (file as { filename?: unknown }).filename)
+    .filter((name): name is string => typeof name === 'string');
+  return { sha: body.sha, parentSha, changedPaths };
+}
+
+// GET /git/trees/{sha}?recursive=1 -- path -> blob sha for a whole tree, in
+// one call. The repository tracks a few hundred files, comfortably inside
+// GitHub's own limits, but `truncated` is checked rather than trusted away:
+// a partial map here would silently look like "this path did not exist in
+// the parent", which handleUndo reads as "the commit added it" and skips --
+// turning a truncated response into a quietly incomplete revert.
+export async function getTreeBlobShas(env: GitHubEnv, treeSha: string): Promise<Record<string, string>> {
+  const url = repoUrl(env, `/git/trees/${treeSha}?recursive=1`);
+  const res = await fetch(url, { headers: ghHeaders(env) });
+  if (!res.ok) {
+    throw new Error(`could not read the tree of ${treeSha} (GitHub returned ${res.status})${await describeFailure(res)}`);
+  }
+  const body = (await res.json()) as { tree?: unknown; truncated?: unknown };
+  if (body.truncated === true) {
+    throw new UndoNotPossibleError('that change cannot be put back automatically');
+  }
+  if (!Array.isArray(body.tree)) {
+    throw new Error(`could not read the tree of ${treeSha} -- GitHub's response had no tree`);
+  }
+  const map: Record<string, string> = {};
+  body.tree.forEach((entry) => {
+    const { path, sha, type } = entry as { path?: unknown; sha?: unknown; type?: unknown };
+    if (type === 'blob' && typeof path === 'string' && typeof sha === 'string') map[path] = sha;
+  });
+  return map;
+}
+
+// A forward commit whose tree re-points the named paths at blob shas they
+// already had. Moves no file bytes through the Worker at all, which is what
+// makes it binary-safe for a menu PDF -- getFileContent's own base64->UTF-8
+// decode would corrupt one, and a 25MB PDF becomes a ~33MB base64 string
+// inside a 128MB isolate for no benefit.
+//
+// The allowlist is re-applied here, on every entry, before any network call
+// -- the same posture commitFiles takes, and for a stronger reason. This
+// function bypasses commitFiles entirely, so it is the ONLY thing standing
+// between the Worker's token and the rest of the repository on this path.
+// That is also exactly why the tempting five-call version -- create a commit
+// whose tree simply IS the parent's tree, a byte-exact revert -- is not what
+// this does: a whole-tree restore cannot enforce a path allowlist at all,
+// and would let a session that may only write content JSON roll back a
+// security fix in worker/auth.ts if that fix happened to be the last commit.
+//
+// `base_tree` is the CURRENT head's tree, never the reverted commit's
+// parent's. Using the parent's would delete every file changed since, and
+// that failure is invisible to a call counter -- only the request body shows
+// it. `parents` is the current head, so this is an ordinary commit on top of
+// the branch, not a history rewrite; the non-force ref PATCH inherits
+// updateBranchHead's own 422 -> PublishConflictError mapping unchanged,
+// which covers the few hundred milliseconds inside this request that no
+// read-then-check ever can.
+export async function restoreBlobs(
+  env: GitHubEnv,
+  entries: { path: string; sha: string }[],
+  message: string,
+): Promise<{ sha: string }> {
+  entries.forEach((entry) => assertAllowedPath(entry.path));
+
+  const headSha = await getBranchHeadSha(env);
+  const baseTreeSha = await getCommitTreeSha(env, headSha);
+  const treeSha = await createTree(env, baseTreeSha, entries);
   const commitSha = await createCommit(env, treeSha, headSha, message);
   await updateBranchHead(env, commitSha);
 

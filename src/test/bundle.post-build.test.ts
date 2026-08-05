@@ -531,6 +531,19 @@ describe('dist/assets/ keeps admin code out of the entry chunk', () => {
 // stylesheet is 48px) is an inline style, the escape hatch CollageTile.tsx
 // documents for exactly this ceiling. The real margin at the ceiling below
 // is 232 bytes, not the ~115 the pre-68a70ec text above implies.
+//
+// Editing pause during a publish, and undo-my-last-publish: 38468 -> 38468
+// for both, again byte-identical with the same content hash. The pause is
+// expressed entirely as a `disabled` fieldset carrying an inline style
+// reset and an inline opacity, and on /edit by REMOVING affordances rather
+// than restyling them -- no disabled variant was added to any editor
+// (RecordList's move buttons document that they have none, which is exactly
+// why greying controls was the wrong lever). The undo button and its
+// confirm reuse BANNER_BUTTON_CLASSNAME plus the classes DraftBanner's own
+// two buttons already carry. Three consecutive features at zero bytes is
+// the constraint being designed for, not a coincidence to assume holds for
+// the next one: the margin is still 232 bytes, and four or five new
+// utilities would spend it.
 describe('dist/assets/ keeps the shared stylesheet under a byte ceiling', () => {
   it.skipIf(!REQUIRED && !existsSync(DIST_ASSETS))('the entry CSS file stays under 38700 bytes', () => {
     const cssFiles = readdirSync(DIST_ASSETS).filter((n) => /^index-.*\.css$/.test(n));

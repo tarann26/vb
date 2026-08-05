@@ -23,6 +23,15 @@ import {
 import { clearDraft, formatRelativeTime, mostRecentSavedAt, saveDraft, type DraftMap, type DraftSurface } from './drafts';
 import type { StagedFiles } from './staged';
 import { CONTENT_FILE_LABELS, type ContentFileName } from './content';
+import {
+  clearUndoRecord,
+  describePaths,
+  describesAddedPhoto,
+  loadUndoRecord,
+  rememberPublish,
+  requestUndo,
+  type UndoRecord,
+} from './undo';
 import type { ValidationProblem } from '../content/validate';
 
 // ---------------------------------------------------------------------------
@@ -95,6 +104,12 @@ type BarState =
   // nothing is in flight yet, and the trigger button behind the panel is
   // not "working", it is simply behind a dialog.
   | { phase: 'confirm' }
+  // She has pressed Undo once. Nothing has been sent: the POST happens only
+  // from the second, explicit button. An undo is irreversible through this
+  // UI by design, so one click is not defensible -- and a redo, added to
+  // make one click safe, is exactly the extra concept this feature exists
+  // without.
+  | { phase: 'undo-armed'; record: UndoRecord }
   | { phase: 'publishing' }
   | { phase: 'polling'; buildState: BuildState }
   | { phase: 'confirming' }
@@ -327,6 +342,15 @@ export interface PublishBarProps {
   // hand a ten-minute timeout the power to freeze her page over a flaky
   // connection, for a commit that has probably already gone live.
   onPublishLockChange?: (locked: boolean) => void;
+  // Called once an undo has actually gone live. A full page reload, not a
+  // registry correction, and not optional: after an undo every entry's
+  // `sha` AND `initial` are stale, and there is no safe API to fix that in
+  // place -- `register` deliberately PRESERVES the existing `initial` (so
+  // every restored file would read as dirty against pre-undo content) and
+  // `markPublished` deliberately leaves `data` alone. Rebuilding from GET
+  // /api/content sidesteps that whole class of bug with no new registry
+  // API. A prop purely so a test can observe it without a real navigation.
+  reload?: () => void;
 }
 
 const REAL_CLOCK = { now: () => Date.now(), sleep: (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)) };
@@ -360,12 +384,22 @@ const PublishBar: React.FC<PublishBarProps> = ({
   problems = [],
   offsetTop = 0,
   onPublishLockChange,
+  reload = () => window.location.reload(),
 }) => {
   const [state, setState] = useState<BarState>({ phase: 'idle' });
   // Her own way out of the pause, and the 60-second cap's way out too. Reset
   // at the top of every publish attempt so releasing one attempt never
   // silently disarms the next one.
   const [lockReleased, setLockReleased] = useState(false);
+  // Which of the two things this bar is currently reporting on. Used ONLY to
+  // pick copy: the undo run drives the exact same phases a publish does, so
+  // BUSY_PHASES covers it unchanged and both buttons are disabled by the
+  // existing `busy` with no new mutual-exclusion logic to get wrong.
+  const [flow, setFlow] = useState<'publish' | 'undo'>('publish');
+  // The offer, read once at mount and then kept in state. Read at mount
+  // rather than on every render so it cannot flicker mid-publish, and so a
+  // test can observe exactly one read.
+  const [undoRecord, setUndoRecord] = useState<UndoRecord | null>(() => loadUndoRecord());
   const mountedRef = useRef(true);
   const abortRef = useRef<AbortController | null>(null);
   // Where focus goes back to when she cancels the confirmation -- the exact
@@ -523,6 +557,7 @@ const PublishBar: React.FC<PublishBarProps> = ({
     // her own "Keep editing") must not leave every later publish in this
     // session unprotected.
     setLockReleased(false);
+    setFlow('publish');
     // Step 1's carried requirement 2: TagsInput commits its typed buffer
     // only when it loses focus. Unconditional, not skipped for the mouse
     // path on the assumption a click already moved focus away -- a review
@@ -578,6 +613,18 @@ const PublishBar: React.FC<PublishBarProps> = ({
     // prior write (see publish.ts's refreshBaseShas comment).
     stagedFiles.clearSent(sentStaged);
     clearDraft(draftSurface);
+    // The undo offer, written from what this publish actually sent -- the
+    // commit sha the server just confirmed, the time, and the exact paths.
+    // Never throws: see undo.ts on why a storage failure here has to
+    // degrade to "no undo offered" rather than surfacing on top of a
+    // publish that already landed.
+    const undoPaths = [
+      ...(Object.keys(plan.contentSnapshots) as ContentFileName[]).map((file) => `src/content/${file}`),
+      ...plan.files.filter((file) => file.encoding === 'base64').map((file) => file.path),
+    ];
+    const record: UndoRecord = { sha: result.sha, at: Date.now(), paths: undoPaths };
+    rememberPublish(record);
+    setUndoRecord(record);
 
     const publishedFiles = Object.keys(plan.contentSnapshots) as ContentFileName[];
     const freshShas = await refreshBaseShas(publishedFiles);
@@ -615,6 +662,65 @@ const PublishBar: React.FC<PublishBarProps> = ({
     if (nextState.phase === 'unauthenticated') onUnauthenticated(nextState.notice);
   }
 
+  // The second click. Reuses the ENTIRE publish reporting machinery -- the
+  // same phases, the same BUSY_PHASES, the same trackPublish and the same
+  // PollDeps -- with `flow` picking the wording, rather than duplicating six
+  // in-flight states for an operation that behaves identically.
+  async function performUndo(record: UndoRecord) {
+    setFlow('undo');
+    setLockReleased(false);
+    setState({ phase: 'publishing' });
+    const result = await requestUndo(record.sha);
+    if (!mountedRef.current) return;
+
+    if (result.status === 'unauthenticated') {
+      setState({ phase: 'unauthenticated', notice: PRE_PUBLISH_UNAUTHENTICATED_NOTICE });
+      onUnauthenticated(PRE_PUBLISH_UNAUTHENTICATED_NOTICE);
+      return;
+    }
+    if (result.status === 'conflict') {
+      // The offer is dead either way: either the branch moved, or the undo
+      // landed and its response was lost. Clearing it is what makes
+      // "pressing undo twice" unreachable rather than merely refused.
+      clearUndoRecord();
+      setUndoRecord(null);
+      setState({ phase: 'conflict' });
+      return;
+    }
+    if (result.status !== 'success') {
+      setState({ phase: 'server-error', message: 'Could not put that change back.' });
+      return;
+    }
+
+    clearUndoRecord();
+    setUndoRecord(null);
+
+    setState({ phase: 'polling', buildState: 'queued' });
+    const controller = new AbortController();
+    abortRef.current = controller;
+    const outcome = await trackPublish(
+      result.sha,
+      {
+        fetchBuildStatus: (sha) => fetchBuildStatus(sha),
+        fetchBuildInfo: () => fetchBuildInfo(),
+        now: pollClock.now,
+        sleep: pollClock.sleep,
+        signal: controller.signal,
+      },
+      (progress) => {
+        if (mountedRef.current) setState(progressToBarState(progress, result.sha));
+      },
+    );
+    if (!mountedRef.current) return;
+    const nextState = progressToBarState(outcome, result.sha);
+    setState(nextState);
+    if (nextState.phase === 'unauthenticated') onUnauthenticated(nextState.notice);
+    // Gated on the build actually reporting live, never on the POST alone --
+    // reloading earlier would show her the pre-undo site and teach her the
+    // button did nothing.
+    if (nextState.phase === 'success') reload();
+  }
+
   return (
     <form
       onSubmit={(event) => {
@@ -647,12 +753,63 @@ const PublishBar: React.FC<PublishBarProps> = ({
             {busy ? 'Publishing…' : 'Publish'}
           </button>
         </div>
+        {/* The undo offer. Not a permanent fixture of the dashboard: it
+            exists only while a publish of HERS is on record and vanishes the
+            moment it is used or superseded. A button that is always there is
+            an invitation to find out what it does; one that appears right
+            after she publishes and then leaves reads as what it is -- a
+            two-minute safety net, not a time machine.
+
+            Gated on `!isDirty` as well: offering to put back the last
+            publish while she has fresh unpublished edits on screen would
+            invite her to lose them, and the reload an undo ends with really
+            would. `type="button"`, like every other button inside this
+            form. */}
+        {undoRecord !== null && !isDirty && !busy && state.phase !== 'confirm' && state.phase !== 'undo-armed' && (
+          <p className="mt-3">
+            <button
+              type="button"
+              onClick={() => setState({ phase: 'undo-armed', record: undoRecord })}
+              className={`${BANNER_BUTTON_CLASSNAME} border border-gray-300 text-[#222] hover:bg-gray-100`}
+            >
+              Undo my last publish
+            </button>
+          </p>
+        )}
+        {state.phase === 'undo-armed' && (
+          <div role="alert" className="mt-3 font-['Montserrat'] text-sm text-[#222]">
+            <p className="mb-3">
+              {`Undo the change you published ${formatRelativeTime(state.record.at)}? This puts ${describePaths(
+                state.record.paths,
+              )} back the way it was.`}
+              {describesAddedPhoto(state.record.paths)
+                ? ' It will not delete the photo you uploaded.'
+                : ''}
+            </p>
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={() => void performUndo(state.record)}
+                className={`${BANNER_BUTTON_CLASSNAME} bg-[#6B8B59] text-white hover:bg-[#5a7349]`}
+              >
+                Yes, undo it
+              </button>
+              <button
+                type="button"
+                onClick={() => setState({ phase: 'idle' })}
+                className={`${BANNER_BUTTON_CLASSNAME} border border-gray-300 text-[#222] hover:bg-gray-100`}
+              >
+                Keep it
+              </button>
+            </div>
+          </div>
+        )}
         {tooManyStaged ? (
           <p role="alert" className="mt-3 font-['Montserrat'] text-sm text-red-600">
             {`You have ${stagedCount} photos or PDFs staged; only ${MAX_STAGED_PHOTOS_PER_PUBLISH} can publish at once. Remove some before publishing.`}
           </p>
         ) : (
-          <PublishStatus state={state} locked={locked} onKeepEditing={() => setLockReleased(true)} />
+          <PublishStatus state={state} flow={flow} locked={locked} onKeepEditing={() => setLockReleased(true)} />
         )}
         {/* I8: client-side validation, informational only -- never disables
             the button above (see `problems` prop's own comment). Shown only
@@ -906,18 +1063,26 @@ function TimeExpectation() {
 
 function PublishStatus({
   state,
+  flow,
   locked,
   onKeepEditing,
 }: {
   state: BarState;
+  // Picks the wording only. An undo drives the identical phases, so this is
+  // the one thing that has to differ -- in particular the post-publish
+  // signed-out sentence, which must not tell her "your changes were already
+  // published" in the middle of putting a change BACK.
+  flow: 'publish' | 'undo';
   locked: boolean;
   onKeepEditing: () => void;
 }) {
+  const undoing = flow === 'undo';
   switch (state.phase) {
-    // Nothing in this slot while the confirmation is open -- the panel
-    // itself is what she is reading, and it repeats the summary.
+    // Nothing in this slot while the confirmation, or the undo offer's own
+    // armed sentence, is what she is reading.
     case 'idle':
     case 'confirm':
+    case 'undo-armed':
       return null;
     case 'publishing':
       // The pause is named in the sentence she is already looking at, not
@@ -931,7 +1096,11 @@ function PublishStatus({
       return (
         <>
           <p role="status" className="mt-3 font-['Montserrat'] text-sm text-gray-600">
-            {locked ? 'Publishing… editing on this page is paused for a moment.' : 'Publishing…'}
+            {undoing
+              ? 'Putting it back…'
+              : locked
+                ? 'Publishing… editing on this page is paused for a moment.'
+                : 'Publishing…'}
           </p>
           {/* The escape hatch, always offered while the pause is on.
               `requestPublish` has no timeout and cannot be aborted, so a
@@ -956,7 +1125,7 @@ function PublishStatus({
       return (
         <>
           <p role="status" className="mt-3 font-['Montserrat'] text-sm text-gray-600">
-            {`Publishing… ${describeBuildState(state.buildState)}.`}
+            {undoing ? `Putting it back… ${describeBuildState(state.buildState)}.` : `Publishing… ${describeBuildState(state.buildState)}.`}
           </p>
           <TimeExpectation />
         </>
@@ -973,7 +1142,7 @@ function PublishStatus({
     case 'success':
       return (
         <p role="status" className="mt-3 font-['Montserrat'] text-sm text-green-700">
-          Your changes are live.
+          {undoing ? 'Your site is back to how it was.' : 'Your changes are live.'}
         </p>
       );
     case 'mismatch':
@@ -1011,8 +1180,9 @@ function PublishStatus({
       // work to a stranger.
       return (
         <p role="alert" className="mt-3 font-['Montserrat'] text-sm text-red-600">
-          This may already be published — from another tab or device, including one of your own. Reload to see the
-          latest, then make your change again.
+          {undoing
+            ? 'Something else has been published since — possibly from another tab or device of your own. Your site may already be back to how it was. Reload to see what it looks like now.'
+            : 'This may already be published — from another tab or device, including one of your own. Reload to see the latest, then make your change again.'}
         </p>
       );
     case 'server-error':

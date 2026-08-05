@@ -11,7 +11,21 @@
 // `crypto`, none of which tsconfig.node.json's ES2023-only `lib` declares.
 import { verifyPassword, signToken, verifyToken, parseCookie } from './auth';
 import { checkLoginRate, recordLoginFailure, clearLoginFailures, checkRate, recordHit } from './ratelimit';
-import { commitFiles, getFileContent, isContentPath, DisallowedPathError, PublishConflictError, type CommitFile, type FileContent, type GitHubEnv } from './github';
+import {
+  commitFiles,
+  getCommitTreeSha,
+  getFileContent,
+  getHeadCommit,
+  getTreeBlobShas,
+  isContentPath,
+  restoreBlobs,
+  DisallowedPathError,
+  PublishConflictError,
+  UndoNotPossibleError,
+  type CommitFile,
+  type FileContent,
+  type GitHubEnv,
+} from './github';
 import { validateContent, type ValidationProblem } from '../src/content/validate';
 import { SCHEDULABLE_FILES } from '../src/content/types';
 import { handleUpload } from './upload';
@@ -76,7 +90,7 @@ async function sessionCookie(
 // The routes that require a session. Listed here rather than inferred, so
 // adding an authenticated route without deciding whether it should slide the
 // window is a visible omission rather than a silent one.
-export const AUTHENTICATED_PATHS = new Set(['/api/publish', '/api/content', '/api/upload', '/api/build-status']);
+export const AUTHENTICATED_PATHS = new Set(['/api/publish', '/api/undo', '/api/content', '/api/upload', '/api/build-status']);
 
 // Slides the idle window on a successful authenticated request. Applied in the
 // router, once, rather than inside each handler: the handlers already
@@ -738,6 +752,114 @@ async function handlePublish(request: Request, env: Env): Promise<Response> {
 }
 
 // ---------------------------------------------------------------------------
+// POST /api/undo -- put back the publish she just made.
+//
+// The client sends the sha it watched itself create, and this route refuses
+// unless that sha is still the branch head. That is deliberately stronger
+// than the per-file baseSha check a publish uses: an undo is only meaningful
+// relative to one specific commit, so ANY movement of the branch -- a second
+// device, a developer's push -- has to refuse rather than revert a stale
+// one. The cost of refusing is a reload; the cost of not refusing is
+// silently discarding whatever landed in between.
+//
+// The offer itself is held client-side (src/admin/undo.ts), never derived
+// here from whatever happens to be at the head. That is what makes it
+// structurally impossible to offer to revert a developer's hand commit and
+// describe it to her as "the change you published" -- content in this
+// repository has historically arrived that way, so a head-inspecting version
+// would do exactly that. It also removes any need for a commit-message
+// marker, which would be client-forgeable anyway since handlePublish already
+// accepts a caller-supplied message.
+//
+// Deliberately does NOT touch the schedule KV bookkeeping: an undo restores
+// a previously-committed publishAt state, and the once-a-day
+// reconcileScheduleFromSource re-derives it from source regardless.
+async function handleUndo(request: Request, env: Env): Promise<Response> {
+  // 1. Verify token -- first, and unconditionally, so an unauthenticated
+  // request cannot spend any of the 8 GitHub subrequests an undo costs.
+  // Same reasoning, and same shape, as handlePublish's own step 1.
+  const token = parseCookie(request.headers.get('Cookie'), 'vb_session');
+  const now = Math.floor(Date.now() / 1000);
+  if (!token || !(await verifyToken(env.TOKEN_SECRET, env.ADMIN_PASSWORD_HASH, token, now))) {
+    return json(401, { message: 'Not authenticated.' });
+  }
+
+  // 2. Parse.
+  let sha: string;
+  try {
+    const body: unknown = await request.json();
+    const raw = (body as { sha?: unknown } | null)?.sha;
+    if (typeof raw !== 'string' || raw.length === 0) {
+      return json(400, { message: 'No change named to put back.' });
+    }
+    sha = raw;
+  } catch {
+    return json(400, { message: 'Invalid request body.' });
+  }
+
+  try {
+    // 3. The explicit guard. Produces a clear sentence and spends no write.
+    const head = await getHeadCommit(env);
+    if (head.sha !== sha) {
+      return json(409, { message: 'Something else has been published since.' });
+    }
+
+    // 4. The paths come from the COMMIT, never from anything the client
+    // sent. Checked against the same allowlist restoreBlobs enforces --
+    // duplicated on purpose, so a commit that touched a source file refuses
+    // with a sentence of its own rather than surfacing as a
+    // DisallowedPathError partway through a write.
+    if (!head.changedPaths.every((path) => isRestorablePath(path))) {
+      return json(409, { message: 'That change touched files this cannot put back.' });
+    }
+
+    // 5. Build entries from the PARENT's tree. A path absent from it is one
+    // the commit ADDED -- skipped entirely, never sent with a null sha.
+    // Undo puts words and choices back; it never deletes a file. That is
+    // not laziness: photo paths are content-addressed, so an "added" asset
+    // can be a path an earlier publish already references, and deleting it
+    // would break a live image. An unreferenced file costs nothing.
+    const parentTreeSha = await getCommitTreeSha(env, head.parentSha);
+    const parentBlobs = await getTreeBlobShas(env, parentTreeSha);
+    const entries: { path: string; sha: string }[] = [];
+    for (const path of head.changedPaths) {
+      const blobSha = parentBlobs[path];
+      if (blobSha === undefined) continue;
+      entries.push({ path, sha: blobSha });
+    }
+    if (entries.length === 0) {
+      throw new UndoNotPossibleError('there is nothing to put back');
+    }
+
+    const result = await restoreBlobs(env, entries, 'Put back the previous version');
+    return json(200, { sha: result.sha });
+  } catch (error) {
+    if (error instanceof DisallowedPathError) {
+      return json(400, { message: error.message });
+    }
+    // Both map to 409, the one word this codebase already uses for "the
+    // state you were looking at is not the state that is there now" -- so
+    // the client branches on STATUS alone, never on message text.
+    if (error instanceof PublishConflictError || error instanceof UndoNotPossibleError) {
+      return json(409, { message: error.message });
+    }
+    return json(502, { message: error instanceof Error ? error.message : 'Could not put that change back.' });
+  }
+}
+
+// The same three shapes assertAllowedPath (worker/github.ts) permits, asked
+// as a question instead of an assertion. Kept here rather than exported from
+// that module so its own check stays the single enforcement point: this is a
+// pre-flight courtesy that produces a better sentence, never the thing that
+// actually protects the repository.
+function isRestorablePath(path: string): boolean {
+  if (path.includes('..')) return false;
+  return /^src\/content\/[a-z0-9-]+\.json$/.test(path)
+    || /^assets-source\/[a-z0-9_-]+\/[A-Za-z0-9 ._-]+$/.test(path)
+    || /^public\/menus\/[a-z0-9-]{1,64}\.pdf$/.test(path);
+}
+
+// ---------------------------------------------------------------------------
 // GET /api/content?path=src/content/<name>.json -- Plan 4 Task 3. Reads
 // current content directly from `main`, not from whatever build-time bundle
 // happens to be loaded in her browser. Without this route the dashboard has
@@ -1016,6 +1138,10 @@ export default {
     // fails a test rather than quietly never sliding.
     if (url.pathname === '/api/publish' && request.method === 'POST') {
       return withSlidingSession(request, env, await handlePublish(request, env));
+    }
+
+    if (url.pathname === '/api/undo' && request.method === 'POST') {
+      return withSlidingSession(request, env, await handleUndo(request, env));
     }
 
     if (url.pathname === '/api/content' && request.method === 'GET') {

@@ -13,6 +13,13 @@
 import { vi } from 'vitest';
 
 export const BASE_COMMIT_SHA = 'base-commit-sha-aaaa';
+// The commit an undo would put back -- i.e. the parent of the branch head --
+// and its own tree. Distinct constants from BASE_* above so a test can prove
+// restoreBlobs builds on the CURRENT head's tree and not the parent's, which
+// is the difference between an undo and silently deleting every file changed
+// since.
+export const PARENT_COMMIT_SHA = 'parent-commit-sha-eeee';
+export const PARENT_TREE_SHA = 'parent-tree-sha-ffff';
 export const BASE_TREE_SHA = 'base-tree-sha-bbbb';
 export const NEW_TREE_SHA = 'new-tree-sha-cccc';
 export const NEW_COMMIT_SHA = 'new-commit-sha-dddd';
@@ -70,6 +77,14 @@ export function makeGitHubStub(
     // path -- `failOn` alone can never target this endpoint.
     contentsFailPath?: string;
     contentsFailStatus?: number;
+    // GET /repos/{owner}/{repo}/commits/{ref} -- the REST Commits API,
+    // which only getHeadCommit uses. Defaults to a shape no existing suite
+    // requests, so nothing already written changes behaviour.
+    headCommit?: { sha?: string; parents?: { sha: string }[]; files?: { filename: string }[] };
+    // GET /git/trees/{sha}?recursive=1, keyed by tree sha. `truncated` is
+    // settable so a test can prove a partial response is refused rather
+    // than turned into a partial revert.
+    trees?: Record<string, { tree?: { path: string; sha: string; type: string }[]; truncated?: boolean }>;
   } = {},
 ): GitHubStub {
   const calls: RecordedCall[] = [];
@@ -121,6 +136,30 @@ export function makeGitHubStub(
       });
     }
 
+    // GET /repos/{owner}/{repo}/commits/{ref} -- matched BEFORE the Git Data
+    // `/git/commits/{sha}` branch below, and distinguishable from it because
+    // this one has no `/git/` segment at all.
+    if (method === 'GET' && /\/repos\/[^/]+\/[^/]+\/commits\/[^/]+$/.test(url) && !url.includes('/git/')) {
+      const head = opts.headCommit ?? {
+        sha: BASE_COMMIT_SHA,
+        parents: [{ sha: PARENT_COMMIT_SHA }],
+        files: [{ filename: 'src/content/dishes.json' }],
+      };
+      return new Response(JSON.stringify(head), { status: 200 });
+    }
+
+    // GET /git/trees/{sha}?recursive=1 -- the whole-tree read an undo uses
+    // to find the blob shas it should put back.
+    if (method === 'GET' && url.includes('/git/trees/')) {
+      const treeSha = url.split('/git/trees/')[1].split('?')[0];
+      const fixture = opts.trees?.[treeSha] ?? {
+        tree: [{ path: 'src/content/dishes.json', sha: 'parent-blob-dishes', type: 'blob' }],
+      };
+      return new Response(JSON.stringify({ sha: treeSha, truncated: fixture.truncated ?? false, tree: fixture.tree ?? [] }), {
+        status: 200,
+      });
+    }
+
     // GET /git/ref/heads/{branch} -- singular "ref", the read side.
     if (method === 'GET' && /\/git\/ref\/heads\/[^/]+$/.test(url)) {
       return new Response(JSON.stringify({ object: opts.malformedRefSha ? {} : { sha: BASE_COMMIT_SHA } }), {
@@ -130,6 +169,13 @@ export function makeGitHubStub(
 
     // GET /git/commits/{sha} -- fetches the base commit's tree sha.
     if (method === 'GET' && /\/git\/commits\/[^/]+$/.test(url)) {
+      // The PARENT commit answers with its own, different tree -- otherwise
+      // a test could not tell "built on the head's tree" (correct) apart
+      // from "built on the parent's tree" (deletes everything since).
+      const requested = url.split('/git/commits/')[1];
+      if (requested === PARENT_COMMIT_SHA) {
+        return new Response(JSON.stringify({ sha: PARENT_COMMIT_SHA, tree: { sha: PARENT_TREE_SHA } }), { status: 200 });
+      }
       return new Response(
         JSON.stringify({ sha: BASE_COMMIT_SHA, tree: opts.malformedTreeSha ? {} : { sha: BASE_TREE_SHA } }),
         { status: 200 },

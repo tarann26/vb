@@ -1,9 +1,21 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { commitFiles, getFileContent, DisallowedPathError, PublishConflictError, type GitHubEnv } from '../github';
+import {
+  commitFiles,
+  getFileContent,
+  getHeadCommit,
+  getTreeBlobShas,
+  restoreBlobs,
+  DisallowedPathError,
+  PublishConflictError,
+  UndoNotPossibleError,
+  type GitHubEnv,
+} from '../github';
 import {
   BASE_COMMIT_SHA,
   BASE_TREE_SHA,
   NEW_COMMIT_SHA,
+  PARENT_COMMIT_SHA,
+  PARENT_TREE_SHA,
   envWith,
   makeGitHubStub,
   utf8,
@@ -450,5 +462,170 @@ describe('getFileContent', () => {
       `https://api.github.com/repos/${NO_FETCH_ENV.GITHUB_OWNER}/${NO_FETCH_ENV.GITHUB_REPO}/contents/src/content/dishes.json?ref=${NO_FETCH_ENV.GITHUB_BRANCH}`,
     );
     expect((init.headers as Record<string, string>).Authorization).toBe(`Bearer ${NO_FETCH_ENV.GITHUB_TOKEN}`);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Undo. restoreBlobs bypasses commitFiles entirely -- it builds its own tree
+// and moves the ref itself -- which makes it the ONLY thing standing between
+// the Worker's token and the rest of the repository on this path. That is
+// what the first test here is really about, and it is the highest-severity
+// property in the whole feature.
+describe('restoreBlobs: putting blob shas back as a forward commit', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('refuses a path outside the allowlist before making a single network call', async () => {
+    const stub = makeGitHubStub();
+    const env = envWith(stub);
+    await expect(restoreBlobs(env, [{ path: '.github/workflows/deploy.yml', sha: 'abc' }], 'msg')).rejects.toBeInstanceOf(
+      DisallowedPathError,
+    );
+    // Nothing written, and nothing even read -- a request with one bad path
+    // must fail closed the same way commitFiles does.
+    expect(stub.calls).toHaveLength(0);
+  });
+
+  it('checks EVERY entry, not just the first', async () => {
+    const stub = makeGitHubStub();
+    const env = envWith(stub);
+    await expect(
+      restoreBlobs(env, [{ path: 'src/content/dishes.json', sha: 'a' }, { path: 'wrangler.toml', sha: 'b' }], 'msg'),
+    ).rejects.toBeInstanceOf(DisallowedPathError);
+    expect(stub.calls).toHaveLength(0);
+  });
+
+  // The failure this pins is invisible to a call counter: using the parent's
+  // tree as base_tree would silently delete every file changed since the
+  // commit being undone. Only the request BODY shows it.
+  it('bases its tree on the CURRENT head tree, never the reverted commit\'s parent tree', async () => {
+    const stub = makeGitHubStub();
+    const env = envWith(stub);
+    await restoreBlobs(env, [{ path: 'src/content/dishes.json', sha: 'parent-blob-dishes' }], 'msg');
+
+    const treeBody = stub.bodies.find((b) => b.tree !== undefined)!;
+    expect(treeBody.base_tree).toBe(BASE_TREE_SHA);
+    expect(treeBody.base_tree).not.toBe(PARENT_TREE_SHA);
+  });
+
+  it('commits on top of the current head, so this is a forward commit and not a history rewrite', async () => {
+    const stub = makeGitHubStub();
+    const env = envWith(stub);
+    const result = await restoreBlobs(env, [{ path: 'src/content/dishes.json', sha: 'parent-blob-dishes' }], 'msg');
+
+    const commitBody = stub.bodies.find((b) => b.parents !== undefined)!;
+    expect(commitBody.parents).toEqual([BASE_COMMIT_SHA]);
+    expect(commitBody.parents).not.toEqual([PARENT_COMMIT_SHA]);
+    expect(result.sha).toBe(NEW_COMMIT_SHA);
+  });
+
+  // Undo never deletes. Every tree entry carries a real blob sha; a null sha
+  // (GitHub's own way of removing a path) must never appear.
+  it('every tree entry names a real blob -- nothing is sent with a null sha', async () => {
+    const stub = makeGitHubStub();
+    const env = envWith(stub);
+    await restoreBlobs(
+      env,
+      [
+        { path: 'src/content/dishes.json', sha: 'parent-blob-dishes' },
+        { path: 'public/menus/food-menu.pdf', sha: 'parent-blob-menu' },
+      ],
+      'msg',
+    );
+
+    const treeBody = stub.bodies.find((b) => b.tree !== undefined)!;
+    const entries = treeBody.tree as { path: string; sha: unknown; mode: string; type: string }[];
+    expect(entries).toHaveLength(2);
+    entries.forEach((entry) => {
+      expect(typeof entry.sha).toBe('string');
+      expect(entry.sha).not.toBeNull();
+      expect(entry.type).toBe('blob');
+    });
+  });
+
+  // Moves no file bytes at all -- which is what makes this binary-safe for a
+  // menu PDF, where a base64/UTF-8 round trip would corrupt the file.
+  it('uploads no blobs -- it only re-points existing ones', async () => {
+    const stub = makeGitHubStub();
+    const env = envWith(stub);
+    await restoreBlobs(env, [{ path: 'src/content/dishes.json', sha: 'parent-blob-dishes' }], 'msg');
+    expect(stub.calls.filter((call) => call.url.endsWith('/git/blobs'))).toHaveLength(0);
+  });
+
+  it('a 422 on the ref update surfaces as PublishConflictError, same as a publish', async () => {
+    const stub = makeGitHubStub({ failOn: '/git/refs/heads/main', failStatus: 422 });
+    const env = envWith(stub);
+    await expect(restoreBlobs(env, [{ path: 'src/content/dishes.json', sha: 'x' }], 'msg')).rejects.toBeInstanceOf(
+      PublishConflictError,
+    );
+  });
+});
+
+describe('getHeadCommit / getTreeBlobShas: reading what an undo needs', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('returns the head sha, its single parent, and the paths it touched', async () => {
+    const stub = makeGitHubStub({
+      headCommit: {
+        sha: BASE_COMMIT_SHA,
+        parents: [{ sha: PARENT_COMMIT_SHA }],
+        files: [{ filename: 'src/content/dishes.json' }, { filename: 'src/content/site.json' }],
+      },
+    });
+    const env = envWith(stub);
+    await expect(getHeadCommit(env)).resolves.toEqual({
+      sha: BASE_COMMIT_SHA,
+      parentSha: PARENT_COMMIT_SHA,
+      changedPaths: ['src/content/dishes.json', 'src/content/site.json'],
+    });
+  });
+
+  // A merge has two parents and a root commit has none -- "the state before
+  // it" is not one well-defined thing in either case.
+  it('refuses a commit that does not have exactly one parent', async () => {
+    const merge = makeGitHubStub({
+      headCommit: { sha: BASE_COMMIT_SHA, parents: [{ sha: 'p1' }, { sha: 'p2' }], files: [] },
+    });
+    await expect(getHeadCommit(envWith(merge))).rejects.toBeInstanceOf(UndoNotPossibleError);
+    vi.unstubAllGlobals();
+
+    const root = makeGitHubStub({ headCommit: { sha: BASE_COMMIT_SHA, parents: [], files: [] } });
+    await expect(getHeadCommit(envWith(root))).rejects.toBeInstanceOf(UndoNotPossibleError);
+  });
+
+  // GitHub caps the `files` array of a commit response at 300. A truncated
+  // list must never become a partial revert -- putting half a commit back is
+  // worse than refusing, because it looks like it worked.
+  it('refuses a file list at the page cap rather than reverting part of a commit', async () => {
+    const files = Array.from({ length: 300 }, (_, i) => ({ filename: `src/content/f${i}.json` }));
+    const stub = makeGitHubStub({ headCommit: { sha: BASE_COMMIT_SHA, parents: [{ sha: PARENT_COMMIT_SHA }], files } });
+    await expect(getHeadCommit(envWith(stub))).rejects.toBeInstanceOf(UndoNotPossibleError);
+  });
+
+  it('reads a whole tree into a path -> blob sha map', async () => {
+    const stub = makeGitHubStub({
+      trees: {
+        [PARENT_TREE_SHA]: {
+          tree: [
+            { path: 'src/content/dishes.json', sha: 'blob-a', type: 'blob' },
+            { path: 'src/content', sha: 'tree-x', type: 'tree' },
+          ],
+        },
+      },
+    });
+    const env = envWith(stub);
+    // Only blobs -- a directory entry is not something a tree update can
+    // name a sha for.
+    await expect(getTreeBlobShas(env, PARENT_TREE_SHA)).resolves.toEqual({ 'src/content/dishes.json': 'blob-a' });
+  });
+
+  it('refuses a truncated tree rather than returning a partial map', async () => {
+    const stub = makeGitHubStub({
+      trees: { [PARENT_TREE_SHA]: { truncated: true, tree: [{ path: 'src/content/dishes.json', sha: 'blob-a', type: 'blob' }] } },
+    });
+    await expect(getTreeBlobShas(envWith(stub), PARENT_TREE_SHA)).rejects.toBeInstanceOf(UndoNotPossibleError);
   });
 });

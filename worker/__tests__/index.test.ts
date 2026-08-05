@@ -1,7 +1,15 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import worker, { AUTHENTICATED_PATHS } from '../index';
 import { hashPassword, parseCookie, verifyToken, signToken } from '../auth';
-import { makeGitHubStub, utf8, NEW_COMMIT_SHA, type GitHubStub } from './githubStub';
+import {
+  makeGitHubStub,
+  utf8,
+  BASE_COMMIT_SHA,
+  NEW_COMMIT_SHA,
+  PARENT_COMMIT_SHA,
+  PARENT_TREE_SHA,
+  type GitHubStub,
+} from './githubStub';
 
 // The session key is TOKEN_SECRET bound to the current password hash, so a
 // password change revokes every token already issued (worker/auth.ts).
@@ -1024,8 +1032,155 @@ describe('the 6-hour idle window', () => {
     // Guards the guard: a new authenticated route added to the router without
     // a decision about the session shows up here rather than silently never
     // sliding its window.
+    //
+    // Recorded honestly, since the name overclaims: this compares the
+    // constant against a hardcoded literal rather than deriving routes from
+    // the router, so it catches an EDIT to the constant but cannot catch an
+    // authenticated route that was never added to it. GET /api/wa proves
+    // that gap is already live -- it authenticates itself, is routed without
+    // withSlidingSession, and is absent from the Set. Adding /api/undo does
+    // not widen the gap, but this should not be read as proof of
+    // completeness.
     expect([...AUTHENTICATED_PATHS].sort()).toEqual(
-      ['/api/build-status', '/api/content', '/api/publish', '/api/upload'],
+      ['/api/build-status', '/api/content', '/api/publish', '/api/undo', '/api/upload'],
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/undo. The route's whole job is to refuse in every case where
+// putting the commit back would mean something other than what she was told,
+// and to spend nothing when it refuses.
+describe('POST /api/undo', () => {
+  let env: Awaited<ReturnType<typeof buildEnv>>;
+  let stub: GitHubStub;
+
+  beforeEach(async () => {
+    env = await buildEnv();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  async function cookie(): Promise<string> {
+    const now = Math.floor(Date.now() / 1000);
+    return `vb_session=${await signToken(TOKEN_SECRET, env.ADMIN_PASSWORD_HASH, now, now + 3600)}`;
+  }
+
+  function undoRequest(body: unknown, sessionCookie?: string): Request {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (sessionCookie) headers['Cookie'] = sessionCookie;
+    return new Request('https://viabiancadelhi.com/api/undo', { method: 'POST', headers, body: JSON.stringify(body) });
+  }
+
+  function stubWith(opts: Parameters<typeof makeGitHubStub>[0] = {}) {
+    stub = makeGitHubStub(opts);
+    vi.stubGlobal('fetch', stub.fetch);
+    return stub;
+  }
+
+  function wroteAnything(): boolean {
+    return stub.calls.some(
+      (call) =>
+        (call.method === 'POST' && (call.url.endsWith('/git/trees') || call.url.endsWith('/git/commits'))) ||
+        call.method === 'PATCH',
+    );
+  }
+
+  it('is 401 with no session, and spends no GitHub subrequest at all', async () => {
+    stubWith();
+    const response = await worker.fetch(undoRequest({ sha: BASE_COMMIT_SHA }), env);
+    expect(response.status).toBe(401);
+    expect(stub.calls).toHaveLength(0);
+  });
+
+  it('is 400 when no sha is named', async () => {
+    stubWith();
+    const response = await worker.fetch(undoRequest({}, await cookie()), env);
+    expect(response.status).toBe(400);
+    expect(stub.calls).toHaveLength(0);
+  });
+
+  // The explicit guard. ANY movement of the branch refuses -- an undo is only
+  // meaningful relative to one specific commit, so a second device or a
+  // developer's push has to stop it rather than revert a stale one.
+  it('is 409 when the sha is no longer the branch head, and writes nothing', async () => {
+    stubWith();
+    const response = await worker.fetch(undoRequest({ sha: 'some-other-commit' }, await cookie()), env);
+    expect(response.status).toBe(409);
+    expect(wroteAnything()).toBe(false);
+  });
+
+  it('is 409 when the commit touched a path outside the allowlist, and writes nothing', async () => {
+    stubWith({
+      headCommit: {
+        sha: BASE_COMMIT_SHA,
+        parents: [{ sha: PARENT_COMMIT_SHA }],
+        files: [{ filename: 'src/content/dishes.json' }, { filename: 'src/components/Hero.tsx' }],
+      },
+    });
+    const response = await worker.fetch(undoRequest({ sha: BASE_COMMIT_SHA }, await cookie()), env);
+    expect(response.status).toBe(409);
+    expect(wroteAnything()).toBe(false);
+  });
+
+  // Undo puts words and choices back; it never deletes. A path the commit
+  // ADDED is absent from the parent tree and is simply left out -- never sent
+  // with a null sha, which is how GitHub's tree API removes a file.
+  it('omits a path the commit added, and sends no null sha', async () => {
+    stubWith({
+      headCommit: {
+        sha: BASE_COMMIT_SHA,
+        parents: [{ sha: PARENT_COMMIT_SHA }],
+        files: [{ filename: 'src/content/dishes.json' }, { filename: 'assets-source/food/newphoto.jpg' }],
+      },
+      trees: {
+        [PARENT_TREE_SHA]: { tree: [{ path: 'src/content/dishes.json', sha: 'parent-blob-dishes', type: 'blob' }] },
+      },
+    });
+    const response = await worker.fetch(undoRequest({ sha: BASE_COMMIT_SHA }, await cookie()), env);
+    expect(response.status).toBe(200);
+
+    const treeBody = stub.bodies.find((b) => b.tree !== undefined)!;
+    const entries = treeBody.tree as { path: string; sha: unknown }[];
+    expect(entries.map((e) => e.path)).toEqual(['src/content/dishes.json']);
+    entries.forEach((entry) => expect(typeof entry.sha).toBe('string'));
+  });
+
+  it('is 409 when every path the commit touched was an addition -- there is nothing to put back', async () => {
+    stubWith({
+      headCommit: {
+        sha: BASE_COMMIT_SHA,
+        parents: [{ sha: PARENT_COMMIT_SHA }],
+        files: [{ filename: 'assets-source/food/newphoto.jpg' }],
+      },
+      trees: { [PARENT_TREE_SHA]: { tree: [] } },
+    });
+    const response = await worker.fetch(undoRequest({ sha: BASE_COMMIT_SHA }, await cookie()), env);
+    expect(response.status).toBe(409);
+    expect(wroteAnything()).toBe(false);
+  });
+
+  it('answers 200 with the new commit sha on the happy path', async () => {
+    stubWith();
+    const response = await worker.fetch(undoRequest({ sha: BASE_COMMIT_SHA }, await cookie()), env);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ sha: NEW_COMMIT_SHA });
+  });
+
+  // The structural guard, covering the window inside the request that no
+  // read-then-check can close. Must be 409, not the 502 an unrecognised
+  // throw would get -- the client branches on status alone.
+  it('maps a 422 on the ref update to 409, not 502', async () => {
+    stubWith({ failOn: '/git/refs/heads/main', failStatus: 422 });
+    const response = await worker.fetch(undoRequest({ sha: BASE_COMMIT_SHA }, await cookie()), env);
+    expect(response.status).toBe(409);
+  });
+
+  it('a GitHub outage on the tree read is 502, not 409', async () => {
+    stubWith({ failOn: `/git/trees/${PARENT_TREE_SHA}?recursive=1`, failStatus: 500 });
+    const response = await worker.fetch(undoRequest({ sha: BASE_COMMIT_SHA }, await cookie()), env);
+    expect(response.status).toBe(502);
   });
 });

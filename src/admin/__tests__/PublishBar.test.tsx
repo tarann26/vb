@@ -14,6 +14,7 @@ import type { ContentRegistry } from '../publish';
 import type { StagedFile, StagedFiles } from '../staged';
 import type { ContentFileName } from '../content';
 import { DRAFT_STORAGE_KEY } from '../drafts';
+import { UNDO_STORAGE_KEY, loadUndoRecord, rememberPublish } from '../undo';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -50,6 +51,7 @@ function Harness({
   tagsFile = 'dishes.json',
   holdDraftClear = false,
   onPublishLockChange,
+  reload,
 }: {
   onUnauthenticated?: (notice: string) => void;
   pollClock?: { now: () => number; sleep: (ms: number) => Promise<void> };
@@ -57,6 +59,7 @@ function Harness({
   tagsFile?: ContentFileName;
   holdDraftClear?: boolean;
   onPublishLockChange?: (locked: boolean) => void;
+  reload?: () => void;
 }) {
   const registry = useContentRegistry();
   const stagedFiles = useStagedFiles();
@@ -72,6 +75,7 @@ function Harness({
       pollClock={pollClock}
       holdDraftClear={holdDraftClear}
       onPublishLockChange={onPublishLockChange}
+      reload={reload}
     >
       {withTagsField && (
         <input
@@ -990,5 +994,213 @@ describe('DraftBanner', () => {
       />,
     );
     expect(screen.getByText("3 photos or PDFs you picked in that session weren't saved and will need to be picked again.")).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Undo my last publish. The offer is held client-side, written when a publish
+// returns 200 and deleted the instant an undo lands -- never derived from
+// whatever happens to be at the branch head, which is what makes it
+// structurally impossible to offer to revert a developer's hand commit and
+// call it "the change you published".
+describe('PublishBar: undo my last publish', () => {
+  const RECORD = { sha: 'commit-1', at: Date.now() - 4 * 60_000, paths: ['src/content/dishes.json', 'src/content/site.json'] };
+
+  function undoFetch(undoResponse: () => Promise<Response>) {
+    return vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/undo') return undoResponse();
+      if (url.startsWith('/api/build-status')) return jsonResponse(200, { state: 'live', deploymentUrl: null, commitUrl: 'https://c' });
+      if (url === '/build-info.json') return jsonResponse(200, { sha: 'undo-commit', builtAt: 'now' });
+      throw new Error(`unexpected fetch ${url}`);
+    });
+  }
+
+  it('offers nothing when there is no record', () => {
+    render(<Harness />);
+    expect(screen.queryByRole('button', { name: 'Undo my last publish' })).not.toBeInTheDocument();
+  });
+
+  // Offering to put back the last publish while she has fresh unpublished
+  // edits on screen would invite her to lose them -- the reload an undo ends
+  // with really would.
+  it('withdraws the offer while she has unpublished edits', () => {
+    rememberPublish(RECORD);
+    render(<Harness />);
+    expect(screen.getByRole('button', { name: 'Undo my last publish' })).toBeInTheDocument();
+
+    dirty(captured!.registry);
+
+    expect(screen.queryByRole('button', { name: 'Undo my last publish' })).not.toBeInTheDocument();
+  });
+
+  // Two clicks, never one. An undo is irreversible through this UI by
+  // design, so a single click is not defensible, and a redo added to make
+  // one click safe is exactly the extra concept this feature exists without.
+  it('the first click arms a confirmation and sends nothing', () => {
+    rememberPublish(RECORD);
+    const fetchImpl = undoFetch(async () => jsonResponse(200, { sha: 'undo-commit' }));
+    vi.stubGlobal('fetch', fetchImpl);
+    render(<Harness />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Undo my last publish' }));
+
+    expect(screen.getByRole('button', { name: 'Yes, undo it' })).toBeInTheDocument();
+    expect(fetchImpl).not.toHaveBeenCalledWith('/api/undo', expect.anything());
+  });
+
+  it('the confirmation names the sections and a relative time, and never a raw path', () => {
+    rememberPublish(RECORD);
+    render(<Harness />);
+    fireEvent.click(screen.getByRole('button', { name: 'Undo my last publish' }));
+
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveTextContent('Dishes and Opening hours');
+    expect(alert).toHaveTextContent('4 minutes ago');
+    expect(alert).not.toHaveTextContent('dishes.json');
+    expect(alert).not.toHaveTextContent('src/content');
+  });
+
+  // The honest negative -- the one thing a non-technical owner would
+  // otherwise assume was covered.
+  it('says out loud that an uploaded photo is not deleted, when one was uploaded', () => {
+    rememberPublish({ ...RECORD, paths: ['src/content/dishes.json', 'assets-source/food/abc.jpg'] });
+    render(<Harness />);
+    fireEvent.click(screen.getByRole('button', { name: 'Undo my last publish' }));
+    expect(screen.getByRole('alert')).toHaveTextContent('It will not delete the photo you uploaded.');
+  });
+
+  it('a successful publish writes the record, and a successful undo clears it', async () => {
+    // build-info answers whichever commit is actually current, so the
+    // confirm step matches for the publish AND then for the undo.
+    let liveSha = 'commit-1';
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/publish') return jsonResponse(200, { sha: 'commit-1' });
+      if (url === '/api/undo') {
+        liveSha = 'undo-commit';
+        return jsonResponse(200, { sha: 'undo-commit' });
+      }
+      if (url.startsWith('/api/content')) return jsonResponse(200, { content: '[]', sha: 'sha-fresh' });
+      if (url.startsWith('/api/build-status')) return jsonResponse(200, { state: 'live', deploymentUrl: null, commitUrl: 'https://c' });
+      if (url === '/build-info.json') return jsonResponse(200, { sha: liveSha, builtAt: 'now' });
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchImpl);
+    render(<Harness pollClock={instantClock()} reload={vi.fn()} />);
+    dirty(captured!.registry);
+    clickPublishAndAccept();
+    await screen.findByText('Your changes are live.');
+
+    expect(loadUndoRecord()).toEqual(expect.objectContaining({ sha: 'commit-1', paths: ['src/content/dishes.json'] }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Undo my last publish' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Yes, undo it' }));
+
+    await screen.findByText('Your site is back to how it was.');
+    expect(loadUndoRecord()).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Undo my last publish' })).not.toBeInTheDocument();
+  });
+
+  // The undo run drives the same phases a publish does, so the existing
+  // `busy` disables the Publish button with no new mutual-exclusion logic.
+  it('Publish is disabled while the undo is in flight', () => {
+    rememberPublish(RECORD);
+    vi.stubGlobal('fetch', undoFetch(() => new Promise<Response>(() => {})));
+    render(<Harness />);
+    fireEvent.click(screen.getByRole('button', { name: 'Undo my last publish' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Yes, undo it' }));
+
+    expect(screen.getByRole('button', { name: 'Publishing…' })).toBeDisabled();
+    expect(screen.getByRole('status')).toHaveTextContent('Putting it back…');
+  });
+
+  // Reloading before the build reports live would show her the PRE-undo site
+  // and teach her the button did nothing.
+  it('reloads only once the build reports live, never as soon as the POST returns', async () => {
+    rememberPublish(RECORD);
+    const reload = vi.fn();
+    // The build is HELD at 'building' by a gate this test controls, rather
+    // than by counting polls: with an instant clock, a count-based stub
+    // races straight through to 'live' before any assertion can observe the
+    // in-between state, which would make "not reloaded yet" vacuous.
+    let releaseBuild!: () => void;
+    const buildFinished = new Promise<void>((resolve) => {
+      releaseBuild = resolve;
+    });
+    let buildLive = false;
+    void buildFinished.then(() => {
+      buildLive = true;
+    });
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/undo') return jsonResponse(200, { sha: 'undo-commit' });
+      if (url.startsWith('/api/build-status')) {
+        return jsonResponse(200, { state: buildLive ? 'live' : 'building', deploymentUrl: null, commitUrl: 'https://c' });
+      }
+      if (url === '/build-info.json') return jsonResponse(200, { sha: 'undo-commit', builtAt: 'now' });
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchImpl);
+    // A clock that never advances and yields to the macrotask queue between
+    // polls: `instantClock` would burn through the ten-minute ceiling in the
+    // same tick and land on 'stalled' before this test could release the
+    // build.
+    const heldClock = { now: () => 0, sleep: () => new Promise<void>((resolve) => setTimeout(resolve, 0)) };
+    render(<Harness pollClock={heldClock} reload={reload} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Undo my last publish' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Yes, undo it' }));
+
+    await screen.findByText('Putting it back… building.');
+    expect(reload).not.toHaveBeenCalled();
+
+    await act(async () => {
+      releaseBuild();
+      await buildFinished;
+    });
+
+    await screen.findByText('Your site is back to how it was.');
+    expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  // The offer is dead either way: either the branch genuinely moved, or the
+  // undo landed and its response was lost. Clearing it is what makes
+  // "pressing undo twice" unreachable rather than merely refused.
+  it('a 409 clears the record and says so, never "your site is back"', async () => {
+    rememberPublish(RECORD);
+    vi.stubGlobal('fetch', undoFetch(async () => jsonResponse(409, { message: 'Something else has been published since.' })));
+    render(<Harness reload={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Undo my last publish' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Yes, undo it' }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Something else has been published since');
+    expect(alert).toHaveTextContent('Your site may already be back to how it was.');
+    expect(screen.queryByText('Your site is back to how it was.')).not.toBeInTheDocument();
+    expect(loadUndoRecord()).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Undo my last publish' })).not.toBeInTheDocument();
+  });
+
+  it('"Keep it" closes the confirmation and sends nothing', () => {
+    rememberPublish(RECORD);
+    const fetchImpl = undoFetch(async () => jsonResponse(200, { sha: 'undo-commit' }));
+    vi.stubGlobal('fetch', fetchImpl);
+    render(<Harness />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Undo my last publish' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Keep it' }));
+
+    expect(screen.queryByRole('button', { name: 'Yes, undo it' })).not.toBeInTheDocument();
+    expect(fetchImpl).not.toHaveBeenCalledWith('/api/undo', expect.anything());
+    // Still offered -- keeping the change does not consume the offer.
+    expect(screen.getByRole('button', { name: 'Undo my last publish' })).toBeInTheDocument();
+  });
+
+  it('a corrupted stored record simply means no offer', () => {
+    window.localStorage.setItem(UNDO_STORAGE_KEY, 'not json');
+    render(<Harness />);
+    expect(screen.queryByRole('button', { name: 'Undo my last publish' })).not.toBeInTheDocument();
   });
 });
