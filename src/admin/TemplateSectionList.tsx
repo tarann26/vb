@@ -12,7 +12,6 @@
 // exactly like a bespoke one.
 import { useState } from 'react';
 import Field from './Field';
-import ScheduleField from './ScheduleField';
 import TemplateContentForm from './TemplateContentForm';
 import { TEMPLATE_SECTION_ID_FIELD } from './fields';
 import { ADD_BUTTON_CLASSNAME, MOVE_BUTTON_CLASSNAME } from './RecordList';
@@ -51,20 +50,6 @@ const TEMPLATE_TYPE_COMPLETENESS: Record<TemplateType, true> = {
   detailBlock: true,
 };
 const ADDABLE_TEMPLATES = Object.keys(TEMPLATE_TYPE_COMPLETENESS) as TemplateType[];
-
-// Deletes `key` from a shallow copy of `section`, keeping every other
-// field -- the same reasoning RecordForm.tsx's own `omitKey` documents in
-// full: clearing a schedule date must remove `publishAt` entirely, not set
-// it to `undefined` (the key would still be present either way, and
-// `JSON.stringify` only happens to make the two look identical once
-// serialized). A `const { publishAt, ...rest }` destructure would do the
-// same thing but leaves an unused `publishAt` binding behind; `delete` on
-// a shallow copy avoids that without a lint suppression.
-function omitPublishAt(section: TemplateSection): TemplateSection {
-  const clone = { ...section };
-  delete clone.publishAt;
-  return clone;
-}
 
 // A blank starting point for "Add a ___ section" -- every field a fresh
 // TemplateSection needs, present and empty/neutral, the same "renders
@@ -232,16 +217,6 @@ function TemplateSectionList({ items, onChange, onReorder, onAdd, problems, rowP
                     value={section.id}
                     onChange={(next) => onChange(index, { ...section, id: next })}
                     problems={rowProblems.filter((p) => p.field === `${path}.id`)}
-                  />
-                  <ScheduleField
-                    id={`${rowId}-publishAt`}
-                    label="Publish on"
-                    help="Leave blank to publish immediately."
-                    value={section.publishAt}
-                    onChange={(next) => {
-                      onChange(index, next === undefined ? omitPublishAt(section) : { ...section, publishAt: next });
-                    }}
-                    problems={rowProblems.filter((p) => p.field === `${path}.publishAt`)}
                   />
                   <TemplateContentForm
                     section={section}

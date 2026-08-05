@@ -191,9 +191,8 @@ describe('buildInfo (the Vite plugin)', () => {
 // resolveCommitSha's own tests: the plugin tests above pin CF_PAGES_COMMIT_SHA
 // (the path every real Cloudflare deploy takes), so none of them exercise the
 // git-fallback or unknown-fallback branches at all. `gitRevParse` is a
-// parameter precisely so those branches can be driven directly, the same way
-// src/content/publish.ts's todayInKolkata takes `today` as a parameter instead
-// of stubbing the clock.
+// parameter precisely so those branches can be driven directly, without
+// uninstalling git or mutating PATH.
 describe('resolveCommitSha', () => {
   it('prefers CF_PAGES_COMMIT_SHA when set', () => {
     expect(resolveCommitSha({ CF_PAGES_COMMIT_SHA: 'deadbeef' })).toBe('deadbeef');

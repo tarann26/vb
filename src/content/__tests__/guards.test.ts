@@ -214,19 +214,6 @@ describe('template sections (Plan 7)', () => {
     expect(() => assertSections([...BESPOKE_SEVEN, badButton])).toThrow(/whatsapp button needs a "label" and a "message"/);
   });
 
-  // Plan 7 Contradiction A, resolved: a bespoke section still forbids
-  // publishAt (unchanged, already covered by sections.test.tsx's own
-  // "rejects a publishAt key on any section"); a TEMPLATE section may now
-  // carry one.
-  it('accepts a valid publishAt on a template section, and rejects a malformed one', async () => {
-    const { assertSections } = await import('../guards');
-    const scheduled = { ...VALID_TEXT_TEMPLATE, publishAt: '2099-01-01' };
-    expect(() => assertSections([...BESPOKE_SEVEN, scheduled])).not.toThrow();
-
-    const malformed = { ...VALID_TEXT_TEMPLATE, publishAt: '01-09-2099' };
-    expect(() => assertSections([...BESPOKE_SEVEN, malformed])).toThrow(/invalid "publishAt"/);
-  });
-
   it('rejects an entry with neither a bespoke nor a template kind', async () => {
     const { assertSections } = await import('../guards');
     const bad = { kind: 'mystery', id: 'x', enabled: true };

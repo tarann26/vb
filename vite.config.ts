@@ -2,7 +2,6 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from "path";
-import filterUnpublished from './plugins/filter-unpublished';
 import buildInfo from './plugins/build-info';
 import sitemap from './plugins/sitemap';
 import { pages, site } from './src/content';
@@ -15,15 +14,10 @@ export default defineConfig(() => ({
   },
   plugins: [
     react(),
-    // Build-only (see plugins/filter-unpublished.ts): strips future-dated
-    // dishes/drinks/press articles out of the shipped JS. Registered
-    // unconditionally -- its own `apply: 'build'` is what scopes it away
-    // from `vite dev` and Vitest, not anything here.
-    filterUnpublished(),
     // Build-only (see plugins/build-info.ts): stamps dist/build-info.json
     // with the commit sha, for the admin dashboard to poll and confirm a
-    // change is live. Same apply: 'build' scoping as filterUnpublished
-    // above, for the same reason.
+    // change is live. Registered unconditionally -- its own `apply: 'build'`
+    // is what scopes it away from `vite dev` and Vitest, not anything here.
     buildInfo(),
     // Build-only (see plugins/sitemap.ts): generates dist/sitemap.xml fresh
     // from the real, validated `pages` array every build, replacing the

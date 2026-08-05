@@ -61,7 +61,7 @@ describe('HoursField: renders one row per hours entry, prefilled', () => {
     // every keystroke; multi-keystroke typing needs a stateful wrapper the
     // same way Field.test.tsx's own ControlledField exists for exactly this
     // (see that file's header comment). One direct `change` event sidesteps
-    // it, same as ScheduleField.test.tsx's own date-input tests do.
+    // it.
     const { onChange } = renderField();
     const [, secondCloses] = screen.getAllByLabelText(HOURS_FIELDS.closes.label);
     fireEvent.change(secondCloses, { target: { value: '22:00' } });

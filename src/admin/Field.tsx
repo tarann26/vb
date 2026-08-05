@@ -26,16 +26,14 @@ export interface FieldProps<V> {
   onStaged?: (staged: StagedPhoto | null) => void;
 }
 
-// Exported, not module-private: ScheduleField.tsx (Task 7) renders the same
-// input/label shell Field.tsx already does for every other kind, for the
-// `publishAt` field specifically (see RecordForm.tsx's own comment on why
-// that one field is special-cased to a sibling component instead of a tenth
-// `kind`). Reusing these exact bindings, rather than retyping the same
-// Tailwind utility strings a second time, is what keeps that new component
-// from being able to introduce a single-character-off utility that Tailwind
-// would then scan as a NEW class and ship extra CSS for -- this project has
-// shipped unused/duplicate CSS from exactly this kind of drift seven times
-// before (see this repo's own commit history).
+// Exported, not module-private: a sibling component that renders its own
+// input/label shell rather than going through Field's generic dispatch (see
+// the `image`/PhotoField case below) must reuse these exact bindings rather
+// than retyping the same Tailwind utility strings a second time. That is
+// what keeps such a component from introducing a single-character-off
+// utility that Tailwind would then scan as a NEW class and ship extra CSS
+// for -- this project has shipped unused/duplicate CSS from exactly this
+// kind of drift seven times before (see this repo's own commit history).
 export const INPUT_CLASSNAME =
   "w-full rounded border border-gray-300 px-3 py-2 text-[#222] focus:border-[#6B8B59] focus:outline-none disabled:bg-gray-100 disabled:text-gray-500";
 export const LABEL_CLASSNAME = "mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-[#6B8B59]";
@@ -116,11 +114,10 @@ function Field<V>({ id, spec, value, onChange, problems, onStaged }: FieldProps<
   // upload status and error region (it has to: a plain <input> can't show
   // upload progress or a Retry button), so wrapping it in the SAME shell
   // every other kind gets would double up every one of those, not merely
-  // look redundant. The exact "sibling component instead of a tenth kind"
-  // shape RecordForm.tsx's own comment already uses for `publishAt`/
-  // ScheduleField, just decided here instead because `image` genuinely is
-  // one of Kind<V>'s members (unlike `publishAt`, which has no FieldSpec
-  // kind of its own at all).
+  // look redundant. Decided here, in Field's own dispatch, rather than in
+  // RecordForm: `image` genuinely IS one of Kind<V>'s members, so this is a
+  // rendering choice about a real kind, not a field this file has never
+  // heard of.
   //
   // `spec as ...` mirrors the 'select' case's own cast just below: TS can't
   // carry the `spec.kind === 'image'` narrowing through to `spec.category`

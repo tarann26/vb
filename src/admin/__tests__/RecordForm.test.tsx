@@ -206,83 +206,15 @@ describe('RecordForm: the real SITE_FIELDS descriptor (dotted bare keys, readonl
   });
 });
 
-// Task 7: `publishAt` routes to ScheduleField, not the generic <Field
-// kind="date">, specifically so clearing it can delete the key instead of
-// writing ''. These tests exercise that through the REAL RecordForm, not
-// ScheduleField in isolation (ScheduleField.test.tsx already covers its own
-// onChange contract) -- what matters here is that RecordForm actually turns
-// ScheduleField's `undefined` into a deleted KEY on the record it hands back.
-describe('RecordForm: publishAt renders as ScheduleField, and clearing it deletes the key', () => {
-  it('renders publishAt as a real date input, prefilled', () => {
-    render(<RecordForm fields={DISH_FIELDS} index={0} value={dish({ publishAt: '2026-09-01' })} onChange={vi.fn()} problems={[]} />);
-    const input = screen.getByLabelText(DISH_FIELDS.publishAt.label);
-    expect(input).toHaveAttribute('type', 'date');
-    expect(input).toHaveValue('2026-09-01');
-  });
-
-  it('a dish with no publishAt at all renders an empty date input, not the literal string "undefined"', () => {
-    render(<RecordForm fields={DISH_FIELDS} index={0} value={dish()} onChange={vi.fn()} problems={[]} />);
-    expect(screen.getByLabelText(DISH_FIELDS.publishAt.label)).toHaveValue('');
-  });
-
-  it('setting a date reports the whole record with the key present and set', () => {
-    const onChange = vi.fn();
-    const record = dish();
-    render(<RecordForm fields={DISH_FIELDS} index={0} value={record} onChange={onChange} problems={[]} />);
-    fireEvent.change(screen.getByLabelText(DISH_FIELDS.publishAt.label), { target: { value: '2026-09-01' } });
-    expect(onChange).toHaveBeenCalledWith({ ...record, publishAt: '2026-09-01' });
-  });
-
-  // The brief's own required test, verbatim: set a date, clear it, assert
-  // the resulting record has no `publishAt` key at all -- not merely that it
-  // reads as `undefined`. MUTATION CHECKED: reverting RecordForm.tsx's
-  // `onChange(omitKey(value, key))` back to `onChange({ ...value, [key]:
-  // undefined })` (set-to-undefined instead of delete) leaves this test RED
-  // -- `toHaveProperty('publishAt')` still passes on `{ publishAt: undefined,
-  // ... }`, since the key is still present (Object.hasOwnProperty is true
-  // for an own key holding `undefined`); only an actual delete makes
-  // `not.toHaveProperty` pass. Confirmed directly by making that exact edit,
-  // running this file, and reverting.
-  it('clearing a previously-set publishAt DELETES the key, not writes an empty string or undefined value', () => {
-    const onChange = vi.fn();
-    const record = dish({ publishAt: '2026-09-01', name: 'Bruschetta' });
-    render(<RecordForm fields={DISH_FIELDS} index={0} value={record} onChange={onChange} problems={[]} />);
-    fireEvent.change(screen.getByLabelText(DISH_FIELDS.publishAt.label), { target: { value: '' } });
-
-    expect(onChange).toHaveBeenCalledTimes(1);
-    const published = onChange.mock.calls[0][0] as Dish;
-    expect(published).not.toHaveProperty('publishAt');
-    expect(Object.keys(published)).not.toContain('publishAt');
-    // The literal claim the brief makes: the PUBLISHED JSON has no
-    // publishAt key -- checked through an actual JSON.stringify round trip,
-    // not just the in-memory object shape.
-    expect(JSON.parse(JSON.stringify(published))).not.toHaveProperty('publishAt');
-    // Every other field survives untouched -- this is a targeted delete of
-    // one key, not a reconstruction of the record.
-    expect(published).toEqual({ id: record.id, name: record.name, description: record.description, image: record.image, tags: record.tags });
-    // omitKey (RecordForm.tsx) must return a CLONE, never delete from the
-    // object it was given -- `record` is the live object sitting in the
-    // caller's own React state (AdminApp.tsx's `value`), so an in-place
-    // delete would corrupt that state before `setState` ever runs, a bug
-    // that would present as "the dashboard shows the old value until I
-    // click something else." MUTATION CHECKED: changing RecordForm.tsx's
-    // `omitKey` to `delete (value as Record<string, unknown>)[String(key)];
-    // return value;` (delete from the original, no spread) leaves every
-    // assertion above this one green -- `published` is still correct,
-    // since `published` and the mutated `record` are now the SAME object --
-    // only this assertion, on the ORIGINAL `record` binding, catches it.
-    expect(record).toHaveProperty('publishAt', '2026-09-01');
-  });
-
-  // Proves the `String(key) === 'publishAt'` branch is scoped by KEY NAME,
-  // not by `kind: 'date'` -- Article's own REQUIRED `date` field shares that
-  // kind but must never lose its key when cleared; an empty date there is a
-  // validation error ("needs a real date"), not "no date". MUTATION CHECKED:
-  // changing RecordForm.tsx's condition to `spec.kind === 'date'` makes this
-  // test go red (Article's `date` would also route through ScheduleField and
-  // DELETE `date` on clearing, rather than emptying it) -- confirmed
-  // directly, then reverted.
-  it("clearing Article's own required `date` field (also kind: 'date') empties it, and does NOT delete the key", () => {
+// Article's `date` is the one remaining `kind: 'date'` field in this
+// dashboard, and it is REQUIRED -- clearing it must report the empty string
+// and keep the key, so validateContent can then say "this article needs a
+// real date". Every field now takes RecordForm's single generic set path
+// (`{ ...value, [key]: next }`); this pins that a date field goes through it
+// intact rather than being special-cased into a deletion the way the retired
+// scheduling field once was.
+describe('RecordForm: clearing a required date field empties it and keeps the key', () => {
+  it("clearing Article's own `date` reports '' and does NOT delete the key", () => {
     const onChange = vi.fn();
     const record = article({ date: '2026-01-01' });
     render(<RecordForm fields={ARTICLE_FIELDS} index={0} value={record} onChange={onChange} problems={[]} />);
@@ -291,18 +223,5 @@ describe('RecordForm: publishAt renders as ScheduleField, and clearing it delete
     expect(onChange).toHaveBeenCalledWith({ ...record, date: '' });
     const published = onChange.mock.calls[0][0] as Article;
     expect(published).toHaveProperty('date', '');
-  });
-
-  it('states next to the control that publishing runs on an hourly check, not at midnight', () => {
-    render(<RecordForm fields={DISH_FIELDS} index={0} value={dish()} onChange={vi.fn()} problems={[]} />);
-    expect(screen.getByText(/hourly check/i)).toBeInTheDocument();
-  });
-
-  it('attaches a publishAt validation problem to the date input, via the real problemsFor matching', () => {
-    const problems: ValidationProblem[] = [
-      { field: '[0].publishAt', message: 'invalid "publishAt" date "01-09-2026", expected a real calendar date as YYYY-MM-DD' },
-    ];
-    render(<RecordForm fields={DISH_FIELDS} index={0} value={dish({ publishAt: '01-09-2026' })} onChange={vi.fn()} problems={problems} />);
-    expect(screen.getByLabelText(DISH_FIELDS.publishAt.label)).toHaveAccessibleDescription(/invalid "publishAt" date/);
   });
 });

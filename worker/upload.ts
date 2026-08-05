@@ -89,10 +89,12 @@ const EXT: Record<Format, string> = {
 //     idempotent (the second upload commits the identical path -- see
 //     worker/__tests__/upload.test.ts) rather than a silent overwrite or a
 //     duplicate file.
-//  2. A guessable name leaks unpublished content. `public/` is copied
-//     verbatim to the live site, so a future-dated item's photo would stay
-//     fetchable at its URL even while the item itself is filtered out of
-//     the build. A generic, unpredictable name is what makes that harmless.
+//  2. A guessable name leaks whatever the photo itself gives away.
+//     `public/` is copied verbatim to the live site, so an uploaded photo
+//     is fetchable at its URL the moment it is committed, whether or not
+//     any page references it yet -- a name like `truffle-special.webp`
+//     announces a dish before she has finished writing it up. A generic,
+//     unpredictable name is what makes that harmless.
 //
 // The extension likewise comes from `detectFormat`, never from the
 // filename: scripts/paths.mjs's IMAGE_EXT (what listSources() filters by)

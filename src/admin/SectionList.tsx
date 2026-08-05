@@ -1,15 +1,10 @@
 // sections.json: the homepage's own ordered, toggleable section list
 // (D6, docs/superpowers/specs/2026-08-02-phase-b-c-dashboard-and-sections-design.md).
 //
-// assertSections (src/content/guards.ts) enforces THREE rules, not the two
-// an earlier draft of this plan noticed:
+// assertSections (src/content/guards.ts) enforces TWO rules here:
 //   1. `hero` cannot be disabled.
-//   2. no `publishAt` key on any section (Section itself has no such field
-//      at all -- src/content/types.ts -- so nothing this component's own
-//      form could ever produce reaches that check; there is no UI path here
-//      that could add one).
-//   3. every SectionId must appear EXACTLY ONCE (guards.ts:150-153) -- the
-//      one a reorder/remove UI can actually break.
+//   2. every SectionId must appear EXACTLY ONCE -- the one a reorder/remove
+//      UI can actually break.
 //
 // D6: "Nothing is ever deleted, only disabled." This component offers
 // REORDER and TOGGLE only -- deliberately **no Add and no Remove button

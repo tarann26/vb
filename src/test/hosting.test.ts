@@ -173,10 +173,9 @@ describe('documented cloudflare build command', () => {
   // assertCopy/assertSections/narrowSectionId/assertHours never run at
   // build time. `npm run test:deploy` is what actually executes them.
   // If the documented command ever put `npm run build` first, a bad commit
-  // would build and deploy successfully, guards and all, and the cron
-  // (worker/index.ts's `scheduled` handler) would trigger exactly that
-  // command, unattended, on whichever hourly tick a scheduled item next
-  // comes due -- as early as 04:00 with nobody watching. This cannot verify
+  // would build and deploy successfully, guards and all -- and because
+  // Cloudflare builds on every push to `main`, that happens unattended, on
+  // whatever commit lands next, with nobody watching. This cannot verify
   // the Cloudflare dashboard itself holds this order (see
   // docs/cloudflare-cutover.md's own new step on that, and that step's own
   // comment on why nothing in this repository can check it) -- only that

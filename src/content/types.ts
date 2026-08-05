@@ -34,59 +34,13 @@ export interface SiteContent {
   copyrightYear: number;
 }
 
-// Shared by Dish, Drink, Article and (Plan 7, Task 1) TemplateSection -- an
-// ISO `YYYY-MM-DD` date after which the item is live. Absent means "always
-// published". Filtering on this field happens in the Vite build
-// (plugins/filter-unpublished.ts), never in the browser -- see that file for
-// why.
-//
-// Plan 7 Contradiction A, resolved: D9 says "items and sections carry an
-// optional publishAt date"; the code used to say sections deliberately do
-// not, because a future-dated `hero` (or any of the seven bespoke,
-// component-backed sections) is ambiguous -- either a hard build failure
-// (the filter plugin never ran on sections.json) or a silently heroless
-// homepage (if a filter were ever added), and `enabled: false` already
-// covers the founder's real scheduling need for those seven. That reasoning
-// still holds, unchanged, for `BespokeSection` -- see `assertSections` in
-// guards.ts, which still throws on a bespoke entry carrying this field.
-//
-// It does NOT hold for `TemplateSection`: a template section is her own
-// content, created and deleted (well, disabled -- D6) freely, with no
-// "homepage has no hero" failure mode possible, so scheduling one (a
-// seasonal promotion section, say) is exactly D9's use case with none of the
-// original ambiguity. `TemplateSection` below is the one place `Schedulable`
-// now reaches beyond Dish/Drink/Article. `Section`'s own two variants
-// therefore disagree on purpose: `BespokeSection` still forbids the field,
-// `TemplateSection` allows it -- decided once, here, not per call site.
-//
-// Gap B, closed: every file whose committed shape can carry a
-// `Schedulable`-typed value is named ONCE, in `SCHEDULABLE_FILES` below, not
-// independently re-listed in `plugins/filter-unpublished.ts` and
-// `worker/index.ts` the way the two used to drift. TypeScript's structural
-// typing cannot itself detect "this interface extends Schedulable" as a
-// compile-time discriminant (the field is optional, so every object type
-// trivially "extends" `{ publishAt?: string }`) -- there is no `T extends
-// Schedulable` conditional that a fifth type could fail. The real backstop
-// is `src/content/__tests__/schedulable.test.ts`, which scans the REAL,
-// committed content of every recognised content file for an object
-// carrying a `publishAt` key and fails if that file is not listed here --
-// so a developer who starts actually using `publishAt` on a new type
-// without registering its file here gets a red test, not silence. What it
-// cannot catch is a `Schedulable` type declared but never yet authored with
-// a real `publishAt` value anywhere -- recorded here, not hidden.
-export type Schedulable = {
-  publishAt?: string;
-};
-
-// The single source both `plugins/filter-unpublished.ts` (build-time
-// filtering) and `worker/index.ts` (the scheduled-rebuild cron's own
-// bookkeeping) import from -- see `Schedulable`'s own comment above for why
-// this collapsing of two previously-independent lists is what actually
-// closes Plan 7's Gap B, and what a fifth Schedulable file needs updated.
-export const SCHEDULABLE_FILES = ['dishes.json', 'drinks.json', 'press.json', 'sections.json'] as const;
-export type SchedulableFile = (typeof SCHEDULABLE_FILES)[number];
-
-export interface Dish extends Schedulable {
+// Publishing is instantaneous, everywhere. There is no per-item or
+// per-section "go live on this date" field on any type in this file, and no
+// build-time or cron machinery that would act on one -- content is live the
+// moment it is committed and the site rebuilds. A section she does not want
+// shown yet is switched off (`enabled: false`), which is immediate,
+// reversible, and the only visibility control this content model has.
+export interface Dish {
   id: string;
   name: string;
   description: string;
@@ -100,7 +54,7 @@ export interface Dish extends Schedulable {
   tags: string[];
 }
 
-export interface Drink extends Schedulable {
+export interface Drink {
   id: string;
   name: string;
   description: string;
@@ -108,7 +62,7 @@ export interface Drink extends Schedulable {
   image: string | null;
 }
 
-export interface Article extends Schedulable {
+export interface Article {
   id: string;
   title: string;
   publication: string;
@@ -166,8 +120,6 @@ export interface BespokeSection {
   kind: 'bespoke';
   id: SectionId;
   enabled: boolean;
-  // No `publishAt` here -- see `Schedulable`'s own comment (above) for why
-  // that stays true for exactly the seven component-backed sections.
 }
 
 // The five templates named in the Plan 7 spec collapsed to four during
@@ -282,7 +234,7 @@ export type TemplateContent = TemplateContentMap[TemplateType];
 // idiom this file's own `SectionId` comment documents -- see that module
 // for why an array literal would not give the same guarantee there either.
 export type TemplateSection = {
-  [K in TemplateType]: { kind: 'template'; id: string; enabled: boolean; publishAt?: string; template: K; content: TemplateContentMap[K] };
+  [K in TemplateType]: { kind: 'template'; id: string; enabled: boolean; template: K; content: TemplateContentMap[K] };
 }[TemplateType];
 
 export type Section = BespokeSection | TemplateSection;
@@ -299,7 +251,7 @@ export type Section = BespokeSection | TemplateSection;
 // completeness rule; that rule is specific to the homepage's identity, not
 // to an arbitrary page. See guards.ts's `assertPages` for exactly what IS
 // still enforced per page (no duplicate id within that page's own list, the
-// same per-template content/publishAt checks sections.json gets).
+// same per-template content checks sections.json gets).
 // Plan 7, Task 3, Step 3: a page's own metadata -- required, not optional.
 // D9's own reasoning ("a homepage with no hero is worse than her being
 // unable to produce one") applies here too: a page with no title or

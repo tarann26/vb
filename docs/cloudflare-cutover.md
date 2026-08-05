@@ -24,8 +24,7 @@ this GitHub repository.
 
 **After entering the build command below, jump to Step 13 and do that check now, before moving on
 to Step 3** — it confirms what you just typed into the dashboard actually landed the way this page
-describes, before anything downstream (the cron in particular) comes to depend on it silently
-matching.
+describes, before anything downstream comes to depend on it silently matching.
 
 - **Build command:** `npm run images && npm run test:deploy && npm run build`
   Yes, `npm run images` runs twice — once here, once again inside `npm run build` (which runs
@@ -251,7 +250,7 @@ works fine, so the first sign anything is wrong is her pressing Publish on real 
    ```bash
    printf '%s' '<the token you just copied>' | npx wrangler secret put GITHUB_TOKEN
    ```
-   (`printf '%s'`, not `echo`, for the same reason `DEPLOY_HOOK_URL` below uses it — no trailing
+   (`printf '%s'`, not `echo` — no trailing
    newline even offered to the pipe, on top of `wrangler secret put` already trimming trailing
    whitespace from piped stdin.)
 
@@ -411,31 +410,19 @@ to achieve revocation:
 openssl rand -base64 32 | npx wrangler secret put TOKEN_SECRET
 ```
 
-## 12. Set up the scheduled-rebuild cron and build-status reporting (Task 8, separate from Steps 1–11)
+## 12. Set up build-status reporting (separate from Steps 1-11)
 
-Two independent pieces, both required before Task 8's `scheduled` handler and `GET /api/build-status`
-work in production. Neither has an ordering dependency on Steps 1–11, but both need the Pages
-project from Step 1 to already exist.
+`GET /api/build-status` needs its own Cloudflare credential before it works in production. This has
+no ordering dependency on Steps 1-11, but it needs the Pages project from Step 1 to already exist.
 
-### 12a. Create a Deploy Hook and set `DEPLOY_HOOK_URL`
-
-In the Cloudflare dashboard: this Pages project → **Settings** → **Builds & deployments** →
-**Deploy hooks** → **Add deploy hook**. Name it something identifiable (e.g.
-`scheduled-rebuild-cron`), point it at the branch this project builds from (`main`), and save.
-Cloudflare shows the hook's URL once — a `https://api.cloudflare.com/client/v4/pages/webhooks/deploy_hooks/<id>`
-address. Set it as a Worker secret immediately:
+There is no deploy hook to create and no `DEPLOY_HOOK_URL` secret to set. This Worker exports no
+`scheduled` handler and `wrangler.toml` declares no cron triggers: publishing is instantaneous, and
+every build is triggered by Cloudflare's own build-on-push integration. If a `DEPLOY_HOOK_URL`
+secret was set on this Worker by an earlier revision of this runbook, delete it -- nothing reads it:
 
 ```bash
-printf '%s' 'https://api.cloudflare.com/client/v4/pages/webhooks/deploy_hooks/<id>' | npx wrangler secret put DEPLOY_HOOK_URL
+npx wrangler secret delete DEPLOY_HOOK_URL
 ```
-
-(`printf '%s'`, not `echo`, so no trailing newline is even offered to the pipe — belt-and-braces on
-top of `wrangler secret put` already trimming trailing whitespace from piped stdin, the same fact
-Step 11 above relies on.)
-
-Anyone holding this URL can trigger a Pages build for this project — a minor quota-exhaustion
-nuisance, not a data leak, but it is still a Worker secret, never a `wrangler.toml` var, matching
-`GITHUB_TOKEN`'s treatment for the same reason (Step 9 above).
 
 ### 12b. Create a Pages-scoped API token, and fill in the account/project identifiers
 
@@ -473,19 +460,17 @@ the moment Step 1 connects this repository) builds on *every* push to `GITHUB_BR
 upload immediately followed by a content publish costs two separate builds, not one. Each commit is
 its own build; there is no batching or debouncing anywhere in this stack, and that is deliberate:
 
-- Task 8's cron exists only to catch a *future-dated* `publishAt` becoming due on a day nothing else
-  commits — it has no mechanism to notice, batch, or build a same-day edit at all. Every ordinary
-  same-day publish or upload going live at all depends on Cloudflare's own build-on-push staying
-  enabled exactly as it is; turning it off to save builds would break that, not just slow it down.
-- The realistic volume this decision costs is nowhere near the 500-build/month cap. The quota risk
-  this task exists to close was the *unconditional hourly cron* (720–744/month on its own, all by
-  itself); routine editing traffic for a small restaurant site is not in the same order of magnitude.
+- Every commit going live at all depends on Cloudflare's own build-on-push staying enabled exactly
+  as it is — nothing else in this stack triggers a build. Turning it off to save builds would break
+  publishing entirely, not just slow it down.
+- The realistic volume this decision costs is nowhere near the 500-build/month cap: routine editing
+  traffic for a small restaurant site is not in the same order of magnitude.
 - Batching would mean either delaying a real publish's own build (contradicting "publish and it's
-  live") or routing every commit through this same deploy-hook-and-cron machinery instead of
-  Cloudflare's native integration — a materially larger change than this task's scope.
+  live") or routing every commit through deploy-hook machinery instead of Cloudflare's native
+  integration — a materially larger change, for a quota that is not under pressure.
 
-If usage ever changes enough that this becomes a real quota concern, the fix belongs on the deploy
-hook's own debounce, not a change to the conditional check above.
+If usage ever changes enough that this becomes a real quota concern, the fix belongs on a debounce
+in front of the build, not on how content is published.
 
 ## 13. Confirm the dashboard's build command still matches what Step 2 documented
 
@@ -504,11 +489,9 @@ standing between a bad commit and a deployed white page. Four of the five conten
 `npm run test:deploy`, or runs it after `npm run build` instead of before, **nothing in this
 repository can detect that.** `src/test/hosting.test.ts` only pins the command documented on *this
 page* — it has no way to read what the Cloudflare dashboard actually holds, and the two can drift
-apart the moment anyone edits the dashboard by hand without also editing this file. Once Task 8's
-cron is live, this stops being only a risk for the next manual publish: the cron's `scheduled`
-handler calls the deploy hook, which runs exactly whatever command the dashboard holds, unattended,
-on whichever hourly tick a scheduled item next comes due — as early as 04:00, with nobody watching
-either way.
+apart the moment anyone edits the dashboard by hand without also editing this file. And because
+Cloudflare builds on every push to `main`, that command runs unattended on whatever commit lands
+next — including a developer's, with nobody watching.
 
 This check cannot be automated — `src/test/hosting.test.ts` proves only that *this document*
 describes the safe order, never that the dashboard agrees with it. Do it manually.
@@ -528,7 +511,7 @@ put the Worker route on and no host to point DNS at. Everything below therefore 
 |---|---|
 | Pages project | `vb`, Git-connected to `tarann26/vb`, production branch `main` |
 | Site | `https://vb.aionxxxi.uk` (and `https://vb-c7r.pages.dev`) |
-| Worker | `via-bianca-admin`, route `vb.aionxxxi.uk/api/*`, zone `aionxxxi.uk`, hourly cron |
+| Worker | `via-bianca-admin`, route `vb.aionxxxi.uk/api/*`, zone `aionxxxi.uk`, no cron |
 | KV | `3e90a6b54f83487995156291801dce95`, bound as `KV` |
 | Secrets | `ADMIN_PASSWORD_HASH`, `TOKEN_SECRET`, `GITHUB_TOKEN` all set |
 

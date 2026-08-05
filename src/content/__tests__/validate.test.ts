@@ -248,54 +248,6 @@ describe('validateContent: names the field when a required value is blank', () =
   });
 });
 
-// Whole-branch review, Important 3: validateContent had no rule for
-// `publishAt` at all. Verified directly: POST /api/publish with
-// {"publishAt":"01-09-2026"} -- the DD-MM date-format habit -- returned 200
-// and the commit landed on `main`, where the build's own guard then fails
-// it, and stays failed for every subsequent publish of any file until she
-// happens to re-edit that one field. A field that isn't even present here
-// (`publishAt` was simply absent from the type this suite's other fixtures
-// use) is exactly what "no rule for it at all" means, so these are new
-// fixtures, not edits to the existing valid ones above.
-describe('validateContent: publishAt (Important 3, whole-branch review)', () => {
-  it('accepts a dish with no publishAt at all -- the ordinary case', () => {
-    expect(validateContent('dishes.json', [validDish])).toEqual([]);
-  });
-
-  it('accepts a dish with a well-formed future publishAt', () => {
-    const problems = validateContent('dishes.json', [{ ...validDish, publishAt: '2099-01-01' }]);
-    expect(problems).toEqual([]);
-  });
-
-  it('refuses a dish with a day/month-swapped publishAt, the DD-MM habit', () => {
-    const problems = validateContent('dishes.json', [{ ...validDish, publishAt: '01-09-2026' }]);
-    expect(messages(problems)).toMatch(/publishAt/i);
-  });
-
-  it('refuses a dish with a publishAt that is not a real calendar date', () => {
-    const problems = validateContent('dishes.json', [{ ...validDish, publishAt: '2026-02-30' }]);
-    expect(messages(problems)).toMatch(/publishAt/i);
-  });
-
-  it('refuses a drink with a malformed publishAt the same way', () => {
-    const problems = validateContent('drinks.json', [{ ...validDrink, publishAt: 'next tuesday' }]);
-    expect(messages(problems)).toMatch(/publishAt/i);
-  });
-
-  it('accepts a drink with no publishAt at all', () => {
-    expect(validateContent('drinks.json', [validDrink])).toEqual([]);
-  });
-
-  it('refuses a press article with a malformed publishAt the same way', () => {
-    const problems = validateContent('press.json', [{ ...newerArticle, publishAt: '2026-13-01' }]);
-    expect(messages(problems)).toMatch(/publishAt/i);
-  });
-
-  it('accepts a press article with no publishAt at all', () => {
-    expect(validateContent('press.json', [newerArticle])).toEqual([]);
-  });
-});
-
 // The three rules below are the ones moved out of the component suite by
 // this task. Each one is fed the exact content the retired test used to
 // reject, so a rule that moved but stopped catching anything is caught

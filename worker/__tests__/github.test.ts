@@ -359,10 +359,10 @@ describe('commitFiles', () => {
   });
 });
 
-// getFileContent: added for Task 8's daily schedule reconciliation
-// (worker/index.ts's reconcileScheduleFromSource), the one caller. Unlike
-// commitFiles above, this hits GET /contents/{path}, not the Git Data API,
-// so it needs its own small stub rather than githubStub.ts's.
+// getFileContent: read by handlePublish's own `baseSha` conflict check, by
+// the site.json developer-owned-field re-check, and by GET /api/content.
+// Unlike commitFiles above, this hits GET /contents/{path}, not the Git
+// Data API, so it needs its own small stub rather than githubStub.ts's.
 describe('getFileContent', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -413,12 +413,10 @@ describe('getFileContent', () => {
     expect(result?.content).toBe(text);
   });
 
-  // The property a mutation confirmed has no OTHER test covering it:
-  // reconcileScheduleFromSource's own try/catch swallows both "genuinely
-  // missing" and "GitHub failed" identically (leaving that file's already-
-  // known schedule untouched either way), so nothing at that call site can
-  // tell a 404 apart from a 500 -- this has to be proven at this function's
-  // own level instead.
+  // "Genuinely missing" and "GitHub failed" must stay distinguishable HERE,
+  // at this function's own level: handlePublish maps a null (missing) to a
+  // 409 conflict and a throw (failure) to a 502, and it can only do that if
+  // this function tells the two apart in the first place.
   it('returns null on a 404, rather than throwing', async () => {
     stubContentsResponse({ message: 'Not Found' }, 404);
     const result = await getFileContent(NO_FETCH_ENV, 'src/content/dishes.json');
@@ -432,8 +430,8 @@ describe('getFileContent', () => {
 
   // A 200 OK whose body doesn't have the shape the Contents API documents
   // (no base64 `content`, or a different `encoding`) must not be silently
-  // treated as empty content -- that would make reconciliation compute
-  // "nothing scheduled" from a response that never actually said that.
+  // treated as empty content -- that would let a caller compare her edit
+  // against "" and report a conflict, or a diff, that never existed.
   it('throws on a 200 response with no base64 content, rather than treating it as empty', async () => {
     stubContentsResponse({ type: 'dir' }, 200);
     await expect(getFileContent(NO_FETCH_ENV, 'src/content/dishes.json')).rejects.toThrow(/base64/);

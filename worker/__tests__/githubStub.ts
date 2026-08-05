@@ -56,11 +56,9 @@ export function makeGitHubStub(
     malformedTreeSha?: boolean;
     // GET /contents/{path} fixtures for `getFileContent` -- Task 3's
     // `baseSha` check on POST /api/publish, the site.json developer-owned
-    // re-check, and GET /api/content all read through it now, not just the
-    // cron's `reconcileScheduleFromSource`. Keyed by the exact
+    // re-check, and GET /api/content all read through it. Keyed by the exact
     // repo-relative path (e.g. 'src/content/site.json'), ASCII-only content
-    // so a plain `btoa` round-trips it cleanly (same constraint
-    // scheduled.test.ts's own `contentsApiResponse` documents). A path with
+    // so a plain `btoa` round-trips it cleanly. A path with
     // no entry here answers 404 -- `getFileContent` treats that as "no
     // current content" without throwing, which is the safe, deliberate
     // default: unlike every other GitHub endpoint this stub answers, a GET

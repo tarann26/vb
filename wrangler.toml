@@ -29,16 +29,12 @@ GITHUB_BRANCH = "main"   # the branch Cloudflare Pages builds from
 CLOUDFLARE_ACCOUNT_ID = "e352283475b003efeab1a35e45932927"
 CLOUDFLARE_PAGES_PROJECT = "vb"
 
-# Hourly, but the `scheduled` handler (worker/index.ts) only actually calls
-# the Cloudflare Pages deploy hook when `anythingPublishesToday` finds a
-# scheduled content date due -- an UNCONDITIONAL hourly hook is 720-744
-# builds/month against Pages Free's 500-build cap, exhausting it around day
-# 21 with nothing deployed and nobody told for the rest of the month.
-# Hourly (not daily) because checking is cheap -- one KV read on the common
-# "nothing due" tick -- and gives finer publish granularity than a single
-# daily check would.
-[triggers]
-crons = ["0 * * * *"]
+# No `[triggers]` block, deliberately: publishing is instantaneous, so there
+# is no future-dated content for a cron to wake up and notice, and
+# worker/index.ts exports no `scheduled` handler for one to call. Adding a
+# cron back here would be a standing charge against Pages Free's 500-build
+# cap (an unconditional hourly hook is 720-744 builds/month on its own) in
+# exchange for nothing.
 
 [[kv_namespaces]]
 binding = "KV"

@@ -57,13 +57,14 @@ function leafProblems(problems: ValidationProblem[], path: string): ValidationPr
   return problems.filter((p) => p.field === path);
 }
 
-// The same "delete the key, don't set it to undefined" contract
-// RecordForm.tsx's own `omitKey` and TemplateSectionList.tsx's own
-// `omitPublishAt` already document in full: `{ ...content, whatsapp:
+// "Delete the key, don't set it to undefined" -- `{ ...content, whatsapp:
 // undefined }` LEAVES THE KEY PRESENT with an undefined value (`'whatsapp'
-// in result` stays true), which is not the same in-memory shape as never
-// having had one, even though `JSON.stringify` happens to make the two
-// look identical once serialized. Generic over every template's own
+// in result` stays true, `Object.keys` still lists it), which is not the
+// same in-memory shape as never having had one, even though
+// `JSON.stringify` happens to make the two look identical once serialized.
+// This is now the only place in the dashboard that needs that distinction
+// -- two sibling helpers documenting the same contract went with the
+// scheduling field they served. Generic over every template's own
 // content shape (all four carry an optional `whatsapp`), so the four call
 // sites below share one implementation instead of four copies.
 function withWhatsApp<T extends { whatsapp?: TemplateWhatsAppButton }>(

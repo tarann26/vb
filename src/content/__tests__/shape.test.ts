@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import { site, story, dishes, drinks, press, menus, galleries } from '../index';
-import { isPublished } from '../publish';
 import type { Dish, Drink, Article } from '../types';
 
 // Types catch a missing field at build time. Nothing catches an *empty* one
@@ -158,65 +157,17 @@ describe('press article required fields are non-blank', () => {
   );
 });
 
-// `publishAt` (Dish, Drink, Article) is optional and, as of this writing,
-// unused by any real content -- so a per-item `it.each` gated on "if this
-// item has one" would generate 65 real test nodes that all take the false
-// branch today, reporting as coverage while asserting nothing. (An earlier
-// version of this file did exactly that: it read as "65 new checks" but
-// only the 2 shapes exercised by deliberately breaking a fixture had ever
-// gone red -- replacing `isRealCalendarDate`'s body with `return false` and
-// running the suite still reported every one of those 65 nodes green.)
-//
-// This version is one node, not gated on presence: it walks every item in
-// all three collections regardless of whether `publishAt` is set, and
-// routes anything present through the *production* `isPublished` -- not a
-// second copy of the validation logic. That closes two gaps the per-item
-// version had: `isPublished` is exercised even at zero live schedules
-// (there's no `if` for the assertion itself to fail to enter), and a future
-// change to `publish.ts`'s validation has exactly one place to go out of
-// sync with, not two. `today` here is a fixed placeholder, not
-// deliberately meaningful: `isPublished` validates and throws on a bad
-// `publishAt` before it ever compares to `today`, so any syntactically
-// valid ISO date works as the second argument.
-describe('publishAt (when present) is a value the production isPublished accepts', () => {
-  it('every dish/drink/press publishAt round-trips through isPublished without throwing', () => {
-    const collections: { file: string; items: { id: string; publishAt?: string }[] }[] = [
-      { file: 'dishes.json', items: dishes },
-      { file: 'drinks.json', items: drinks },
-      { file: 'press.json', items: press },
-    ];
-    const offenders: { file: string; id: string; publishAt: string; error: string }[] = [];
-    for (const { file, items } of collections) {
-      for (const item of items) {
-        if (item.publishAt === undefined) continue;
-        try {
-          isPublished(item, '1970-01-01');
-        } catch (error) {
-          offenders.push({
-            file,
-            id: item.id,
-            publishAt: item.publishAt,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
-      }
-    }
-    expect(offenders).toEqual([]);
-  });
-});
-
 // `dishesRaw`/`drinksRaw`/`pressRaw` are assigned into `Dish[]`/`Drink[]`/
 // `Article[]` in index.ts through a type annotation or a spread, neither of
 // which excess-property-checks -- TypeScript only excess-property-checks
 // object *literals* assigned directly to a typed position, never a value
-// that merely structurally matches. So a typo'd key -- "publishedAt"
-// instead of "publishAt" being the one this whole task is about -- compiles
-// clean, ships, and silently never filters: `tsc -b` stays green, the build
-// succeeds, and the dish goes live immediately regardless of the intended
-// date. Confirmed directly: `"publishedAt": "2099-01-01"` on a real dish,
-// `tsc -b --noEmit` exit 0, `vitest run` all green (before this guard
-// existed), `npm run build` exit 0, and the dish's name present in
-// `dist/assets/`.
+// that merely structurally matches. So a typo'd or entirely invented key on
+// a real content item compiles clean and ships, with `tsc -b` green and the
+// build succeeding, while whatever the author expected that key to do
+// silently never happens. Confirmed directly: an extra key on a real dish
+// left `tsc -b --noEmit` exit 0, `vitest run` all green (before this guard
+// existed), `npm run build` exit 0, and the dish shipped in `dist/assets/`
+// with the stray key intact.
 //
 // `Record<keyof X, true>` gets this the same compile-time completeness
 // `SECTION_ID_SET` already relies on in guards.ts: if `Dish`/`Drink`/
@@ -229,7 +180,6 @@ const DISH_KEYS: Record<keyof Dish, true> = {
   description: true,
   image: true,
   tags: true,
-  publishAt: true,
 };
 const DRINK_KEYS: Record<keyof Drink, true> = {
   id: true,
@@ -237,7 +187,6 @@ const DRINK_KEYS: Record<keyof Drink, true> = {
   description: true,
   category: true,
   image: true,
-  publishAt: true,
 };
 const ARTICLE_KEYS: Record<keyof Article, true> = {
   id: true,
@@ -247,7 +196,6 @@ const ARTICLE_KEYS: Record<keyof Article, true> = {
   excerpt: true,
   url: true,
   image: true,
-  publishAt: true,
 };
 
 function unknownKeys(item: object, knownKeys: Record<string, true>): string[] {

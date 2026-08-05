@@ -79,14 +79,12 @@ async function buildEnv() {
     GITHUB_REPO: 'vb',
     GITHUB_BRANCH: 'main',
     GITHUB_TOKEN: 'index-test-github-token-not-real',
-    // Task 8: build-status and the scheduled-rebuild cron. Unused by any
-    // test in this file (none of them call /api/build-status or
-    // worker.scheduled -- see status.test.ts and scheduled.test.ts), but
-    // required for `env` to satisfy `Env`.
+    // Build-status reporting. Unused by any test in this file (none of them
+    // call /api/build-status -- see status.test.ts), but required for `env`
+    // to satisfy `Env`.
     CLOUDFLARE_ACCOUNT_ID: 'index-test-account-id',
     CLOUDFLARE_PAGES_PROJECT: 'index-test-project',
     CLOUDFLARE_API_TOKEN: 'index-test-fixture-cf-token-not-real',
-    DEPLOY_HOOK_URL: 'https://api.cloudflare.com/client/v4/pages/webhooks/deploy_hooks/index-test-not-real',
   };
 }
 
@@ -393,26 +391,6 @@ describe('worker entry point', () => {
       expect(response.status).toBe(422);
       const body = (await response.json()) as { problems: { field: string; message: string }[] };
       expect(body.problems).toEqual([{ field: 'src/content/site.json', message: 'This file is not valid JSON.' }]);
-      expect(stub.calls).toHaveLength(0);
-    });
-
-    // Whole-branch review, Important 3: verified directly against this exact
-    // route -- POST /api/publish with a DD-MM-swapped publishAt used to
-    // return 200 and commit, because validateContent had no rule for the
-    // field at all. It does now (src/content/validate.ts's
-    // validatePublishAt); this is that fix proven end-to-end through the
-    // real route, not just at the validator's own unit level -- nothing
-    // reaches GitHub for a request that never should have.
-    it('a malformed publishAt is 422 and makes no GitHub call, not a landed commit the build later fails', async () => {
-      const cookie = await sessionCookie();
-      const badDish = { id: 'x', name: 'X', description: 'd', image: '/food/x.webp', tags: [], publishAt: '01-09-2026' };
-      const response = await worker.fetch(
-        publishRequest({ files: [utf8('src/content/dishes.json', JSON.stringify([badDish]))] }, cookie),
-        env,
-      );
-      expect(response.status).toBe(422);
-      const body = (await response.json()) as { problems: { field: string; message: string }[] };
-      expect(body.problems.some((p) => p.field.includes('publishAt'))).toBe(true);
       expect(stub.calls).toHaveLength(0);
     });
 

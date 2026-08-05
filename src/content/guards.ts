@@ -14,7 +14,6 @@ import type {
   SectionId,
   Drink,
 } from './types';
-import { isPublished } from './publish';
 
 const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/; // 24-hour "HH:MM"
 
@@ -134,30 +133,6 @@ export function isTemplateType(value: unknown): value is TemplateType {
   return typeof value === 'string' && (TEMPLATE_TYPES as readonly string[]).includes(value);
 }
 
-// `today` is irrelevant to this check -- the same `INERT_TODAY` reasoning
-// src/content/validate.ts's own `validatePublishAt` documents: `isPublished`
-// only ever THROWS on a malformed date, before it ever compares to `today`,
-// so any fixed placeholder reaches the same verdict on a well-formed one.
-// Used here (guards.ts, which runs at build/import time, including the dev
-// server where plugins/filter-unpublished.ts's own `apply: 'build'` guard
-// means it never runs at all) so a malformed `publishAt` on a template
-// section fails loudly the same way assertHours/assertDrinkCategory already
-// fail loudly on a malformed value, rather than only in a production build.
-const INERT_TODAY = '1970-01-01';
-
-function assertSectionPublishAt(publishAt: unknown, context: string): string | undefined {
-  if (publishAt === undefined) return undefined;
-  if (typeof publishAt !== 'string') {
-    throw new Error(`content: "publishAt" must be a string for ${context}`);
-  }
-  try {
-    isPublished({ publishAt }, INERT_TODAY);
-  } catch (error) {
-    throw new Error(`content: ${context} -- ${error instanceof Error ? error.message : String(error)}`);
-  }
-  return publishAt;
-}
-
 function assertWhatsAppButton(raw: unknown, context: string): TemplateWhatsAppButton | undefined {
   if (raw === undefined) return undefined;
   if (!raw || typeof raw !== 'object') {
@@ -247,8 +222,8 @@ function assertTemplateContent(template: TemplateType, raw: unknown, context: st
 // The one function both assertSections (sections.json, the homepage) and
 // assertPages (pages.json) parse each entry of their own `Section[]`
 // through -- everything a single entry needs checked (kind, id shape and
-// collision, enabled, and -- for a template entry -- template type, content
-// shape and publishAt) lives here exactly once. `seenIds` is caller-owned
+// collision, enabled, and -- for a template entry -- template type and
+// content shape) lives here exactly once. `seenIds` is caller-owned
 // (sections.json tracks one Set across the whole homepage; assertPages
 // starts a fresh one per page) so id collision is scoped correctly in each
 // caller without this function knowing which caller it is.
@@ -257,7 +232,7 @@ function assertSectionEntry(raw: unknown, index: number, seenIds: Set<string>, f
     throw new Error(`content/${fileLabel}: entry [${index}] is not an object`);
   }
   const entry = raw as Record<string, unknown>;
-  const { kind, id, enabled, publishAt } = entry;
+  const { kind, id, enabled } = entry;
 
   if (kind === 'bespoke') {
     if (!isSectionId(id)) {
@@ -269,12 +244,6 @@ function assertSectionEntry(raw: unknown, index: number, seenIds: Set<string>, f
     seenIds.add(id);
     if (typeof enabled !== 'boolean') {
       throw new Error(`content/${fileLabel}: "enabled" must be a boolean for section "${id}"`);
-    }
-    // See Schedulable's own comment (types.ts) for why this stays forbidden
-    // on exactly the seven bespoke sections while a template section (below)
-    // may now carry it -- Plan 7 Contradiction A's resolution.
-    if (publishAt !== undefined) {
-      throw new Error(`content/${fileLabel}: "publishAt" is not supported on a bespoke section (section "${id}")`);
     }
     const result: BespokeSection = { kind: 'bespoke', id, enabled };
     return result;
@@ -333,7 +302,6 @@ function assertSectionEntry(raw: unknown, index: number, seenIds: Set<string>, f
       throw new Error(`content/${fileLabel}: unknown template "${String(template)}" for section "${id}"`);
     }
     const content = assertTemplateContent(template, entry.content, `section "${id}"`);
-    const resolvedPublishAt = assertSectionPublishAt(publishAt, `section "${id}"`);
     // The five-member discriminated union (TemplateSection) is reconstructed
     // through a per-branch literal rather than one shared object spread, so
     // `content`'s already-narrowed shape (assertTemplateContent's own return
@@ -342,13 +310,13 @@ function assertSectionEntry(raw: unknown, index: number, seenIds: Set<string>, f
     // declaration (types.ts) pairs them.
     switch (template) {
       case 'text':
-        return { kind: 'template', id, enabled, publishAt: resolvedPublishAt, template, content: content as TextTemplateContent };
+        return { kind: 'template', id, enabled, template, content: content as TextTemplateContent };
       case 'itemList':
-        return { kind: 'template', id, enabled, publishAt: resolvedPublishAt, template, content: content as ItemListTemplateContent };
+        return { kind: 'template', id, enabled, template, content: content as ItemListTemplateContent };
       case 'gallery':
-        return { kind: 'template', id, enabled, publishAt: resolvedPublishAt, template, content: content as GalleryTemplateContent };
+        return { kind: 'template', id, enabled, template, content: content as GalleryTemplateContent };
       case 'detailBlock':
-        return { kind: 'template', id, enabled, publishAt: resolvedPublishAt, template, content: content as DetailBlockTemplateContent };
+        return { kind: 'template', id, enabled, template, content: content as DetailBlockTemplateContent };
     }
   }
 

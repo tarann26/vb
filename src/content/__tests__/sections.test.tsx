@@ -275,13 +275,4 @@ describe('assertSections', () => {
     expect(() => assertSections(bad)).toThrow(/"enabled" must be a boolean.*food/);
   });
 
-  // Section has no `publishAt` field (see the comment on assertSections
-  // itself for why: a future-dated hero would otherwise be either a hard
-  // build failure or a silently heroless homepage, depending on whether the
-  // guard or the filter ran first). Rejecting the key outright means that
-  // ambiguity can never arise, on hero or any other section.
-  it('rejects a publishAt key on any section', () => {
-    const bad = sections.map((s) => (s.id === 'hero' ? { ...s, publishAt: '2099-01-01' } : s));
-    expect(() => assertSections(bad)).toThrow(/publishAt/);
-  });
 });

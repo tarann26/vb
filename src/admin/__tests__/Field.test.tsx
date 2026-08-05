@@ -223,9 +223,13 @@ describe('Field: one input per kind, wired to onChange', () => {
     expect(onChange).toHaveBeenCalledWith('wine');
   });
 
+  // 'Published on' is ARTICLE_FIELDS.date's own real label -- the one
+  // remaining `kind: 'date'` field in this dashboard, and a required one
+  // (an empty value there is a validation error, not a meaningful "no
+  // date").
   it('date: a real date input', () => {
-    render(<Field id="f-pub" spec={{ label: 'Publish on', kind: 'date' }} value="2026-09-01" onChange={vi.fn()} problems={[]} />);
-    const input = screen.getByLabelText('Publish on');
+    render(<Field id="f-pub" spec={{ label: 'Published on', kind: 'date' }} value="2026-09-01" onChange={vi.fn()} problems={[]} />);
+    const input = screen.getByLabelText('Published on');
     expect(input).toHaveAttribute('type', 'date');
     expect(input).toHaveValue('2026-09-01');
   });

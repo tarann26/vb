@@ -160,9 +160,8 @@ describe('loadDraft: malformed or hostile data already stored never throws', () 
   });
 
   // A per-entry defect (one file's own savedAt lost or corrupted) drops
-  // ONLY that entry, not the whole draft -- the identical "one bad item
-  // doesn't cost every other item" posture worker/index.ts's own
-  // isStillPending takes toward a malformed publishAt.
+  // ONLY that entry, not the whole draft -- one unreadable file's draft is
+  // not a reason to throw away every other file's readable one.
   it('one malformed entry among valid ones is dropped, not the whole draft', () => {
     window.localStorage.setItem(
       DRAFT_STORAGE_KEY,

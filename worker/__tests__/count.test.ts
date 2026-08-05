@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import worker, { WA_DAILY_CAP, type Env } from '../index';
 import { hashPassword, signToken } from '../auth';
-import { todayInKolkata } from '../../src/content/publish';
+import { todayInKolkata } from '../date';
 
 // The session key is TOKEN_SECRET bound to the current password hash, so a
 // password change revokes every token already issued (worker/auth.ts).
@@ -69,7 +69,6 @@ async function buildEnv(kv = new FakeKV()): Promise<Env> {
     CLOUDFLARE_ACCOUNT_ID: 'count-test-account-id',
     CLOUDFLARE_PAGES_PROJECT: 'count-test-project',
     CLOUDFLARE_API_TOKEN: 'count-test-fixture-cf-token-not-real',
-    DEPLOY_HOOK_URL: 'https://api.cloudflare.com/client/v4/pages/webhooks/deploy_hooks/count-test-not-real',
   };
 }
 

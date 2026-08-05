@@ -77,13 +77,14 @@ export type FieldSpec<V = unknown> =
   | { label: string; kind: Extract<Kind<V>, 'select'>; options: readonly V[]; help?: string }
   | { label: string; kind: Extract<Kind<V>, 'image'>; category: UploadCategory; help?: string };
 
-// `Required<T>` makes an optional content field (e.g. `publishAt`) required
-// *in the descriptor* -- the dashboard still needs a label and a kind for a
-// field even though a particular dish is allowed to omit it.
+// `Required<T>` makes an optional content field (e.g. `Drink.image`, which
+// is nullable) required *in the descriptor* -- the dashboard still needs a
+// label and a kind for a field even though a particular record is allowed to
+// leave it empty.
 export type FieldsOf<T> = { [K in keyof Required<T>]: FieldSpec<Required<T>[K]> };
 
 // ---------------------------------------------------------------------------
-// Dish, Drink, Article -- the three Schedulable content types.
+// Dish, Drink, Article -- the three list-shaped content types.
 
 export const DISH_FIELDS: FieldsOf<Dish> = {
   id: {
@@ -107,11 +108,6 @@ export const DISH_FIELDS: FieldsOf<Dish> = {
     kind: 'tags',
     help: 'Recorded for later use but not shown anywhere on the site today -- no page renders these yet, so editing this list changes nothing a diner sees.',
   },
-  publishAt: {
-    label: 'Publish on',
-    kind: 'date',
-    help: 'Leave blank to publish immediately. Must be a real calendar date (YYYY-MM-DD).',
-  },
 };
 
 export const DRINK_FIELDS: FieldsOf<Drink> = {
@@ -130,11 +126,6 @@ export const DRINK_FIELDS: FieldsOf<Drink> = {
   // against the real, committed drinks.json, where the one drink with a
   // photo today stores it at /mocktails/piccante.webp.
   image: { label: 'Photo', kind: 'image', category: 'mocktails', help: 'Optional -- leave empty for no photo.' },
-  publishAt: {
-    label: 'Publish on',
-    kind: 'date',
-    help: 'Leave blank to publish immediately. Must be a real calendar date (YYYY-MM-DD).',
-  },
 };
 
 export const ARTICLE_FIELDS: FieldsOf<Article> = {
@@ -151,11 +142,6 @@ export const ARTICLE_FIELDS: FieldsOf<Article> = {
   // 'press' -- matches where every real press.json `image` value lives on
   // disk today (public/press/*.webp).
   image: { label: 'Photo', kind: 'image', category: 'press' },
-  publishAt: {
-    label: 'Publish on',
-    kind: 'date',
-    help: 'Leave blank to publish immediately. Must be a real calendar date (YYYY-MM-DD).',
-  },
 };
 
 // ---------------------------------------------------------------------------
@@ -191,8 +177,8 @@ export const MENU_FIELDS: FieldsOf<MenuFile> = {
   label: { label: 'Label', kind: 'text' },
   // `kind: 'text'` here is never actually rendered -- AdminApp.tsx's own
   // menus section replaces this one field with PdfField directly (the same
-  // "sibling component instead of a tenth kind" swap RecordForm.tsx already
-  // makes for `publishAt`/ScheduleField), because PdfField's own `name` prop
+  // "sibling component instead of a tenth kind" swap Field.tsx already makes
+  // for `image`/PhotoField), because PdfField's own `name` prop
   // has to be derived from the record's CURRENT `file` value (so a
   // same-name replacement really does commit to the same path -- see
   // worker/upload.ts's own `menuAssetPath`), not a single unchanging value a

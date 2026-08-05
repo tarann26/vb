@@ -9,10 +9,11 @@
 // route reads Cloudflare's own Pages deployments API instead, which knows the
 // real state regardless of whether the build ever produced output.
 //
-// Deliberately NOT sourced from the deploy hook's own response: a Cloudflare
-// Pages deploy hook (worker/index.ts's `scheduled` handler fires one) answers
-// only with an empty 200 -- no deployment id, nothing to poll -- so the hook
-// response can never be the source of this endpoint's data.
+// Deliberately NOT sourced from a Pages deploy hook's own response: such a
+// hook answers only with an empty 200 -- no deployment id, nothing to poll
+// -- so it could never be the source of this endpoint's data. Cloudflare's
+// own GitHub integration is what actually triggers every build here, and it
+// reports through this same deployments API.
 import { parseCookie, verifyToken } from './auth';
 import type { GitHubEnv } from './github';
 

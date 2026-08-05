@@ -148,7 +148,7 @@ function dotsNeeded(filePath: string): number {
   return filePath.split('/').length - 2;
 }
 
-// The six modules under src/content/ that are legitimate to import from
+// The five modules under src/content/ that are legitimate to import from
 // src/admin/ -- none of them import any JSON, and none has a transitive path
 // to src/content/index.ts, the build-time snapshot. `types`, `validate` and
 // `guards` erase entirely at compile time (every export is a type or a pure
@@ -171,14 +171,14 @@ function dotsNeeded(filePath: string): number {
 // exactly this -- straight through. Confirmed directly: that version left
 // this exact line green across all 21 tests in this file's previous
 // revision.
-const SAFE_CONTENT_SUBMODULES = ['types', 'validate', 'guards', 'publish', 'context', 'placement'];
+const SAFE_CONTENT_SUBMODULES = ['types', 'validate', 'guards', 'context', 'placement'];
 
 function importsContentSnapshot(source: string, filePath: string): boolean {
   const dots = dotsNeeded(filePath);
   const safe = SAFE_CONTENT_SUBMODULES.join('|');
   // After `content`, either nothing (the bare barrel) or a `/` NOT
   // immediately followed by one of the safe submodule names -- so
-  // `/types`, `/validate`, `/guards`, `/publish` (and their own further
+  // `/types`, `/validate`, `/guards` (and their own further
   // subpaths, e.g. a hypothetical `/types/foo`) stay legal, while
   // `/index`, `/dishes.json`, `/index.ts`, or a bare trailing `/` with
   // nothing after it all match.
@@ -285,12 +285,11 @@ describe('importsContentSnapshot catches every import form, at the right depth',
     expect(importsContentSnapshot(`import type { Dish } from '../content/types';`, AT_DEPTH_1)).toBe(false);
   });
 
-  it('does not match the validate/guards/publish/context/placement modules, which import no JSON', () => {
+  it('does not match the validate/guards/context/placement modules, which import no JSON', () => {
     expect(importsContentSnapshot(`import { validateContent } from '../content/validate';`, AT_DEPTH_1)).toBe(false);
     expect(importsContentSnapshot(`import { assertSections } from '../content/guards';`, AT_DEPTH_1)).toBe(false);
-    expect(importsContentSnapshot(`import { isPublished } from '../content/publish';`, AT_DEPTH_1)).toBe(false);
     // Post-review Fix 5: `context` holds a real runtime `createContext` call
-    // (unlike the other three, which erase entirely), but it still imports
+    // (unlike the others, which erase entirely), but it still imports
     // no JSON and has no path to src/content/index.ts -- the actual property
     // this whitelist exists to guard, per SAFE_CONTENT_SUBMODULES's own
     // comment above.
@@ -302,7 +301,7 @@ describe('importsContentSnapshot catches every import form, at the right depth',
     // the kind of change this test file exists to catch. `placement.ts`
     // itself imports no JSON today (confirmed directly -- zero imports at
     // all), so it belongs on the list for the identical reason
-    // validate/guards/publish do; this pins that it actually IS on it, not
+    // validate/guards do; this pins that it actually IS on it, not
     // just that adding it didn't break anything else.
     expect(importsContentSnapshot(`import { resolveLayout } from '../content/placement';`, AT_DEPTH_1)).toBe(false);
   });

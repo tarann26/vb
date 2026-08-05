@@ -13,11 +13,9 @@ import path from 'node:path';
 // user input here to inject, but there's also no reason to open a shell for
 // a fixed two-argument command.
 //
-// `gitRevParse` is a parameter (not a bare call in the body) for the same
-// reason todayInKolkata's callers pass `today` in rather than reading the
-// clock directly (see src/content/publish.ts): it lets the git-throws branch
-// be exercised deterministically in a test, without uninstalling git or
-// mutating PATH.
+// `gitRevParse` is a parameter (not a bare call in the body) so the
+// git-throws branch can be exercised deterministically in a test, without
+// uninstalling git or mutating PATH.
 //
 // Never throws -- a build that works is worth more than a stamp that is
 // always right. The dashboard's poll is a convenience, not a correctness
@@ -38,10 +36,10 @@ export function resolveCommitSha(
 // Stamps dist/build-info.json with the commit sha and build time, so the
 // admin dashboard can poll it and tell the owner her change went live.
 //
-// `apply: 'build'` scopes this to `vite build` only -- see
-// filter-unpublished.ts's own comment for why that also means Vitest never
-// sees it (vitest.config.ts is a separate Vite config that never imports
-// this file). Verified behaviourally, not just by reading `.apply`: see
+// `apply: 'build'` scopes this to `vite build` only, which also means
+// Vitest never sees it (vitest.config.ts is a separate Vite config that
+// never imports this file). Verified behaviourally, not just by reading
+// `.apply`: see
 // plugins/__tests__/build-info.test.ts, which runs a real `vite build` and
 // a real `vite dev`-equivalent (createServer + close) against a minimal
 // fixture root and asserts the file appears after one and not the other.

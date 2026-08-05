@@ -273,26 +273,22 @@ export interface FileContent {
 
 // GET /contents/{path}?ref={branch} -- reads a file's current text content
 // directly from the branch Cloudflare Pages builds from, independent of
-// whatever commit last touched it. Originally added for Task 8's
-// `reconcileScheduleFromSource` (worker/index.ts), which needs the *actual
-// current* state of dishes/drinks/press.json, including content that
-// reached `main` some way other than `POST /api/publish` (a direct commit,
-// the GitHub web UI, a revert) -- none of which ever runs through
-// `recordScheduledDates`, since that only fires from inside `handlePublish`
-// itself. Task 3 added the `sha` field and a second caller: `GET
-// /api/content` and `POST /api/publish`'s `baseSha` check both need it too.
+// whatever commit last touched it, and independent of how that content got
+// there (a publish through this Worker, a direct commit, the GitHub web UI,
+// a revert). Two callers: `GET /api/content`, which serves the dashboard
+// the current committed copy of a file, and `POST /api/publish`'s `baseSha`
+// check, which compares against it to refuse a stale edit. The `sha` field
+// is what makes the second of those possible.
 //
 // Returns `null` on a 404 (the file genuinely doesn't exist on this branch)
-// rather than throwing -- a schedulable file that doesn't exist yet isn't a
-// GitHub failure, it's "nothing to reconcile for this one" (and, for Task
-// 3's conditional write, a `baseSha` sent for a file that no longer exists
-// is itself treated as a conflict, not a crash -- see handlePublish). Any
-// other non-OK status, or a 200 whose body isn't the base64-plus-sha shape
-// the Contents API documents, still throws: unlike `resolveCommitSha`
+// rather than throwing -- a content file that doesn't exist yet isn't a
+// GitHub failure, and a `baseSha` sent for a file that no longer exists is
+// itself treated as a conflict, not a crash (see handlePublish). Any other
+// non-OK status, or a 200 whose body isn't the base64-plus-sha shape the
+// Contents API documents, still throws: unlike `resolveCommitSha`
 // (plugins/build-info.ts), a read this function's callers depend on to
-// *recover* missed schedule dates, detect a stale edit, or re-check a
-// developer-owned field should not quietly pretend nothing changed on a
-// genuine failure.
+// detect a stale edit or re-check a developer-owned field should not
+// quietly pretend nothing changed on a genuine failure.
 export async function getFileContent(env: GitHubEnv, path: string): Promise<FileContent | null> {
   const url = repoUrl(env, `/contents/${path}?ref=${env.GITHUB_BRANCH}`);
   const res = await fetch(url, { headers: ghHeaders(env) });

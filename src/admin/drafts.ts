@@ -113,9 +113,8 @@ function isDraftEntry(value: unknown): value is DraftEntry {
 // offer", the same as "nothing was ever saved" -- a caller (AdminApp's own
 // banner-or-not decision) has no reason to tell those two apart. A single
 // malformed entry among otherwise-valid ones is dropped on its own, not
-// treated as a reason to discard the whole map -- the identical
-// per-item-not-whole-file posture worker/index.ts's `isStillPending`
-// already takes toward one bad `publishAt` among many.
+// treated as a reason to discard the whole map -- one unreadable draft is
+// not a reason to throw away every other surface's readable one.
 //
 // `storage` is a parameter, not a bare `window.localStorage` reference in
 // the body, so a test can inject a `Storage` that throws (a real, reachable
@@ -148,9 +147,8 @@ export function loadDraft(surface: DraftSurface, storage: Storage = window.local
 // Never throws -- see loadDraft's own comment above; a quota-exceeded write
 // (real, reachable on some browsers/private-mode configurations) must not
 // crash the dashboard she is actively using. Worst case, that one write is
-// silently lost and the next change tries again -- the same "best effort,
-// never load-bearing for the publish itself" posture worker/index.ts's own
-// recordScheduledDates already takes toward its KV bookkeeping.
+// silently lost and the next change tries again -- draft saving is best
+// effort, and never load-bearing for the publish itself.
 //
 // An empty map REMOVES the key rather than writing `"{}"` -- so a caller
 // that clears every dirty file (an undo back to nothing changed, or the
@@ -245,7 +243,6 @@ export function mostRecentSavedAt(map: DraftMap): number | null {
 // hours ago" -- never a raw timestamp or ISO string, which is not what a
 // non-technical owner reads at a glance mid-workday. `now` is a parameter
 // (not a bare `Date.now()` call in the body), the same reason
-// `todayInKolkata`'s callers pass `today` in (src/content/publish.ts) and
 // `resolveCommitSha`'s callers pass `gitRevParse` in (plugins/build-info.ts):
 // it lets this be tested deterministically, without faking the system
 // clock. Clamped at zero so clock skew (a `savedAt` fractionally in the

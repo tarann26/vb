@@ -114,21 +114,3 @@ describe('wrangler.toml Cloudflare Pages identifiers', () => {
     expect(isValidPagesProjectOrPlaceholder('has spaces')).toBe(false);
   });
 });
-
-// Task 8's cron: hourly, but conditional on the Worker's own side (see
-// worker/index.ts's `anythingPublishesToday`) -- this only pins that the
-// trigger itself is registered with the right cadence. An unconditional
-// hourly hook would be 720-744 builds/month against Pages Free's 500 cap;
-// this test cannot see the conditional check (that's scheduled.test.ts's
-// job), only that the schedule string a missing or wrong `[triggers]` block
-// would silently mean "the cron never runs at all" -- caught here instead
-// of discovered by a dashboard that never shows a cron invocation.
-describe('wrangler.toml cron trigger', () => {
-  it('registers the hourly schedule the scheduled handler expects', () => {
-    const toml = readFileSync('wrangler.toml', 'utf8');
-    const match = toml.match(/crons\s*=\s*\[([^\]]*)\]/);
-    expect(match).not.toBeNull();
-    const crons = match![1].split(',').map((c) => c.trim().replace(/^"|"$/g, '')).filter(Boolean);
-    expect(crons).toEqual(['0 * * * *']);
-  });
-});
