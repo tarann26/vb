@@ -3,6 +3,12 @@ import worker, { anythingPublishesToday, type Env } from '../index';
 import { hashPassword, signToken } from '../auth';
 import { makeGitHubStub, utf8, type GitHubStub } from './githubStub';
 
+// The session key is TOKEN_SECRET bound to the current password hash, so a
+// password change revokes every token already issued (worker/auth.ts).
+// These tests supply a fixed hash so that binding is held constant except
+// where a test varies it deliberately.
+
+
 // Runs under this repo's single jsdom Vitest environment, same as every
 // other worker/__tests__ file (see vitest.config.ts's comment).
 
@@ -457,9 +463,9 @@ describe('handlePublish records scheduled dates for the cron', () => {
     vi.unstubAllGlobals();
   });
 
-  async function sessionCookie(): Promise<string> {
+  async function sessionCookie(env: { ADMIN_PASSWORD_HASH: string }): Promise<string> {
     const expiresAt = Math.floor(Date.now() / 1000) + 3600;
-    const token = await signToken(TOKEN_SECRET, expiresAt);
+    const token = await signToken(TOKEN_SECRET, env.ADMIN_PASSWORD_HASH, expiresAt);
     return `vb_session=${token}`;
   }
 
@@ -481,7 +487,7 @@ describe('handlePublish records scheduled dates for the cron', () => {
   };
 
   it('publishing a dish with a future publishAt makes anythingPublishesToday true on that date', async () => {
-    const cookie = await sessionCookie();
+    const cookie = await sessionCookie(env);
     const response = await worker.fetch(
       publishRequest({ files: [utf8('src/content/dishes.json', JSON.stringify([futureDish]))] }, cookie),
       env,
@@ -507,7 +513,7 @@ describe('handlePublish records scheduled dates for the cron', () => {
   // GitHub at all -- see index.test.ts's `POST /api/publish` describe block
   // for the same property proven against `stub.calls` staying empty.
   it('a malformed publishAt is refused at validation, not committed then left to fail the build', async () => {
-    const cookie = await sessionCookie();
+    const cookie = await sessionCookie(env);
     const malformed = { ...futureDish, publishAt: 'next tuesday' };
     const response = await worker.fetch(
       publishRequest({ files: [utf8('src/content/dishes.json', JSON.stringify([malformed]))] }, cookie),
@@ -523,7 +529,11 @@ describe('handlePublish records scheduled dates for the cron', () => {
   // bookkeeping for a cron that hasn't even run yet.
   it('a KV failure during schedule bookkeeping does not turn a successful publish into a 500', async () => {
     const throwingEnv = await buildEnv(new ThrowingKV());
-    const cookie = await sessionCookie();
+    // Signed against throwingEnv, the env this request is actually sent to --
+    // not the outer `env`. buildEnv() salts a fresh ADMIN_PASSWORD_HASH per
+    // call, and the session key is derived from it, so a cookie minted against
+    // a different env is correctly rejected as a stale session.
+    const cookie = await sessionCookie(throwingEnv);
     const response = await worker.fetch(
       publishRequest({ files: [utf8('src/content/dishes.json', JSON.stringify([futureDish]))] }, cookie),
       throwingEnv,
@@ -535,7 +545,7 @@ describe('handlePublish records scheduled dates for the cron', () => {
   // commit that just landed already triggers Cloudflare's own build-on-push.
   // Tracking it too would just be redundant bookkeeping.
   it('does not track a dish whose publishAt is today or already past', async () => {
-    const cookie = await sessionCookie();
+    const cookie = await sessionCookie(env);
     const notFuture = { ...futureDish, id: 'todays-dish', publishAt: '2020-01-01' };
     const response = await worker.fetch(
       publishRequest({ files: [utf8('src/content/dishes.json', JSON.stringify([notFuture]))] }, cookie),
@@ -549,7 +559,7 @@ describe('handlePublish records scheduled dates for the cron', () => {
   // the stale date -- not leave it sitting in KV forever, which would make
   // the cron fire a build for content that no longer exists.
   it('republishing the same file without the scheduled item clears its date', async () => {
-    const cookie = await sessionCookie();
+    const cookie = await sessionCookie(env);
     await worker.fetch(
       publishRequest({ files: [utf8('src/content/dishes.json', JSON.stringify([futureDish]))] }, cookie),
       env,
@@ -569,7 +579,7 @@ describe('handlePublish records scheduled dates for the cron', () => {
   // Publishing one schedulable file must not clobber another file's
   // already-recorded dates -- each file owns its own slice of the record.
   it('publishing one file preserves a different file\'s already-recorded dates', async () => {
-    const cookie = await sessionCookie();
+    const cookie = await sessionCookie(env);
     const futureDrink = {
       id: 'winter-spritz',
       name: 'Winter Spritz',
@@ -606,7 +616,7 @@ describe('handlePublish records scheduled dates for the cron', () => {
   // file in one commit`), so this is a real, reachable request shape today,
   // not a hypothetical one.
   it('publishing two schedulable files in ONE request records both -- no lost update', async () => {
-    const cookie = await sessionCookie();
+    const cookie = await sessionCookie(env);
     const futureDrink = {
       id: 'winter-spritz-together',
       name: 'Winter Spritz Together',
@@ -638,7 +648,7 @@ describe('handlePublish records scheduled dates for the cron', () => {
   // unset, not just "returns false", which a bug in the file-name check
   // could also produce by accident.
   it('publishing a non-schedulable file never writes the schedule KV key', async () => {
-    const cookie = await sessionCookie();
+    const cookie = await sessionCookie(env);
     const validSite = {
       name: 'Via Bianca',
       tagline: 'A Roman trattoria',

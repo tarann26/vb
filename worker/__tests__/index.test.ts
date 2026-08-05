@@ -3,6 +3,19 @@ import worker from '../index';
 import { hashPassword, parseCookie, verifyToken, signToken } from '../auth';
 import { makeGitHubStub, utf8, NEW_COMMIT_SHA, type GitHubStub } from './githubStub';
 
+// The session key is TOKEN_SECRET bound to the current password hash, so a
+// password change revokes every token already issued (worker/auth.ts).
+// These tests supply a fixed hash so that binding is held constant except
+// where a test varies it deliberately.
+// Deliberately NOT in `pbkdf2$<iterations>$<salt>$<hash>` shape:
+// src/test/secrets.test.ts scans every tracked file for that pattern to stop
+// a real password hash being committed, and it correctly flagged an earlier
+// version of this fixture. Nothing here needs a well-formed hash -- the
+// session key treats it as opaque key material -- so an obviously-fake
+// string keeps the guard meaningful instead of teaching it an exception.
+const PASSWORD_HASH = 'test-only-password-hash-placeholder';
+
+
 // Runs under this repo's single jsdom Vitest environment (see
 // vitest.config.ts's comment on that decision) -- fetch/Request/Response
 // here come from Node itself, not from jsdom, so this is a faithful test of
@@ -144,11 +157,20 @@ describe('worker entry point', () => {
       const token = parseCookie(setCookie, 'vb_session');
       expect(token).not.toBeNull();
       // The cookie carries a token that actually verifies against the same
-      // secret the Worker signed it with -- not just a string that looks
-      // like one.
-      expect(await verifyToken(TOKEN_SECRET, token as string, Math.floor(Date.now() / 1000))).toBe(
-        true,
-      );
+      // key the Worker signed it with -- not just a string that looks like
+      // one. That key is TOKEN_SECRET bound to the CURRENT password hash, so
+      // this reads the hash off the env rather than a constant.
+      expect(
+        await verifyToken(TOKEN_SECRET, env.ADMIN_PASSWORD_HASH, token as string, Math.floor(Date.now() / 1000)),
+      ).toBe(true);
+
+      // The property this whole change exists for: changing the password
+      // revokes every session already issued. Same token, same TOKEN_SECRET,
+      // a different password hash -- and it no longer verifies.
+      const afterPasswordChange = await hashPassword('a-completely-different-password');
+      expect(
+        await verifyToken(TOKEN_SECRET, afterPasswordChange, token as string, Math.floor(Date.now() / 1000)),
+      ).toBe(false);
     });
 
     it('the wrong password gets 401 and no cookie', async () => {
@@ -284,7 +306,7 @@ describe('worker entry point', () => {
 
     async function sessionCookie(): Promise<string> {
       const expiresAt = Math.floor(Date.now() / 1000) + 3600;
-      const token = await signToken(TOKEN_SECRET, expiresAt);
+      const token = await signToken(TOKEN_SECRET, env.ADMIN_PASSWORD_HASH, expiresAt);
       return `vb_session=${token}`;
     }
 
@@ -312,7 +334,7 @@ describe('worker entry point', () => {
     // dangerous failure mode: verifyToken must actually check the
     // signature, not just "a vb_session cookie is present".
     it('a forged session cookie is also 401 and makes no GitHub call', async () => {
-      const forgedToken = await signToken('a-different-secret-entirely', Math.floor(Date.now() / 1000) + 3600);
+      const forgedToken = await signToken('a-different-secret-entirely', PASSWORD_HASH, Math.floor(Date.now() / 1000) + 3600);
       const response = await worker.fetch(
         publishRequest(
           { files: [utf8('src/content/site.json', JSON.stringify(VALID_SITE))] },
@@ -835,7 +857,7 @@ describe('worker entry point', () => {
 
     async function sessionCookie(): Promise<string> {
       const expiresAt = Math.floor(Date.now() / 1000) + 3600;
-      const token = await signToken(TOKEN_SECRET, expiresAt);
+      const token = await signToken(TOKEN_SECRET, env.ADMIN_PASSWORD_HASH, expiresAt);
       return `vb_session=${token}`;
     }
 
@@ -856,7 +878,7 @@ describe('worker entry point', () => {
     // Same forged-signature reproduction as POST /api/publish's own 401
     // test -- a cookie must actually verify, not merely be present.
     it('a forged session cookie is also 401', async () => {
-      const forgedToken = await signToken('a-different-secret-entirely', Math.floor(Date.now() / 1000) + 3600);
+      const forgedToken = await signToken('a-different-secret-entirely', PASSWORD_HASH, Math.floor(Date.now() / 1000) + 3600);
       const response = await worker.fetch(
         contentRequest('src/content/dishes.json', `vb_session=${forgedToken}`),
         env,

@@ -152,13 +152,41 @@ async function hmac(secret: string, data: string): Promise<string> {
   return bytesToBase64(new Uint8Array(signature));
 }
 
-export async function signToken(secret: string, expiresAt: number): Promise<string> {
+// The signing key is TOKEN_SECRET **bound to the current password hash**, not
+// TOKEN_SECRET alone. That one detail is what makes changing the password
+// revoke every session already issued.
+//
+// Without it, a session cookie's validity came entirely from an HMAC over
+// TOKEN_SECRET, and the token's payload (`{exp}`) said nothing about which
+// password produced it -- so rotating ADMIN_PASSWORD_HASH left every
+// outstanding 7-day cookie working. The failure that matters: someone gets in,
+// the owner changes the password to lock them out, and the attacker keeps full
+// write access to the site's GitHub repo for up to another week. Changing your
+// password and not being logged out is not a behaviour any human expects, and
+// the old runbook's answer -- "rotate TOKEN_SECRET too, in the same sitting"
+// -- only worked for someone who knew to read it first.
+//
+// Binding costs nothing: the hash is already in `env`, it is already a
+// high-entropy string, no extra byte goes into the cookie, no storage is
+// added, and verification stays a single HMAC with no lookup. `\u0000` as the
+// separator so a hash and a secret can never be concatenated two different
+// ways into the same key.
+function sessionKey(secret: string, passwordHash: string): string {
+  return `${secret}\u0000${passwordHash}`;
+}
+
+export async function signToken(secret: string, passwordHash: string, expiresAt: number): Promise<string> {
   const payloadB64 = btoa(JSON.stringify({ exp: expiresAt }));
-  const sigB64 = await hmac(secret, payloadB64);
+  const sigB64 = await hmac(sessionKey(secret, passwordHash), payloadB64);
   return `${payloadB64}.${sigB64}`;
 }
 
-export async function verifyToken(secret: string, token: string, now: number): Promise<boolean> {
+export async function verifyToken(
+  secret: string,
+  passwordHash: string,
+  token: string,
+  now: number,
+): Promise<boolean> {
   // Exactly two segments, not "at least two": `token.split('.')` alone
   // would destructure only the first two elements and silently ignore any
   // more, so `<payload>.<sig>.` and `<payload>.<sig>.evil` would both
@@ -177,7 +205,7 @@ export async function verifyToken(secret: string, token: string, now: number): P
   // instead of failing closed, which is the wrong shape for an auth gate
   // (the moment a caller wraps it in a try/catch expecting only `boolean`,
   // a misconfigured secret becomes fail-open in whatever that catch does).
-  if (!secret || !payloadB64 || !sigB64) return false;
+  if (!secret || !passwordHash || !payloadB64 || !sigB64) return false;
 
   // Signature FIRST, on principle: a scheme that parses the payload (or
   // checks `exp`) before verifying the signature trusts attacker-controlled
@@ -197,7 +225,7 @@ export async function verifyToken(secret: string, token: string, now: number): P
   // far as this suite can tell. The ordering here is real defense-in-depth
   // (don't act on unverified bytes at all, not even to read `exp` off them),
   // it just isn't what this specific test demonstrates.
-  const expectedSig = await hmac(secret, payloadB64);
+  const expectedSig = await hmac(sessionKey(secret, passwordHash), payloadB64);
   if (!timingSafeEqual(expectedSig, sigB64)) return false;
 
   try {

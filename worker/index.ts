@@ -124,7 +124,7 @@ async function handleLogin(request: Request, env: Env): Promise<Response> {
   }
 
   const expiresAt = Math.floor(Date.now() / 1000) + SESSION_SECONDS;
-  const token = await signToken(env.TOKEN_SECRET, expiresAt);
+  const token = await signToken(env.TOKEN_SECRET, env.ADMIN_PASSWORD_HASH, expiresAt);
   return new Response(null, {
     status: 204,
     headers: {
@@ -456,7 +456,7 @@ async function handlePublish(request: Request, env: Env): Promise<Response> {
   // alone write anything.
   const token = parseCookie(request.headers.get('Cookie'), 'vb_session');
   const now = Math.floor(Date.now() / 1000);
-  if (!token || !(await verifyToken(env.TOKEN_SECRET, token, now))) {
+  if (!token || !(await verifyToken(env.TOKEN_SECRET, env.ADMIN_PASSWORD_HASH, token, now))) {
     return json(401, { message: 'Not authenticated.' });
   }
 
@@ -703,7 +703,7 @@ async function handleGetContent(request: Request, env: Env): Promise<Response> {
   // request just because reading is less dangerous than writing.
   const token = parseCookie(request.headers.get('Cookie'), 'vb_session');
   const now = Math.floor(Date.now() / 1000);
-  if (!token || !(await verifyToken(env.TOKEN_SECRET, token, now))) {
+  if (!token || !(await verifyToken(env.TOKEN_SECRET, env.ADMIN_PASSWORD_HASH, token, now))) {
     return json(401, { message: 'Not authenticated.' });
   }
 
@@ -917,7 +917,7 @@ async function handleReadWaCounts(request: Request, env: Env): Promise<Response>
   // target a browser fires blind.
   const token = parseCookie(request.headers.get('Cookie'), 'vb_session');
   const now = Math.floor(Date.now() / 1000);
-  if (!token || !(await verifyToken(env.TOKEN_SECRET, token, now))) {
+  if (!token || !(await verifyToken(env.TOKEN_SECRET, env.ADMIN_PASSWORD_HASH, token, now))) {
     return json(401, { message: 'Not authenticated.' });
   }
 

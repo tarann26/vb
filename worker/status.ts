@@ -31,7 +31,7 @@ export interface PagesEnv {
   CLOUDFLARE_API_TOKEN: string;
 }
 
-export type BuildStatusEnv = PagesEnv & Pick<GitHubEnv, 'GITHUB_OWNER' | 'GITHUB_REPO'> & { TOKEN_SECRET: string };
+export type BuildStatusEnv = PagesEnv & Pick<GitHubEnv, 'GITHUB_OWNER' | 'GITHUB_REPO'> & { TOKEN_SECRET: string; ADMIN_PASSWORD_HASH: string };
 
 export type BuildState = 'queued' | 'building' | 'live' | 'failed';
 
@@ -116,7 +116,7 @@ export async function handleBuildStatus(request: Request, env: BuildStatusEnv): 
   // API call this route's whole job is to make.
   const token = parseCookie(request.headers.get('Cookie'), 'vb_session');
   const now = Math.floor(Date.now() / 1000);
-  if (!token || !(await verifyToken(env.TOKEN_SECRET, token, now))) {
+  if (!token || !(await verifyToken(env.TOKEN_SECRET, env.ADMIN_PASSWORD_HASH, token, now))) {
     return json(401, { message: 'Not authenticated.' });
   }
 

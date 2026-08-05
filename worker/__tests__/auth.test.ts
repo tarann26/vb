@@ -1,6 +1,19 @@
 import { describe, it, expect } from 'vitest';
 import { hashPassword, verifyPassword, signToken, verifyToken, parseCookie } from '../auth';
 
+// The session key is TOKEN_SECRET bound to the current password hash, so a
+// password change revokes every token already issued (worker/auth.ts).
+// These tests supply a fixed hash so that binding is held constant except
+// where a test varies it deliberately.
+// Deliberately NOT in `pbkdf2$<iterations>$<salt>$<hash>` shape:
+// src/test/secrets.test.ts scans every tracked file for that pattern to stop
+// a real password hash being committed, and it correctly flagged an earlier
+// version of this fixture. Nothing here needs a well-formed hash -- the
+// session key treats it as opaque key material -- so an obviously-fake
+// string keeps the guard meaningful instead of teaching it an exception.
+const PASSWORD_HASH = 'test-only-password-hash-placeholder';
+
+
 // Runs under this repo's single jsdom Vitest environment (see
 // vitest.config.ts's comment). crypto.subtle's standard methods (importKey,
 // deriveBits, sign) come from Node itself, not jsdom, so this is a faithful
@@ -34,22 +47,22 @@ async function hmacForTest(secret: string, data: string): Promise<string> {
 
 describe('signToken / verifyToken', () => {
   it('accepts a token it just signed', async () => {
-    expect(await verifyToken(SECRET, await signToken(SECRET, 2_000_000), 1_000_000)).toBe(true);
+    expect(await verifyToken(SECRET, PASSWORD_HASH, await signToken(SECRET, PASSWORD_HASH, 2_000_000), 1_000_000)).toBe(true);
   });
 
   it('rejects a token signed with a different secret', async () => {
-    expect(await verifyToken(SECRET, await signToken('other', 2_000_000), 1_000_000)).toBe(false);
+    expect(await verifyToken(SECRET, PASSWORD_HASH, await signToken('other', PASSWORD_HASH, 2_000_000), 1_000_000)).toBe(false);
   });
 
   it('rejects an expired token', async () => {
-    expect(await verifyToken(SECRET, await signToken(SECRET, 1_000_000), 1_000_001)).toBe(false);
+    expect(await verifyToken(SECRET, PASSWORD_HASH, await signToken(SECRET, PASSWORD_HASH, 1_000_000), 1_000_001)).toBe(false);
   });
 
   // Boundary: the pseudocode in the brief is `exp > now`, not `exp >= now`
   // -- a token expires the instant `now` reaches its `exp`, not one second
   // later.
   it('rejects a token whose exp equals now (expiry is exclusive)', async () => {
-    expect(await verifyToken(SECRET, await signToken(SECRET, 1_000_000), 1_000_000)).toBe(false);
+    expect(await verifyToken(SECRET, PASSWORD_HASH, await signToken(SECRET, PASSWORD_HASH, 1_000_000), 1_000_000)).toBe(false);
   });
 
   // The test that matters most. A scheme that checks expiry before the
@@ -58,23 +71,23 @@ describe('signToken / verifyToken', () => {
   // one valid (expired or not) token can read its signature, mint any
   // payload they like, and reuse that signature verbatim.
   it('rejects a token whose payload was edited to extend it', async () => {
-    const token = await signToken(SECRET, 1_000_000);
+    const token = await signToken(SECRET, PASSWORD_HASH, 1_000_000);
     const tampered =
       btoa(JSON.stringify({ exp: 9_999_999 })).replace(/=+$/, '') + '.' + token.split('.')[1];
     expect(tampered).not.toBe(token);
-    expect(await verifyToken(SECRET, tampered, 1_000_001)).toBe(false);
+    expect(await verifyToken(SECRET, PASSWORD_HASH, tampered, 1_000_001)).toBe(false);
   });
 
   it('rejects a token with no signature at all', async () => {
-    expect(await verifyToken(SECRET, btoa(JSON.stringify({ exp: 9_999_999 })), 1)).toBe(false);
+    expect(await verifyToken(SECRET, PASSWORD_HASH, btoa(JSON.stringify({ exp: 9_999_999 })), 1)).toBe(false);
   });
 
   it('rejects an empty string', async () => {
-    expect(await verifyToken(SECRET, '', 1)).toBe(false);
+    expect(await verifyToken(SECRET, PASSWORD_HASH, '', 1)).toBe(false);
   });
 
   it('rejects garbage that merely contains a dot', async () => {
-    expect(await verifyToken(SECRET, 'not-base64.also-not-base64', 1)).toBe(false);
+    expect(await verifyToken(SECRET, PASSWORD_HASH, 'not-base64.also-not-base64', 1)).toBe(false);
   });
 
   // Important fix from the security review: crypto.subtle.importKey throws
@@ -83,10 +96,10 @@ describe('signToken / verifyToken', () => {
   // false -- the wrong shape for an auth gate. Proven by both an empty
   // secret and (via the cast) an entirely absent one.
   it('returns false rather than throwing when the secret is empty or missing', async () => {
-    const token = await signToken(SECRET, 2_000_000);
-    await expect(verifyToken('', token, 1_000_000)).resolves.toBe(false);
+    const token = await signToken(SECRET, PASSWORD_HASH, 2_000_000);
+    await expect(verifyToken('', PASSWORD_HASH, token, 1_000_000)).resolves.toBe(false);
     await expect(
-      verifyToken(undefined as unknown as string, token, 1_000_000),
+      verifyToken(undefined as unknown as string, PASSWORD_HASH, token, 1_000_000),
     ).resolves.toBe(false);
   });
 
@@ -94,9 +107,9 @@ describe('signToken / verifyToken', () => {
   // silently ignores the rest, so a trailing extra segment used to verify
   // identically to the real token.
   it('rejects a token with a trailing extra segment', async () => {
-    const token = await signToken(SECRET, 2_000_000);
-    expect(await verifyToken(SECRET, `${token}.`, 1_000_000)).toBe(false);
-    expect(await verifyToken(SECRET, `${token}.evil`, 1_000_000)).toBe(false);
+    const token = await signToken(SECRET, PASSWORD_HASH, 2_000_000);
+    expect(await verifyToken(SECRET, PASSWORD_HASH, `${token}.`, 1_000_000)).toBe(false);
+    expect(await verifyToken(SECRET, PASSWORD_HASH, `${token}.evil`, 1_000_000)).toBe(false);
   });
 
   // Minor 4: `{"exp":1e400}` is valid JSON syntax (a number literal with a
@@ -109,7 +122,7 @@ describe('signToken / verifyToken', () => {
     const payloadB64 = btoa('{"exp":1e400}');
     const sigB64 = await hmacForTest(SECRET, payloadB64);
     const forged = `${payloadB64}.${sigB64}`;
-    expect(await verifyToken(SECRET, forged, 1)).toBe(false);
+    expect(await verifyToken(SECRET, PASSWORD_HASH, forged, 1)).toBe(false);
   });
 });
 

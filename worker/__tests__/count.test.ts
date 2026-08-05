@@ -3,6 +3,19 @@ import worker, { WA_DAILY_CAP, type Env } from '../index';
 import { hashPassword, signToken } from '../auth';
 import { todayInKolkata } from '../../src/content/publish';
 
+// The session key is TOKEN_SECRET bound to the current password hash, so a
+// password change revokes every token already issued (worker/auth.ts).
+// These tests supply a fixed hash so that binding is held constant except
+// where a test varies it deliberately.
+// Deliberately NOT in `pbkdf2$<iterations>$<salt>$<hash>` shape:
+// src/test/secrets.test.ts scans every tracked file for that pattern to stop
+// a real password hash being committed, and it correctly flagged an earlier
+// version of this fixture. Nothing here needs a well-formed hash -- the
+// session key treats it as opaque key material -- so an obviously-fake
+// string keeps the guard meaningful instead of teaching it an exception.
+const PASSWORD_HASH = 'test-only-password-hash-placeholder';
+
+
 // Runs under this repo's single jsdom Vitest environment, same as every
 // other worker/__tests__ file (see vitest.config.ts's comment) -- fetch,
 // Request, Response and URL here come from Node itself, not jsdom.
@@ -74,9 +87,14 @@ async function getWa(cookie?: string): Promise<Request> {
   return new Request('https://viabiancadelhi.com/api/wa', { headers });
 }
 
-async function sessionCookie(): Promise<string> {
+// Takes the env, because the session key is now derived from BOTH
+// TOKEN_SECRET and the CURRENT ADMIN_PASSWORD_HASH (worker/auth.ts). These
+// fixtures build their hash with `await hashPassword(PASSWORD)`, which salts
+// randomly per call -- so a cookie signed against any other hash correctly
+// fails to verify. That is the new behaviour working, not a broken fixture.
+async function sessionCookie(env: { ADMIN_PASSWORD_HASH: string }): Promise<string> {
   const expiresAt = Math.floor(Date.now() / 1000) + 3600;
-  const token = await signToken(TOKEN_SECRET, expiresAt);
+  const token = await signToken(TOKEN_SECRET, env.ADMIN_PASSWORD_HASH, expiresAt);
   return `vb_session=${token}`;
 }
 
@@ -240,7 +258,7 @@ describe('GET /api/wa', () => {
   });
 
   it('a forged session cookie is also 401', async () => {
-    const forged = await signToken('a-different-secret-entirely', Math.floor(Date.now() / 1000) + 3600);
+    const forged = await signToken('a-different-secret-entirely', PASSWORD_HASH, Math.floor(Date.now() / 1000) + 3600);
     const response = await worker.fetch(await getWa(`vb_session=${forged}`), env);
     expect(response.status).toBe(401);
   });
@@ -248,7 +266,7 @@ describe('GET /api/wa', () => {
   it('returns the recorded counts, and says explicitly that the number is a lower bound', async () => {
     await worker.fetch(postWa(), env);
     await worker.fetch(postWa(), env);
-    const cookie = await sessionCookie();
+    const cookie = await sessionCookie(env);
     const response = await worker.fetch(await getWa(cookie), env);
     expect(response.status).toBe(200);
     const body = (await response.json()) as { counts: Record<string, number>; lowerBound: boolean };
@@ -262,7 +280,7 @@ describe('GET /api/wa', () => {
   });
 
   it('an empty day answers with an empty counts object, not an error', async () => {
-    const cookie = await sessionCookie();
+    const cookie = await sessionCookie(env);
     const response = await worker.fetch(await getWa(cookie), env);
     expect(response.status).toBe(200);
     const body = (await response.json()) as { counts: Record<string, number>; lowerBound: boolean };

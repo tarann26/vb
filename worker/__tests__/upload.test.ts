@@ -25,6 +25,19 @@ import { signToken } from '../auth';
 import { derivativePath } from '../../src/shared/derivative-path';
 import { envWith, makeGitHubStub, type GitHubStub } from './githubStub';
 
+// The session key is TOKEN_SECRET bound to the current password hash, so a
+// password change revokes every token already issued (worker/auth.ts).
+// These tests supply a fixed hash so that binding is held constant except
+// where a test varies it deliberately.
+// Deliberately NOT in `pbkdf2$<iterations>$<salt>$<hash>` shape:
+// src/test/secrets.test.ts scans every tracked file for that pattern to stop
+// a real password hash being committed, and it correctly flagged an earlier
+// version of this fixture. Nothing here needs a well-formed hash -- the
+// session key treats it as opaque key material -- so an obviously-fake
+// string keeps the guard meaningful instead of teaching it an exception.
+const PASSWORD_HASH = 'test-only-password-hash-placeholder';
+
+
 const TOKEN_SECRET = 'upload-test-token-secret';
 
 function enc(s: string): Uint8Array {
@@ -101,7 +114,7 @@ const PDF_EOF_TOO_FAR_FROM_END = new Uint8Array([
 
 async function sessionCookie(): Promise<string> {
   const expiresAt = Math.floor(Date.now() / 1000) + 3600;
-  const token = await signToken(TOKEN_SECRET, expiresAt);
+  const token = await signToken(TOKEN_SECRET, PASSWORD_HASH, expiresAt);
   return `vb_session=${token}`;
 }
 
@@ -197,7 +210,7 @@ describe('POST /api/upload', () => {
   function freshEnv(): UploadEnv {
     stub = makeGitHubStub();
     vi.stubGlobal('fetch', stub.fetch);
-    return { ...envWith(stub), TOKEN_SECRET };
+    return { ...envWith(stub), TOKEN_SECRET, ADMIN_PASSWORD_HASH: PASSWORD_HASH };
   }
 
   afterEach(() => {
@@ -216,7 +229,7 @@ describe('POST /api/upload', () => {
 
   it('a forged session cookie is also 401 and makes no GitHub call', async () => {
     env = freshEnv();
-    const forged = await signToken('a-different-secret-entirely', Math.floor(Date.now() / 1000) + 3600);
+    const forged = await signToken('a-different-secret-entirely', PASSWORD_HASH, Math.floor(Date.now() / 1000) + 3600);
     const response = await handleUpload(
       uploadRequest({ category: 'food', file: { bytes: JPEG_BYTES }, cookie: `vb_session=${forged}` }),
       env,

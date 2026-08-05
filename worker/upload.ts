@@ -16,7 +16,7 @@ import { commitFiles, DisallowedPathError, type CommitFile, type GitHubEnv } fro
 // other. `Env` (index.ts) is structurally assignable to this -- it extends
 // GitHubEnv and always carries TOKEN_SECRET -- so index.ts can still call
 // handleUpload(request, env) with its real env unchanged.
-export type UploadEnv = GitHubEnv & { TOKEN_SECRET: string };
+export type UploadEnv = GitHubEnv & { TOKEN_SECRET: string; ADMIN_PASSWORD_HASH: string };
 
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 
@@ -275,7 +275,7 @@ export async function handleUpload(request: Request, env: UploadEnv): Promise<Re
   // GitHub call happens, for an unauthenticated request.
   const token = parseCookie(request.headers.get('Cookie'), 'vb_session');
   const now = Math.floor(Date.now() / 1000);
-  if (!token || !(await verifyToken(env.TOKEN_SECRET, token, now))) {
+  if (!token || !(await verifyToken(env.TOKEN_SECRET, env.ADMIN_PASSWORD_HASH, token, now))) {
     return json(401, { message: 'Not authenticated.' });
   }
 
