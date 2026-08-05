@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Instagram, Menu, X } from 'lucide-react';
+import { Instagram, Menu, X, ChevronDown } from 'lucide-react';
 import { useContent } from '../content/ContentContext';
 
 // Plan 7, Task 3, Step 2: "one nav, not two." copy.nav.links (a hand-
@@ -46,12 +46,39 @@ export interface NavbarProps {
   offHomePage?: boolean;
 }
 
+// Grouping rule, and why it is this one rather than a hand-kept list of
+// slugs: a SECTION link scrolls somewhere on the page you are already on; a
+// PAGE link takes you somewhere else entirely. That is a real semantic
+// split, not an arbitrary tidy-up, so the nav renders it -- five section
+// anchors stay flat, and every page collapses under one word. It also
+// scales without maintenance: when breads-and-dips and who-we-supply are
+// switched on they join the group by themselves, with no list to update.
+//
+// Below this many pages, a disclosure button costs more than it saves (a
+// menu that opens to reveal one item is worse than the item), so the pages
+// render flat alongside the sections instead.
+const GROUP_PAGES_FROM = 2;
+
+// Shared by both the desktop row and the mobile card. The underline is a
+// pseudo-element scaled from 0 on the x-axis rather than a border toggled
+// on hover: a border changes the element's box and nudges everything after
+// it by a pixel, which reads as a flinch. `origin-left` is what makes it
+// extend out of the word rather than unfurl from its centre.
+const LINK_BASE =
+  'relative inline-block py-1 transition-colors duration-300 hover:text-[#222] focus-visible:text-[#222] ' +
+  'after:absolute after:left-0 after:-bottom-0.5 after:h-px after:w-full after:bg-[#6B8B59] ' +
+  'after:origin-left after:scale-x-0 after:transition-transform after:duration-300 ' +
+  'hover:after:scale-x-100 focus-visible:after:scale-x-100';
+
 const Navbar: React.FC<NavbarProps> = ({ offHomePage = false }) => {
   const content = useContent();
   const { site, copy, sections, pages } = content;
   const [showNavbar, setShowNavbar] = useState(true);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isGroupOpen, setIsGroupOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
   const lastScrollY = useRef(0);
+  const groupRef = useRef<HTMLDivElement>(null);
 
   // Sections she has switched off disappear from the nav too, so a link
   // never scrolls to nothing. hero/drinks have no nav link at all, which
@@ -69,26 +96,73 @@ const Navbar: React.FC<NavbarProps> = ({ offHomePage = false }) => {
   const pageEntries: NavEntry[] = pages
     .filter((page) => page.inNav && page.enabled)
     .map((page) => ({ kind: 'page', href: `/${page.slug}`, label: page.name }));
-  const visibleLinks: NavEntry[] = [...sectionEntries, ...pageEntries];
+
+  const grouped = pageEntries.length >= GROUP_PAGES_FROM;
+  const flatEntries: NavEntry[] = grouped ? sectionEntries : [...sectionEntries, ...pageEntries];
+  const groupEntries: NavEntry[] = grouped ? pageEntries : [];
 
   useEffect(() => {
     const handleScroll = () => {
       const y = window.scrollY;
       setShowNavbar(y < 100 || y < lastScrollY.current);
+      setScrolled(y > 8);
       lastScrollY.current = y;
     };
     window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  // Escape closes whichever disclosure is open, and a click anywhere outside
+  // the group closes it. Both are keyboard/pointer parity for a control that
+  // otherwise opens on hover and would strand a keyboard user inside it.
+  useEffect(() => {
+    if (!isGroupOpen && !isMenuOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      setIsGroupOpen(false);
+      setIsMenuOpen(false);
+    };
+    const onPointerDown = (event: MouseEvent) => {
+      if (groupRef.current && !groupRef.current.contains(event.target as Node)) setIsGroupOpen(false);
+    };
+    document.addEventListener('keydown', onKeyDown);
+    document.addEventListener('mousedown', onPointerDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener('mousedown', onPointerDown);
+    };
+  }, [isGroupOpen, isMenuOpen]);
+
   const closeMenu = () => setIsMenuOpen(false);
+  const closeAll = () => {
+    setIsMenuOpen(false);
+    setIsGroupOpen(false);
+  };
+
+  const renderEntry = (link: NavEntry, className: string, onClick?: () => void) =>
+    link.kind === 'section' ? (
+      <a key={link.href} href={link.href} onClick={onClick} className={className}>
+        {link.label}
+      </a>
+    ) : (
+      <Link key={link.href} to={link.href} onClick={onClick} className={className}>
+        {link.label}
+      </Link>
+    );
 
   return (
     <nav
       className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 ${
         showNavbar || isMenuOpen
-          ? 'bg-white shadow-md opacity-100 translate-y-0'
-          : 'bg-transparent shadow-none opacity-0 -translate-y-full'
+          ? 'opacity-100 translate-y-0'
+          : 'opacity-0 -translate-y-full'
+      } ${
+        // A hairline and a blur once she has scrolled, instead of a shadow
+        // that is either fully on or fully off -- the bar reads as a layer
+        // over the photography rather than a slab dropped on top of it.
+        scrolled || isMenuOpen
+          ? 'bg-white/90 backdrop-blur-md border-b border-[#6B8B59]/15'
+          : 'bg-white border-b border-transparent'
       } py-3 px-6 flex justify-between items-center`}
     >
       {/* Logo */}
@@ -101,18 +175,62 @@ const Navbar: React.FC<NavbarProps> = ({ offHomePage = false }) => {
         <div className="hidden md:flex">
           <div
             data-testid="desktop-nav-links"
-            className="space-x-6 text-sm font-['Montserrat'] tracking-wider text-[#6B8B59] uppercase"
+            className="flex items-center space-x-6 text-sm font-['Montserrat'] tracking-wider text-[#6B8B59] uppercase"
           >
-            {visibleLinks.map((link) =>
-              link.kind === 'section' ? (
-                <a key={link.href} href={link.href} className="hover:text-[#222] transition">
-                  {link.label}
-                </a>
-              ) : (
-                <Link key={link.href} to={link.href} className="hover:text-[#222] transition">
-                  {link.label}
-                </Link>
-              ),
+            {flatEntries.map((link) => renderEntry(link, LINK_BASE))}
+
+            {grouped && (
+              <div
+                ref={groupRef}
+                className="relative"
+                onMouseEnter={() => setIsGroupOpen(true)}
+                onMouseLeave={() => setIsGroupOpen(false)}
+              >
+                <button
+                  type="button"
+                  aria-expanded={isGroupOpen}
+                  aria-haspopup="true"
+                  onClick={() => setIsGroupOpen((open) => !open)}
+                  className={`${LINK_BASE} flex items-center gap-1 uppercase tracking-wider`}
+                >
+                  {content.renderText('nav.pagesLabel', copy.nav.pagesLabel)}
+                  <ChevronDown
+                    aria-hidden="true"
+                    className={`h-3.5 w-3.5 transition-transform duration-300 ${isGroupOpen ? 'rotate-180' : ''}`}
+                  />
+                </button>
+
+                {isGroupOpen && (
+                  <div
+                    data-testid="desktop-nav-group"
+                    className="absolute right-0 top-full pt-3"
+                  >
+                    <div className="min-w-[13rem] rounded-md border-t-2 border-[#6B8B59] bg-[#FFFDF8] py-2 shadow-xl shadow-black/5 ring-1 ring-black/5">
+                      {groupEntries.map((link, index) => (
+                        // Staggered by inline style rather than a Tailwind
+                        // arbitrary value per index: the delay is data, not a
+                        // class, and building a per-index delay class
+                        // from an index is exactly the dynamic-class shape
+                        // Tailwind's scanner cannot see -- the same hazard
+                        // galleries.json's grid strings already cost this
+                        // project nine invisible collage photos.
+                        <div
+                          key={link.href}
+                          style={{ animationDelay: `${index * 40}ms` }}
+                          className="animate-nav-in"
+                        >
+                          {renderEntry(
+                            link,
+                            'block px-4 py-2.5 normal-case tracking-normal font-["Open_Sans"] text-[#222]/80 ' +
+                              'transition-colors duration-200 hover:bg-[#6B8B59]/8 hover:text-[#6B8B59]',
+                            closeAll,
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
           </div>
         </div>
@@ -122,7 +240,7 @@ const Navbar: React.FC<NavbarProps> = ({ offHomePage = false }) => {
             target="_blank"
             rel="noopener noreferrer"
             aria-label={copy.nav.instagramLabel}
-            className="text-[#6B8B59] hover:text-[#222] transition"
+            className="text-[#6B8B59] transition-colors duration-300 hover:text-[#222]"
           >
             <Instagram className="h-5 w-5" />
           </a>
@@ -132,28 +250,54 @@ const Navbar: React.FC<NavbarProps> = ({ offHomePage = false }) => {
           aria-label={copy.nav.menuLabel}
           aria-expanded={isMenuOpen}
           onClick={() => setIsMenuOpen((open) => !open)}
-          className="md:hidden text-[#6B8B59] hover:text-[#222] transition"
+          className="md:hidden text-[#6B8B59] transition-colors duration-300 hover:text-[#222]"
         >
           {isMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
         </button>
       </div>
 
       {isMenuOpen && (
+        // A floating card pinned to the right, not a full-bleed sheet: the
+        // old panel spanned `left-0 right-0` and swallowed the viewport, so
+        // opening the menu hid the page you were deciding whether to leave.
+        // `max-w-[15rem]` keeps the photography visible beside it.
         <div
           data-testid="mobile-nav-panel"
-          className="absolute top-full left-0 right-0 md:hidden bg-white shadow-md flex flex-col items-start px-6 py-4 space-y-4 text-sm font-['Montserrat'] tracking-wider text-[#6B8B59] uppercase"
+          className="absolute right-4 top-full mt-2 w-[15rem] max-w-[calc(100vw-2rem)] md:hidden
+                     overflow-hidden rounded-lg border-t-2 border-[#6B8B59] bg-[#FFFDF8]
+                     shadow-xl shadow-black/10 ring-1 ring-black/5 animate-nav-in"
         >
-          {visibleLinks.map((link) =>
-            link.kind === 'section' ? (
-              <a key={link.href} href={link.href} onClick={closeMenu} className="hover:text-[#222] transition">
-                {link.label}
-              </a>
-            ) : (
-              <Link key={link.href} to={link.href} onClick={closeMenu} className="hover:text-[#222] transition">
-                {link.label}
-              </Link>
-            ),
-          )}
+          <div className="flex flex-col py-2 text-sm font-['Montserrat'] tracking-wider text-[#6B8B59] uppercase">
+            {flatEntries.map((link, index) => (
+              <div key={link.href} style={{ animationDelay: `${index * 35}ms` }} className="animate-nav-in">
+                {renderEntry(
+                  link,
+                  'block px-5 py-2.5 transition-colors duration-200 hover:bg-[#6B8B59]/8 hover:text-[#222]',
+                  closeMenu,
+                )}
+              </div>
+            ))}
+
+            {groupEntries.length > 0 && (
+              <>
+                <div className="mx-5 my-2 border-t border-[#6B8B59]/20" />
+                {groupEntries.map((link, index) => (
+                  <div
+                    key={link.href}
+                    style={{ animationDelay: `${(flatEntries.length + index) * 35}ms` }}
+                    className="animate-nav-in"
+                  >
+                    {renderEntry(
+                      link,
+                      'block px-5 py-2.5 normal-case tracking-normal font-["Open_Sans"] text-[#222]/80 ' +
+                        'transition-colors duration-200 hover:bg-[#6B8B59]/8 hover:text-[#6B8B59]',
+                      closeAll,
+                    )}
+                  </div>
+                ))}
+              </>
+            )}
+          </div>
         </div>
       )}
     </nav>

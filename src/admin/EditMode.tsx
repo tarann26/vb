@@ -206,7 +206,7 @@ const EMPTY_STORY: StoryContent = { heading: '', paragraphs: [] };
 const EMPTY_PAGES: Page[] = [];
 
 const EMPTY_COPY: Copy = {
-  nav: { wordmark: '', links: [], instagramLabel: '', menuLabel: '' },
+  nav: { wordmark: '', links: [], instagramLabel: '', menuLabel: '', pagesLabel: '' },
   hero: { logoName: '', logoTagline: '', reservationsLabel: '', reserveButton: '' },
   atmosphere: { heading: '' },
   food: { heading: '' },

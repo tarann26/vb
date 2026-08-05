@@ -51,7 +51,20 @@ export default {
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}', '!./src/**/__tests__/**', '!./src/test/**'],
   safelist: GRID_PLACEMENT_SAFELIST,
   theme: {
-    extend: {},
+    extend: {
+      // The nav's staggered reveal. A keyframe here rather than per-item
+      // Tailwind classes because the DELAY is data (an index), and building
+      // a per-index delay class name from a variable is exactly what
+      // this project's scanner cannot see -- NavBar.tsx passes the delay as
+      // an inline style and reuses this one animation for every item.
+      keyframes: {
+        'nav-in': {
+          from: { opacity: '0', transform: 'translateY(-4px)' },
+          to: { opacity: '1', transform: 'none' },
+        },
+      },
+      animation: { 'nav-in': 'nav-in 280ms cubic-bezier(0.22, 1, 0.36, 1) both' },
+    },
   },
   plugins: [],
   // Task 10 (Plan 4): PublishBar.tsx calls the real DOM method

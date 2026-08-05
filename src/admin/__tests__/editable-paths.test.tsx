@@ -39,7 +39,7 @@ const REAL_COPY = copyJson as Copy;
 // the two routes above live) because it imports COPY_FIELDS from
 // src/admin/fields.ts, the real source of truth for which dotted paths are
 // editable text -- deriving the expected set from it, rather than
-// hand-typing a second 28-entry list a future edit to fields.ts could
+// hand-typing a second 29-entry list a future edit to fields.ts could
 // silently drift out of sync with, is the same "derive from the real thing,
 // don't duplicate it by hand" call src/admin/__tests__/content.test.ts's own
 // CONTENT_FILES check already makes. src/test/bundle.test.ts's own
@@ -157,7 +157,7 @@ describe('every renderText/renderImage call site passes a path that really point
 
   // Mounted once for the whole describe block, not per-test: blogsPage.*
   // only renders at /blogs and notFound.* only at a route nothing matches,
-  // so no single route's calls alone ever cover the full 28 -- the three
+  // so no single route's calls alone ever cover the full 29 -- the three
   // together do.
   beforeAll(() => {
     mountAt('/', bundle);
@@ -175,7 +175,7 @@ describe('every renderText/renderImage call site passes a path that really point
   });
 
   it('the recorded copy.json paths are exactly EDITABLE_TEXT_PATHS (src/admin/editable-paths.ts) -- no missing, no extra', () => {
-    expect(EDITABLE_TEXT_PATHS).toHaveLength(28);
+    expect(EDITABLE_TEXT_PATHS).toHaveLength(29);
     // Partitioned, not filtered-and-forgotten: EDITABLE_TEXT_PATHS is derived
     // from COPY_FIELDS and therefore describes copy.json ONLY, so a template
     // section's `sections.<id>.content.*` path is legitimately not a member.
@@ -234,8 +234,8 @@ describe('every renderText/renderImage call site passes a path that really point
 // test of the exported module's own membership, not a re-derivation of it
 // (which would only ever prove the module equals itself).
 describe('EDITABLE_TEXT_PATHS (src/admin/editable-paths.ts)', () => {
-  it('has exactly 28 entries, every one a real COPY_FIELDS key', () => {
-    expect(EDITABLE_TEXT_PATHS).toHaveLength(28);
+  it('has exactly 29 entries, every one a real COPY_FIELDS key', () => {
+    expect(EDITABLE_TEXT_PATHS).toHaveLength(29);
     const copyFieldKeys = new Set(Object.keys(COPY_FIELDS));
     EDITABLE_TEXT_PATHS.forEach((path) => expect(copyFieldKeys.has(path)).toBe(true));
   });

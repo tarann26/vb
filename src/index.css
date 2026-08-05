@@ -2,6 +2,24 @@
 @tailwind components;
 @tailwind utilities;
 
+/* The navbar is `fixed top-0` (NavBar.tsx), so anything scrolled to by an
+   in-page anchor -- every "#our-story"-style nav link -- lands UNDERNEATH it
+   and the heading you clicked toward is the part that gets covered. This was
+   true from the first fixed navbar and nothing caught it: jsdom has no
+   layout, so no vitest test can see it, and it only shows as "the heading is
+   slightly cut off", which reads as a design choice rather than a bug.
+   Surfaced by e2e/collage-hit-test.spec.ts, where two collage badges scrolled
+   to y=0 and hit-tested to the <nav> instead of themselves.
+
+   `scroll-padding-top` on the scroll container fixes every scroll at once --
+   anchors, scrollIntoView, and find-in-page -- rather than needing a
+   `scroll-margin-top` remembered on each new scroll target. 5rem clears the
+   bar (~61px: py-3 either side of a text-3xl Parisienne wordmark) with room
+   to spare, so a heading lands just below it rather than flush against it. */
+html {
+  scroll-padding-top: 5rem;
+}
+
 /* Custom animations */
 @keyframes fade-in {
   from {

@@ -300,6 +300,7 @@ interface CopyLeafShape {
   'nav.wordmark': string;
   'nav.instagramLabel': string;
   'nav.menuLabel': string;
+  'nav.pagesLabel': string;
   'hero.logoName': string;
   'hero.logoTagline': string;
   'hero.reservationsLabel': string;
@@ -336,6 +337,11 @@ export const COPY_FIELDS: FieldsOf<CopyLeafShape> = {
   'nav.wordmark': { label: 'Wordmark', kind: 'text' },
   'nav.instagramLabel': { label: 'Instagram link label', kind: 'text' },
   'nav.menuLabel': { label: 'Menu button label', kind: 'text' },
+  'nav.pagesLabel': {
+    label: 'Pages menu label',
+    kind: 'text',
+    help: "The one word the nav groups your separate pages under -- Catering, Cheeseboards and the rest. Only shown once you have two or more pages in the nav.",
+  },
   'hero.logoName': { label: 'Hero logo name', kind: 'text' },
   'hero.logoTagline': { label: 'Hero logo tagline', kind: 'text' },
   'hero.reservationsLabel': { label: 'Reservations label', kind: 'text' },

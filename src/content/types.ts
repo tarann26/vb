@@ -335,7 +335,7 @@ export interface NavLink {
 }
 
 export interface Copy {
-  nav: { wordmark: string; links: NavLink[]; instagramLabel: string; menuLabel: string };
+  nav: { wordmark: string; links: NavLink[]; instagramLabel: string; menuLabel: string; pagesLabel: string };
   hero: { logoName: string; logoTagline: string; reservationsLabel: string; reserveButton: string };
   atmosphere: { heading: string };
   food: { heading: string };

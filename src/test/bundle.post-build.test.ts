@@ -492,6 +492,6 @@ describe('dist/assets/ keeps the shared stylesheet under a byte ceiling', () => 
     const cssFiles = readdirSync(DIST_ASSETS).filter((n) => /^index-.*\.css$/.test(n));
     expect(cssFiles.length).toBeGreaterThan(0);
     const size = statSync(join(DIST_ASSETS, cssFiles[0])).size;
-    expect(size).toBeLessThan(34600);
+    expect(size).toBeLessThan(38700);
   });
 });

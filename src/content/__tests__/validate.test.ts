@@ -67,6 +67,7 @@ const validCopy: Copy = {
     links: [{ href: '#a', label: 'Home', section: 'hero' }],
     instagramLabel: 'Follow on Instagram',
     menuLabel: 'Menu',
+    pagesLabel: 'Experiences',
   },
   hero: {
     logoName: 'Via Bianca',
