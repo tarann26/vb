@@ -130,7 +130,22 @@ export interface LoadedContent<T> {
 export async function fetchContent<K extends ContentFileName>(name: K): Promise<LoadedContent<ContentTypeMap[K]>> {
   const response = await fetch(`/api/content?path=src/content/${name}`, { credentials: 'same-origin' });
   if (!response.ok) {
-    throw new Error(`could not load ${name} (status ${response.status})`);
+    // The Worker puts the REASON in the body -- worker/index.ts's 502 branch
+    // passes `error.message`, which worker/github.ts's `describeFailure`
+    // built by reading GitHub's own response. Throwing only the status threw
+    // all of that away: every one of the nine files reported "status 502" and
+    // nothing anywhere said *why*, so a bad GITHUB_TOKEN and a real GitHub
+    // outage looked identical -- to her AND to whoever she asked. The
+    // machinery to explain it already existed; nothing displayed it.
+    const detail = await response
+      .json()
+      .then((body: unknown) => (body as { message?: unknown })?.message)
+      .catch(() => undefined);
+    // The status stays in the message even when a reason is available: the
+    // status is what a developer greps for and the reason is what tells
+    // anyone what to actually do, and there is no cost to carrying both.
+    const base = `could not load ${name} (status ${response.status})`;
+    throw new Error(typeof detail === 'string' && detail.trim() ? `${base}: ${detail}` : base);
   }
   const body = (await response.json()) as { content: string; sha: string };
   let data: ContentTypeMap[K];

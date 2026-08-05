@@ -35,6 +35,30 @@ describe('fetchContent', () => {
     expect(result).toEqual({ data: [{ id: 'x' }], sha: 'sha-2' });
   });
 
+  // The reason the Worker sent, not just the status. Every content file
+  // reporting a bare "status 502" is what a real, live GITHUB_TOKEN failure
+  // looked like: nine identical messages, none of which said the token was
+  // the problem. The Worker had already built the explanation
+  // (worker/github.ts's describeFailure -> worker/index.ts's 502 branch) and
+  // this function discarded it.
+  it('surfaces the reason the Worker gave, not just the status code', async () => {
+    stubFetch(
+      async () =>
+        new Response(JSON.stringify({ message: 'could not read src/content/site.json (GitHub returned 401) -- Bad credentials' }), {
+          status: 502,
+          headers: { 'content-type': 'application/json' },
+        }),
+    );
+    await expect(fetchContent('site.json')).rejects.toThrow(/Bad credentials/);
+  });
+
+  // A failure with no readable body must still say something useful rather
+  // than throwing on the JSON parse of an empty or HTML response.
+  it('falls back to the status when the body carries no message', async () => {
+    stubFetch(async () => new Response('<!doctype html>', { status: 502 }));
+    await expect(fetchContent('site.json')).rejects.toThrow(/status 502/);
+  });
+
   it('throws on a non-OK response, naming the file and the status', async () => {
     stubFetch(async () => new Response(null, { status: 401 }));
     await expect(fetchContent('site.json')).rejects.toThrow(/site\.json/);
