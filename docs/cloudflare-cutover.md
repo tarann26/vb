@@ -552,3 +552,54 @@ in `BlogTeaser` and `BlogsPage`. A date-only ISO string parses as UTC midnight, 
 early for any visitor west of UTC, and a two-digit day becoming one digit is exactly one byte. Now
 rendered with `timeZone: 'UTC'` (`src/content/article-date.ts`), and the homepage byte count is
 identical in UTC, New York and Delhi, which it never was before.
+
+## 15. If the site renders unstyled on the custom domain: a poisoned cache entry
+
+**Symptom.** The page loads, React runs, images appear — and there is no CSS at all. Plain
+serif text, blue underlined links. The console says:
+
+```
+Refused to apply style from '.../assets/index-XXXX.css' because its MIME type
+('text/html') is not a supported stylesheet MIME type, and strict MIME checking is enabled.
+```
+
+**What makes this hard to diagnose:** `curl` fetches the same URL successfully and reports
+`content-type: text/css`. So does `fetch()` from inside the page with `{cache: 'reload'}`. Only
+the browser's own `<link rel="stylesheet">` load fails, and only on the custom domain — the
+`*.pages.dev` URL serves the identical file correctly, with the identical build hash.
+
+**The differentiating header is `Origin`.** A browser sends it on subresource requests; `curl`
+does not. Reproduce in one command:
+
+```bash
+# poisoned: returns index.html
+curl -sI -H "Origin: https://vb.aionxxxi.uk" https://vb.aionxxxi.uk/assets/index-XXXX.css | grep -i content-type
+# clean: returns the real stylesheet
+curl -sI                                      https://vb.aionxxxi.uk/assets/index-XXXX.css | grep -i content-type
+```
+
+The bad response carries `vary: accept-encoding` and no `content-length`; the good one has
+`content-length: <real size>`. They are two different cached objects at one URL.
+
+**Why it happens, and why `/assets/*` specifically.** `public/_redirects` ends with
+`/*  /index.html  200` — the SPA catch-all, which answers **200** (not 404) for any path Pages
+cannot serve as a file. `public/_headers` marks `/assets/*` as
+`max-age=31536000, immutable`. So a single request for an asset that momentarily is not there —
+a deploy mid-propagation, or a hashed filename requested from a stale HTML — gets `index.html`
+with a 200 and the edge caches that HTML **for a year, as immutable, at a content-hashed asset
+URL**. Nothing later corrects it: the filename never changes, so the entry is never revalidated.
+
+**Fix:** purge it. Dashboard → the zone → **Caching → Configuration → Purge Everything**, or a
+Custom Purge of the one URL. Then re-check with the `Origin` command above.
+
+**Faster workaround if a purge is not available:** change anything that alters the CSS content
+hash. A new hash is a new URL, and the poisoned entry is simply no longer referenced.
+
+**Check the blast radius before assuming it is only the stylesheet** — the same thing can happen
+to any asset:
+
+```bash
+for f in $(curl -s https://HOST/ | grep -o 'assets/[A-Za-z0-9._-]*\.\(js\|css\)' | sort -u); do
+  printf '%-40s %s\n' "$f" "$(curl -s -o /dev/null -w '%{content_type}' -H "Origin: https://HOST" "https://HOST/$f")"
+done
+```
