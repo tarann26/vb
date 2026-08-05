@@ -105,7 +105,12 @@ function resolveTextValue(bundle: ContentBundle, path: string): unknown {
     // Parsed by the SAME production function the app routes edits through
     // (src/admin/template-section-paths.ts), so this test and the commit path
     // cannot disagree about what a section content path means.
-    const found = findTemplateSection(bundle.sections, section.sectionId);
+    // Searched across the homepage AND every page: template sections live in
+    // pages.json now, so looking only at bundle.sections would resolve every
+    // one of them to `undefined` and fail for a reason that has nothing to do
+    // with the path being wrong.
+    const pools = [bundle.sections, ...defaultBundle.pages.map((page) => page.sections)];
+    const found = pools.map((pool) => findTemplateSection(pool, section.sectionId)).find(Boolean);
     if (!found) return undefined;
     return section.rest.split('.').reduce<unknown>((node, key) => {
       return node && typeof node === 'object' && key in node ? (node as Record<string, unknown>)[key] : undefined;
@@ -158,6 +163,10 @@ describe('every renderText/renderImage call site passes a path that really point
     mountAt('/', bundle);
     mountAt('/blogs', bundle);
     mountAt('/this-route-matches-nothing', bundle);
+    // Every enabled page, because template sections moved OFF the homepage
+    // and onto their own routes -- mounting only the three above would make
+    // the section-path half of these assertions vacuous again.
+    defaultBundle.pages.filter((page) => page.enabled).forEach((page) => mountAt(`/${page.slug}`, bundle));
   });
 
   it('recorded at least one call of each kind, so the assertions below are not vacuous', () => {
@@ -184,8 +193,16 @@ describe('every renderText/renderImage call site passes a path that really point
     const sectionPaths = textCalls.map((c) => c.path).filter((p) => parseSectionContentPath(p));
     expect(sectionPaths.length).toBeGreaterThan(0);
     const ids = new Set(sectionPaths.map((p) => parseSectionContentPath(p)!.sectionId));
-    const enabled = bundle.sections.filter((s) => s.kind === 'template' && s.enabled).map((s) => s.id);
-    expect([...ids].sort()).toEqual([...enabled].sort());
+    // Template sections live on PAGES now (pages.json), not on the homepage,
+    // so the expected set is every template section of every enabled page --
+    // plus any that sections.json still carries, so this keeps working if one
+    // is ever put back on the homepage.
+    const expected = new Set<string>();
+    bundle.sections.filter((x) => x.kind === 'template' && x.enabled).forEach((x) => expected.add(x.id));
+    defaultBundle.pages
+      .filter((page) => page.enabled)
+      .forEach((page) => page.sections.filter((x) => x.kind === 'template' && x.enabled).forEach((x) => expected.add(x.id)));
+    expect([...ids].sort()).toEqual([...expected].sort());
   });
 
   // Kills both the typo ('visit.heading' -> 'visit.headingTYPO') and a

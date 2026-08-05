@@ -1,1 +1,215 @@
-[]
+[
+  {
+    "slug": "catering",
+    "name": "Catering",
+    "inNav": true,
+    "enabled": true,
+    "seo": {
+      "title": "Catering | Via Bianca",
+      "description": "Bespoke and curated catering menus for up to 100 guests, from the kitchen of Via Bianca in Greater Kailash I."
+    },
+    "sections": [
+      {
+        "kind": "template",
+        "id": "catering",
+        "template": "detailBlock",
+        "enabled": true,
+        "content": {
+          "heading": "Catering",
+          "body": "Bespoke and curated menus, built around what you are hosting. Sit-down dinners or grazing tables, cooked by Chef Kamalika's kitchen and delivered to your event.",
+          "facts": [
+            {
+              "label": "Guests",
+              "value": "Up to 100"
+            },
+            {
+              "label": "Formats",
+              "value": "Sit-down dinners and grazing tables"
+            },
+            {
+              "label": "Menus",
+              "value": "Bespoke and curated to your requirement"
+            }
+          ],
+          "whatsapp": {
+            "label": "Enquire about catering",
+            "message": "Hi, I'd like to enquire about catering."
+          }
+        }
+      }
+    ]
+  },
+  {
+    "slug": "cheeseboards",
+    "name": "Cheeseboards",
+    "inNav": true,
+    "enabled": true,
+    "seo": {
+      "title": "Cheeseboards | Via Bianca",
+      "description": "Cheeseboards from Via Bianca, put together by our kitchen and delivered across Delhi."
+    },
+    "sections": [
+      {
+        "kind": "template",
+        "id": "cheeseboards",
+        "template": "detailBlock",
+        "enabled": true,
+        "content": {
+          "heading": "Cheeseboards",
+          "body": "Our cheeseboards, put together by the kitchen and delivered to you.",
+          "facts": [
+            {
+              "label": "Available",
+              "value": "Delivery across Delhi"
+            }
+          ],
+          "whatsapp": {
+            "label": "Order a cheeseboard",
+            "message": "Hi, I'd like to order a cheeseboard."
+          }
+        }
+      }
+    ]
+  },
+  {
+    "slug": "cooking-class",
+    "name": "Cooking Class",
+    "inNav": true,
+    "enabled": true,
+    "seo": {
+      "title": "Cooking Class for Little Chefs | Via Bianca",
+      "description": "A Sunday cooking class for children aged six and above at Via Bianca. Four children, four dishes, every week."
+    },
+    "sections": [
+      {
+        "kind": "template",
+        "id": "kids-class",
+        "template": "detailBlock",
+        "enabled": true,
+        "content": {
+          "heading": "Cooking class for our little chefs",
+          "body": "Every Sunday, four children cook four dishes with our kitchen. Small by design, so each child actually gets their hands in the food.",
+          "facts": [
+            {
+              "label": "When",
+              "value": "Every Sunday, 12pm"
+            },
+            {
+              "label": "Ages",
+              "value": "6 and above"
+            },
+            {
+              "label": "Spots",
+              "value": "4 children per batch"
+            },
+            {
+              "label": "They cook",
+              "value": "4 dishes"
+            },
+            {
+              "label": "Price",
+              "value": "\u20b94,000 per child"
+            },
+            {
+              "label": "Siblings",
+              "value": "Sibling discount available"
+            }
+          ],
+          "whatsapp": {
+            "label": "Book a spot",
+            "message": "Hi, I'd like to book a spot in the Sunday cooking class."
+          }
+        }
+      }
+    ]
+  },
+  {
+    "slug": "membership",
+    "name": "Membership",
+    "inNav": true,
+    "enabled": true,
+    "seo": {
+      "title": "Membership | Via Bianca",
+      "description": "The Via Bianca membership booklet, limited to one hundred a year and handpicked by Chef Kamalika."
+    },
+    "sections": [
+      {
+        "kind": "template",
+        "id": "membership",
+        "template": "detailBlock",
+        "enabled": true,
+        "content": {
+          "heading": "Membership",
+          "body": "A membership booklet, limited to one hundred a year. Members are handpicked by Chef Kamalika and offered a booklet free of cost based on how often they visit Via Bianca, or it can be bought outright at a fixed price.",
+          "facts": [
+            {
+              "label": "Limited to",
+              "value": "100 members a year"
+            },
+            {
+              "label": "How you join",
+              "value": "Handpicked by Chef Kamalika, by visit frequency"
+            },
+            {
+              "label": "Or",
+              "value": "Bought at a fixed price"
+            }
+          ],
+          "whatsapp": {
+            "label": "Ask about membership",
+            "message": "Hi, I'd like to know more about the membership booklet."
+          }
+        }
+      }
+    ]
+  },
+  {
+    "slug": "breads-and-dips",
+    "name": "Breads & Dips",
+    "inNav": false,
+    "enabled": false,
+    "seo": {
+      "title": "Breads & Dips | Via Bianca",
+      "description": "Our retail line of breads and dips, baked in the Via Bianca kitchen."
+    },
+    "sections": [
+      {
+        "kind": "template",
+        "id": "breads-and-dips",
+        "template": "itemList",
+        "enabled": true,
+        "content": {
+          "heading": "Breads and dips",
+          "items": [],
+          "whatsapp": {
+            "label": "Ask what's available",
+            "message": "Hi, I'd like to know more about your breads and dips."
+          }
+        }
+      }
+    ]
+  },
+  {
+    "slug": "who-we-supply",
+    "name": "Who We Supply",
+    "inNav": false,
+    "enabled": false,
+    "seo": {
+      "title": "Who We Supply | Via Bianca",
+      "description": "The restaurants, cafes and kitchens across Delhi that Via Bianca supplies."
+    },
+    "sections": [
+      {
+        "kind": "template",
+        "id": "b2b-clients",
+        "template": "gallery",
+        "enabled": true,
+        "content": {
+          "heading": "Who we supply",
+          "layout": "grid",
+          "images": []
+        }
+      }
+    ]
+  }
+]

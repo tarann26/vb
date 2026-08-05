@@ -1,8 +1,24 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
 import Navbar from '../NavBar';
 import { copy, sections } from '../../content';
+
+// Wrapped in a router because the nav now renders a real <Link> for every
+// page with `inNav && enabled` (NavBar.tsx's own `pageEntries`), and a Link
+// outside a Router throws on `useContext(...).basename`. This test file used
+// to render <Navbar/> bare, which worked only while pages.json was empty --
+// the moment the first page reached the nav, all four cases here died on a
+// router error rather than on anything about the nav itself.
+function renderNav() {
+  return render(
+    <MemoryRouter>
+      <Navbar />
+    </MemoryRouter>,
+  );
+}
+
 
 // copy.nav.links[].label is owner-editable via copy.json; look it up rather
 // than pinning today's wording, so a content edit to the label doesn't break
@@ -24,13 +40,13 @@ if (!visibleLink) {
 
 describe('Navbar', () => {
   it('exposes a menu toggle for small screens', () => {
-    render(<Navbar />);
+    renderNav();
     expect(screen.getByRole('button', { name: copy.nav.menuLabel })).toBeInTheDocument();
   });
 
   it('opens and closes the menu', async () => {
     const user = userEvent.setup();
-    render(<Navbar />);
+    renderNav();
     const toggle = screen.getByRole('button', { name: copy.nav.menuLabel });
 
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
@@ -42,7 +58,7 @@ describe('Navbar', () => {
 
   it('closes the menu after a link is followed', async () => {
     const user = userEvent.setup();
-    render(<Navbar />);
+    renderNav();
     const toggle = screen.getByRole('button', { name: copy.nav.menuLabel });
     await user.click(toggle);
 
@@ -73,7 +89,7 @@ describe('Navbar', () => {
   // catch (the list vanishing while the menu is open) still fails loudly.
   it('keeps the desktop links rendered even while the mobile menu is open', async () => {
     const user = userEvent.setup();
-    render(<Navbar />);
+    renderNav();
     const toggle = screen.getByRole('button', { name: copy.nav.menuLabel });
     await user.click(toggle);
 
