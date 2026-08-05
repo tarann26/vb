@@ -11,7 +11,7 @@
 // collision this component's own comments now document. This file is the
 // regression net for the logic; that pass was the proof it is reachable.
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import CollageTile from '../CollageTile';
 // The real, committed collage -- the exact fixture the cascade test below
 // needs (see that describe block's own comment for why a hand-built
@@ -201,6 +201,72 @@ describe('CollageTile: size-change buttons', () => {
     expect(screen.getAllByRole('status')[0]).toHaveTextContent(
       "Can't make this narrower — that would move this photo off the collage grid.",
     );
+  });
+});
+
+// The owner's own report about the panel as it was: "a control panel which
+// has no information in it." Eight arrows and the words "PHOTO 5 OF THE
+// COLLAGE", controlling a ~60px tile somewhere above -- quite possibly
+// scrolled off screen, since the panel is docked to the bottom of the
+// viewport.
+describe("CollageTile: the panel shows the photo it is moving", () => {
+  function thumbnail(): HTMLImageElement | null {
+    const region = screen.getByRole('region', { name: 'Moving or resizing photo 1' });
+    return region.querySelector('img[data-collage-panel-thumbnail]');
+  }
+
+  // Mutation this guards: deleting the `<img data-collage-panel-thumbnail>`
+  // from the panel -- confirmed red.
+  it('renders a thumbnail of this tile\'s own photo, alongside the line naming it', () => {
+    renderTile({ selected: true, image: <img src="/hero/oven.webp" alt="" /> });
+    expect(thumbnail()).toHaveAttribute('src', '/hero/oven.webp');
+    expect(screen.getByRole('region', { name: 'Moving or resizing photo 1' })).toHaveTextContent(
+      'Photo 1 of the collage',
+    );
+  });
+
+  // Mutation this guards: reading the src from the `image` prop's own
+  // `props.src` (React.isValidElement(image) ? image.props.src : null)
+  // instead of from the rendered DOM -- confirmed red. That version is the
+  // obvious one and it is wrong on the one case that matters: between
+  // staging a replacement and publishing it, the DOM carries a local object
+  // URL for the file she just picked while the content value is a
+  // derivative path the Cloudflare build has not written yet, so the panel
+  // would show a broken image for exactly the photo she is working on.
+  it('follows the photo actually on screen when it is replaced mid-session, not the content value', async () => {
+    const { container } = renderTile({ selected: true, image: <img src="/hero/oven.webp" alt="" /> });
+    expect(thumbnail()).toHaveAttribute('src', '/hero/oven.webp');
+
+    // Exactly what EditableImage does when a pick starts: it swaps the
+    // element's own `src` to a local object URL, without React re-rendering
+    // this component at all.
+    const tileImage = container.querySelector('img') as HTMLImageElement;
+    tileImage.setAttribute('src', 'blob:http://localhost/just-picked');
+    await waitFor(() => expect(thumbnail()).toHaveAttribute('src', 'blob:http://localhost/just-picked'));
+  });
+
+  // Not announced: the line beside it already says which photo this is, and
+  // Hero.tsx passes `alt: ''` for every collage photo, so there is no real
+  // alternative text to borrow. Repeating "photo 1" to a screen reader in
+  // two different ways is noise, not information.
+  it('marks the thumbnail decorative rather than announcing the same photo twice', () => {
+    renderTile({ selected: true, image: <img src="/hero/oven.webp" alt="" /> });
+    expect(thumbnail()).toHaveAttribute('alt', '');
+    expect(thumbnail()).toHaveAttribute('aria-hidden', 'true');
+  });
+
+  // Mutation this guards: rendering the thumbnail unconditionally instead of
+  // behind `photoSrc !== null` -- confirmed red, an <img> with no src at all
+  // is a broken-image glyph in a real browser.
+  it('renders no thumbnail at all when the tile has no photo to show', () => {
+    renderTile({ selected: true, image: <div /> });
+    expect(thumbnail()).toBeNull();
+  });
+
+  it('does not render the panel, or its thumbnail, while the tile is unselected', () => {
+    renderTile({ image: <img src="/hero/oven.webp" alt="" /> });
+    expect(screen.queryByRole('region', { name: 'Moving or resizing photo 1' })).not.toBeInTheDocument();
+    expect(document.querySelector('img[data-collage-panel-thumbnail]')).toBeNull();
   });
 });
 

@@ -335,6 +335,46 @@ const CollageTile: React.FC<CollageTileProps> = ({ index, className, classNames,
   // this can tell "just deselected" (clear -- a genuinely stale message)
   // apart from "just selected" (keep -- she may be here BECAUSE of the
   // message), which a bare `[selected]` dependency can't distinguish.
+  // The photo this panel is about, so the panel can SHOW it. The owner's own
+  // words about the version without it: "a control panel which has no
+  // information in it" -- eight arrows and the line "PHOTO 5 OF THE COLLAGE",
+  // controlling an object she cannot see from where the controls are. On a
+  // phone the panel is docked to the bottom of the viewport and the tile it
+  // moves is a ~60px cell somewhere above it, quite possibly scrolled off
+  // screen entirely.
+  //
+  // Read off this tile's own rendered <img>, not from a `src` threaded down
+  // out of galleries.json. Deliberate, and it is the difference between a
+  // thumbnail and a broken image: between staging a replacement and
+  // publishing it, EditableImage shows a local object URL for the file she
+  // just picked while galleries.json holds a derivative path the Cloudflare
+  // build has not written yet (that exact confusion has already been fixed
+  // twice on this surface -- see EditableImage.tsx's own `locked` comment).
+  // The DOM holds whatever is actually on screen, which is by construction
+  // the photo she is moving.
+  //
+  // A MutationObserver rather than a re-read on every render: the src can
+  // change while this panel is open and while `selected` never moves -- she
+  // can tap the camera badge on the very tile she is moving, and the local
+  // preview replaces the src the moment the file is picked. An effect keyed
+  // on `[selected]` alone would show her the photo she just replaced; an
+  // effect with no key at all would re-read on every render of every tile
+  // and trip `react-hooks/exhaustive-deps` (a warning this project runs at
+  // zero). Watching the one attribute that can change is both narrower and
+  // more correct than either: it fires whether or not React re-rendered
+  // anything, and only while this tile's own panel is up.
+  const [photoSrc, setPhotoSrc] = useState<string | null>(null);
+  useEffect(() => {
+    if (!selected) return;
+    const tileEl = tileRef.current;
+    if (!tileEl) return;
+    const read = () => setPhotoSrc(tileEl.querySelector('img')?.getAttribute('src') ?? null);
+    read();
+    const observer = new MutationObserver(read);
+    observer.observe(tileEl, { subtree: true, childList: true, attributes: true, attributeFilter: ['src'] });
+    return () => observer.disconnect();
+  }, [selected]);
+
   const wasSelectedRef = useRef(selected);
   useEffect(() => {
     if (wasSelectedRef.current && !selected) {
@@ -721,10 +761,37 @@ const CollageTile: React.FC<CollageTileProps> = ({ index, className, classNames,
             className="fixed inset-x-0 bottom-0 z-50 border-t border-gray-200 bg-white px-4 py-3 shadow-[0_-4px_12px_rgba(0,0,0,0.15)]"
           >
             <div className="mx-auto flex max-w-md flex-col items-center gap-3">
-              <div className="flex w-full items-center justify-between">
-                <p className="font-['Montserrat'] text-xs font-semibold uppercase tracking-wide text-[#222]">
-                  {`Photo ${index + 1} of the collage`}
-                </p>
+              <div className="flex w-full items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  {/* Decorative, and marked as such: the line beside it
+                      already says WHICH photo this is, so announcing the
+                      image as well would read the same fact twice. Hero.tsx
+                      passes `alt: ''` for every collage photo anyway, so
+                      there is no real alternative text to borrow.
+
+                      Sized by an inline style rather than a utility pair:
+                      the shipped stylesheet carries a byte ceiling every
+                      admin-only class counts against
+                      (src/test/bundle.post-build.test.ts), no existing
+                      rule is close to the size this wants, and this
+                      component already uses that escape hatch for its own
+                      refusal toast. Every class below already has a rule
+                      from the panel's own buttons, so this whole addition
+                      costs the stylesheet nothing. */}
+                  {photoSrc !== null && (
+                    <img
+                      src={photoSrc}
+                      alt=""
+                      aria-hidden="true"
+                      data-collage-panel-thumbnail
+                      style={{ width: '44px', height: '44px' }}
+                      className="rounded border border-gray-300 object-cover"
+                    />
+                  )}
+                  <p className="font-['Montserrat'] text-xs font-semibold uppercase tracking-wide text-[#222]">
+                    {`Photo ${index + 1} of the collage`}
+                  </p>
+                </div>
                 <ControlButton
                   label="Done moving this photo"
                   onClick={() => onSelect(null)}
