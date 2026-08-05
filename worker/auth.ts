@@ -175,10 +175,29 @@ function sessionKey(secret: string, passwordHash: string): string {
   return `${secret}\u0000${passwordHash}`;
 }
 
-export async function signToken(secret: string, passwordHash: string, expiresAt: number): Promise<string> {
-  const payloadB64 = btoa(JSON.stringify({ exp: expiresAt }));
+// `iat` travels in the payload because the session slides: every
+// authenticated request re-issues the cookie with a fresh `exp`, and without
+// the ORIGINAL issue time there would be nothing to cap that sliding against
+// -- a stolen cookie kept warm by a poll every few hours would never expire.
+// See SESSION_IDLE_SECONDS / SESSION_ABSOLUTE_SECONDS in worker/index.ts for
+// the two clocks this enables.
+export async function signToken(
+  secret: string,
+  passwordHash: string,
+  issuedAt: number,
+  expiresAt: number,
+): Promise<string> {
+  const payloadB64 = btoa(JSON.stringify({ iat: issuedAt, exp: expiresAt }));
   const sigB64 = await hmac(sessionKey(secret, passwordHash), payloadB64);
   return `${payloadB64}.${sigB64}`;
+}
+
+// Returns the token's own claims rather than a bare boolean, so a caller can
+// read `iat` and re-issue. `null` for "not valid" keeps every existing
+// `if (!token || !(await verifyToken(...)))` call site reading correctly.
+export interface SessionClaims {
+  iat: number;
+  exp: number;
 }
 
 export async function verifyToken(
@@ -186,7 +205,7 @@ export async function verifyToken(
   passwordHash: string,
   token: string,
   now: number,
-): Promise<boolean> {
+): Promise<SessionClaims | null> {
   // Exactly two segments, not "at least two": `token.split('.')` alone
   // would destructure only the first two elements and silently ignore any
   // more, so `<payload>.<sig>.` and `<payload>.<sig>.evil` would both
@@ -197,7 +216,7 @@ export async function verifyToken(
   // revocation-list key, where string-keyed revocation becomes trivially
   // evadable by appending garbage.
   const parts = token.split('.');
-  if (parts.length !== 2) return false;
+  if (parts.length !== 2) return null;
   const [payloadB64, sigB64] = parts;
   // `!secret` first: `crypto.subtle.importKey` rejects a zero-length raw
   // HMAC key with an unhandled `DataError`, not a returned failure -- an
@@ -205,7 +224,7 @@ export async function verifyToken(
   // instead of failing closed, which is the wrong shape for an auth gate
   // (the moment a caller wraps it in a try/catch expecting only `boolean`,
   // a misconfigured secret becomes fail-open in whatever that catch does).
-  if (!secret || !passwordHash || !payloadB64 || !sigB64) return false;
+  if (!secret || !passwordHash || !payloadB64 || !sigB64) return null;
 
   // Signature FIRST, on principle: a scheme that parses the payload (or
   // checks `exp`) before verifying the signature trusts attacker-controlled
@@ -226,7 +245,7 @@ export async function verifyToken(
   // (don't act on unverified bytes at all, not even to read `exp` off them),
   // it just isn't what this specific test demonstrates.
   const expectedSig = await hmac(sessionKey(secret, passwordHash), payloadB64);
-  if (!timingSafeEqual(expectedSig, sigB64)) return false;
+  if (!timingSafeEqual(expectedSig, sigB64)) return null;
 
   try {
     const parsed: unknown = JSON.parse(atob(payloadB64));
@@ -241,9 +260,17 @@ export async function verifyToken(
     // happen through the one public token-minting path today -- but
     // `verifyToken` shouldn't depend on every future signer getting that
     // right. Defence in depth, not a live exploit.
-    return typeof exp === 'number' && Number.isFinite(exp) && exp > now;
+    const iat = (parsed as { iat?: unknown }).iat;
+    if (typeof exp !== 'number' || !Number.isFinite(exp) || exp <= now) return null;
+    // A token with no usable `iat` is rejected rather than defaulted. Defaulting
+    // it to `now` would hand a pre-sliding-session token an unlimited absolute
+    // cap -- the one thing the cap exists to prevent. Nothing is stranded by
+    // this: binding the session key to the password hash already invalidated
+    // every token minted before these two changes.
+    if (typeof iat !== 'number' || !Number.isFinite(iat)) return null;
+    return { iat, exp };
   } catch {
-    return false;
+    return null;
   }
 }
 

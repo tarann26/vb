@@ -35,13 +35,72 @@ export interface Env extends GitHubEnv, PagesEnv {
   DEPLOY_HOOK_URL: string;
 }
 
-// 7 days. Rotating ADMIN_PASSWORD_HASH alone does not invalidate a session
-// token already issued under the old password -- a token's validity comes
-// entirely from TOKEN_SECRET (see worker/auth.ts's verifyToken), not from
-// whether the password that produced it is still current. Revoking an
-// outstanding session requires rotating TOKEN_SECRET too; see
-// docs/cloudflare-cutover.md.
-const SESSION_SECONDS = 604_800;
+// TWO clocks, because one cannot express what a session actually needs.
+//
+//   IDLE     -- 6 hours since the LAST request. A laptop left open in the
+//               restaurant, or a phone put down mid-edit, stops being a way in.
+//               Every authenticated request slides this forward (see
+//               `withSlidingSession` below), so it only ever runs out on
+//               genuine inactivity, not while she is working.
+//   ABSOLUTE -- 7 days since LOGIN, and nothing extends it. Without this, the
+//               sliding window alone would let a stolen cookie live forever:
+//               an attacker polling any authenticated route once an hour keeps
+//               renewing it and never has to know the password again.
+//
+// The cookie's own `exp` is always the earlier of the two, so a single
+// expiry check enforces both and `verifyToken` needs no concept of either.
+//
+// Rotating ADMIN_PASSWORD_HASH invalidates every outstanding token
+// immediately -- the session key is derived from it (worker/auth.ts's
+// `sessionKey`), so a password change is a full revocation on its own.
+const SESSION_IDLE_SECONDS = 6 * 60 * 60;
+const SESSION_ABSOLUTE_SECONDS = 604_800;
+
+// One place that knows how the two clocks combine, used by login and by every
+// sliding refresh. `exp` is the earlier of "idle window from now" and "the
+// absolute cap measured from the ORIGINAL login", and Max-Age matches it so
+// the browser drops the cookie on the same schedule the server would reject it.
+// Returns null once the absolute cap has passed -- there is no cookie to
+// issue then, and the caller must not invent one.
+async function sessionCookie(
+  env: Pick<Env, 'TOKEN_SECRET' | 'ADMIN_PASSWORD_HASH'>,
+  issuedAt: number,
+  now: number,
+): Promise<string> {
+  const expiresAt = Math.min(now + SESSION_IDLE_SECONDS, issuedAt + SESSION_ABSOLUTE_SECONDS);
+  const token = await signToken(env.TOKEN_SECRET, env.ADMIN_PASSWORD_HASH, issuedAt, expiresAt);
+  const maxAge = Math.max(0, expiresAt - now);
+  return `vb_session=${token}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=${maxAge}`;
+}
+
+// The routes that require a session. Listed here rather than inferred, so
+// adding an authenticated route without deciding whether it should slide the
+// window is a visible omission rather than a silent one.
+export const AUTHENTICATED_PATHS = new Set(['/api/publish', '/api/content', '/api/upload', '/api/build-status']);
+
+// Slides the idle window on a successful authenticated request. Applied in the
+// router, once, rather than inside each handler: the handlers already
+// authenticate themselves, and threading a cookie back out of every one of
+// them is four chances to forget. Costs one extra HMAC per authenticated
+// request to re-read `iat`, which is not measurable next to the GitHub round
+// trips a publish makes.
+//
+// Deliberately skipped on 401 -- refreshing a session in the same response
+// that says "not authenticated" would be absurd -- and on a token that no
+// longer verifies, where there is nothing to slide.
+async function withSlidingSession(request: Request, env: Env, response: Response): Promise<Response> {
+  if (response.status === 401) return response;
+  const token = parseCookie(request.headers.get('Cookie'), 'vb_session');
+  if (!token) return response;
+  const now = Math.floor(Date.now() / 1000);
+  const claims = await verifyToken(env.TOKEN_SECRET, env.ADMIN_PASSWORD_HASH, token, now);
+  if (!claims) return response;
+  // Already past the absolute cap: let it run out rather than reissuing.
+  if (now >= claims.iat + SESSION_ABSOLUTE_SECONDS) return response;
+  const headers = new Headers(response.headers);
+  headers.append('Set-Cookie', await sessionCookie(env, claims.iat, now));
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+}
 
 function json(status: number, body: unknown, extraHeaders: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(body), {
@@ -123,13 +182,10 @@ async function handleLogin(request: Request, env: Env): Promise<Response> {
     return json(500, { message: 'Login is not configured.' });
   }
 
-  const expiresAt = Math.floor(Date.now() / 1000) + SESSION_SECONDS;
-  const token = await signToken(env.TOKEN_SECRET, env.ADMIN_PASSWORD_HASH, expiresAt);
+  const now = Math.floor(Date.now() / 1000);
   return new Response(null, {
     status: 204,
-    headers: {
-      'Set-Cookie': `vb_session=${token}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=${SESSION_SECONDS}`,
-    },
+    headers: { 'Set-Cookie': await sessionCookie(env, now, now) },
   });
 }
 
@@ -953,20 +1009,25 @@ export default {
       return handleLogin(request, env);
     }
 
+    // Every authenticated route goes through withSlidingSession, which pushes
+    // the 6-hour idle window forward on success. AUTHENTICATED_PATHS is
+    // asserted against this list by worker/__tests__/index.test.ts, so a new
+    // authenticated route added here without a decision about the session
+    // fails a test rather than quietly never sliding.
     if (url.pathname === '/api/publish' && request.method === 'POST') {
-      return handlePublish(request, env);
+      return withSlidingSession(request, env, await handlePublish(request, env));
     }
 
     if (url.pathname === '/api/content' && request.method === 'GET') {
-      return handleGetContent(request, env);
+      return withSlidingSession(request, env, await handleGetContent(request, env));
     }
 
     if (url.pathname === '/api/upload' && request.method === 'POST') {
-      return handleUpload(request, env);
+      return withSlidingSession(request, env, await handleUpload(request, env));
     }
 
     if (url.pathname === '/api/build-status' && request.method === 'GET') {
-      return handleBuildStatus(request, env);
+      return withSlidingSession(request, env, await handleBuildStatus(request, env));
     }
 
     if (url.pathname === '/api/wa' && request.method === 'POST') {

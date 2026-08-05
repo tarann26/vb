@@ -36,7 +36,7 @@ function buildEnv(): BuildStatusEnv {
 
 async function sessionCookie(): Promise<string> {
   const expiresAt = Math.floor(Date.now() / 1000) + 3600;
-  const token = await signToken(TOKEN_SECRET, PASSWORD_HASH, expiresAt);
+  const token = await signToken(TOKEN_SECRET, PASSWORD_HASH, expiresAt - 60, expiresAt);
   return `vb_session=${token}`;
 }
 
@@ -122,7 +122,7 @@ describe('GET /api/build-status', () => {
   it('a forged session cookie is also 401 and makes no Cloudflare call', async () => {
     const fetchStub = vi.fn();
     vi.stubGlobal('fetch', fetchStub);
-    const forged = await signToken('a-different-secret', PASSWORD_HASH, Math.floor(Date.now() / 1000) + 3600);
+    const forged = await signToken('a-different-secret', PASSWORD_HASH, Math.floor(Date.now() / 1000), Math.floor(Date.now() / 1000) + 3600);
     const response = await handleBuildStatus(statusRequest(SHA, `vb_session=${forged}`), env);
     expect(response.status).toBe(401);
     expect(fetchStub).not.toHaveBeenCalled();

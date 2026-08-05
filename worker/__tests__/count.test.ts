@@ -94,7 +94,7 @@ async function getWa(cookie?: string): Promise<Request> {
 // fails to verify. That is the new behaviour working, not a broken fixture.
 async function sessionCookie(env: { ADMIN_PASSWORD_HASH: string }): Promise<string> {
   const expiresAt = Math.floor(Date.now() / 1000) + 3600;
-  const token = await signToken(TOKEN_SECRET, env.ADMIN_PASSWORD_HASH, expiresAt);
+  const token = await signToken(TOKEN_SECRET, env.ADMIN_PASSWORD_HASH, expiresAt - 60, expiresAt);
   return `vb_session=${token}`;
 }
 
@@ -258,7 +258,7 @@ describe('GET /api/wa', () => {
   });
 
   it('a forged session cookie is also 401', async () => {
-    const forged = await signToken('a-different-secret-entirely', PASSWORD_HASH, Math.floor(Date.now() / 1000) + 3600);
+    const forged = await signToken('a-different-secret-entirely', PASSWORD_HASH, Math.floor(Date.now() / 1000), Math.floor(Date.now() / 1000) + 3600);
     const response = await worker.fetch(await getWa(`vb_session=${forged}`), env);
     expect(response.status).toBe(401);
   });

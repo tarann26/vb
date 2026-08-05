@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import worker from '../index';
+import worker, { AUTHENTICATED_PATHS } from '../index';
 import { hashPassword, parseCookie, verifyToken, signToken } from '../auth';
 import { makeGitHubStub, utf8, NEW_COMMIT_SHA, type GitHubStub } from './githubStub';
 
@@ -142,7 +142,11 @@ describe('worker entry point', () => {
       });
     }
 
-    it('the correct password gets a 204 with a signed, httpOnly, 7-day session cookie', async () => {
+    // Renamed from "7-day session cookie": login now issues a SIX-HOUR idle
+  // window, which every authenticated request slides forward, with seven days
+  // as an absolute cap nothing can extend (worker/index.ts's two constants).
+  // The cookie's Max-Age is the idle window, not the cap.
+  it('the correct password gets a 204 with a signed, httpOnly, sliding session cookie', async () => {
       const response = await worker.fetch(loginRequest({ password: PASSWORD }), env);
       expect(response.status).toBe(204);
 
@@ -152,7 +156,9 @@ describe('worker entry point', () => {
       expect(setCookie).toContain('Secure');
       expect(setCookie).toContain('SameSite=Strict');
       expect(setCookie).toContain('Path=/');
-      expect(setCookie).toContain('Max-Age=604800');
+      // 6 hours, not 7 days: the cap is enforced by `iat` inside the token,
+      // and re-checked on every slide, so the cookie itself never carries it.
+      expect(setCookie).toContain(`Max-Age=${6 * 60 * 60}`);
 
       const token = parseCookie(setCookie, 'vb_session');
       expect(token).not.toBeNull();
@@ -162,7 +168,7 @@ describe('worker entry point', () => {
       // this reads the hash off the env rather than a constant.
       expect(
         await verifyToken(TOKEN_SECRET, env.ADMIN_PASSWORD_HASH, token as string, Math.floor(Date.now() / 1000)),
-      ).toBe(true);
+      ).not.toBeNull();
 
       // The property this whole change exists for: changing the password
       // revokes every session already issued. Same token, same TOKEN_SECRET,
@@ -170,7 +176,7 @@ describe('worker entry point', () => {
       const afterPasswordChange = await hashPassword('a-completely-different-password');
       expect(
         await verifyToken(TOKEN_SECRET, afterPasswordChange, token as string, Math.floor(Date.now() / 1000)),
-      ).toBe(false);
+      ).toBeNull();
     });
 
     it('the wrong password gets 401 and no cookie', async () => {
@@ -306,7 +312,7 @@ describe('worker entry point', () => {
 
     async function sessionCookie(): Promise<string> {
       const expiresAt = Math.floor(Date.now() / 1000) + 3600;
-      const token = await signToken(TOKEN_SECRET, env.ADMIN_PASSWORD_HASH, expiresAt);
+      const token = await signToken(TOKEN_SECRET, env.ADMIN_PASSWORD_HASH, expiresAt - 60, expiresAt);
       return `vb_session=${token}`;
     }
 
@@ -334,7 +340,7 @@ describe('worker entry point', () => {
     // dangerous failure mode: verifyToken must actually check the
     // signature, not just "a vb_session cookie is present".
     it('a forged session cookie is also 401 and makes no GitHub call', async () => {
-      const forgedToken = await signToken('a-different-secret-entirely', PASSWORD_HASH, Math.floor(Date.now() / 1000) + 3600);
+      const forgedToken = await signToken('a-different-secret-entirely', PASSWORD_HASH, Math.floor(Date.now() / 1000), Math.floor(Date.now() / 1000) + 3600);
       const response = await worker.fetch(
         publishRequest(
           { files: [utf8('src/content/site.json', JSON.stringify(VALID_SITE))] },
@@ -857,7 +863,7 @@ describe('worker entry point', () => {
 
     async function sessionCookie(): Promise<string> {
       const expiresAt = Math.floor(Date.now() / 1000) + 3600;
-      const token = await signToken(TOKEN_SECRET, env.ADMIN_PASSWORD_HASH, expiresAt);
+      const token = await signToken(TOKEN_SECRET, env.ADMIN_PASSWORD_HASH, expiresAt - 60, expiresAt);
       return `vb_session=${token}`;
     }
 
@@ -878,7 +884,7 @@ describe('worker entry point', () => {
     // Same forged-signature reproduction as POST /api/publish's own 401
     // test -- a cookie must actually verify, not merely be present.
     it('a forged session cookie is also 401', async () => {
-      const forgedToken = await signToken('a-different-secret-entirely', PASSWORD_HASH, Math.floor(Date.now() / 1000) + 3600);
+      const forgedToken = await signToken('a-different-secret-entirely', PASSWORD_HASH, Math.floor(Date.now() / 1000), Math.floor(Date.now() / 1000) + 3600);
       const response = await worker.fetch(
         contentRequest('src/content/dishes.json', `vb_session=${forgedToken}`),
         env,
@@ -947,5 +953,79 @@ describe('worker entry point', () => {
       const response = await worker.fetch(contentRequest('src/content/dishes.json', cookie), env);
       expect(response.status).toBe(502);
     });
+  });
+});
+
+describe('the 6-hour idle window', () => {
+  // Two clocks (worker/index.ts): 6 hours since the last request, and a hard
+  // 7 days since login that nothing can extend. The cookie's own `exp` is
+  // always the earlier of the two.
+  const IDLE = 6 * 60 * 60;
+  const ABSOLUTE = 604_800;
+
+  it('a token idle past six hours no longer verifies', async () => {
+    const env = await buildEnv();
+    const iat = 1_000_000;
+    const token = await signToken(TOKEN_SECRET, env.ADMIN_PASSWORD_HASH, iat, iat + IDLE);
+    expect(await verifyToken(TOKEN_SECRET, env.ADMIN_PASSWORD_HASH, token, iat + IDLE - 1)).not.toBeNull();
+    expect(await verifyToken(TOKEN_SECRET, env.ADMIN_PASSWORD_HASH, token, iat + IDLE + 1)).toBeNull();
+  });
+
+  it('an authenticated request slides the window forward', async () => {
+    const env = await buildEnv();
+    const now = Math.floor(Date.now() / 1000);
+    const token = await signToken(TOKEN_SECRET, env.ADMIN_PASSWORD_HASH, now, now + IDLE);
+    const response = await worker.fetch(
+      new Request('https://viabiancadelhi.com/api/content?path=src/content/copy.json', {
+        headers: { Cookie: `vb_session=${token}` },
+      }),
+      env,
+    );
+    // Whatever the route answers, a live session must come back refreshed --
+    // that IS the sliding window. Without it the cookie would keep its
+    // original expiry and six hours of work would end in a logout.
+    const refreshed = response.headers.get('Set-Cookie');
+    expect(refreshed, 'an authenticated request must reissue the session cookie').toBeTruthy();
+    expect(refreshed).toContain('HttpOnly');
+    expect(refreshed).toContain('SameSite=Strict');
+  });
+
+  it('a 401 never reissues a session cookie', async () => {
+    const env = await buildEnv();
+    const response = await worker.fetch(
+      new Request('https://viabiancadelhi.com/api/content?path=src/content/copy.json'),
+      env,
+    );
+    expect(response.status).toBe(401);
+    expect(response.headers.get('Set-Cookie')).toBeNull();
+  });
+
+  it('the absolute cap is never extended by activity', async () => {
+    const env = await buildEnv();
+    // Logged in seven days ago, active the whole time: the cookie can slide
+    // right up to the cap and no further.
+    const now = Math.floor(Date.now() / 1000);
+    const iat = now - ABSOLUTE + 30;
+    const token = await signToken(TOKEN_SECRET, env.ADMIN_PASSWORD_HASH, iat, now + 60);
+    const response = await worker.fetch(
+      new Request('https://viabiancadelhi.com/api/content?path=src/content/copy.json', {
+        headers: { Cookie: `vb_session=${token}` },
+      }),
+      env,
+    );
+    const refreshed = response.headers.get('Set-Cookie');
+    if (refreshed) {
+      const maxAge = Number(refreshed.match(/Max-Age=(\d+)/)?.[1] ?? '0');
+      expect(maxAge, 'a refresh must never push past the absolute cap').toBeLessThanOrEqual(30);
+    }
+  });
+
+  it('every authenticated route is listed in AUTHENTICATED_PATHS', () => {
+    // Guards the guard: a new authenticated route added to the router without
+    // a decision about the session shows up here rather than silently never
+    // sliding its window.
+    expect([...AUTHENTICATED_PATHS].sort()).toEqual(
+      ['/api/build-status', '/api/content', '/api/publish', '/api/upload'],
+    );
   });
 });

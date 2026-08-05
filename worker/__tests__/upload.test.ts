@@ -114,7 +114,7 @@ const PDF_EOF_TOO_FAR_FROM_END = new Uint8Array([
 
 async function sessionCookie(): Promise<string> {
   const expiresAt = Math.floor(Date.now() / 1000) + 3600;
-  const token = await signToken(TOKEN_SECRET, PASSWORD_HASH, expiresAt);
+  const token = await signToken(TOKEN_SECRET, PASSWORD_HASH, expiresAt - 60, expiresAt);
   return `vb_session=${token}`;
 }
 
@@ -229,7 +229,7 @@ describe('POST /api/upload', () => {
 
   it('a forged session cookie is also 401 and makes no GitHub call', async () => {
     env = freshEnv();
-    const forged = await signToken('a-different-secret-entirely', PASSWORD_HASH, Math.floor(Date.now() / 1000) + 3600);
+    const forged = await signToken('a-different-secret-entirely', PASSWORD_HASH, Math.floor(Date.now() / 1000), Math.floor(Date.now() / 1000) + 3600);
     const response = await handleUpload(
       uploadRequest({ category: 'food', file: { bytes: JPEG_BYTES }, cookie: `vb_session=${forged}` }),
       env,

@@ -465,7 +465,7 @@ describe('handlePublish records scheduled dates for the cron', () => {
 
   async function sessionCookie(env: { ADMIN_PASSWORD_HASH: string }): Promise<string> {
     const expiresAt = Math.floor(Date.now() / 1000) + 3600;
-    const token = await signToken(TOKEN_SECRET, env.ADMIN_PASSWORD_HASH, expiresAt);
+    const token = await signToken(TOKEN_SECRET, env.ADMIN_PASSWORD_HASH, expiresAt - 60, expiresAt);
     return `vb_session=${token}`;
   }
 
