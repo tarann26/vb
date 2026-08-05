@@ -13,30 +13,4 @@
 # here for some other path, know that this file cannot express "fail loudly"
 # for it -- see docs/cloudflare-cutover.md's deploy-time curl smoke check for
 # the only reliable way to confirm the route is actually live.
-# The SPA catch-all, deliberately NOT `/*`.
-#
-# `/*` matched EVERY path, including `/assets/index-<hash>.css`. Cloudflare
-# Pages consults this file only when it cannot serve a path as a real file --
-# so during the propagation window of a deploy, a request for a brand-new
-# hashed asset got index.html back with a **200**, and `_headers` marks
-# `/assets/*` `max-age=31536000, immutable`, so that HTML was then cached at a
-# content-hashed asset URL for a year. The filename never changes, so nothing
-# ever revalidates it. Observed live: the stylesheet served as `text/html` to
-# every browser (which sends an `Origin` header on subresource requests) while
-# curl, which does not, got the real CSS -- and separately on two different
-# favicons, on two different hosts, from one deploy. A poisoned stylesheet is
-# an unstyled site; a poisoned JS bundle would be a blank page.
-#
-# Every real route is one segment (`/blogs`, `/catering`, and every page slug
-# via App.tsx's `/:slug`) except the dashboard, so a single-segment
-# placeholder covers them all and leaves `/assets/<file>` -- two segments --
-# to 404 honestly instead. `/` needs no rule: index.html exists at the root
-# and Pages serves it directly.
-#
-# The cost, stated: a nonexistent DEEP path (`/catering/nope`) now gets
-# Cloudflare's own 404 instead of the site's branded NotFound page. That is a
-# fair trade for a real 404 status, and single-segment misses -- the ones
-# anyone actually mistypes -- still reach NotFound.
-/edit/manage      /index.html   200
-/edit/manage/*    /index.html   200
-/:page            /index.html   200
+/*    /index.html   200
