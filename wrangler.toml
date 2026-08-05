@@ -27,7 +27,7 @@ GITHUB_BRANCH = "main"   # the branch Cloudflare Pages builds from
 # unset does not. An invented or half-pasted value still fails, guarding
 # against build-status silently querying a nonexistent account/project.
 CLOUDFLARE_ACCOUNT_ID = "e352283475b003efeab1a35e45932927"
-CLOUDFLARE_PAGES_PROJECT = "PLACEHOLDER-NOT-A-REAL-PAGES-PROJECT-NAME"
+CLOUDFLARE_PAGES_PROJECT = "vb"
 
 # Hourly, but the `scheduled` handler (worker/index.ts) only actually calls
 # the Cloudflare Pages deploy hook when `anythingPublishesToday` finds a
