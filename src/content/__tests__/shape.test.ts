@@ -14,6 +14,9 @@ import {
   TEMPLATE_SECTION_KEYS,
   unknownKeys,
 } from '../guards';
+import { collagePhotos, countCollagePhotos } from '../collage';
+import { assertCollageTree } from '../guards';
+import galleriesRaw from '../galleries.json';
 
 // Types catch a missing field at build time. Nothing catches an *empty* one
 // -- and the it.each/forEach loops elsewhere in this suite become vacuous
@@ -123,8 +126,22 @@ describe('collections are non-empty', () => {
     expect(galleries.ourStory.length).toBeGreaterThan(0);
   });
 
+  // index.ts runs the raw JSON through `assertCollageTree`, which RECONSTRUCTS
+  // every node from named keys -- so a `galleries.heroCollage` that is the
+  // very same object as the raw import means the guard was replaced by a cast
+  // at some point and stopped running at all. Reading the raw file here (not
+  // the barrel's export) is what makes this checkable: a sweep over the
+  // narrowed export alone would pass either way. The same reasoning
+  // sections.json/pages.json already get in the describe block below.
+  it('the committed hero collage really is narrowed by assertCollageTree, not cast', () => {
+    expect(galleries.heroCollage).not.toBe(galleriesRaw.heroCollage);
+    expect(() => assertCollageTree(galleriesRaw.heroCollage)).not.toThrow();
+    expect(galleries.heroCollage).toEqual(galleriesRaw.heroCollage);
+  });
+
   it('has at least one hero collage image', () => {
-    expect(galleries.heroCollage.length).toBeGreaterThan(0);
+    expect(galleries.heroCollage).not.toBeNull();
+    expect(countCollagePhotos(galleries.heroCollage!)).toBeGreaterThan(0);
   });
 });
 
@@ -307,11 +324,22 @@ describe('gallery image required fields are non-blank', () => {
     },
   );
 
-  it.each(galleries.heroCollage.map((img, i) => [i, img] as const))(
-    'heroCollage[%i] has non-blank src and className',
-    (_i, img) => {
-      expect(isBlank(img.src)).toBe(false);
-      expect(isBlank(img.className)).toBe(false);
+  // The collage is a tree, so its photos are addressed by id, not by array
+  // position -- and every one has an id precisely so that a swap cannot make
+  // a name mean a different photograph.
+  //
+  // Only `src` is asserted here, deliberately. A blank or duplicated id is
+  // not something this sweep could ever observe: `assertCollageTree` refuses
+  // both at import time (src/content/index.ts), so a violation makes this
+  // whole FILE fail to load rather than producing a failing assertion --
+  // confirmed directly by blanking the id in the guard's own photo branch.
+  // An assertion that cannot fail is a defect in this repo, so the id rules
+  // are proven where they can actually be exercised, against fixtures:
+  // src/content/__tests__/collage.test.ts.
+  it.each(collagePhotos(galleries.heroCollage!).map((photo) => [photo.id, photo] as const))(
+    'heroCollage photo %s has a non-blank src',
+    (_id, photo) => {
+      expect(isBlank(photo.src)).toBe(false);
     },
   );
 });

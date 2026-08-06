@@ -3,7 +3,8 @@ import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import type { ImgHTMLAttributes } from 'react';
 import { defaultBundle, ContentProvider, type ContentBundle } from '../../content/ContentContext';
-import type { Copy, Galleries } from '../../content/types';
+import type { Copy } from '../../content/types';
+import { findCollagePhoto } from '../../content/collage';
 import { AppRoutes } from '../../App';
 import { COPY_FIELDS } from '../fields';
 import { parseSectionContentPath, findTemplateSection } from '../template-section-paths';
@@ -121,17 +122,22 @@ function resolveTextValue(bundle: ContentBundle, path: string): unknown {
   }, bundle.copy);
 }
 
-// Every real renderImage call site is one of two shapes: an index into one
-// of galleries.json's three arrays, or `<collection>.<id>.image` into
-// dishes/drinks/press. A path of neither shape is not a defect this test
-// knows how to check -- it throws rather than silently passing, so an
-// eighth renderImage call site with a new path shape some day fails loudly
-// here instead of going unchecked.
+// Every real renderImage call site is one of three shapes: an index into one
+// of galleries.json's two flat arrays, a photo ID into the hero collage's
+// tree, or `<collection>.<id>.image` into dishes/drinks/press. A path of none
+// of those shapes is not a defect this test knows how to check -- it throws
+// rather than silently passing, so a renderImage call site with a new path
+// shape some day fails loudly here instead of going unchecked.
 function resolveImageSrc(bundle: ContentBundle, path: string): string | null | undefined {
-  const gallery = path.match(/^galleries\.(atmosphere|ourStory|heroCollage)\.(\d+)$/);
+  const gallery = path.match(/^galleries\.(atmosphere|ourStory)\.(\d+)$/);
   if (gallery) {
     const [, key, index] = gallery;
-    return bundle.galleries[key as keyof Galleries][Number(index)]?.src;
+    return (bundle.galleries[key as 'atmosphere' | 'ourStory'])[Number(index)]?.src;
+  }
+  const collage = path.match(/^galleries\.heroCollage\.([^.]+)$/);
+  if (collage) {
+    const tree = bundle.galleries.heroCollage;
+    return tree === null ? undefined : findCollagePhoto(tree, collage[1])?.src;
   }
   const item = path.match(/^(dishes|drinks|press)\.([^.]+)\.image$/);
   if (item) {

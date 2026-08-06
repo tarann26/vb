@@ -1,0 +1,195 @@
+import { expect, test, type Page } from '@playwright/test';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
+// What the split tree actually renders, measured in a real browser.
+//
+// None of this can be checked in vitest: jsdom has no layout engine, so every
+// box it reports is 0x0 and every ratio comes out identical no matter what the
+// stylesheet says. That is not a theoretical gap here -- it is precisely how
+// this collage shipped nine photos nobody could see. Their placement classes
+// had no rules in the built stylesheet, the tiles auto-placed into implicit
+// rows, `overflow-hidden` clipped them away, and every jsdom test stayed
+// green because the markup was fine and only the LAYOUT was wrong.
+//
+// Three properties, each one a different way that failure could come back:
+//   1. Every split's children take the proportions the content authored.
+//   2. A 1:1 split renders two equal boxes whatever is inside them -- the
+//      `flexBasis: 0` half of Hero.tsx's sizing, without which an image's
+//      intrinsic width leaks into the ratio.
+//   3. Every one of the sixteen photos has a real box on screen.
+
+interface CollageNode {
+  kind: 'photo' | 'split';
+  id: string;
+  src?: string;
+  direction?: 'row' | 'column';
+  children?: CollageNode[];
+  sizes?: number[];
+}
+
+// Read at run time rather than imported: this spec runs as ESM, where a JSON
+// import needs an import attribute, and reading the committed file directly is
+// both simpler and unambiguous about which bytes are being checked.
+const GALLERIES_PATH = fileURLToPath(new URL('../src/content/galleries.json', import.meta.url));
+const TREE = (JSON.parse(readFileSync(GALLERIES_PATH, 'utf8')) as { heroCollage: CollageNode }).heroCollage;
+
+const VIEWPORTS = [
+  { label: '390px (phone)', width: 390, height: 844 },
+  { label: '1440px (desktop)', width: 1440, height: 900 },
+];
+
+// Waits for every collage image to settle, so a lazily-loaded photo cannot
+// resize a box between the measurement and the assertion. Bounded, for the
+// reason e2e/collage-hit-test.spec.ts records: an unbounded wait on an image
+// that fires neither load nor error hangs the spec until the suite timeout,
+// which is a worse failure than the flake it fixes.
+async function settle(page: Page): Promise<void> {
+  await page.evaluate(async () => {
+    const bounded = <T>(p: Promise<T>, ms: number) =>
+      Promise.race([p, new Promise((r) => setTimeout(r, ms))]);
+    const images = [...document.querySelectorAll('img')].filter((img) => !img.complete);
+    await bounded(
+      Promise.all(
+        images.map((img) => new Promise((r) => {
+          img.addEventListener('load', r, { once: true });
+          img.addEventListener('error', r, { once: true });
+        })),
+      ),
+      5000,
+    );
+  });
+}
+
+// Walks the committed tree and the rendered DOM in lockstep -- child index i
+// of a split node is child index i of its <div>, which is exactly what
+// `renderCollageNode` (src/components/Hero.tsx) builds -- and reports one
+// measurement per split. Done inside ONE `evaluate` so every box is read from
+// the same frame; a per-node round trip would let a late image load move
+// layout underneath an already-measured parent.
+async function measureSplits(page: Page, tree: CollageNode) {
+  return page.evaluate((serialised: string) => {
+    const root = JSON.parse(serialised) as {
+      kind: string; id: string; direction?: string; children?: unknown[]; sizes?: number[];
+    };
+    const container = document.querySelector('section .absolute.inset-0.flex');
+    if (!container) throw new Error('collage container not found');
+    const rootEl = container.firstElementChild;
+    if (!rootEl) throw new Error('collage root node not rendered');
+
+    const results: {
+      id: string; direction: string; gap: number; containerExtent: number;
+      sizes: number[]; extents: number[];
+    }[] = [];
+
+    function walk(node: typeof root, el: Element): void {
+      if (node.kind !== 'split') return;
+      const children = [...el.children];
+      const style = getComputedStyle(el);
+      const rect = el.getBoundingClientRect();
+      const horizontal = node.direction === 'row';
+      results.push({
+        id: node.id,
+        direction: String(node.direction),
+        gap: parseFloat(horizontal ? style.columnGap : style.rowGap) || 0,
+        containerExtent: horizontal ? rect.width : rect.height,
+        sizes: node.sizes ?? [],
+        extents: children.map((child) => {
+          const r = child.getBoundingClientRect();
+          return horizontal ? r.width : r.height;
+        }),
+      });
+      (node.children ?? []).forEach((child, i) => walk(child as typeof root, children[i]));
+    }
+
+    walk(root, rootEl);
+    return results;
+  }, JSON.stringify(tree));
+}
+
+for (const viewport of VIEWPORTS) {
+  test.describe(`the hero collage renders its split tree at ${viewport.label}`, () => {
+    test.use({ viewport: { width: viewport.width, height: viewport.height } });
+
+    test('every split divides its box in the proportions the content authors', async ({ page }) => {
+      await page.goto('/');
+      await settle(page);
+
+      const splits = await measureSplits(page, TREE);
+      // Non-vacuous: the committed arrangement has thirteen splits. A walk
+      // that silently found none would otherwise pass with no assertions run
+      // at all, which is the exact shape of test this repo counts as a defect.
+      expect(splits.length).toBe(13);
+
+      for (const split of splits) {
+        expect(split.extents.length, `${split.id}: rendered a different number of boxes than the tree has`).toBe(
+          split.sizes.length,
+        );
+        // Flexbox subtracts the gaps first, then distributes what is left by
+        // the relative grow factors -- so the expected extent of child i is
+        // (container - gap * (n - 1)) * sizes[i] / sum(sizes).
+        const total = split.sizes.reduce((t, s) => t + s, 0);
+        const available = split.containerExtent - split.gap * (split.sizes.length - 1);
+        split.sizes.forEach((size, i) => {
+          const expected = (available * size) / total;
+          // One CSS pixel of slack, for sub-pixel rounding only. Any real
+          // mistake -- a dropped `flexBasis`, a size read off the wrong
+          // index, an ignored `sizes` array -- is wrong by far more than that.
+          expect(
+            Math.abs(split.extents[i] - expected),
+            `${split.id} child ${i}: expected ${expected.toFixed(2)}px, measured ${split.extents[i].toFixed(2)}px`,
+          ).toBeLessThanOrEqual(1);
+        });
+      }
+    });
+
+    // The property `flexBasis: 0` exists for, stated as the case that breaks
+    // without it. `right-bottom-pair` is a 1:1 row split holding
+    // /our_story/cut.webp (1000px wide natively) and /hero/farfalle.webp
+    // (500px) -- a 2:1 difference in intrinsic width, which is what leaks into
+    // the layout the moment a flex item's base size comes from its content
+    // instead of from zero.
+    test('a 1:1 split renders two equal boxes even when the two photos differ in intrinsic width', async ({ page }) => {
+      await page.goto('/');
+      await settle(page);
+
+      const measured = await page.evaluate(() => {
+        const box = (src: string) => {
+          const img = document.querySelector<HTMLImageElement>(`section img[src="${src}"]`);
+          if (!img) throw new Error(`no collage image for ${src}`);
+          const el = img.closest('div');
+          if (!el) throw new Error(`no box around ${src}`);
+          return { width: el.getBoundingClientRect().width, natural: img.naturalWidth };
+        };
+        return { wide: box('/our_story/cut.webp'), narrow: box('/hero/farfalle.webp') };
+      });
+
+      // The precondition, asserted rather than assumed: if these two photos
+      // ever became the same size, the test below would still pass and would
+      // no longer be checking anything.
+      expect(measured.wide.natural).toBeGreaterThan(measured.narrow.natural);
+      expect(measured.wide.width).toBeGreaterThan(0);
+      expect(Math.abs(measured.wide.width - measured.narrow.width)).toBeLessThanOrEqual(1);
+    });
+
+    test('all sixteen photos have a real box on screen, none collapsed to nothing', async ({ page }) => {
+      await page.goto('/');
+      await settle(page);
+
+      const boxes = await page.evaluate(() => {
+        const container = document.querySelector('section .absolute.inset-0.flex');
+        return [...container!.querySelectorAll('img')].map((img) => {
+          const el = img.closest('div')!;
+          const r = el.getBoundingClientRect();
+          return { src: img.getAttribute('src'), width: r.width, height: r.height };
+        });
+      });
+
+      expect(boxes.length).toBe(16);
+      for (const box of boxes) {
+        expect(box.width, `${box.src} has no width`).toBeGreaterThan(0);
+        expect(box.height, `${box.src} has no height`).toBeGreaterThan(0);
+      }
+    });
+  });
+}

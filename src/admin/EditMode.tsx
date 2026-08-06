@@ -40,7 +40,6 @@ import GallerySection from '../components/templates/GallerySection';
 import DetailBlockSection from '../components/templates/DetailBlockSection';
 import EditableText from './EditableText';
 import EditableImage from './EditableImage';
-import CollageTile from './CollageTile';
 import { setCopyText } from './editable-paths';
 import { parseSectionContentPath, findTemplateSection, setTemplateSectionText, setTemplateSectionImage } from './template-section-paths';
 import { useStagedFiles, fromStagedPhoto } from './staged';
@@ -60,12 +59,17 @@ import { useValidation } from './useValidation';
 // that module's own comment): ./types is type-only and erases entirely at
 // compile time, which is no longer true of anything holding a real
 // `createContext` call.
-import { ContentProvider } from '../content/context';
-// Plan 6, Task 3, Step 4: the same server-side rule the Worker's own deploy
-// gate applies (validate.ts is on content.test.ts's own SAFE_CONTENT_SUBMODULES
-// whitelist -- it imports no JSON and has no path to src/content/index.ts).
-// `commitCollagePlacement` below is the one call site.
-import { validateContent } from '../content/validate';
+import {
+  COLLAGE_PATH_PREFIX,
+  ContentProvider,
+  defaultRenderCollagePhoto,
+  defaultRenderCollageSplit,
+} from '../content/context';
+// The tree operations themselves. `collage` joins SAFE_CONTENT_SUBMODULES for
+// exactly the reason the other five are on it: it imports no JSON, no react,
+// and has no transitive path to src/content/index.ts (the build-time
+// snapshot). See src/admin/__tests__/content.test.ts, which pins that.
+import { setCollagePhotoSrc } from '../content/collage';
 import type {
   ContentBundle,
   SectionId,
@@ -195,7 +199,11 @@ const EMPTY_SITE: SiteContent = {
   copyrightYear: 0,
 };
 
-const EMPTY_GALLERIES: Galleries = { atmosphere: [], ourStory: [], heroCollage: [] };
+// `heroCollage: null` is the tree's own spelling of what `[]` used to say:
+// nothing to draw. See Galleries' own comment (src/content/types.ts) -- it is
+// legitimate in memory for exactly the window before galleries.json loads,
+// and validateContent refuses it, so no publish can ever produce one.
+const EMPTY_GALLERIES: Galleries = { atmosphere: [], ourStory: [], heroCollage: null };
 
 const EMPTY_STORY: StoryContent = { heading: '', paragraphs: [] };
 
@@ -279,11 +287,15 @@ function pick<K extends ContentFileName>(
 // reasoned about -- see this file's own tests for both halves (restaging
 // one row leaves one staged file; the two paths sharing dining.webp leave
 // two).
-const GALLERY_LIST_CATEGORY: Record<'atmosphere' | 'ourStory' | 'heroCollage', UploadCategory> = {
+const GALLERY_LIST_CATEGORY: Record<'atmosphere' | 'ourStory', UploadCategory> = {
   atmosphere: 'atmosphere',
   ourStory: 'our_story',
-  heroCollage: 'hero',
 };
+
+// The hero collage is no longer one of those lists: it is a tree, and its
+// photos are addressed by id rather than by position (see CollagePhoto,
+// src/content/types.ts). One category, named once.
+const HERO_COLLAGE_CATEGORY: UploadCategory = 'hero';
 
 const ITEM_CATEGORY: Record<'dishes' | 'drinks' | 'press', UploadCategory> = {
   dishes: 'food',
@@ -292,7 +304,13 @@ const ITEM_CATEGORY: Record<'dishes' | 'drinks' | 'press', UploadCategory> = {
 };
 
 type ImageTarget =
-  | { kind: 'gallery'; list: 'atmosphere' | 'ourStory' | 'heroCollage'; index: number; category: UploadCategory }
+  | { kind: 'gallery'; list: 'atmosphere' | 'ourStory'; index: number; category: UploadCategory }
+  // The collage's own target. `photoId`, never an index: a swap (Task 4)
+  // moves a photo to a different position in the tree and takes its id with
+  // it, so a positional target would rewrite the wrong photograph the moment
+  // she swaps two -- and a replacement staged before the swap would follow
+  // the box rather than the photo.
+  | { kind: 'collage'; photoId: string; category: UploadCategory }
   | { kind: 'item'; collection: 'dishes' | 'drinks' | 'press'; id: string; category: UploadCategory }
   // Plan 7, Task 5, Step 1: a template section's own item-list photo
   // (`sections.<id>.content.items.<i>.image`) or gallery photo
@@ -314,10 +332,17 @@ type ImageTarget =
 const TEMPLATE_SECTION_CATEGORY: UploadCategory = 'atmosphere';
 
 function resolveImageTarget(path: string): ImageTarget | null {
-  const gallery = path.match(/^galleries\.(atmosphere|ourStory|heroCollage)\.(\d+)$/);
+  const gallery = path.match(/^galleries\.(atmosphere|ourStory)\.(\d+)$/);
   if (gallery) {
-    const list = gallery[1] as 'atmosphere' | 'ourStory' | 'heroCollage';
+    const list = gallery[1] as 'atmosphere' | 'ourStory';
     return { kind: 'gallery', list, index: Number(gallery[2]), category: GALLERY_LIST_CATEGORY[list] };
+  }
+  // `galleries.heroCollage.<photo id>` -- built by `collageNodePath`
+  // (src/content/context.ts), which is also what Hero.tsx hands
+  // `renderImage`, so this pattern and that one cannot drift.
+  if (path.startsWith(`${COLLAGE_PATH_PREFIX}.`)) {
+    const photoId = path.slice(COLLAGE_PATH_PREFIX.length + 1);
+    if (photoId.length > 0) return { kind: 'collage', photoId, category: HERO_COLLAGE_CATEGORY };
   }
   const item = path.match(/^(dishes|drinks|press)\.([^.]+)\.image$/);
   if (item) {
@@ -332,27 +357,23 @@ function resolveImageTarget(path: string): ImageTarget | null {
 }
 
 // Rewrites exactly the one array entry `target` names, leaving every
-// sibling entry -- and the other two galleries.json lists -- at its prior
+// sibling entry -- and the other galleries.json lists -- at its prior
 // object identity. Mirrors setCopyText's own "spread the touched level
 // only" contract (editable-paths.ts).
-function setGallerySrc(galleries: Galleries, list: 'atmosphere' | 'ourStory' | 'heroCollage', index: number, src: string): Galleries {
+function setGallerySrc(galleries: Galleries, list: 'atmosphere' | 'ourStory', index: number, src: string): Galleries {
   return {
     ...galleries,
     [list]: galleries[list].map((entry, i) => (i === index ? { ...entry, src } : entry)),
   };
 }
 
-// Plan 6, Task 3: mirrors `setGallerySrc` exactly, for the OTHER field a
-// heroCollage entry has -- `className`, never `src`. A tile whose photo she
-// also replaced this session keeps both changes: this only ever touches
-// `className` on the one entry `index` names, leaving `src` (and every
-// sibling entry) at its prior object identity, the same "spread the touched
-// level only" contract `setCopyText`/`setGallerySrc` already follow.
-function setHeroCollagePlacement(galleries: Galleries, index: number, className: string): Galleries {
-  return {
-    ...galleries,
-    heroCollage: galleries.heroCollage.map((entry, i) => (i === index ? { ...entry, className } : entry)),
-  };
+// The same contract for the collage, where "the touched level" is a path
+// through a tree rather than one array index -- `setCollagePhotoSrc`
+// (src/content/collage.ts) returns every untouched subtree by reference, so
+// replacing one photo re-renders exactly one box.
+function setCollagePhoto(galleries: Galleries, photoId: string, src: string): Galleries {
+  if (galleries.heroCollage === null) return galleries;
+  return { ...galleries, heroCollage: setCollagePhotoSrc(galleries.heroCollage, photoId, src) };
 }
 
 // dishes/drinks/press key on `.id`, never on array position -- Task 1's own
@@ -404,13 +425,6 @@ function setItemImage<T extends { id: string; image: string | null }>(items: T[]
 // default export genuinely is a component). Disabled deliberately, not
 // silenced blind: `buildBundle` is a pure function with no React state or
 // hooks of its own, so it has nothing for Fast Refresh to lose track of.
-// `selectedTileIndex`/`onSelectTile` (Plan 6, Task 3): which hero collage
-// tile, if any, currently shows its move/size-change panel -- single-select,
-// lifted here (not local to each CollageTile instance) because Hero.tsx
-// renders each tile independently via its own `renderCollageTile` call, and
-// only one panel may be open at a time. A plain closure-captured pair, the
-// same shape `stage` already is, not a new React Context: nothing else on
-// this page needs to read it.
 // `locked` (Plan: lock editing while a publish is in flight) is OPTIONAL and
 // defaults to unlocked. Optional for two reasons, both real: this file's own
 // test suite calls buildBundle directly at a dozen sites, and a required
@@ -430,8 +444,6 @@ export function buildBundle(
   entries: ContentEntries,
   registry: ContentRegistry,
   stage: (key: string, file: StagedFile | null) => void,
-  selectedTileIndex: number | null,
-  onSelectTile: (index: number | null) => void,
   locked = false,
 ): ContentBundle {
   const copy = pick(entries, 'copy.json', EMPTY_COPY);
@@ -511,6 +523,10 @@ export function buildBundle(
       registry.updateData('galleries.json', setGallerySrc(galleries, target.list, target.index, contentPath));
       return;
     }
+    if (target.kind === 'collage') {
+      registry.updateData('galleries.json', setCollagePhoto(galleries, target.photoId, contentPath));
+      return;
+    }
     if (target.kind === 'section') {
       commitSectionField(target.sectionId, (content) => setTemplateSectionImage(content, target.rest, contentPath));
       return;
@@ -524,31 +540,11 @@ export function buildBundle(
   // yet -- the same "no affordance before there's somewhere real to write
   // it" gate `copyLoaded` applies to text.
   function targetLoaded(target: ImageTarget): boolean {
-    if (target.kind === 'gallery') return galleriesLoaded;
+    if (target.kind === 'gallery' || target.kind === 'collage') return galleriesLoaded;
     if (target.kind === 'section') return sectionsLoaded;
     if (target.collection === 'dishes') return dishesLoaded;
     if (target.collection === 'drinks') return drinksLoaded;
     return pressLoaded;
-  }
-
-  // Plan 6, Task 3, Step 4: `registry.updateData`, never `register` -- the
-  // identical reasoning `commitText`/`commitImage` above already follow
-  // (see `commitText`'s own comment on Finding C4). CollageTile has already
-  // checked `isOnGrid` on `className`'s own candidate before ever calling
-  // this (both its per-button disabled state and its own commit guard), but
-  // this is the one place that ALSO holds against a bad write reaching the
-  // registry another way -- a future second caller of `onCommit`, a bug in
-  // that check -- by re-running the real, server-side `validateContent`
-  // (the SAME rule the Worker's own deploy gate applies) against the whole
-  // candidate `galleries.json`, not just this one field. A refusal here is
-  // silent by design, not silent by accident: CollageTile's own UI already
-  // never lets her reach a placement this would refuse, so surfacing a
-  // second, redundant error message for a path she cannot actually take
-  // would tell her nothing she could act on.
-  function commitCollagePlacement(index: number, className: string) {
-    const next = setHeroCollagePlacement(galleries, index, className);
-    if (validateContent('galleries.json', next).length > 0) return;
-    registry.updateData('galleries.json', next);
   }
 
   return {
@@ -614,7 +610,11 @@ export function buildBundle(
       // GalleryList.tsx's own stage keys already use
       // (`${file}:${listName}:${index}:src`).
       const stageFile =
-        target.kind === 'gallery' ? 'galleries.json' : target.kind === 'section' ? 'sections.json' : `${target.collection}.json`;
+        target.kind === 'gallery' || target.kind === 'collage'
+          ? 'galleries.json'
+          : target.kind === 'section'
+            ? 'sections.json'
+            : `${target.collection}.json`;
       // `locked` is passed THROUGH rather than swapping this component for a
       // bare <img>, for the same reason `renderText` above passes it to
       // EditableText: the swap unmounts. Here that cost more than a layout
@@ -636,44 +636,16 @@ export function buildBundle(
         />
       );
     },
-    // Plan 6, Task 3: the collage's own tiles become selectable, movable
-    // and resizable, exactly like renderText/renderImage above -- gated on
-    // `galleriesLoaded` for the identical reason `renderImage` gates
-    // targetLoaded: committing a move before galleries.json has a registry
-    // entry to write into would be a documented no-op (`updateData`'s own
-    // contract) that silently discards the move. Falls back to the SAME
-    // markup ContentContext.ts's own default `renderCollageTile` produces
-    // (byte-identical -- confirmed directly), so a collage tile whose file
-    // hasn't loaded yet renders exactly as it would with no provider
-    // mounted at all, not as something broken.
-    // `locked` is passed THROUGH, not used to pick the fallback branch --
-    // review finding (Important), the collage half of the same defect
-    // renderImage above carries. Swapping this component for the plain <div>
-    // below is an element-TYPE change at the same position, so React
-    // unmounts the whole tile, `image` included: a collage photo she had
-    // just replaced lost its local preview and got its object URL revoked
-    // the instant the pause engaged, and came back as the not-yet-built
-    // derivative path. CollageTile takes its own controls off while locked
-    // (see that component's `locked` prop), so the affordances still vanish
-    // -- nothing is left to click -- without anything being torn down.
-    renderCollageTile: (_path, index, className, image) =>
-      galleriesLoaded ? (
-        <CollageTile
-          key={index}
-          index={index}
-          className={className}
-          classNames={galleries.heroCollage.map((tile) => tile.className)}
-          image={image}
-          selected={selectedTileIndex === index}
-          onSelect={onSelectTile}
-          onCommit={commitCollagePlacement}
-          locked={locked}
-        />
-      ) : (
-        <div key={index} className={`${className} relative overflow-hidden`}>
-          {image}
-        </div>
-      ),
+    // The collage's two node seams. /edit takes the SAME implementations the
+    // public page uses (src/content/context.ts), not a copy of them and not a
+    // stub: the photos inside are already editable, because Hero.tsx routes
+    // every one of them through `renderImage` above, which is what puts
+    // EditableImage's camera badge on each box. The affordances that need a
+    // seam of their own -- drag-to-swap on a photo, a divider between two
+    // children of a split -- are the next tasks in this plan, and these two
+    // parameters are what they attach to.
+    renderCollagePhoto: defaultRenderCollagePhoto,
+    renderCollageSplit: defaultRenderCollageSplit,
   };
 }
 
@@ -750,10 +722,6 @@ const EditMode: React.FC = () => {
   // tells her it exists, so she isn't left assuming /edit is the only
   // place she has unpublished work.
   const [otherSurfaceDraftExists, setOtherSurfaceDraftExists] = useState(false);
-  // Plan 6, Task 3: which hero collage tile (if any) currently shows its
-  // move/size-change panel -- see `buildBundle`'s own comment on why this lives
-  // here rather than as local state inside each CollageTile instance.
-  const [selectedTileIndex, setSelectedTileIndex] = useState<number | null>(null);
   // True only while the publish REQUEST itself is in flight. PublishBar owns
   // the decision and reports it here; see its `onPublishLockChange` prop for
   // why the build-poll window deliberately locks nothing.
@@ -883,7 +851,7 @@ const EditMode: React.FC = () => {
     return null;
   }
 
-  const bundle = buildBundle(entries, registry, staged.stage, selectedTileIndex, setSelectedTileIndex, publishLocked);
+  const bundle = buildBundle(entries, registry, staged.stage, publishLocked);
   const erroredFiles = Object.keys(fileErrors) as ContentFileName[];
   const loadedOrErroredCount = CONTENT_FILES.filter(
     (file) => entries[file] !== undefined || fileErrors[file] !== undefined,

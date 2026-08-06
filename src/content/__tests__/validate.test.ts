@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { validateContent } from '../validate';
-import { GRID_SIZE, formatPlacement } from '../placement';
+import { MAX_COLLAGE_PHOTOS, MIN_SPLIT_CHILDREN, normalizeSizes } from '../collage';
+import type { CollageNode } from '../types';
 import type { Dish, Drink, Article, StoryContent, Copy, Section, SiteContent, Galleries, MenuFile } from '../types';
 
 // Every fixture in this file is hand-built against the real types, not read
@@ -141,7 +142,7 @@ const validSite: SiteContent = {
 const validGalleries: Galleries = {
   atmosphere: [{ src: '/atmosphere/a.webp', alt: 'A' }],
   ourStory: [{ src: '/our_story/b.webp', alt: 'B' }],
-  heroCollage: [{ src: '/hero/c.webp', className: 'col-span-1' }],
+  heroCollage: { kind: 'photo', id: 'only', src: '/hero/c.webp', alt: '' },
 };
 
 const validMenus: MenuFile[] = [{ id: 'food', label: 'Food Menu', file: '/menus/food-menu.pdf' }];
@@ -571,84 +572,84 @@ describe('validateContent: Task 6 -- content-quality rules the dashboard already
   });
 });
 
-// Plan 6, Task 1, Step 2: `heroCollage[i].className` used to be checked for
-// nothing beyond non-blankness (`"col-start-99"`, `"garbage"` and `""` were
-// all equally acceptable). This is the same `resolveLayout`/`isOnGrid` pair
-// Hero.test.tsx's own "collage placement" tests call, so a placement this
-// suite refuses and one Hero.test.tsx would flag as off-grid can never
-// silently drift apart -- the exact disagreement review finding C3 warned
-// would let her pass the Worker's own gate, publish, and have Cloudflare
-// refuse the build. Overlap is deliberately NOT one of the rejected shapes
-// below -- she is arranging a photo collage, and CSS grid already paints
-// the later tile over the earlier one.
-describe('validateContent: hero collage placement is refused by validateContent (Task 1, Step 2)', () => {
-  function withHeroClassName(className: string): Galleries {
-    return { ...validGalleries, heroCollage: [{ src: '/hero/a.webp', className }] };
+// The hero collage is a tree of splits, and `validateContent` is the write
+// boundary that refuses a malformed one before it can become a commit. The
+// per-rule assertions -- and the proof that this end and the build-time guard
+// (`assertCollageTree`) agree on every one of them -- live in
+// src/content/__tests__/collage.test.ts, which drives the same thirteen
+// malformed trees through both. What belongs HERE is the part that is
+// specific to validateContent's own galleries.json rule: that a bad tree
+// reaches it at all, that it is addressed to a field the dashboard can route,
+// and that "no collage" is refused.
+describe('validateContent: the hero collage tree (Plan 9, Task 1)', () => {
+  function photo(id: string, src = `/hero/${id}.webp`): CollageNode {
+    return { kind: 'photo', id, src, alt: '' };
   }
 
-  // Built through `formatPlacement`, not written out as literal
-  // `col-start-N`-shaped source text -- this project's own standing WATCH
-  // (tailwind.config.js's own `blocklist` comment, this plan's own report
-  // on the two bare-word collisions Plan 5 caught mid-flight) is that
-  // Tailwind's content scanner has no JS parser and reads comments and
-  // string literals exactly like real classNames. Routing every non-trivial
-  // fixture below through the real formatter means the only place a real
-  // grid-placement-shaped substring can ever appear in this FILE's own text
-  // is inside `formatPlacement`'s own implementation, not scattered across
-  // however many literal test fixtures happen to need one -- the fixtures
-  // below hand it plain numbers instead.
-  function placement(colStart: number | null, colSpan: number | null, rowStart: number | null, rowSpan: number | null): string {
-    return formatPlacement({ colStart, colSpan, rowStart, rowSpan });
+  function withCollage(heroCollage: unknown): unknown {
+    return { ...validGalleries, heroCollage };
   }
 
-  it('placement "garbage" (does not parse at all) is refused by validateContent', () => {
-    const problems = validateContent('galleries.json', withHeroClassName('garbage'));
-    expect(messages(problems)).toMatch(/does not understand|layout/i);
+  it('accepts the smallest legal collage -- a single photo filling the hero', () => {
+    expect(validateContent('galleries.json', withCollage(photo('only')))).toEqual([]);
   });
 
-  it('placement "col-start-99" (index outside 1-6) is refused by validateContent', () => {
-    const problems = validateContent('galleries.json', withHeroClassName(placement(99, null, null, null)));
-    expect(messages(problems)).toMatch(/does not fit/i);
-  });
-
-  it('a start plus span that runs off the grid is refused by validateContent', () => {
-    const problems = validateContent('galleries.json', withHeroClassName(placement(GRID_SIZE, 2, null, null)));
-    expect(messages(problems)).toMatch(/does not fit/i);
-  });
-
-  // The exact shape review finding C1 found: no row-start at all, and by
-  // the time the sparse cursor reaches it, every explicit row's matching
-  // columns are already taken by earlier, fully-definite tiles -- so it
-  // resolves into an implicit row nothing on the page can see.
-  it('a placement that auto-places into an implicit row (C1) is refused by validateContent', () => {
-    const bad: Galleries = {
-      ...validGalleries,
-      heroCollage: [
-        { src: '/hero/a.webp', className: placement(1, GRID_SIZE, 1, 1) },
-        { src: '/hero/b.webp', className: placement(1, GRID_SIZE, 2, 1) },
-        { src: '/hero/c.webp', className: placement(1, GRID_SIZE, 3, 1) },
-        { src: '/hero/d.webp', className: placement(1, GRID_SIZE, 4, 1) },
-        { src: '/hero/e.webp', className: placement(1, GRID_SIZE, 5, 1) },
-        { src: '/hero/f.webp', className: placement(1, GRID_SIZE, 6, 1) },
-        // Every one of the six explicit rows is now full-width occupied --
-        // this seventh, auto-placed tile has nowhere left but an implicit row.
-        { src: '/hero/g.webp', className: placement(null, 1, null, 1) },
-      ],
+  it('accepts a real nested tree', () => {
+    const tree: CollageNode = {
+      kind: 'split',
+      id: 'root',
+      direction: 'row',
+      children: [photo('a'), { kind: 'split', id: 'mid', direction: 'column', children: [photo('b'), photo('c')], sizes: [1, 1] }],
+      sizes: normalizeSizes([2, 1]),
     };
-    const problems = validateContent('galleries.json', bad);
-    expect(problems.some((p) => p.field === 'heroCollage[6].className')).toBe(true);
-    expect(messages(problems)).toMatch(/does not fit/i);
+    expect(validateContent('galleries.json', withCollage(tree))).toEqual([]);
   });
 
-  it('overlap is NOT refused -- she is arranging a photo collage', () => {
-    const overlapping: Galleries = {
-      ...validGalleries,
-      heroCollage: [
-        { src: '/hero/a.webp', className: placement(1, 3, 1, 3) },
-        { src: '/hero/b.webp', className: placement(2, 1, 2, 1) }, // entirely inside the first
-      ],
+  it('a collage with no tree at all is refused by validateContent', () => {
+    expect(messages(validateContent('galleries.json', withCollage(null)))).toMatch(/at least 1 photo/i);
+    expect(messages(validateContent('galleries.json', { ...validGalleries, heroCollage: undefined }))).toMatch(
+      /at least 1 photo/i,
+    );
+  });
+
+  it('a collage tree with a one-child split is refused by validateContent', () => {
+    const problems = validateContent('galleries.json', withCollage({ kind: 'split', id: 'root', direction: 'row', children: [photo('a')], sizes: [1] }));
+    expect(messages(problems)).toMatch(new RegExp(`at least ${MIN_SPLIT_CHILDREN} boxes`));
+  });
+
+  it('a collage tree whose sizes do not match its children is refused by validateContent', () => {
+    const problems = validateContent('galleries.json', withCollage({ kind: 'split', id: 'root', direction: 'row', children: [photo('a'), photo('b')], sizes: [1] }));
+    expect(messages(problems)).toMatch(/different number of sizes than boxes/i);
+  });
+
+  it('a collage tree with an un-normalised sizes array is refused by validateContent', () => {
+    const problems = validateContent('galleries.json', withCollage({ kind: 'split', id: 'root', direction: 'row', children: [photo('a'), photo('b')], sizes: [1, 2] }));
+    expect(messages(problems)).toMatch(/must add up to 2/i);
+  });
+
+  it('a collage tree with more than the cap of photos is refused by validateContent', () => {
+    const children = Array.from({ length: MAX_COLLAGE_PHOTOS + 1 }, (_, i) => photo(`p${i}`));
+    const problems = validateContent('galleries.json', withCollage({
+      kind: 'split', id: 'root', direction: 'row', children, sizes: children.map(() => 1),
+    }));
+    expect(messages(problems)).toMatch(new RegExp(`${MAX_COLLAGE_PHOTOS} is the most`));
+  });
+
+  // The one thing that is this file's own rather than collage.test.ts's: the
+  // FIELD a per-photo problem is addressed to. src/admin/problems.ts routes
+  // `key[i].sub` to a row of the dashboard's own hero-collage list, which
+  // renders the tree's photos in document order -- so an index that did not
+  // mean "document order" would silently put the message on the wrong photo.
+  it('addresses a bad photo to its document-order row, the shape the dashboard routes on', () => {
+    const tree: CollageNode = {
+      kind: 'split',
+      id: 'root',
+      direction: 'row',
+      children: [photo('a'), { kind: 'split', id: 'mid', direction: 'column', children: [photo('b'), { kind: 'photo', id: 'c', src: '', alt: '' }], sizes: [1, 1] }],
+      sizes: [1, 1],
     };
-    expect(validateContent('galleries.json', overlapping)).toEqual([]);
+    const problems = validateContent('galleries.json', withCollage(tree));
+    expect(problems.map((p) => p.field)).toEqual(['heroCollage[2].src']);
   });
 });
 

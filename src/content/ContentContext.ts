@@ -1,7 +1,12 @@
 import { createElement, useContext } from 'react';
 import { site, galleries, dishes, drinks, press, story, menus, copy, sections, pages } from './index';
 import type { ContentBundle, EditableTextPath, EditableImagePath } from './types';
-import { ContentReactContext, ContentProvider } from './context';
+import {
+  ContentReactContext,
+  ContentProvider,
+  defaultRenderCollagePhoto,
+  defaultRenderCollageSplit,
+} from './context';
 
 // .ts, not .tsx: eslint's react-refresh/only-export-components rule (which
 // warns on a file that exports both components and non-component values,
@@ -64,12 +69,11 @@ export const defaultBundle: ContentBundle = {
   // module-level comment above ContentBundle for why), and .ts is not
   // parsed for JSX syntax at all.
   renderImage: (_path, props) => createElement('img', props),
-  // Byte-identical to what Hero.tsx wrote inline before Task 3: the same
-  // `key`, the same `${className} relative overflow-hidden` string, the
-  // same single child. Confirmed directly -- homepage-bytes.test.tsx's own
-  // pinned count did not move when this seam was introduced.
-  renderCollageTile: (_path, index, className, image) =>
-    createElement('div', { key: index, className: `${className} relative overflow-hidden` }, image),
+  // The real public renderers, shared with /edit rather than written out a
+  // second time here -- see ./context for both, and for why one definition
+  // rather than two identical-by-assertion copies.
+  renderCollagePhoto: defaultRenderCollagePhoto,
+  renderCollageSplit: defaultRenderCollageSplit,
 };
 
 export function useContent(): ContentBundle {

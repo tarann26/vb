@@ -12,6 +12,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import userEvent from '@testing-library/user-event';
 import AdminApp from '../AdminApp';
 import { DISH_FIELDS } from '../fields';
+import { collagePhotos } from '../../content/collage';
 import type { Article, Copy, Dish, Drink, Galleries, MenuFile, Section, SiteContent, StoryContent } from '../../content/types';
 // The real, committed files -- not hand-typed fixtures -- for galleries.json,
 // menus.json, story.json and copy.json specifically: each one has real
@@ -514,15 +515,21 @@ describe('AdminApp: the new prose, gallery, menus and copy screens all render, f
     expect(within(section).getByDisplayValue('Drinks Menu')).toBeInTheDocument();
   });
 
-  it('renders Galleries, prefilled with real atmosphere/ourStory alt text and read-only heroCollage positions', async () => {
+  it('renders Galleries, prefilled with real atmosphere/ourStory alt text and one row per collage photo', async () => {
     stubFetch();
     render(<AdminApp />);
     const section = await sectionByHeading('Galleries');
     expect(await within(section).findByDisplayValue(GALLERIES.atmosphere[0].alt)).toBeInTheDocument();
     expect(within(section).getByDisplayValue(GALLERIES.ourStory[0].alt)).toBeInTheDocument();
-    const positions = within(section).getAllByLabelText('Layout position');
-    expect(positions.length).toBe(GALLERIES.heroCollage.length);
-    expect(positions[0]).toBeDisabled();
+    // The collage's grid-placement string is gone, and with it the read-only
+    // "Layout position" field this used to count. What is left per photo is
+    // the one thing this screen still does for the collage: replace it.
+    const photos = collagePhotos(GALLERIES.heroCollage!);
+    expect(photos.length).toBeGreaterThan(0);
+    // One PhotoField per collage photo, on top of the atmosphere and
+    // ourStory rows this screen already renders.
+    const pickers = within(section).getAllByLabelText('Photo');
+    expect(pickers.length).toBe(GALLERIES.atmosphere.length + GALLERIES.ourStory.length + photos.length);
   });
 
   it('renders Our Story, prefilled with the real heading and first paragraph', async () => {

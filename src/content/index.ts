@@ -20,7 +20,7 @@ import type {
   Section,
   Page,
 } from './types';
-import { assertHours, assertSections, assertPages, assertCopy, assertDrinkCategory, narrowSectionId } from './guards';
+import { assertHours, assertSections, assertPages, assertCopy, assertCollageTree, assertDrinkCategory, narrowSectionId } from './guards';
 
 // Re-exported so existing importers (site.test.ts, copy.test.ts,
 // sections.test.tsx) that import these three guards from `./index` keep
@@ -29,13 +29,23 @@ import { assertHours, assertSections, assertPages, assertCopy, assertDrinkCatego
 // part of index.ts's public surface and aren't re-exported here; a Worker
 // (or any other future consumer) reaches them directly via `./guards`.
 // Plan 7, Task 1: assertPages joins them for the identical reason.
-export { assertHours, assertSections, assertPages, assertCopy };
+export { assertHours, assertSections, assertPages, assertCopy, assertCollageTree };
 
 export const site: SiteContent = {
   ...siteRaw,
   hours: siteRaw.hours.map(assertHours),
 };
-export const galleries: Galleries = galleriesRaw;
+// `heroCollage` is a tree of splits, and the JSON module infers `kind` and
+// `direction` as plain `string` and `children` as a union it cannot resolve
+// recursively -- so a plain annotation cannot narrow it and a blind cast
+// would wave through a one-child split, a mismatched `sizes` array, a zero
+// size, a duplicate id or a photo with no source. `assertCollageTree`
+// (guards.ts) narrows it with real runtime checks, so any of those fails the
+// build at import time rather than rendering a broken hero.
+export const galleries: Galleries = {
+  ...galleriesRaw,
+  heroCollage: assertCollageTree(galleriesRaw.heroCollage),
+};
 export const dishes: Dish[] = dishesRaw;
 export const press: Article[] = pressRaw;
 export const story: StoryContent = storyRaw;

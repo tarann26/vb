@@ -54,19 +54,22 @@ describe('no route renders a list without a real React key on every item', () =>
     expect(keyWarnings).toEqual([]);
   });
 
-  // Plan 6, Task 3: /edit renders the hero collage through CollageTile
-  // (EditMode.tsx's own `renderCollageTile`), not through the plain <div>
-  // ContentContext.ts's default emits -- a SECOND call site the original
-  // test above never reached (it never logs in, so /edit stays on its login
-  // form and the collage grid this warning would appear in never mounts).
-  // Caught directly: an earlier draft of EditMode.tsx's `renderCollageTile`
-  // put <CollageTile> in the array `galleries.heroCollage.map` produces
-  // with no `key` prop at all (only its own `<div>` fallback, for the
-  // not-yet-loaded case, had one) -- confirmed in a REAL Chromium build
-  // serving a real vite-served /edit, logged in: this exact warning, naming
-  // CollageTile, in the console. jsdom reproduces it identically once
-  // /edit actually reaches its logged-in, loaded state, which is what this
-  // test drives.
+  // The collage is a tree of splits, and EVERY split builds a React array
+  // from `children.map(...)` -- one array per split, thirteen of them in the
+  // committed arrangement, all produced inside `renderCollageNode`
+  // (Hero.tsx) and all keyed by the node's own path (src/content/context.ts's
+  // two default renderers). That is thirteen chances to emit an unkeyed
+  // list, against the old model's one, which is exactly why this test is
+  // worth more now than it was.
+  //
+  // Driven at /edit rather than at /, deliberately: it is the call site the
+  // original test above cannot reach (it never logs in, so /edit stays on its
+  // login form and the collage never mounts), and it is where an override of
+  // either seam would land. Caught directly by this test's Plan 6 ancestor:
+  // an earlier draft of /edit's own collage seam put its component into the
+  // mapped array with no `key` at all, and a REAL Chromium build printed this
+  // exact warning. jsdom reproduces it identically once /edit reaches its
+  // logged-in, loaded state, which is what this test drives.
   it('never logs the missing-key warning on /edit\'s hero collage, logged in with real content loaded', async () => {
     vi.stubGlobal(
       'fetch',
@@ -104,7 +107,11 @@ describe('no route renders a list without a real React key on every item', () =>
       );
       await waitFor(
         () => {
-          expect(container.querySelectorAll('[data-collage-tile-index]').length).toBe(16);
+          // Sixteen collage photos, each rendered through the editable-image
+          // seam -- non-vacuous in the way that matters: if the collage
+          // never mounted, this count is zero and the test fails rather
+          // than passing with no arrays ever built.
+          expect(container.querySelectorAll('[data-editable-image-path^="galleries.heroCollage."]').length).toBe(16);
         },
         { timeout: 5000 },
       );

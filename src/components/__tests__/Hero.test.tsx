@@ -3,7 +3,7 @@ import { render, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import Hero from '../Hero';
 import { copy, galleries, site } from '../../content';
-import { GRID_SIZE, isOnGrid, parsePlacement, resolveLayout } from '../../content/placement';
+import { collagePhotos, countCollagePhotos, collageDepth, MAX_COLLAGE_DEPTH, MAX_COLLAGE_PHOTOS } from '../../content/collage';
 
 describe('Hero', () => {
   it('has exactly one h1, and it is the page heading rather than the logo', () => {
@@ -47,79 +47,65 @@ describe('Hero', () => {
     });
   });
 
-  // Replaces the old "places every collage image in a distinct grid cell"
-  // test (and its two supporting fixtures below) -- review finding C3: that
-  // test built its key as `${col-start}:${row-start}` and never read spans
-  // at all, so it accepted a tile sitting entirely INSIDE another (distinct
-  // keys, real overlap, false pass) and refused two tiles that never touch
-  // but happen to auto-place into different rows with the same key (same
-  // key, no real collision, false fail). It was written to catch an
-  // authoring mistake in a hand-edited file, back when a developer was the
-  // only editor -- once she is the editor (Tasks 3/4) it would silently
-  // revert her drags. Overlap is a legitimate thing to want in a photo
-  // collage and CSS grid already handles it; what actually breaks the page
-  // is a tile resolving outside the six explicit rows/columns
-  // `grid-rows-6`/`grid-cols-6` declare, where Hero.tsx's own
-  // `overflow-hidden` (line 57) clips it. `resolveLayout` -- the same
-  // function `validateContent` (src/content/validate.ts) calls -- is what
-  // decides that here, so this test and the server-side validator cannot
-  // disagree about what "off grid" means by construction.
-  describe('collage placement', () => {
-    it('every real heroCollage className parses -- a garbled one would silently auto-place instead of failing loudly', () => {
-      galleries.heroCollage.forEach(({ className }) => {
-        expect(parsePlacement(className)).not.toBeNull();
+  // The collage used to be sixteen Tailwind grid-placement strings, and these
+  // tests used to be about whether each one resolved inside the six explicit
+  // rows and columns. It is a tree of splits now: a photo cannot be
+  // "off-grid", because there is no grid and no coordinate to be wrong -- a
+  // box is wherever its parent split puts it, by construction. What is left
+  // to check is what the tree renders INTO, which is nested flex containers,
+  // and jsdom can see the DOM even though it cannot lay it out. The
+  // properties that need a layout engine -- that a 1:1 split really does
+  // produce two equal boxes, whatever is inside them -- are in
+  // e2e/hero-collage.spec.ts against real Chromium, deliberately not here.
+  describe('the collage tree', () => {
+    it('renders one <img> per photo in the real tree, in document order', () => {
+      const { container } = render(<MemoryRouter><Hero /></MemoryRouter>);
+      const tree = galleries.heroCollage;
+      expect(tree).not.toBeNull();
+      const photos = collagePhotos(tree!);
+      const collage = container.querySelector('.absolute.inset-0.flex');
+      expect(collage).not.toBeNull();
+      const rendered = Array.from(collage!.querySelectorAll('img')).map((img) => img.getAttribute('src'));
+      expect(rendered).toEqual(photos.map((photo) => photo.src));
+    });
+
+    // Every photo box is a flex ITEM of its parent split and every split is a
+    // flex CONTAINER, and both carry their size inline rather than as a class
+    // name -- which is the whole reason the placement strings went away. A
+    // regression to a generated class name would leave the numbers below
+    // absent from the DOM entirely.
+    it('sizes every box with an inline grow factor and a zero basis, never a class name', () => {
+      const { container } = render(<MemoryRouter><Hero /></MemoryRouter>);
+      const collage = container.querySelector('.absolute.inset-0.flex');
+      const boxes = Array.from(collage!.querySelectorAll('div'));
+      expect(boxes.length).toBeGreaterThan(0);
+      boxes.forEach((box) => {
+        const style = (box as HTMLElement).style;
+        expect(Number(style.flexGrow)).toBeGreaterThan(0);
+        expect(style.flexBasis).toBe('0px');
       });
+      expect(container.innerHTML).not.toMatch(/col-start-|col-span-|row-start-|row-span-/);
     });
 
-    // This is the live defect this plan's own Task 2 repaired, proven here
-    // rather than merely described. Before Task 2 Step 3, entry 4
-    // (`/hero/farfalle4.webp`, `col-start-3 col-span-2 row-span-1`, no
-    // `row-start`) resolved into an implicit SEVENTH row -- outside
-    // `grid-rows-6` -- because by the time the sparse auto-placement cursor
-    // reached it, columns 3-4 were already occupied in every one of the six
-    // explicit rows. Task 2 gave entry 4 an explicit row start pinning it
-    // to the collage's first row; this assertion is pinned to the REAL,
-    // now-repaired content, so it fails the moment that content and this
-    // test's own expectation drift apart in either direction.
-    it('all sixteen real entries resolve on-grid -- entry 4 no longer lands in an implicit row', () => {
-      const resolved = resolveLayout(galleries.heroCollage.map((tile) => parsePlacement(tile.className)));
-      expect(resolved.length).toBe(16);
-      resolved.forEach((placement) => {
-        expect(isOnGrid(placement)).toBe(true);
-      });
+    // The root's own children are the first cut through the hero; a split
+    // renders as a flex container in its own direction, so this is the one
+    // structural fact the DOM makes visible without a layout engine.
+    it('renders a split as a flex container in its own direction', () => {
+      const { container } = render(<MemoryRouter><Hero /></MemoryRouter>);
+      const rows = container.querySelectorAll('.flex.flex-row.gap-1');
+      const columns = container.querySelectorAll('.flex.flex-col.gap-1');
+      expect(rows.length).toBeGreaterThan(0);
+      expect(columns.length).toBeGreaterThan(0);
     });
 
-    // Closes the old test's first blind spot: a tile sitting entirely
-    // INSIDE another must be accepted, not refused -- she is arranging a
-    // photo collage, and overlapping tiles are a legitimate thing to want.
-    it('does not refuse a tile that sits entirely inside another -- overlap is allowed', () => {
-      const resolved = resolveLayout([
-        parsePlacement('col-start-3 col-span-2 row-start-2 row-span-2'),
-        parsePlacement('col-start-3 col-span-1 row-start-2 row-span-1'), // inside the first
-      ]);
-      resolved.forEach((placement) => expect(isOnGrid(placement)).toBe(true));
-    });
-
-    // Closes the old test's second blind spot: two tiles that auto-place
-    // into different rows and never touch must not be refused just because
-    // the OLD test's key (`${col-start}:${row-start}`) happened to collide
-    // (both entries here have no col-start/row-start at all -- the exact
-    // shape that produced a false failure before).
-    it('does not false-positive when multiple entries are auto-placed into different rows', () => {
-      const resolved = resolveLayout([
-        parsePlacement('col-start-5 col-span-2 row-span-2'),
-        parsePlacement('col-span-2 row-span-2'),
-        parsePlacement('col-span-2 row-span-1'),
-      ]);
-      resolved.forEach((placement) => expect(isOnGrid(placement)).toBe(true));
-    });
-
-    // Proves this test would actually catch a real, page-breaking layout --
-    // a tile whose own declared span is wider than the grid can never
-    // resolve on-grid no matter where it lands.
-    it('refuses a placement whose span alone cannot fit on the grid', () => {
-      const [resolved] = resolveLayout([parsePlacement(`col-span-${GRID_SIZE + 1} row-span-1`)]);
-      expect(isOnGrid(resolved)).toBe(false);
+    // Pinned against the REAL committed content, so this fails the moment the
+    // arrangement and this file drift apart in either direction.
+    it('the committed collage holds sixteen photos, within the cap and the depth limit', () => {
+      const tree = galleries.heroCollage!;
+      expect(countCollagePhotos(tree)).toBe(16);
+      expect(countCollagePhotos(tree)).toBeLessThanOrEqual(MAX_COLLAGE_PHOTOS);
+      expect(collageDepth(tree)).toBe(6);
+      expect(collageDepth(tree)).toBeLessThanOrEqual(MAX_COLLAGE_DEPTH);
     });
   });
 

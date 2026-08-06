@@ -1,5 +1,6 @@
-// galleries.json's own screen: three independently add/remove/reorder-able
-// image lists (atmosphere, ourStory, heroCollage), none of which fit
+// galleries.json's own screen: two independently add/remove/reorder-able
+// image lists (atmosphere, ourStory) plus the hero collage's photos, none of
+// which fit
 // RecordList -- GalleryImage (src/content/types.ts) has no `id` field at
 // all, so RecordList<GalleryImage>'s own `T extends { id: string }`
 // constraint can't be satisfied the way Dish/Drink/Article satisfy it. Every
@@ -22,6 +23,7 @@ import PhotoField from './PhotoField';
 import { GALLERY_IMAGE_FIELDS } from './fields';
 import { ADD_BUTTON_CLASSNAME, MOVE_BUTTON_CLASSNAME, REMOVE_BUTTON_CLASSNAME } from './RecordList';
 import { fromStagedPhoto, type StagedFile } from './staged';
+import { collagePhotos, setCollagePhotoSrc } from '../content/collage';
 import type { Galleries, GalleryImage } from '../content/types';
 import type { UploadCategory } from '../shared/upload-categories';
 import type { ValidationProblem } from '../content/validate';
@@ -42,7 +44,7 @@ export interface GalleryListProps {
 
 // `key[i].sub` -- the third field shape src/admin/problems.ts's own header
 // comment documents (an array-valued field inside a non-array file), for
-// one of THREE different prefixes here (atmosphere/ourStory/heroCollage), so
+// one of three different prefixes here (atmosphere/ourStory/heroCollage), so
 // a fresh caller-supplied prefix is genuinely needed -- unlike HoursField.tsx's
 // own HOURS_ITEM (one single, never-changing prefix), one pre-written regex
 // can't cover all three without also matching each other's rows.
@@ -75,7 +77,7 @@ function bannerFor(problems: ValidationProblem[], prefix: string, itemCount: num
 // permanently disabled Publish with nothing on screen able to remove one.
 // `rowIdFor` is the identity fix instead: a WeakMap keyed on the actual
 // GalleryImage object REFERENCE, scoped to one list instance (via
-// `useRef`, not module state, so atmosphere/ourStory/heroCollage each track
+// `useRef`, not module state, so atmosphere and ourStory each track
 // their own rows independently -- their generated ids CAN collide as plain
 // strings; the `prefix` already in every stage key below is what keeps them
 // from colliding as COLLECTOR keys). GalleryImage carries no `id` of its
@@ -268,66 +270,40 @@ function GalleryImageList({ prefix, heading, sectionHeading, addLabel, category,
 }
 
 interface HeroCollageListProps {
-  items: Galleries['heroCollage'];
+  tree: Galleries['heroCollage'];
   onChange: (next: Galleries['heroCollage']) => void;
   problems: ValidationProblem[];
   stage: (key: string, file: StagedFile | null) => void;
 }
 
-// The one entry that can never be added or removed by this screen at all --
-// deliberate, not an oversight: `className` is a Tailwind grid-placement
-// string another plan owns (see this component's own read-only note below),
-// so a row this screen invented from nothing would need SOME className,
-// and there is no neutral value that wouldn't already be a real, meaningful
-// grid position. Every collage entry that exists today came from a
-// developer hand-placing it; a brand new SLOT in the collage grid is a
-// developer decision too.
-function HeroCollageList({ items, onChange, problems, stage }: HeroCollageListProps) {
+// The hero collage is a TREE (src/content/collage.ts), not a list, so this
+// screen shows its photos flattened into document order and offers exactly
+// one thing per photo: replace it. Everything structural -- where a photo
+// sits, how big its box is, adding one, removing one -- happens on the
+// collage itself at /edit, where she can see what she is doing, which is the
+// whole point of the split tree. There is nothing here to reorder: a photo's
+// position is a place in the tree, not a place in this list, so the "Up" and
+// "Down" buttons this list used to carry (with a paragraph under the heading
+// admitting that most of the time they changed nothing a visitor could see)
+// are gone rather than reimplemented as a no-op.
+//
+// No `useRowIds` WeakMap here either, unlike the two lists above. That
+// machinery exists because `GalleryImage` has no id of its own and the only
+// other candidates -- the array index and `item.src` -- are both rewritten
+// out from under a staged upload (see useRowIds' own comment for both
+// failures). A `CollagePhoto` HAS an id, stable across every edit including a
+// swap, so it can be the staging key directly.
+function HeroCollageList({ tree, onChange, problems, stage }: HeroCollageListProps) {
   const prefix = 'heroCollage';
-  const banner = bannerFor(problems, prefix, items.length);
-  const { rowIdFor, carryForward } = useRowIds<Galleries['heroCollage'][number]>();
-
-  function swap(index: number, otherIndex: number) {
-    const next = items.slice();
-    const moved = next[index];
-    next[index] = next[otherIndex];
-    next[otherIndex] = moved;
-    onChange(next);
-  }
-
-  // See useRowIds' own comment: `src` is the one mutable field this list
-  // ever writes, so this is the one place that has to carry a row's own
-  // identity forward onto the fresh object `{ ...row, src: next }` always
-  // creates.
-  function patchSrc(index: number, src: string) {
-    onChange(
-      items.map((row, i) => {
-        if (i !== index) return row;
-        const nextRow = { ...row, src };
-        carryForward(row, nextRow);
-        return nextRow;
-      }),
-    );
-  }
+  const photos = tree === null ? [] : collagePhotos(tree);
+  const banner = bannerFor(problems, prefix, photos.length);
 
   return (
     <div className="mb-8">
       <h3 className="mb-3 font-['Montserrat'] text-base text-[#222]">Hero collage</h3>
-      {/* Review finding (Task 9): each entry's own "Layout position" (its
-          className, read-only below) pins its actual place in the grid --
-          moving an entry with BOTH a row and a column position already set
-          (most of the real, committed entries) up or down this list
-          re-orders the underlying data but changes nothing a visitor sees,
-          since that position travels with the entry, not with its spot in
-          this list. Kept -- not removed -- because it is NOT universally a
-          no-op: an entry missing one of the two (there are real ones today)
-          still falls back to the browser's own grid auto-placement, which
-          DOES read the order data is written in. Said here rather than
-          silently, so a reorder that visibly does nothing isn't mistaken
-          for one that didn't register. */}
       <p className="mb-3 text-xs text-gray-500">
-        Reordering here only changes what a visitor sees for a photo whose layout position doesn't already set BOTH
-        a row and a column — most of these already do, so moving them will not change how the homepage looks.
+        Replace any of these photos here. To move one, change how big it is, or add and remove photos, open the
+        homepage editor — the collage is arranged there.
       </p>
       {banner.length > 0 && (
         <div
@@ -343,62 +319,24 @@ function HeroCollageList({ items, onChange, problems, stage }: HeroCollageListPr
         </div>
       )}
       <ul>
-        {items.map((item, index) => {
-          const isFirst = index === 0;
-          const isLast = index === items.length - 1;
+        {photos.map((photo, index) => {
           const rowProblems = problems.filter((p) => itemOf(prefix, p.field)?.index === index);
-          // See GalleryImageList's own identical comment above.
-          const rowId = rowIdFor(item);
           return (
-            <li key={index} className="mb-6 rounded border border-gray-200 p-4">
-              <div className="mb-3 flex items-center justify-between gap-2">
-                <div className="flex gap-2">
-                  {!isFirst && (
-                    <button
-                      type="button"
-                      aria-label={`Move Hero collage photo ${index + 1} up`}
-                      onClick={() => swap(index, index - 1)}
-                      className={MOVE_BUTTON_CLASSNAME}
-                    >
-                      Up
-                    </button>
-                  )}
-                  {!isLast && (
-                    <button
-                      type="button"
-                      aria-label={`Move Hero collage photo ${index + 1} down`}
-                      onClick={() => swap(index, index + 1)}
-                      className={MOVE_BUTTON_CLASSNAME}
-                    >
-                      Down
-                    </button>
-                  )}
-                </div>
-              </div>
+            <li key={photo.id} className="mb-6 rounded border border-gray-200 p-4">
               <PhotoField
-                id={`gallery-heroCollage-${index}-src`}
+                id={`gallery-heroCollage-${photo.id}-src`}
                 label="Photo"
                 category="hero"
-                value={item.src}
-                onChange={(next) => patchSrc(index, next ?? '')}
-                // Keyed on `rowId`, not `item.src` or `index` -- identical
-                // reasoning to GalleryImageList's own `src` field above (see
-                // useRowIds' own comment for the restage-orphan defect this
-                // avoids, on top of the reorder-eviction one Task 9 already
-                // fixed).
-                onStaged={(staged) => stage(`galleries.json:heroCollage:${rowId}:src`, fromStagedPhoto(staged))}
-                problems={rowProblems.filter((p) => itemOf(prefix, p.field)?.sub === 'src')}
-              />
-              <Field
-                id={`gallery-heroCollage-${index}-className`}
-                spec={{
-                  label: 'Layout position',
-                  kind: 'readonly',
-                  help: 'Controls where this photo sits in the homepage collage grid — a developer needs to change this, not the dashboard.',
+                value={photo.src}
+                onChange={(next) => {
+                  if (tree === null) return;
+                  onChange(setCollagePhotoSrc(tree, photo.id, next ?? ''));
                 }}
-                value={item.className}
-                onChange={() => undefined}
-                problems={rowProblems.filter((p) => itemOf(prefix, p.field)?.sub === 'className')}
+                // Keyed on the photo's own id -- the identity that survives a
+                // reorder, a restage on the same row, and (Task 4) a swap
+                // that moves this photo to a different box entirely.
+                onStaged={(staged) => stage(`galleries.json:heroCollage:${photo.id}:src`, fromStagedPhoto(staged))}
+                problems={rowProblems.filter((p) => itemOf(prefix, p.field)?.sub === 'src')}
               />
             </li>
           );
@@ -434,7 +372,7 @@ function GalleryList({ value, onChange, problems, stage }: GalleryListProps) {
         stage={stage}
       />
       <HeroCollageList
-        items={value.heroCollage}
+        tree={value.heroCollage}
         onChange={(next) => onChange({ ...value, heroCollage: next })}
         problems={problems}
         stage={stage}

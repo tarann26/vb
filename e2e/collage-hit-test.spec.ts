@@ -1,67 +1,47 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { mockEditBackend } from './edit-backend';
 
-// I-B review finding: this spec is the committed, re-runnable version of
-// the reviewer's own manual proof -- "the select badge and camera badge are
-// reachable on 16/16 tiles at both 390px and 1440px". It exists to catch a
-// REGRESSION of the two z-index fixes CollageTile.tsx (`SELECT_BUTTON_CLASSNAME`/
-// `SELECTED_BUTTON_CLASSNAME`) and EditableImage.tsx (`CONTROL_LABEL_CLASSNAME`/
-// `ERROR_CONTROL_LABEL_CLASSNAME`) both carry (`z-20`, not `z-10`) -- the bug
-// that made every one of the sixteen camera badges, and every one of the
-// sixteen select badges, unreachable by a real click for the whole life of
-// Plan 5's photo-replace feature. Mutation-tested directly while writing
-// this: reverting either `z-20` back to `z-10` makes this spec fail (see
-// this task's own report for the red/green transcript); no vitest test in
-// this repo can, because jsdom has no layout engine to hit-test against.
+// The committed, re-runnable version of a proof that was once a one-shot
+// manual run recorded in prose: "the camera badge is reachable on 16/16
+// collage photos at both 390px and 1440px". It exists to catch a REGRESSION
+// of the z-index fix EditableImage.tsx carries (`CONTROL_LABEL_CLASSNAME`/
+// `ERROR_CONTROL_LABEL_CLASSNAME` are `z-20`, not `z-10`) -- the bug that made
+// every one of the sixteen camera badges unreachable by a real click for the
+// whole life of the photo-replace feature. No vitest test in this repo can:
+// jsdom has no layout engine to hit-test against, and the reviewer's own
+// mutation (both `z-20`s back to `z-10`) left the entire suite green.
 //
-// `document.elementFromPoint` at each badge's own measured centre, not a
-// Playwright `.click()` -- a real click on the select badge OPENS its
-// panel (this spec would then need to close it, or every subsequent tile's
-// own hit-test would be reasoning about a page with an open panel already
-// on it), and a real click on the camera badge opens the OS's native file
-// picker, which cannot be dismissed from a script. Reading what's actually
-// under the pointer, the same thing `document.elementFromPoint` does
-// inside a real click's own hit-test, proves the identical fact --
-// "reachable by a real click" -- without either side effect.
-
-
-// `.closest('[aria-label]')`, not a direct element match: the icon glyph
-// each badge wraps (CollageTile's `<Move>` SVG, EditableImage's
-// camera-glyph <span>) is what actually paints at the badge's own centre
-// pixel, and neither carries its own aria-label -- the *badge* does, one
-// DOM level up. The z-10 regression this spec guards against puts an
-// unrelated Hero.tsx element at that same point instead, which has no
-// `aria-label` ancestor at all, so `.closest` correctly comes back null
-// there rather than coincidentally matching something else.
+// This spec used to cover CollageTile's select badge too. The split tree
+// deleted that control along with the grid placement it moved, so what is
+// left is the one affordance a collage photo still carries -- and the tree
+// makes this MORE worth checking, not less: the collage is now nested flex
+// containers rather than one grid, so every level is a fresh chance for a
+// stacking context to swallow a badge.
 //
-// Scrolls the locator into view, measures it, and hit-tests its own centre
-// -- all three as one atomic step, in that order, for exactly this element.
-// `document.elementFromPoint` only ever hit-tests the CURRENT scroll
-// position, and the hero's own `min-h-screen` grows taller than the
-// viewport once its real content (logo, heading, phone numbers) needs more
-// room than 100vh gives it at a narrow width -- the collage covers that
-// whole (possibly-taller-than-viewport) section, not just whatever's on
-// screen at load. Confirmed directly while writing this spec: tile 1's own
-// camera badge measured at y≈914 in an 844px-tall viewport, and
-// `elementFromPoint` at that point returned nothing at all (off-screen, not
-// occluded) before this scroll existed. Scrolling and measuring and
-// hit-testing each badge as one block, never batching the scroll step for
-// two different badges before hit-testing either, is what keeps a LATER
-// badge's own scroll (the camera's, bottom-right of the tile) from moving
-// the page out from under an EARLIER badge's already-measured coordinates
-// (the select button's, top-left) before it's hit-tested.
+// `document.elementFromPoint` at the badge's own measured centre, not a
+// Playwright `.click()`: a real click on the camera badge opens the OS's
+// native file picker, which cannot be dismissed from a script. Reading what
+// is actually under the pointer -- the same thing a real click's own
+// hit-test does -- proves the identical fact without the side effect.
+
+// `.closest('[aria-label]')`, not a direct element match: the glyph that
+// paints at the badge's centre pixel (EditableImage's camera <span>) carries
+// no aria-label of its own -- the badge does, one DOM level up. The z-10
+// regression this guards against puts an unrelated Hero.tsx element at that
+// point instead, which has no `aria-label` ancestor at all, so `.closest`
+// correctly comes back null rather than coincidentally matching something.
+//
+// Scrolls, measures and hit-tests as ONE atomic step, in that order, for
+// exactly this element. `document.elementFromPoint` only ever hit-tests the
+// CURRENT scroll position, and the hero's own `min-h-screen` grows taller
+// than the viewport once its real content needs more room than 100vh gives
+// it at a narrow width. Measuring and hit-testing inside one `evaluate`, in
+// the page, keeps both reading the same frame -- collage images are lazy, so
+// scrolling one into view starts loads that resize things a moment later,
+// which made an earlier two-round-trip version of this spec flaky rather
+// than wrong. A test that fails at random teaches everyone to ignore it.
 async function hitTestLabel(locator: Locator): Promise<string | null> {
   await locator.scrollIntoViewIfNeeded();
-  // Measure and hit-test in ONE evaluate, inside the page, so both read the
-  // same frame. The previous version took the box over one round trip
-  // (`locator.boundingBox()`) and hit-tested over another
-  // (`page.evaluate(elementFromPoint)`), leaving a window in which layout
-  // could move underneath the already-measured coordinates -- collage images
-  // are `loading: 'lazy'`, so scrolling a tile into view starts loads that
-  // resize things a moment later. That made this spec FLAKY rather than
-  // wrong: the same commit passed and failed on alternate CI runs, and a test
-  // that fails at random teaches everyone to ignore it, which costs more than
-  // the regression it was written to catch.
   return locator.evaluate((el) => {
     const rect = el.getBoundingClientRect();
     const hit = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
@@ -105,43 +85,30 @@ for (const viewport of VIEWPORTS) {
   test.describe(`hero collage badges are hit-testable at ${viewport.label}`, () => {
     test.use({ viewport: { width: viewport.width, height: viewport.height } });
 
-    test('all sixteen tiles: the select badge and the camera badge both resolve to themselves under document.elementFromPoint', async ({ page }) => {
+    test('all sixteen photos: the camera badge resolves to itself under document.elementFromPoint', async ({ page }) => {
       await mockEditBackend(page);
       await page.goto('/edit');
 
-      const tiles = page.locator('[data-collage-tile-index]');
-      // Non-vacuous: sixteen real tiles, not a smaller stand-in fixture --
-      // the same "sixteen real entries" invariant placement.test.ts's own
-      // round-trip describe block pins.
-      await expect(tiles).toHaveCount(16);
+      // Located by the editing path EditableImage carries, which is
+      // `galleries.heroCollage.<photo id>` -- an id, not a position, so this
+      // selector keeps naming the same photographs after a swap.
+      const photos = page.locator('[data-editable-image-path^="galleries.heroCollage."]');
+      // Non-vacuous: sixteen real photos, not a smaller stand-in fixture.
+      await expect(photos).toHaveCount(16);
       await settleLayout(page);
 
-      for (let i = 0; i < 16; i++) {
-        const tile = page.locator(`[data-collage-tile-index="${i}"]`);
-        // The select toggle: CollageTile's own top-level <button>, the
-        // one interactive element directly under the tile wrapper before
-        // any tile is selected (the resize handle and the move/size panel
-        // both render only once selected -- neither is on screen yet).
-        const selectButton = tile.locator('> button[aria-label]');
-        // The camera-replace badge: EditableImage's own <label>, nested
-        // inside the drag surface. Every one of the sixteen shares the
-        // literal aria-label "Replace this photo" -- Hero.tsx passes
-        // `alt: ''` for every collage image, and EditableImage falls back
-        // to that generic label whenever `alt` is empty (its own
-        // `controlLabel` comment) -- so this spec locates it structurally,
-        // scoped to this one tile, rather than by a name unique to it.
-        const cameraLabel = tile.locator('label[aria-label]');
-
-        await expect(selectButton).toBeVisible();
+      const count = await photos.count();
+      for (let i = 0; i < count; i++) {
+        // EditableImage's own <label>. All sixteen share the literal
+        // aria-label "Replace this photo" -- every collage photo's `alt` is
+        // empty (they are decorative background behind the hero's own
+        // heading), and EditableImage falls back to that generic label
+        // whenever `alt` is empty -- so this locates it structurally, scoped
+        // to one photo, rather than by a name unique to it.
+        const cameraLabel = photos.nth(i).locator('label[aria-label]');
         await expect(cameraLabel).toBeVisible();
-
-        const selectHit = await hitTestLabel(selectButton);
-        expect(selectHit, `tile ${i}: select badge is occluded (hit something with no matching aria-label)`).toMatch(
-          /^(Move or change the size of photo|Stop moving photo) \d+$/,
-        );
-
         const cameraHit = await hitTestLabel(cameraLabel);
-        expect(cameraHit, `tile ${i}: camera badge is occluded (hit something with no matching aria-label)`).toBe(
+        expect(cameraHit, `photo ${i}: camera badge is occluded (hit something with no matching aria-label)`).toBe(
           'Replace this photo',
         );
       }

@@ -57,28 +57,19 @@ const GALLERIES: Galleries = {
     { src: '/atmosphere/bar.webp', alt: 'The bar' },
   ],
   ourStory: [{ src: '/our_story/cut.webp', alt: 'Cutting pasta by hand' }],
-  // Plan 6, Task 1: `validateContent('galleries.json', ...)` now actually
-  // parses `heroCollage[i].className` (src/content/placement.ts's own
-  // `parsePlacement`), so this fixture can no longer use an opaque
-  // non-Tailwind string the way it used to (see this file's own git
-  // history) -- an unparseable className is now a real validation problem,
-  // and this describe block's own tests need `validateContent` to come back
-  // clean for everything OTHER than the one field they're each deliberately
-  // breaking. `col-span-1`/`col-span-2` are used instead of a fuller,
-  // four-field placement string: both single-token values were ALREADY
-  // present in the real shipped stylesheet before this
-  // plan touched tailwind.config.js at all (they survived only because
-  // Hero.test.tsx's own fixtures spelled them out -- see this plan's own
-  // report), so this file's own text triggering Tailwind's content scanner
-  // for them adds no NEW rule; confirmed directly with a before/after
-  // `npm run build` CSS byte diff. Both resolve on-grid (auto-placed into
-  // row 1) under `resolveLayout`, so neither adds a spurious problem of its
-  // own to any test below that isn't explicitly testing hero collage
-  // layout.
-  heroCollage: [
-    { src: '/hero/scene.webp', className: 'col-span-1' },
-    { src: '/hero/farfalle1.webp', className: 'col-span-2' },
-  ],
+  // The collage is a tree now, not a list -- two photos side by side is the
+  // smallest one that still has a split in it, which is what these tests
+  // need to be non-trivial about the flattening this screen does.
+  heroCollage: {
+    kind: 'split',
+    id: 'root',
+    direction: 'row',
+    children: [
+      { kind: 'photo', id: 'photo-a', src: '/hero/scene.webp', alt: '' },
+      { kind: 'photo', id: 'photo-b', src: '/hero/farfalle1.webp', alt: '' },
+    ],
+    sizes: [1, 1],
+  },
 };
 
 function renderList(overrides: Partial<Parameters<typeof GalleryList>[0]> = {}) {
@@ -103,12 +94,62 @@ describe('GalleryList: renders all three lists, prefilled', () => {
     );
   });
 
-  it('shows heroCollage as read-only layout positions, not an editable text field', () => {
+  // The collage's grid-placement string is gone, and with it the read-only
+  // "Layout position" field this screen used to show beside every collage
+  // photo. What is left is one row per photo, flattened out of the tree in
+  // document order, offering exactly one action: replace it.
+  it('shows one row per collage photo, in document order, with no layout field at all', () => {
     renderList();
-    const positions = screen.getAllByLabelText('Layout position');
-    expect(positions).toHaveLength(2);
-    positions.forEach((el) => expect(el).toBeDisabled());
-    expect((positions[0] as HTMLInputElement).value).toBe('col-span-1');
+    expect(screen.queryByLabelText('Layout position')).toBeNull();
+    const heading = screen.getByRole('heading', { name: 'Hero collage' });
+    const wrapper = heading.closest('div');
+    if (!wrapper) throw new Error('Hero collage heading is not inside a <div>');
+    const previews = within(wrapper).getAllByRole('presentation') as HTMLImageElement[];
+    expect(previews.map((img) => img.getAttribute('src'))).toEqual(['/hero/scene.webp', '/hero/farfalle1.webp']);
+  });
+});
+
+// The collage's own write path, which the two tests above only prove RENDERS.
+// Driven through the real PhotoField upload rather than by reaching into a
+// prop: `onChange` is what actually reaches the registry, and a screen that
+// lists the photos but writes back the wrong one (or nothing at all) looks
+// identical until it is published.
+describe('GalleryList: replacing a collage photo rewrites exactly that photo in the tree', () => {
+  beforeEach(() => {
+    FakeXHR.instances = [];
+    vi.stubGlobal('XMLHttpRequest', FakeXHR as unknown as typeof XMLHttpRequest);
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('reports the whole tree with only the chosen photo\'s src changed, siblings and sizes untouched', async () => {
+    const user = userEvent.setup();
+    const { onChange } = renderList();
+    const photoInputs = screen.getAllByLabelText('Photo');
+    // atmosphere (2) + ourStory (1) = 3 rows before the collage's first
+    // photo; its SECOND photo is the one this drives, so a write that always
+    // hits index 0 of the flattened list is caught too.
+    await user.upload(photoInputs[4], jpegFile());
+    await waitFor(() => expect(FakeXHR.instances).toHaveLength(1));
+    FakeXHR.instances[0].respond(200, { path: 'assets-source/hero/aaa111.jpg', contentPath: '/hero/aaa111.webp' });
+
+    await waitFor(() => expect(onChange).toHaveBeenCalled());
+    const next = onChange.mock.calls[onChange.mock.calls.length - 1][0] as Galleries;
+    expect(next.heroCollage).toEqual({
+      kind: 'split',
+      id: 'root',
+      direction: 'row',
+      children: [
+        { kind: 'photo', id: 'photo-a', src: '/hero/scene.webp', alt: '' },
+        { kind: 'photo', id: 'photo-b', src: '/hero/aaa111.webp', alt: '' },
+      ],
+      sizes: [1, 1],
+    });
+    // The other two lists are handed back at their prior object identity --
+    // the "spread the touched level only" contract every write path here keeps.
+    expect(next.atmosphere).toBe(GALLERIES.atmosphere);
+    expect(next.ourStory).toBe(GALLERIES.ourStory);
   });
 });
 
@@ -153,7 +194,7 @@ describe('GalleryList: add, remove, and reorder -- atmosphere and ourStory only,
   // button this section renders, compared against the exact accessible
   // names expected, is what a rename or a differently-worded new button
   // can't slip past.
-  it('Hero collage can be reordered but never added to or removed from -- every entry there is developer-placed', () => {
+  it('Hero collage offers no add, no remove and no reorder -- arranging it happens on the collage itself', () => {
     renderList();
     const heading = screen.getByRole('heading', { name: 'Hero collage' });
     // Named `wrapper`, not the more obvious variable name here: this
@@ -167,23 +208,24 @@ describe('GalleryList: add, remove, and reorder -- atmosphere and ourStory only,
     // five breakpoint variants of it) to the built CSS.
     const wrapper = heading.closest('div');
     if (!wrapper) throw new Error('Hero collage heading is not inside a <div>');
-    const buttonLabels = within(wrapper).getAllByRole('button').map((b) => b.getAttribute('aria-label'));
-    // Exactly the two reorder buttons two rows produce -- nothing else,
-    // under any name.
-    expect(buttonLabels).toEqual(['Move Hero collage photo 1 down', 'Move Hero collage photo 2 up']);
+    // An exhaustive count of every button this section renders, not an
+    // anchored name pattern: a pattern like /^Remove Hero collage/ cannot
+    // catch a working Add/Remove pair named anything else (a plain "Delete
+    // photo 1", say), where a count of ALL of them can't be slipped past by
+    // a rename or a differently-worded new control. PhotoField's own picker
+    // is a <label> wrapping a file input, not a button, so a correct render
+    // of this section has no buttons in it at all -- and the file inputs
+    // below are what proves that is because there is nothing else to click,
+    // not because the section failed to render.
+    expect(within(wrapper).queryAllByRole('button')).toEqual([]);
+    expect(within(wrapper).getAllByLabelText('Photo')).toHaveLength(2);
   });
 
-  // Judgment call recorded in this task's own report: the reorder buttons
-  // stay (an entry missing an explicit row+column position still responds
-  // to source order via the browser's own grid auto-placement), but she is
-  // told plainly that most real entries already pin BOTH, so reordering
-  // them visibly does nothing -- otherwise a reorder that does nothing
-  // reads as broken, not as working correctly on data that doesn't need it.
-  it('tells her plainly that reordering usually has no visible effect, rather than leaving a no-op reorder unexplained', () => {
+  // A screen that silently offers less than it used to reads as broken. This
+  // one says where the missing controls went instead.
+  it('says where arranging the collage actually happens, rather than silently offering less', () => {
     renderList();
-    expect(
-      screen.getByText(/Reordering here only changes what a visitor sees/),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/the collage is arranged there/i)).toBeInTheDocument();
   });
 });
 
@@ -261,7 +303,7 @@ describe("GalleryList: Task 9's collector wiring -- src stages through PhotoFiel
     FakeXHR.instances[0].respond(200, { path: 'assets-source/hero/eee555eee555.jpg', contentPath: '/hero/eee555eee555.webp' });
     await waitFor(() =>
       expect(stage).toHaveBeenCalledWith(
-        'galleries.json:heroCollage:row-0:src',
+        'galleries.json:heroCollage:photo-a:src',
         expect.objectContaining({
           path: 'assets-source/hero/eee555eee555.jpg',
           encoding: 'base64',

@@ -1,6 +1,63 @@
 import React from 'react';
 import { ChefHat } from 'lucide-react';
 import { useContent } from '../content/ContentContext';
+import { COLLAGE_PHOTO_CLASSNAME, COLLAGE_SPLIT_CLASSNAME, collageNodePath } from '../content/context';
+import type { CollageNode, ContentBundle } from '../content/types';
+
+// The collage, drawn as nested flexbox from the split tree in
+// `galleries.heroCollage`. There is no generated class name anywhere in here:
+// a split's proportions arrive as numbers and leave as `flexGrow`, so
+// Tailwind never needs to see them. That is the whole point of the tree --
+// this project's content glob has never scanned `.json`, and the previous
+// model (a Tailwind grid-placement string per photo, authored in exactly that
+// unscanned file) cost it seven missing utilities and nine photos rendered
+// into implicit rows that `overflow-hidden` clipped away.
+//
+// `flexBasis: 0` beside every `flexGrow` is not belt and braces. Without it a
+// flex item's base size is its CONTENT's size, so a wide photograph and a
+// narrow one in a 1:1 split render at different widths and the ratio silently
+// stops meaning anything. Proven in a real browser rather than reasoned about
+// -- jsdom has no layout engine and cannot see this at all -- by
+// e2e/hero-collage.spec.ts.
+//
+// A plain function, not a component: it is called recursively with a
+// different `style` per level, and every element it produces already comes
+// from a content seam that /edit can override.
+function renderCollageNode(content: ContentBundle, node: CollageNode, style: React.CSSProperties): React.ReactNode {
+  const path = collageNodePath(node);
+  if (node.kind === 'photo') {
+    return content.renderCollagePhoto(
+      path,
+      node,
+      { className: COLLAGE_PHOTO_CLASSNAME, style },
+      content.renderImage(path, {
+        src: node.src,
+        alt: node.alt,
+        className: 'w-full h-full object-cover opacity-90 hover:opacity-100 transition-opacity duration-500',
+        // I-A review finding (repair of Plan 6, Task 4, Step 1): native
+        // HTML5 image drag hijacks the pointer sequence a real drag needs on
+        // desktop, but a `draggable={false}` HERE is not the fix -- it ships
+        // an explicit `draggable="false"` attribute (React never omits it for
+        // a literal `false`) on every collage <img> to every PUBLIC visitor,
+        // +288 bytes for a requirement that only exists at `/edit`.
+        // `dragstart` bubbles, so an /edit-only handler on the wrapper
+        // cancels the child's native drag without this component -- or its
+        // rendered output -- knowing anything is editable at all. The same
+        // conclusion applies unchanged to Task 4's drag-to-swap; it is
+        // recorded here because this is the call site that would otherwise
+        // add the prop back again.
+      }),
+    );
+  }
+  return content.renderCollageSplit(
+    path,
+    node,
+    { className: COLLAGE_SPLIT_CLASSNAME[node.direction], style },
+    node.children.map((child, i) =>
+      renderCollageNode(content, child, { flexGrow: node.sizes[i], flexBasis: 0 }),
+    ),
+  );
+}
 
 const Hero: React.FC = () => {
  const content = useContent();
@@ -53,39 +110,14 @@ const Hero: React.FC = () => {
       alt=""
       className="absolute inset-0 -z-20 w-full h-full object-cover opacity-20"
     />
-     {/* ===== Collage ===== */}
-     <div className="absolute inset-0 grid grid-cols-6 grid-rows-6 gap-1">
-      {galleries.heroCollage.map(({ src, className }, i) =>
-        content.renderCollageTile(
-          `galleries.heroCollage.${i}`,
-          i,
-          className,
-          content.renderImage(`galleries.heroCollage.${i}`, {
-            src,
-            alt: '',
-            className: 'w-full h-full object-cover opacity-90 hover:opacity-100 transition-opacity duration-500',
-            // I-A review finding (repair of Plan 6, Task 4, Step 1): native
-            // HTML5 image drag hijacks the pointer sequence a real
-            // drag-to-move needs on desktop, but a `draggable={false}` HERE
-            // is not the fix -- it shipped an explicit `draggable="false"`
-            // attribute (React never omits it for a literal `false`) on
-            // every one of the sixteen collage `<img>`s to every PUBLIC
-            // visitor, +288 bytes for a requirement that only exists at
-            // `/edit`. `dragstart` bubbles, so CollageTile.tsx's own
-            // `onDragStart` on its tile wrapper (an /edit-only element)
-            // cancels the child <img>'s native drag without this public
-            // component -- or its rendered output -- ever needing to know
-            // anything is editable at all. See that file's own comment for
-            // the full real-Chromium comparison: a wrapper `onDragStart`
-            // (used here), a wrapper `-webkit-user-drag: none`, and a
-            // `pointerdown` preventDefault on the drag surface all worked
-            // equally well, each confined to CollageTile.tsx alone; only
-            // `React.cloneElement` genuinely doesn't, since at `/edit` the
-            // child this component receives is `<EditableImage>`, not a
-            // bare `<img>`, so there is no element to clone a prop onto.
-          }),
-        ),
-      )}
+     {/* ===== Collage =====
+         One flex container holding the tree's root node, which fills it.
+         Every level below is another flex container -- see
+         `renderCollageNode` above. `overflow-hidden` on the <section> still
+         clips whatever the collage paints outside the hero, unchanged. */}
+     <div className="absolute inset-0 flex">
+       {galleries.heroCollage !== null &&
+         renderCollageNode(content, galleries.heroCollage, { flexGrow: 1, flexBasis: 0 })}
      </div>
 
 

@@ -1,4 +1,4 @@
-import type { ImgHTMLAttributes, ReactNode } from 'react';
+import type { CSSProperties, ImgHTMLAttributes, ReactNode } from 'react';
 
 // Two-letter schema.org day codes, in week order. A plain `string` here would
 // let a typo (e.g. "Xx") through both the type checker and the JSON import
@@ -161,7 +161,14 @@ export type CollageNode = CollagePhoto | CollageSplit;
 export interface Galleries {
   atmosphere: GalleryImage[];
   ourStory: GalleryImage[];
-  heroCollage: { src: string; className: string }[];
+  // `null` is "there is no collage to draw", the same state the old
+  // sixteen-entry array expressed as `[]`. It is not a publishable state --
+  // validateContent refuses it, so a write can never produce one -- it exists
+  // only as /edit's fallback for the moment before galleries.json has
+  // finished loading, exactly as the empty array was before it. A tree with
+  // ZERO photos is unrepresentable (see collage.ts), so this is the only way
+  // "no photos" can be spelled at all.
+  heroCollage: CollageNode | null;
 }
 
 export interface StoryContent {
@@ -428,19 +435,40 @@ export interface ContentBundle {
   renderText(path: EditableTextPath, value: string): ReactNode;
   // default: (_, p) => createElement('img', p) -- see ContentContext.ts's defaultBundle.
   renderImage(path: EditableImagePath, props: ImgHTMLAttributes<HTMLImageElement>): ReactNode;
-  // Plan 6, Task 3: the ONE seam that lets `/edit` make a hero collage tile
-  // selectable, movable and resizable while Hero.tsx (the public page)
-  // keeps rendering `className` verbatim and stays entirely unaware
-  // anything is editable -- the same "default is the identity, /edit
-  // overrides it" shape `renderText`/`renderImage` already establish, not a
-  // new pattern. `index` is the tile's position in `heroCollage` (what
-  // `formatPlacement`'s eventual write-back needs to know which entry to
-  // replace); `className` is that entry's CURRENT placement string, read
-  // fresh on every render so a committed move is reflected immediately;
-  // `image` is the already-rendered child (Hero.tsx's own
-  // `content.renderImage(...)` call for this same tile), passed through
-  // rather than re-derived, so this seam never needs to know how an image
-  // is rendered.
-  // default: (_, index, className, image) => createElement('div', { key: index, className: `${className} relative overflow-hidden` }, image)
-  renderCollageTile(path: EditableImagePath, index: number, className: string, image: ReactNode): ReactNode;
+  // The two seams that let `/edit` add affordances to the collage while
+  // Hero.tsx (the public page) stays entirely unaware anything is editable --
+  // the same "default is the identity, /edit overrides it" shape
+  // `renderText`/`renderImage` already establish. One per node kind, because
+  // the two editing gestures this plan builds attach to different things: a
+  // swap (Task 4) is a property of a PHOTO's box, and a divider (Task 5)
+  // lives between two adjacent children of a SPLIT, which no photo-level seam
+  // can reach.
+  //
+  // `box` carries everything the node's own outermost element must keep --
+  // spread it (`<div {...box} onPointerDown={…}>`) and an override cannot
+  // accidentally drop the sizing that places the box. `path` is
+  // `galleries.heroCollage.<node id>` for both kinds; ids are unique across
+  // the whole tree (guards.ts), so one scheme addresses every node without
+  // ambiguity, and a photo's path is the SAME string Hero.tsx hands
+  // `renderImage`, so a staged replacement and an editing affordance always
+  // name the same photograph.
+  //
+  // Both defaults are the real public renderer, not a stub -- see
+  // `defaultRenderCollagePhoto`/`defaultRenderCollageSplit` in
+  // src/content/context.ts, which /edit also uses verbatim for the parts of
+  // the collage it does not override.
+  renderCollagePhoto(path: EditableImagePath, photo: CollagePhoto, box: CollageBox, image: ReactNode): ReactNode;
+  renderCollageSplit(path: string, split: CollageSplit, box: CollageBox, children: ReactNode[]): ReactNode;
+}
+
+// What every collage node's own outermost element has to carry: the Tailwind
+// chrome for its kind, and the inline sizing that places it inside its parent
+// split (`flexGrow` from the parent's `sizes`, plus a zero `flexBasis` so an
+// image's intrinsic width never leaks into the ratio). Deliberately one
+// spreadable object rather than two parameters: an override that forgets one
+// of them is a layout bug that renders almost right, which is the hardest
+// kind to notice.
+export interface CollageBox {
+  className: string;
+  style: CSSProperties;
 }

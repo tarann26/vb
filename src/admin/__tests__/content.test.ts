@@ -158,11 +158,13 @@ function dotsNeeded(filePath: string): number {
 // anyway because it is react-only and imports no JSON, which is the actual
 // property this whitelist exists to guard (see EditMode.tsx's own comment on
 // why `../content/types` stopped being safe to whitelist blindly the moment
-// it held that same call, before this fix moved it out). `placement` (Plan 6,
-// Task 1) is the same shape as `validate`/`guards`: pure parsing/layout
-// functions, zero imports of its own (confirmed directly -- it has no
-// `import` statement at all), needed by CollageTile.tsx (Task 3) for the
-// exact move/resize arithmetic `validateContent` also calls. Anything else
+// it held that same call, before this fix moved it out). `collage` (Plan 9,
+// Task 1) is the same shape as `validate`/`guards`: pure operations on the
+// hero collage's split tree whose only import is an `import type` from
+// ./types, which erases entirely -- needed by EditMode.tsx and
+// GalleryList.tsx to rewrite one photo of the tree, the same functions
+// `validateContent` and the build-time guard both read. It replaces
+// `placement`, the deleted grid-layout module it succeeds. Anything else
 // reachable via `content/<subpath>` is NOT safe, and a first version of this
 // check (`content(?:/index)?`, matching only the bare barrel and an explicit
 // `/index`) missed that: it let `import dishes from '../content/dishes.json'`
@@ -171,7 +173,7 @@ function dotsNeeded(filePath: string): number {
 // exactly this -- straight through. Confirmed directly: that version left
 // this exact line green across all 21 tests in this file's previous
 // revision.
-const SAFE_CONTENT_SUBMODULES = ['types', 'validate', 'guards', 'context', 'placement'];
+const SAFE_CONTENT_SUBMODULES = ['types', 'validate', 'guards', 'context', 'collage'];
 
 function importsContentSnapshot(source: string, filePath: string): boolean {
   const dots = dotsNeeded(filePath);
@@ -285,7 +287,7 @@ describe('importsContentSnapshot catches every import form, at the right depth',
     expect(importsContentSnapshot(`import type { Dish } from '../content/types';`, AT_DEPTH_1)).toBe(false);
   });
 
-  it('does not match the validate/guards/context/placement modules, which import no JSON', () => {
+  it('does not match the validate/guards/context/collage modules, which import no JSON', () => {
     expect(importsContentSnapshot(`import { validateContent } from '../content/validate';`, AT_DEPTH_1)).toBe(false);
     expect(importsContentSnapshot(`import { assertSections } from '../content/guards';`, AT_DEPTH_1)).toBe(false);
     // Post-review Fix 5: `context` holds a real runtime `createContext` call
@@ -294,16 +296,15 @@ describe('importsContentSnapshot catches every import form, at the right depth',
     // this whitelist exists to guard, per SAFE_CONTENT_SUBMODULES's own
     // comment above.
     expect(importsContentSnapshot(`import { ContentProvider } from '../content/context';`, AT_DEPTH_1)).toBe(false);
-    // Plan 6 review finding (Minor, repaired here): `placement` joined
-    // SAFE_CONTENT_SUBMODULES with Plan 6's own collage-layout module, but
-    // this whitelist test was never extended to cover it -- 1844 tests
-    // stayed green with the entry present or absent alike, which is exactly
-    // the kind of change this test file exists to catch. `placement.ts`
-    // itself imports no JSON today (confirmed directly -- zero imports at
-    // all), so it belongs on the list for the identical reason
-    // validate/guards do; this pins that it actually IS on it, not
-    // just that adding it didn't break anything else.
-    expect(importsContentSnapshot(`import { resolveLayout } from '../content/placement';`, AT_DEPTH_1)).toBe(false);
+    // `collage` replaces the deleted `placement` on that list, for the
+    // identical reason validate/guards are on it: it imports no JSON, no
+    // react, and has no transitive path to src/content/index.ts (confirmed
+    // directly -- its only import is `import type` from ./types, which
+    // erases entirely). Pinned here rather than merely added to the array:
+    // Plan 6's own review found `placement` on the list with NOTHING
+    // asserting it, so 1844 tests stayed green with the entry present or
+    // absent alike -- exactly the change this file exists to catch.
+    expect(importsContentSnapshot(`import { setCollagePhotoSrc } from '../content/collage';`, AT_DEPTH_1)).toBe(false);
   });
 
   // The direct-JSON-import fix must not overreach into flagging the four

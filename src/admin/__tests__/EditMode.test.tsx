@@ -26,11 +26,19 @@ import type { Article, Copy, Dish, Drink, Galleries, MenuFile, Section, SiteCont
 // against that file's own scope (fields.test.ts's own comment documents the
 // identical exclusion for the identical reason).
 import galleriesJson from '../../content/galleries.json';
+import { collagePhotos, findCollagePhoto } from '../../content/collage';
 import storyJson from '../../content/story.json';
 import menusJson from '../../content/menus.json';
 import copyJson from '../../content/copy.json';
 
-const GALLERIES = galleriesJson as Galleries;
+const GALLERIES = galleriesJson as unknown as Galleries;
+
+// The collage photo whose src is /atmosphere/dining.webp -- the same
+// photograph galleries.atmosphere[0] carries, which is the whole point of the
+// two staging tests that use it. Addressed by the photo's own id, so a future
+// swap that moves it to another box does not silently retarget these tests.
+const COLLAGE_DINING_ID = 'photo-15';
+const COLLAGE_DINING_PATH = `galleries.heroCollage.${COLLAGE_DINING_ID}`;
 const STORY = storyJson as StoryContent;
 const MENUS = menusJson as MenuFile[];
 const COPY = copyJson as Copy;
@@ -596,234 +604,19 @@ describe('EditMode: in-page navigation and page chrome are not blocked (post-rev
     expect(inputClickSpy).toHaveBeenCalledTimes(1);
   });
 
-  // Plan 6, Task 3: CollageTile's own select toggle carries
-  // `data-collage-control`, the fourth carve-out this guard's own comment
-  // documents -- the same class of bug C1 found for the camera control
-  // (an affordance that renders but can never actually be activated,
-  // because EditMode's capture-phase guard swallows the click before the
-  // component's own onClick ever runs). Driven the identical way C1's own
-  // test is: a real `fireEvent.click` on the control itself, mounted
-  // inside EditMode's real guard, asserting `!event.defaultPrevented`.
-  it('the collage tile select toggle is not swallowed by the click guard (Plan 6, Task 3 carve-out 4)', async () => {
-    stubFetch();
-    render(
-      <MemoryRouter>
-        <EditMode />
-      </MemoryRouter>,
-    );
-
-    const toggle = await screen.findByRole('button', { name: 'Move or change the size of photo 1' });
-    expect(toggle).toHaveAttribute('data-collage-control', 'true');
-    expect(fireEvent.click(toggle)).toBe(true);
-    expect(toggle).toHaveAttribute('aria-pressed', 'true');
-  });
-
-  // The panel itself is a SEPARATE case from the toggle above: it is
-  // rendered via `createPortal` into `document.body`, so its own buttons'
-  // real DOM ancestors are never a collage tile's wrapper -- CollageTile.tsx's
-  // own comment on `CONTROL_ATTR` explains why every button in the panel
-  // needs the marker directly, not just the tile. This proves that holds
-  // through EditMode's REAL guard, not just in CollageTile's own isolated
-  // render (CollageTile.test.tsx already covers the panel's own logic;
-  // this covers the one thing that render can't -- whether a portal's
-  // content actually reaches the guard the same way, and survives it).
-  it('the portal-rendered move panel is not swallowed by the click guard either', async () => {
-    stubFetch();
-    render(
-      <MemoryRouter>
-        <EditMode />
-      </MemoryRouter>,
-    );
-
-    const toggle = await screen.findByRole('button', { name: 'Move or change the size of photo 1' });
-    fireEvent.click(toggle);
-    // "Move right", not left: tile 0 is col-start-5 col-span-2 (cols 5-6,
-    // the grid's own last two columns) -- moving right would run off the
-    // 6-wide grid and be refused, proving nothing about whether the click
-    // itself reached this button. Left is the legal direction from here.
-    const moveLeft = await screen.findByRole('button', { name: 'Move left' });
-    expect(moveLeft).toHaveAttribute('data-collage-control', 'true');
-    expect(fireEvent.click(moveLeft)).toBe(true);
-    // A real commit reached the registry: the collage's first tile
-    // (col-start-5 col-span-2, auto row, in the real galleries.json) moved
-    // one column left, and its row -- previously auto -- is now pinned
-    // explicit at its own resolved value.
-    expect(document.querySelector('[data-collage-tile-index="0"]')).toHaveClass('col-start-4', 'row-start-1');
-  });
 });
 
-// Plan 6 Task 5, Step 1's own claim: `galleries.json` is already one of the
-// five files /edit can write, so a placement move should reach a real
-// publish with NO NEW PLUMBING -- neither dirtyContentFiles nor
-// buildPublishRequest (src/admin/publish.ts) has ever heard of `heroCollage`
-// or `className`; both are generic over any ContentFileName, comparing
-// `entry.data` against `entry.initial` by JSON string equality. Proven the
-// same way Plan 5 Task 5 proved a text edit: driven entirely through the
-// real UI -- the same "Move left" button the carve-out test just above this
-// one already proves reaches the registry -- through the real publish.ts
-// pipeline, to a real POST /api/publish body, asserting the MOVED
-// className is what actually left the browser. Confirmed directly: before
-// Task 3/4 wired `commitCollagePlacement` to call the same
-// `registry.updateData` every other field already uses, this test would
-// have found `galleries.json` simply never dirty -- Publish would have sent
-// a request with no entry for it at all (or stayed disabled, depending on
-// whether any OTHER field was also touched), which is the "new plumbing
-// silently required and never added" failure this step's own wording warns
-// against.
-describe('Plan 6 Task 5: publishing a collage placement move rides the existing publish path', () => {
-  it('moving a tile with the real UI and clicking Publish sends the moved className -- no collage-specific code in publish.ts', async () => {
-    stubFetch();
-    render(
-      <MemoryRouter>
-        <EditMode />
-      </MemoryRouter>,
-    );
-
-    const toggle = await screen.findByRole('button', { name: 'Move or change the size of photo 1' });
-    fireEvent.click(toggle);
-    const moveLeft = await screen.findByRole('button', { name: 'Move left' });
-    fireEvent.click(moveLeft);
-    // Same resolved position the carve-out test above already names: tile 0
-    // (col-start-5 col-span-2, auto row -> resolves to row-start-1
-    // row-span-2 in the real, unedited galleries.json) moved one column left.
-    expect(document.querySelector('[data-collage-tile-index="0"]')).toHaveClass(
-      'col-start-4',
-      'col-span-2',
-      'row-start-1',
-      'row-span-2',
-    );
-
-    const publishButton = await screen.findByRole('button', { name: 'Publish' });
-    expect(publishButton).not.toBeDisabled();
-    fireEvent.click(publishButton);
-    acceptPublishConfirm();
-
-    expect(await screen.findByText('Your changes are live.')).toBeInTheDocument();
-
-    // `vi.stubGlobal('fetch', ...)` (inside stubFetch, above) sets
-    // `globalThis.fetch` to that exact mock instance -- reading it back here
-    // is the same object, not a second stub.
-    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
-    const publishCall = fetchMock.mock.calls.find(([url]) => url === '/api/publish');
-    expect(publishCall).toBeDefined();
-    const body = JSON.parse((publishCall![1] as RequestInit).body as string) as {
-      files: { path: string; content: string }[];
-    };
-    const galleriesFile = body.files.find((f) => f.path === 'src/content/galleries.json');
-    expect(galleriesFile).toBeDefined();
-    const publishedGalleries = JSON.parse(galleriesFile!.content) as Galleries;
-    expect(publishedGalleries.heroCollage[0].className).toBe('col-start-4 col-span-2 row-start-1 row-span-2');
-    // Every other tile's className is untouched -- this is a MOVE, not a
-    // rewrite of the whole file.
-    expect(publishedGalleries.heroCollage[1].className).toBe(GALLERIES.heroCollage[1].className);
-  });
-});
-
-// Plan 6's own Definition of Done: "A tile moved and photo-replaced in one
-// session keeps both changes." Not exercised by any test above -- the
-// Task 5 test just above drives a move alone, and Plan 5's own gallery
-// tests (further down this file) drive a photo replace alone, each through
-// `buildBundle` directly rather than the real `<EditMode>` component. Both
-// edits write into the SAME `galleries.json` registry entry
-// (`commitCollagePlacement` patches only `heroCollage[index].className`;
-// `commitImage`, Plan 5's own path, patches only `heroCollage[index].src`),
-// so the real risk this test names is a stale-closure read -- the second
-// commit reading a `galleries` snapshot captured before the first commit's
-// re-render landed, silently discarding it. Driven through the real
-// `<EditMode>` component, in one session, in the order she would actually
-// do it (move, then replace), reading the result back from the one place
-// that cannot be fooled by an intermediate render: the actual POST
-// /api/publish body.
-describe('Plan 6 Definition of Done: a tile moved AND photo-replaced in one session keeps both changes', () => {
-  // A second, local, minimal XHR fake -- not the one further down this file
-  // (Plan 5 Task 4, Step 2's own `describe` block): that one is declared
-  // inside its own `describe` callback, an ordinary JS function scope, so
-  // it is not reachable from here. Duplicating this much (not extracting a
-  // shared module-level helper) keeps this file's existing, carefully-tuned
-  // describe blocks untouched by a change this specific test alone needs.
-  class FakeXHR {
-    static instances: FakeXHR[] = [];
-    status = 0;
-    responseText = '';
-    upload: { onprogress: ((event: { lengthComputable: boolean; loaded: number; total: number }) => void) | null } = { onprogress: null };
-    onload: (() => void) | null = null;
-    onerror: (() => void) | null = null;
-    constructor() {
-      FakeXHR.instances.push(this);
-    }
-    open() {}
-    send() {}
-    respond(status: number, body: unknown) {
-      this.status = status;
-      this.responseText = JSON.stringify(body);
-      this.onload?.();
-    }
-  }
-
-  function jpegFile(name: string): File {
-    return new File([new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 0, 0, 0])], name, { type: 'image/jpeg' });
-  }
-
-  beforeEach(() => {
-    FakeXHR.instances = [];
-    vi.stubGlobal('XMLHttpRequest', FakeXHR as unknown as typeof XMLHttpRequest);
-  });
-
-  it('moving tile 1 then replacing its photo, in one session, publishes both the moved className AND the new src', async () => {
-    stubFetch();
-    render(
-      <MemoryRouter>
-        <EditMode />
-      </MemoryRouter>,
-    );
-
-    // 1. Move, exactly like the Task 5 test above.
-    const toggle = await screen.findByRole('button', { name: 'Move or change the size of photo 1' });
-    fireEvent.click(toggle);
-    const moveLeft = await screen.findByRole('button', { name: 'Move left' });
-    fireEvent.click(moveLeft);
-    expect(document.querySelector('[data-collage-tile-index="0"]')).toHaveClass('col-start-4', 'row-start-1');
-
-    // 2. Replace the SAME tile's photo. Every collage tile renders with
-    // `alt=""` (Hero.tsx's own `content.renderImage` call) -- EditableImage's
-    // own `alt` normalises an empty string to `undefined` (its `alt.length >
-    // 0` check), so its `Replace ${alt ?? 'this photo'}` title reads "Replace
-    // this photo" identically across all sixteen tiles; `within(tileEl)` is
-    // what makes this unambiguous, not the title text.
-    const tileEl = document.querySelector('[data-collage-tile-index="0"]') as HTMLElement;
-    const control = within(tileEl).getByTitle('Replace this photo');
-    const input = control.querySelector('input[type="file"]') as HTMLInputElement;
-    expect(input).not.toBeNull();
-    const before = FakeXHR.instances.length;
-    Object.defineProperty(input, 'files', { value: [jpegFile('new-scene.jpg')], configurable: true });
-    fireEvent.change(input);
-    await waitFor(() => expect(FakeXHR.instances.length).toBeGreaterThan(before));
-    FakeXHR.instances[FakeXHR.instances.length - 1].respond(200, {
-      path: 'assets-source/x/new-scene.jpg',
-      contentPath: '/x/new-scene.webp',
-    });
-
-    // Both edits now live in the registry together -- confirmed the only way
-    // that cannot be fooled by an intermediate render: publish, and read back
-    // the actual request body.
-    const publishButton = await screen.findByRole('button', { name: 'Publish' });
-    await waitFor(() => expect(publishButton).not.toBeDisabled());
-    fireEvent.click(publishButton);
-    acceptPublishConfirm();
-    expect(await screen.findByText('Your changes are live.')).toBeInTheDocument();
-
-    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
-    const publishCall = fetchMock.mock.calls.find(([url]) => url === '/api/publish');
-    const body = JSON.parse((publishCall![1] as RequestInit).body as string) as {
-      files: { path: string; content: string }[];
-    };
-    const publishedGalleries = JSON.parse(body.files.find((f) => f.path === 'src/content/galleries.json')!.content) as Galleries;
-    expect(publishedGalleries.heroCollage[0]).toEqual({
-      src: '/x/new-scene.webp',
-      className: 'col-start-4 col-span-2 row-start-1 row-span-2',
-    });
-  });
-});
+// Plan 6's collage-move tests lived here: a move driven through
+// CollageTile's own arrow buttons, published, and read back out of the real
+// POST body. Both the buttons and the grid placement string they wrote are
+// gone with the split tree -- there is no `className` on a collage photo to
+// publish any more. What they were really proving about the PUBLISH path --
+// that galleries.json rides the existing pipeline with no collage-specific
+// code in publish.ts -- is proven unchanged by the photo-replacement tests
+// further down this file, which write into the same registry entry through
+// the same `registry.updateData`. The gestures that replace them (drag to
+// swap, drag a divider) are the next tasks in this plan and get their own
+// real-Chromium specs in e2e/, because jsdom cannot hit-test a drag.
 
 describe('EditMode: one malformed content file does not take down the page', () => {
   it('dishes.json parsing to the wrong shape (an object, not an array) shows a per-section error, while the rest of the page still renders', async () => {
@@ -1321,7 +1114,7 @@ describe('Task 3 review Finding C4: committing a text edit calls registry.update
       markPublished: vi.fn(),
     };
 
-    const bundle = buildBundle(entries, registry, vi.fn(), null, vi.fn());
+    const bundle = buildBundle(entries, registry, vi.fn());
     render(<>{bundle.renderText('hero.reserveButton', COPY.hero.reserveButton)}</>);
 
     const field = screen.getByRole('textbox');
@@ -1375,7 +1168,7 @@ describe('Plan 7, Task 5: a template section\'s own text edit commits to section
       markPublished: vi.fn(),
     };
 
-    const bundle = buildBundle(entries, registry, vi.fn(), null, vi.fn());
+    const bundle = buildBundle(entries, registry, vi.fn());
     render(<>{bundle.renderText('sections.promo.content.heading', 'Old Heading')}</>);
 
     const field = screen.getByRole('textbox');
@@ -1407,7 +1200,7 @@ describe('Plan 7, Task 5: a template section\'s own text edit commits to section
       version: 0,
       markPublished: vi.fn(),
     };
-    const bundle = buildBundle(entries, registry, vi.fn(), null, vi.fn());
+    const bundle = buildBundle(entries, registry, vi.fn());
     render(<>{bundle.renderText('sections.promo.content.heading', 'Old Heading')}</>);
     // No contentEditable textbox -- the plain value passed straight through,
     // the identical "no affordance before there's somewhere real to write
@@ -1512,27 +1305,29 @@ describe('Plan 5 Task 4, Step 2: staged photos are keyed on an identity the stag
 
   // Verified directly against the real, committed galleries.json (Task 4's
   // own brief: "verify this yourself before relying on it") -- five paths
-  // shared between atmosphere and heroCollage, three between ourStory and
-  // heroCollage, none shared between atmosphere and ourStory.
-  it('the real galleries.json really does share five atmosphere/heroCollage photos and three ourStory/heroCollage ones', () => {
+  // shared between atmosphere and the collage, three between ourStory and
+  // the collage, none shared between atmosphere and ourStory.
+  it('the real galleries.json really does share five atmosphere/collage photos and three ourStory/collage ones', () => {
     const srcs = (list: { src: string }[]) => new Set(list.map((e) => e.src));
     const atmosphere = srcs(GALLERIES.atmosphere);
     const ourStory = srcs(GALLERIES.ourStory);
-    const heroCollage = srcs(GALLERIES.heroCollage);
+    const heroCollage = srcs(collagePhotos(GALLERIES.heroCollage!));
     expect([...atmosphere].filter((s) => heroCollage.has(s))).toHaveLength(5);
     expect([...ourStory].filter((s) => heroCollage.has(s))).toHaveLength(3);
     expect([...atmosphere].filter((s) => ourStory.has(s))).toHaveLength(0);
-    // 'galleries.atmosphere.0' and 'galleries.heroCollage.5' are the exact
-    // indices the two tests below drive -- pinned here so a future edit to
-    // galleries.json that reorders these rows fails THIS assertion first,
-    // loudly, rather than silently making the tests below pass for the
-    // wrong reason.
+    // 'galleries.atmosphere.0' and COLLAGE_DINING_PATH are the exact targets
+    // the two tests below drive -- pinned here so a future edit to
+    // galleries.json that moves either fails THIS assertion first, loudly,
+    // rather than silently making the tests below pass for the wrong reason.
+    // The collage half is addressed by the photo's own ID, not by a position:
+    // a swap moves a photo to a different box and takes its id with it, which
+    // is exactly what makes this name survive one.
     expect(GALLERIES.atmosphere[0].src).toBe('/atmosphere/dining.webp');
-    expect(GALLERIES.heroCollage[5].src).toBe('/atmosphere/dining.webp');
+    expect(findCollagePhoto(GALLERIES.heroCollage!, COLLAGE_DINING_ID)?.src).toBe('/atmosphere/dining.webp');
   });
 
   // Minor review finding: an earlier version of this test rendered
-  // `bundle.renderImage('galleries.heroCollage.5', { src: ... })` exactly
+  // `bundle.renderImage(COLLAGE_DINING_PATH, { src: ... })` exactly
   // ONCE, with the SAME `src` prop across all three picks -- so it could
   // never tell path-keying (what the stage key is ACTUALLY built from,
   // EditMode.tsx's own `${stageFile}:${path}`) apart from a hypothetical
@@ -1549,9 +1344,9 @@ describe('Plan 5 Task 4, Step 2: staged photos are keyed on an identity the stag
   it('restaging the SAME row three times leaves exactly one staged file, even as its own src changes between picks (path-keyed, not src-keyed)', async () => {
     const { files, stage } = makeStageAccumulator();
     const registry = makeRegistry();
-    const bundle = buildBundle(registry.getEntries(), registry, stage, null, vi.fn());
+    const bundle = buildBundle(registry.getEntries(), registry, stage);
     const { container, rerender } = render(
-      <>{bundle.renderImage('galleries.heroCollage.5', { src: '/atmosphere/dining.webp', alt: 'Dining room' })}</>,
+      <>{bundle.renderImage(COLLAGE_DINING_PATH, { src: '/atmosphere/dining.webp', alt: 'Dining room' })}</>,
     );
     const input = () => container.querySelector('input[type="file"]') as HTMLInputElement;
 
@@ -1560,9 +1355,9 @@ describe('Plan 5 Task 4, Step 2: staged photos are keyed on an identity the stag
     // What a real re-render sees next: PlaceGallery re-reads galleries.json
     // from the (now-updated) registry, and hands renderImage the SAME
     // path with a DIFFERENT src -- the just-staged contentPath.
-    rerender(<>{bundle.renderImage('galleries.heroCollage.5', { src: '/x/first.webp', alt: 'Dining room' })}</>);
+    rerender(<>{bundle.renderImage(COLLAGE_DINING_PATH, { src: '/x/first.webp', alt: 'Dining room' })}</>);
     await pickAndRespond(input(), 'second.jpg', '/x/second.webp');
-    rerender(<>{bundle.renderImage('galleries.heroCollage.5', { src: '/x/second.webp', alt: 'Dining room' })}</>);
+    rerender(<>{bundle.renderImage(COLLAGE_DINING_PATH, { src: '/x/second.webp', alt: 'Dining room' })}</>);
     await pickAndRespond(input(), 'third.jpg', '/x/third.webp');
 
     await waitFor(() => expect(Object.keys(files)).toHaveLength(1));
@@ -1576,12 +1371,12 @@ describe('Plan 5 Task 4, Step 2: staged photos are keyed on an identity the stag
   it('the Atmosfera row and the hero-collage tile that share /atmosphere/dining.webp leave TWO staged files, under distinct keys', async () => {
     const { files, stage } = makeStageAccumulator();
     const registry = makeRegistry();
-    const bundle = buildBundle(registry.getEntries(), registry, stage, null, vi.fn());
+    const bundle = buildBundle(registry.getEntries(), registry, stage);
     const atmosphere = render(
       <>{bundle.renderImage('galleries.atmosphere.0', { src: '/atmosphere/dining.webp', alt: 'Atmosfera dining' })}</>,
     );
     const heroCollage = render(
-      <>{bundle.renderImage('galleries.heroCollage.5', { src: '/atmosphere/dining.webp', alt: 'Collage dining' })}</>,
+      <>{bundle.renderImage(COLLAGE_DINING_PATH, { src: '/atmosphere/dining.webp', alt: 'Collage dining' })}</>,
     );
     const atmosphereInput = () => atmosphere.container.querySelector('input[type="file"]') as HTMLInputElement;
     const heroCollageInput = () => heroCollage.container.querySelector('input[type="file"]') as HTMLInputElement;
@@ -1597,7 +1392,7 @@ describe('Plan 5 Task 4, Step 2: staged photos are keyed on an identity the stag
     const keys = Object.keys(files);
     expect(new Set(keys).size).toBe(2);
     expect(keys.some((k) => k.includes('galleries.atmosphere.0'))).toBe(true);
-    expect(keys.some((k) => k.includes('galleries.heroCollage.5'))).toBe(true);
+    expect(keys.some((k) => k.includes(COLLAGE_DINING_PATH))).toBe(true);
   });
 });
 
@@ -1629,7 +1424,7 @@ describe('Plan 5 Task 4: committing a replacement writes back into the right con
 
   it('an item-shaped path (dishes.<id>.image) writes the new contentPath into exactly that dish, siblings untouched', () => {
     const { registry, entries } = makeRegistryWithDishes();
-    const bundle = buildBundle(entries, registry, vi.fn(), null, vi.fn());
+    const bundle = buildBundle(entries, registry, vi.fn());
     const element = bundle.renderImage('dishes.margherita.image', { src: DISH_A.image!, alt: DISH_A.name }) as React.ReactElement<{
       onReplace: (contentPath: string) => void;
     }>;
@@ -1648,6 +1443,41 @@ describe('Plan 5 Task 4: committing a replacement writes back into the right con
     ]);
   });
 
+  // The collage's own write-back, the shape that replaced Plan 6's
+  // `heroCollage[index].src`: a photo is named by its ID, and the rewrite has
+  // to find it wherever in the tree it currently sits. A positional write
+  // would be indistinguishable from this one until she swaps two photos and
+  // then replaces one.
+  it('a collage path (galleries.heroCollage.<photo id>) rewrites exactly that photo in the tree, wherever it sits', () => {
+    const galleries = JSON.parse(JSON.stringify(GALLERIES)) as Galleries;
+    const entries: ContentEntries = { 'galleries.json': { data: galleries, initial: galleries, sha: 'sha-galleries' } };
+    const registry: ContentRegistry = {
+      register: vi.fn(),
+      updateData: vi.fn(),
+      getEntries: () => entries,
+      version: 0,
+      markPublished: vi.fn(),
+    };
+    const bundle = buildBundle(entries, registry, vi.fn());
+    const element = bundle.renderImage(COLLAGE_DINING_PATH, { src: '/atmosphere/dining.webp', alt: '' }) as React.ReactElement<{
+      onReplace: (contentPath: string) => void;
+    }>;
+    element.props.onReplace('/atmosphere/dining-new.webp');
+
+    expect(registry.updateData).toHaveBeenCalledTimes(1);
+    const [file, next] = (registry.updateData as unknown as ReturnType<typeof vi.fn>).mock.calls[0] as [string, Galleries];
+    expect(file).toBe('galleries.json');
+    // Exactly one photo changed, and it is the one the path named.
+    expect(findCollagePhoto(next.heroCollage!, COLLAGE_DINING_ID)?.src).toBe('/atmosphere/dining-new.webp');
+    const before = collagePhotos(galleries.heroCollage!);
+    const after = collagePhotos(next.heroCollage!);
+    expect(after.map((p) => p.id)).toEqual(before.map((p) => p.id));
+    expect(after.filter((p, i) => p.src !== before[i].src).map((p) => p.id)).toEqual([COLLAGE_DINING_ID]);
+    // The tree's own shape is untouched: this is a photo replacement, not a
+    // rearrangement.
+    expect(next.atmosphere).toBe(galleries.atmosphere);
+  });
+
   // `galleries.json` is deliberately ALSO marked loaded here (not just
   // dishes.json) -- otherwise this test would pass even if
   // resolveImageTarget wrongly matched 'hero.brick.webp' as some gallery
@@ -1658,7 +1488,7 @@ describe('Plan 5 Task 4: committing a replacement writes back into the right con
   it('an unrecognised path falls back to the identity <img>, exactly like the default bundle', () => {
     const { registry, entries } = makeRegistryWithDishes();
     entries['galleries.json'] = { data: GALLERIES, initial: GALLERIES, sha: 'sha-galleries' };
-    const bundle = buildBundle(entries, registry, vi.fn(), null, vi.fn());
+    const bundle = buildBundle(entries, registry, vi.fn());
     const { container } = render(<>{bundle.renderImage('hero.brick.webp', { src: '/hero/brick.webp', alt: '' })}</>);
     expect(container.querySelector('[data-editable-image-path]')).toBeNull();
     expect(container.querySelector('img')).toHaveAttribute('src', '/hero/brick.webp');
@@ -1676,7 +1506,7 @@ describe('Plan 5 Task 4: committing a replacement writes back into the right con
       version: 0,
       markPublished: vi.fn(),
     };
-    const bundle = buildBundle({}, registry, vi.fn(), null, vi.fn());
+    const bundle = buildBundle({}, registry, vi.fn());
     const { container } = render(<>{bundle.renderImage('dishes.margherita.image', { src: '/food/margherita.webp', alt: 'Margherita' })}</>);
     expect(container.querySelector('[data-editable-image-path]')).toBeNull();
     expect(container.querySelector('img')).toHaveAttribute('src', '/food/margherita.webp');
@@ -1717,7 +1547,7 @@ describe('Plan 7, Task 5: a template section\'s own photo replacement writes bac
       },
     };
     const { registry, entries } = makeRegistryWithSections(section);
-    const bundle = buildBundle(entries, registry, vi.fn(), null, vi.fn());
+    const bundle = buildBundle(entries, registry, vi.fn());
     const element = bundle.renderImage('sections.breads.content.items.1.image', {
       src: '/food/old-hummus.webp',
       alt: 'Hummus',
@@ -1748,7 +1578,7 @@ describe('Plan 7, Task 5: a template section\'s own photo replacement writes bac
       content: { heading: 'Partners', layout: 'grid', images: [{ src: '/press/old-logo.webp', alt: 'Partner logo' }] },
     };
     const { registry, entries } = makeRegistryWithSections(section);
-    const bundle = buildBundle(entries, registry, vi.fn(), null, vi.fn());
+    const bundle = buildBundle(entries, registry, vi.fn());
     const element = bundle.renderImage('sections.partners.content.images.0', {
       src: '/press/old-logo.webp',
       alt: 'Partner logo',
@@ -1909,19 +1739,35 @@ describe('Plan 5 Task 5: publishing from /edit', () => {
       await waitFor(() => expect(screen.queryByLabelText(/^Replace /)).toBeNull());
     });
 
-    it('the collage move/resize control is gone while paused, and present at idle', async () => {
+    // Plan 6's version of this test used CollageTile's own select toggle,
+    // which the split tree deleted along with the grid placement it moved.
+    // The collage's remaining affordance is the camera badge on every photo
+    // box, and the property is the same one: the pause must take it off the
+    // collage too, not only off the flat galleries.
+    it("the collage photos' own replace control is gone while paused, and present at idle", async () => {
       stubFetch();
       const { unmount } = render(
         <MemoryRouter>
           <EditMode />
         </MemoryRouter>,
       );
-      expect(await screen.findAllByLabelText(/Move or change the size of photo/)).not.toHaveLength(0);
+      await waitFor(() =>
+        expect(document.querySelectorAll('[data-editable-image-path^="galleries.heroCollage."]').length).toBeGreaterThan(0),
+      );
+      expect(
+        [...document.querySelectorAll('[data-editable-image-path^="galleries.heroCollage."]')]
+          .filter((el) => el.querySelector('[title^="Replace "]')).length,
+      ).toBeGreaterThan(0);
       unmount();
       vi.unstubAllGlobals();
 
       await publishAndHang();
-      await waitFor(() => expect(screen.queryByLabelText(/Move or change the size of photo/)).toBeNull());
+      await waitFor(() =>
+        expect(
+          [...document.querySelectorAll('[data-editable-image-path^="galleries.heroCollage."]')]
+            .filter((el) => el.querySelector('[title^="Replace "]')).length,
+        ).toBe(0),
+      );
     });
 
     // On this surface the affordances vanish entirely, so the sentence is
@@ -1976,8 +1822,11 @@ describe('Plan 5 Task 5: publishing from /edit', () => {
           </MemoryRouter>,
         );
 
+        // Addressed by the collage photo's own ID, via the path EditableImage
+        // already carries -- there is no positional tile index any more, and
+        // an id is what survives a swap.
         const tileEl = (await waitFor(() => {
-          const el = document.querySelector('[data-collage-tile-index="0"]');
+          const el = document.querySelector(`[data-editable-image-path="${COLLAGE_DINING_PATH}"]`);
           expect(el).not.toBeNull();
           return el;
         })) as HTMLElement;
