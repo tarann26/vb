@@ -18,7 +18,7 @@
 // ../src/content/validate), which must never pull in react or the build-time
 // content snapshot. See src/admin/__tests__/content.test.ts's
 // SAFE_CONTENT_SUBMODULES for the boundary this keeps.
-import type { CollageNode, CollagePhoto, SplitDirection } from './types';
+import type { CollageNode, CollagePhoto, CollageSplit, SplitDirection } from './types';
 
 // ---------------------------------------------------------------------------
 // The two closed unions, as `Record<K, true>` rather than array literals.
@@ -198,6 +198,31 @@ export function findCollagePhoto(node: CollageNode, id: string): CollagePhoto | 
   return collagePhotos(node).find((photo) => photo.id === id) ?? null;
 }
 
+export function findCollageSplit(node: CollageNode, id: string): CollageSplit | null {
+  if (node.kind === 'photo') return null;
+  if (node.id === id) return node;
+  for (const child of node.children) {
+    const found = findCollageSplit(child, id);
+    if (found !== null) return found;
+  }
+  return null;
+}
+
+// The split a node hangs off, and which child of it the node is. `null` for
+// the ROOT, which hangs off nothing -- a one-photo collage is the reachable
+// case, and it is exactly the case where "make this box wider" has no answer,
+// because there is no neighbour to take the width from.
+export function findCollageParent(node: CollageNode, id: string): { split: CollageSplit; index: number } | null {
+  if (node.kind === 'photo') return null;
+  const index = node.children.findIndex((child) => child.id === id);
+  if (index !== -1) return { split: node, index };
+  for (const child of node.children) {
+    const found = findCollageParent(child, id);
+    if (found !== null) return found;
+  }
+  return null;
+}
+
 // Exchanges the POSITIONS of the two photos `idA` and `idB` name, carrying
 // each photo's whole payload -- id, src and alt -- with it. Exactly the
 // gesture the owner described: "The boxes keep their shape. The photos are
@@ -260,4 +285,129 @@ export function setCollagePhotoSrc(node: CollageNode, id: string, src: string): 
     return next;
   });
   return changed ? { ...node, children } : node;
+}
+
+// ---------------------------------------------------------------------------
+// Task 5's operation: moving one divider.
+//
+// A DIVIDER is `(a split, the gap at index i)`, and it resolves to exactly two
+// adjacent boxes -- `children[i]` and `children[i + 1]` -- always, by
+// construction. That is the property the owner's requirement turns on:
+// dragging a photo's left edge to widen it must take that width from the box
+// immediately to its left, which then gives up exactly as much as this one
+// gains. One box widening IS the other one narrowing, because the pair's total
+// is conserved and every other child's size is left exactly as it was.
+//
+// Her own sentence is quoted verbatim in
+// docs/superpowers/plans/2026-08-05-plan-9-collage-split-tree.md and
+// deliberately paraphrased here, for the reason types.ts's CollageSplit
+// comment records for the identical quote: one of its words is a real, bare,
+// no-argument Tailwind utility with no rule in the shipped stylesheet, and
+// this repo's content scanner has no JS parser to tell a class name from prose
+// inside a comment. Measured, not guessed -- the first draft of this comment
+// shipped exactly that rule, and the rule-level build diff caught it.
+
+// How little of the pair's shared span the narrower of the two boxes may be
+// left with. 15%.
+//
+// A box dragged to nothing is a photo she can neither see nor select, with no
+// obvious way back -- so there has to be a floor, and the only question is
+// what it is measured in. Deliberately a proportion of THE PAIR, not a number
+// of pixels:
+//
+//   * The tree is one document rendered at every width. A pixel floor would
+//     make the same arrangement legal on a desktop and refused on a phone, so
+//     the same drag would stop in a different place depending on which device
+//     she happened to be holding -- and `validateContent`, which has no
+//     viewport at all, could not check it.
+//   * A fraction of the pair is always satisfiable (0.15 <= 0.5), so the
+//     clamp can never produce an empty interval, and it can never produce a
+//     size at or below zero -- which the validator refuses -- because it is a
+//     positive fraction of a positive total.
+//   * 15% leaves a visible sixth of the space the two boxes share. On the
+//     committed arrangement's widest pair at 1440px that is ~71px, and on its
+//     tightest pair on a 390px phone ~19px: small, but still on screen, still
+//     draggable back, and still the only outcome of a gesture she made
+//     deliberately.
+export const MIN_PAIR_SHARE = 0.15;
+
+// What one tap of the panel's "wider"/"narrower" pair moves. 5% of the pair,
+// so it takes seven taps to travel from an even split to the clamp above --
+// fine enough to land where she means, coarse enough to get there.
+export const RESIZE_STEP_SHARE = 0.05;
+
+// How much of the pair `children[gapIndex]` currently holds, 0..1.
+export function collagePairShare(split: CollageSplit, gapIndex: number): number {
+  const total = split.sizes[gapIndex] + split.sizes[gapIndex + 1];
+  return split.sizes[gapIndex] / total;
+}
+
+// Gives `children[gapIndex]` the fraction `share` of what it and
+// `children[gapIndex + 1]` share between them, and gives the rest to
+// `children[gapIndex + 1]`. Every other child of that split, and every other
+// split in the tree, is left byte-for-byte alone -- and untouched branches
+// come back by reference, so React re-renders only the pair.
+//
+// `share` is clamped into [MIN_PAIR_SHARE, 1 - MIN_PAIR_SHARE] rather than
+// refused: a drag that runs past the end should stop at the end, not undo
+// itself. A `gapIndex` that names no gap, or a `splitId` that names no split,
+// IS refused -- returning the tree by reference -- because neither is a
+// gesture, it is a caller mistake.
+export function resizeCollageSplit(
+  node: CollageNode,
+  splitId: string,
+  gapIndex: number,
+  share: number,
+): CollageNode {
+  const split = findCollageSplit(node, splitId);
+  if (split === null) return node;
+  if (!Number.isFinite(share)) return node;
+  if (!Number.isInteger(gapIndex) || gapIndex < 0 || gapIndex > split.children.length - 2) return node;
+
+  const clamped = Math.min(Math.max(share, MIN_PAIR_SHARE), 1 - MIN_PAIR_SHARE);
+  const total = split.sizes[gapIndex] + split.sizes[gapIndex + 1];
+  const sizes = [...split.sizes];
+  sizes[gapIndex] = total * clamped;
+  sizes[gapIndex + 1] = total - sizes[gapIndex];
+  // The sum is unchanged by construction, so this only rounds to
+  // SIZE_PRECISION -- which is the whole reason it is here: a drag writes
+  // `1.234567` into a file a human reads in a diff, never seventeen digits of
+  // float noise.
+  const next = normalizeSizes(sizes);
+  if (next.every((size, i) => size === split.sizes[i])) return node;
+  return replaceCollageNode(node, splitId, { ...split, sizes: next });
+}
+
+// Swaps one node for another by id, rebuilding only the path down to it.
+function replaceCollageNode(node: CollageNode, id: string, replacement: CollageNode): CollageNode {
+  if (node.id === id) return replacement;
+  if (node.kind === 'photo') return node;
+  let changed = false;
+  const children = node.children.map((child) => {
+    const nextChild = replaceCollageNode(child, id, replacement);
+    if (nextChild !== child) changed = true;
+    return nextChild;
+  });
+  return changed ? { ...node, children } : node;
+}
+
+// Which divider the panel's own "wider"/"narrower" buttons move for the box
+// `id` names, and in which sense.
+//
+// A box has a gap on each side unless it is first or last, so this picks the
+// gap AFTER it where there is one and the gap BEFORE it otherwise -- and
+// reports `first`, meaning "this box is `children[gapIndex]`", because
+// widening the first of a pair and widening the second are opposite moves of
+// the same divider. `null` when the box is the whole collage: there is no
+// neighbour, so there is no answer, and the UI has to say that rather than
+// offer a control that does nothing.
+export function collageResizeTarget(
+  node: CollageNode,
+  id: string,
+): { split: CollageSplit; gapIndex: number; first: boolean } | null {
+  const parent = findCollageParent(node, id);
+  if (parent === null) return null;
+  const { split, index } = parent;
+  const last = index === split.children.length - 1;
+  return { split, gapIndex: last ? index - 1 : index, first: !last };
 }

@@ -19,10 +19,10 @@ import { useState } from 'react';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import Hero from '../../components/Hero';
 import { ContentProvider, defaultBundle } from '../../content/ContentContext';
-import { defaultRenderCollageSplit } from '../../content/context';
 import { COLLAGE_PHOTO_ATTR, useCollageEditor } from '../CollageEditor';
 import { NO_IMAGE_PREVIEWS } from '../previews';
 import type { ImagePreviews } from '../previews';
+import { findCollageSplit } from '../../content/collage';
 import type { CollageNode } from '../../content/types';
 
 function photo(id: string, src = `/hero/${id}.webp`): CollageNode {
@@ -126,15 +126,139 @@ describe('the collage editor: what every photo box carries', () => {
     expect(document.querySelectorAll('[draggable]')).toHaveLength(0);
   });
 
-  it('leaves the split seam as the public renderer, not a second copy of it', () => {
-    // Task 4 adds nothing to a split; Task 5's dividers are what change this.
-    // Pinned so the two do not quietly become different four-line functions.
-    function Probe() {
-      const editor = useCollageEditor({ tree: fixture(), onChange: () => {}, locked: false, previews: NO_IMAGE_PREVIEWS });
-      expect(editor.renderCollageSplit).toBe(defaultRenderCollageSplit);
-      return null;
-    }
-    render(<Probe />);
+});
+
+describe('the collage editor: what every split box carries', () => {
+  it('keeps the public renderer’s class name and sizing, and adds only a containing block', () => {
+    render(<Harness initial={fixture()} />);
+    const right = document.querySelector<HTMLElement>('[data-collage-split-id="right"]')!;
+    expect(right.className).toBe('flex flex-col gap-1 overflow-hidden');
+    // The sizing it was handed, untouched -- root is [1.5, 0.5].
+    expect(right.style.flexGrow).toBe('0.5');
+    expect(right.style.flexBasis).toBe('0px');
+    // ...plus the one thing the editor adds, which the handles position
+    // against and which changes no layout of its own.
+    expect(right.style.position).toBe('relative');
+  });
+
+  it('puts one divider between each adjacent pair, and none after the last box', () => {
+    render(<Harness initial={fixture()} />);
+    // root has two children -> one gap; `right` has three -> two gaps. In
+    // document order the nested split's own handles come first, because each
+    // split renders its children before its dividers.
+    expect([...document.querySelectorAll('[data-collage-divider]')].map((el) => el.getAttribute('data-collage-divider'))).toEqual([
+      'right:0',
+      'right:1',
+      'root:0',
+    ]);
+  });
+
+  // The offset flexbox actually produces: it subtracts every gap from the box
+  // FIRST and distributes what is left by the grow factors, so the boundary
+  // after child 0 of a [1.5, 0.5] pair sits at 75% of (100% - one 4px gap),
+  // and the handle is then pulled back by its own 6px overhang so its CENTRE
+  // lands on the gap rather than its leading edge.
+  //
+  // Asserted as the three numbers rather than as one string: jsdom's CSS
+  // parser re-orders the terms of a `calc()` when it round-trips it (the
+  // literal here comes back as `calc(-6px + 0.75 * (100% - 4px))`), so an
+  // exact match would be pinning jsdom's formatter, not this code. That the
+  // handle really lands on the gap is measured in a real browser instead --
+  // e2e/collage-divider.spec.ts puts its centre within a pixel of the
+  // measured boundary between the two rendered boxes.
+  it('offsets each handle by the fraction, the gaps before it, and its own overhang', () => {
+    render(<Harness initial={fixture()} />);
+    const root = document.querySelector<HTMLElement>('[data-collage-divider="root:0"]')!;
+    expect(root.style.left).toContain('0.75');
+    expect(root.style.left).toContain('(100% - 4px)');
+    expect(root.style.left).toContain('-6px');
+    expect(root.style.width).toBe('16px');
+    const second = document.querySelector<HTMLElement>('[data-collage-divider="right:1"]')!;
+    // `right` is a column of three: two gaps come out of the percentage, the
+    // boundary is two thirds along, and one whole gap lies before it (4px)
+    // against the 6px overhang -- a net -2px.
+    expect(second.style.top).toContain('0.666');
+    expect(second.style.top).toContain('(100% - 8px)');
+    expect(second.style.top).toContain('-2px');
+    expect(second.style.height).toBe('16px');
+  });
+
+  it('gives every divider the marker /edit’s click guard looks for', () => {
+    render(<Harness initial={fixture()} />);
+    const dividers = [...document.querySelectorAll('[data-collage-divider]')];
+    expect(dividers.length).toBeGreaterThan(0);
+    dividers.forEach((el) => expect(el).toHaveAttribute('data-collage-control'));
+  });
+
+  it('takes every divider off the page while a publish is in flight', () => {
+    render(<Harness initial={fixture()} locked />);
+    expect(document.querySelectorAll('[data-collage-divider]')).toHaveLength(0);
+  });
+});
+
+describe('the collage editor: changing a box’s size from the panel', () => {
+  it('names the axis the divider actually moves along', () => {
+    render(<Harness initial={fixture()} />);
+    // p1 is a child of the ROW root, so its own divider runs vertically.
+    fireEvent.focusIn(boxFor('p1'));
+    expect(screen.getByRole('button', { name: 'Make this photo wider, and the one beside it narrower' })).toBeEnabled();
+    // p2 is a child of the COLUMN split, so its divider runs horizontally.
+    fireEvent.focusIn(boxFor('p2'));
+    expect(screen.getByRole('button', { name: 'Make this photo taller, and the one beside it shorter' })).toBeEnabled();
+  });
+
+  it('moves size from the box beside it and conserves the pair’s total', () => {
+    const onChange = vi.fn();
+    render(<Harness initial={fixture()} onChange={onChange} />);
+    fireEvent.focusIn(boxFor('p2'));
+    fireEvent.click(screen.getByRole('button', { name: 'Make this photo taller, and the one beside it shorter' }));
+
+    const next = onChange.mock.calls[0][0] as CollageNode;
+    const right = findCollageSplit(next, 'right')!;
+    // One step is 5% of what the pair shares (2 of the 3 units here), so p2
+    // gains 0.1 and p3 loses exactly 0.1...
+    expect(right.sizes[0]).toBeCloseTo(1.1, 5);
+    expect(right.sizes[1]).toBeCloseTo(0.9, 5);
+    // ...and p4, which is not part of that pair, does not move at all.
+    expect(right.sizes[2]).toBe(1);
+  });
+
+  it('moves the divider BEFORE the last box, in the opposite sense', () => {
+    const onChange = vi.fn();
+    render(<Harness initial={fixture()} onChange={onChange} />);
+    fireEvent.focusIn(boxFor('p4'));
+    fireEvent.click(screen.getByRole('button', { name: 'Make this photo taller, and the one beside it shorter' }));
+
+    const right = findCollageSplit(onChange.mock.calls[0][0] as CollageNode, 'right')!;
+    expect(right.sizes[2]).toBeCloseTo(1.1, 5);
+    expect(right.sizes[1]).toBeCloseTo(0.9, 5);
+    expect(right.sizes[0]).toBe(1);
+  });
+
+  it('stops at the floor, with the control disabled and the reason on screen', () => {
+    render(<Harness initial={fixture()} />);
+    fireEvent.focusIn(boxFor('p2'));
+    const smaller = () => screen.getByRole('button', { name: 'Make this photo shorter, and the one beside it taller' });
+    // Seven taps take an even split to MIN_PAIR_SHARE.
+    for (let tap = 0; tap < 7; tap += 1) fireEvent.click(smaller());
+    expect(smaller()).toBeDisabled();
+    expect(screen.getByText('This box is as short as it goes — any less and you could not see what is in it.')).toBeInTheDocument();
+  });
+
+  it('says why, rather than offering a control that would do nothing, for a collage of one photo', () => {
+    render(<Harness initial={photo('only')} />);
+    fireEvent.focusIn(boxFor('only'));
+    expect(screen.getByRole('button', { name: 'Make this photo wider, and the one beside it narrower' })).toBeDisabled();
+    expect(
+      screen.getByText('This photo fills the whole collage — there is nothing beside it to take the space from.'),
+    ).toBeInTheDocument();
+  });
+
+  it('refuses both size controls while a publish is in flight', () => {
+    render(<Harness initial={fixture()} locked />);
+    fireEvent.focusIn(boxFor('p1'));
+    expect(screen.getByRole('button', { name: 'Make this photo wider, and the one beside it narrower' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Make this photo narrower, and the one beside it wider' })).toBeDisabled();
   });
 });
 

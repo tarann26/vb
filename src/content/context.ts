@@ -103,6 +103,19 @@ export const COLLAGE_SPLIT_CLASSNAME: Record<CollageSplit['direction'], string> 
   column: 'flex flex-col gap-1 overflow-hidden',
 };
 
+// What `gap-1` above is, in CSS pixels (Tailwind's spacing scale: 1 = 0.25rem
+// = 4px at the default root size).
+//
+// Spelled as a number as well as a class because /edit has to put a divider
+// handle exactly on that gap, and flexbox subtracts the gaps from the box
+// BEFORE distributing what is left by the `flexGrow` factors -- so the offset
+// of the boundary between children i and i+1 is
+// `(100% - gap * (n - 1)) * fraction + gap * i`, which cannot be written
+// without the number. The two spellings must agree; the divider e2e spec
+// measures the rendered gap and the handle's own centre against each other,
+// so a change to one of them without the other is caught rather than assumed.
+export const COLLAGE_GAP_PX = 4;
+
 // `galleries.heroCollage.<id>` -- the one place the collage's path scheme is
 // spelled, so Hero.tsx (which hands it to `renderImage`), EditMode.tsx (which
 // parses it back to find the photo to rewrite) and every test cannot disagree

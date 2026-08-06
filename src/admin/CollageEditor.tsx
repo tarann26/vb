@@ -43,9 +43,18 @@
 // that makes a control unreachable to a screen reader.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactNode } from 'react';
-import { collagePhotos, findCollagePhoto, swapCollagePhotos } from '../content/collage';
-import { collageNodePath, defaultRenderCollageSplit } from '../content/context';
-import type { CollageBox, CollageNode, CollagePhoto, ContentBundle } from '../content/types';
+import {
+  MIN_PAIR_SHARE,
+  RESIZE_STEP_SHARE,
+  collagePairShare,
+  collagePhotos,
+  collageResizeTarget,
+  findCollagePhoto,
+  resizeCollageSplit,
+  swapCollagePhotos,
+} from '../content/collage';
+import { COLLAGE_GAP_PX, collageNodePath } from '../content/context';
+import type { CollageBox, CollageNode, CollagePhoto, CollageSplit, ContentBundle } from '../content/types';
 import CollageControlButton, { COLLAGE_CONTROL_ATTR } from './CollageControlButton';
 import type { ImagePreviews } from './previews';
 
@@ -119,6 +128,20 @@ const SWAP_TARGET_STYLE: CSSProperties = {
 };
 
 const THUMBNAIL_STYLE: CSSProperties = { width: 64, height: 64, objectFit: 'cover' };
+
+// The divider handle, and the two attributes a test addresses it by.
+export const COLLAGE_SPLIT_ATTR = 'data-collage-split-id';
+export const COLLAGE_DIVIDER_ATTR = 'data-collage-divider';
+
+// The gap itself is 4px (COLLAGE_GAP_PX) -- far too thin to catch with a
+// mouse, let alone a finger. The handle is 16px of hit area centred on it, so
+// it overhangs each neighbouring box by 6px; it is absolutely positioned, so
+// it takes no space from either and the boxes render exactly as they do on the
+// public page. Proven, not assumed: the divider e2e spec measures all sixteen
+// photo rectangles at /edit against the same page with no editor and requires
+// them to be identical.
+const DIVIDER_HIT_PX = 16;
+const DIVIDER_OVERHANG_PX = (DIVIDER_HIT_PX - COLLAGE_GAP_PX) / 2;
 
 interface Notice {
   // Which photo the sentence is about, so its own box can carry the matching
@@ -306,6 +329,124 @@ export function useCollageEditor({ tree, onChange, locked, previews }: CollageEd
     return null;
   }
 
+  // ---------------------------------------------------------------------
+  // Task 5: the divider.
+
+  // Which divider is being dragged, and the split BOX it belongs to -- taken
+  // once at pointerdown rather than re-queried on every move, and kept in a
+  // ref for the same reason the swap drag is: this fires many times a second
+  // and nothing here is drawn.
+  const dividerRef = useRef<{ pointerId: number; splitId: string; gapIndex: number; element: Element } | null>(null);
+
+  function handleDividerDown(event: ReactPointerEvent<HTMLDivElement>, split: CollageSplit, gapIndex: number) {
+    if (locked || tree === null) return;
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
+    const element = event.currentTarget.parentElement;
+    if (element === null) return;
+    dividerRef.current = { pointerId: event.pointerId, splitId: split.id, gapIndex, element };
+    event.currentTarget.setPointerCapture(event.pointerId);
+    // Stops the press from also selecting text across the page while she
+    // drags. Not `stopPropagation`: the photo boxes' own pointerdown checks
+    // for a control under the press and declines, so both can coexist.
+    event.preventDefault();
+  }
+
+  function handleDividerMove(event: ReactPointerEvent<HTMLDivElement>, split: CollageSplit) {
+    const drag = dividerRef.current;
+    if (!drag || drag.pointerId !== event.pointerId || tree === null) return;
+    const horizontal = split.direction === 'row';
+    const rect = drag.element.getBoundingClientRect();
+    const extent = horizontal ? rect.width : rect.height;
+    // Flexbox subtracts every gap first and distributes what is LEFT by the
+    // `flexGrow` factors, so the proportions live in `available`, not in
+    // `extent`.
+    const available = extent - COLLAGE_GAP_PX * (split.children.length - 1);
+    if (available <= 0) return;
+    // Where the pointer is in content space: its offset inside the box, less
+    // the gaps that lie before this divider, less half of this one (the
+    // handle is centred on the gap, so its own centre is the boundary).
+    const offset = horizontal ? event.clientX - rect.left : event.clientY - rect.top;
+    const contentOffset = offset - COLLAGE_GAP_PX * drag.gapIndex - COLLAGE_GAP_PX / 2;
+    const totalSize = split.sizes.reduce((sum, size) => sum + size, 0);
+    const before = split.sizes.slice(0, drag.gapIndex).reduce((sum, size) => sum + size, 0);
+    const pairTotal = split.sizes[drag.gapIndex] + split.sizes[drag.gapIndex + 1];
+    // The boundary, expressed in size units, minus everything before the
+    // pair, is how much of the pair the FIRST box should get.
+    const firstSize = (contentOffset / available) * totalSize - before;
+    const next = resizeCollageSplit(tree, drag.splitId, drag.gapIndex, firstSize / pairTotal);
+    if (next !== tree) onChange(next);
+  }
+
+  function handleDividerUp(event: ReactPointerEvent<HTMLDivElement>) {
+    const drag = dividerRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    dividerRef.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  }
+
+  // Where the boundary between children i and i+1 sits, as a CSS length
+  // measured from the box's own start edge. See COLLAGE_GAP_PX
+  // (src/content/context.ts) for why the gaps come out of the percentage
+  // before the fraction is applied.
+  function dividerOffset(split: CollageSplit, gapIndex: number): string {
+    const totalSize = split.sizes.reduce((sum, size) => sum + size, 0);
+    const beforeSize = split.sizes.slice(0, gapIndex + 1).reduce((sum, size) => sum + size, 0);
+    const gapsTotal = COLLAGE_GAP_PX * (split.children.length - 1);
+    const fraction = beforeSize / totalSize;
+    return `calc((100% - ${gapsTotal}px) * ${fraction} + ${COLLAGE_GAP_PX * gapIndex - DIVIDER_OVERHANG_PX}px)`;
+  }
+
+  function dividerStyle(split: CollageSplit, gapIndex: number): CSSProperties {
+    const offset = dividerOffset(split, gapIndex);
+    const shared: CSSProperties = {
+      position: 'absolute',
+      zIndex: 30,
+      backgroundColor: 'rgba(107,139,89,0.35)',
+      touchAction: 'none',
+    };
+    return split.direction === 'row'
+      ? { ...shared, top: 0, bottom: 0, left: offset, width: DIVIDER_HIT_PX, cursor: 'ew-resize' }
+      : { ...shared, left: 0, right: 0, top: offset, height: DIVIDER_HIT_PX, cursor: 'ns-resize' };
+  }
+
+  function renderCollageSplit(path: string, split: CollageSplit, box: CollageBox, children: ReactNode[]): ReactNode {
+    return (
+      <div
+        key={path}
+        className={box.className}
+        // `position: relative` is the ONE thing added to the box the public
+        // page draws: it makes this the containing block the handles below
+        // position against. It changes no layout of its own -- the box is
+        // still the same flex item with the same `flexGrow` factor -- and the
+        // handles are out of flow, so the children render at exactly the
+        // rectangles they render at on the public page.
+        style={{ ...box.style, position: 'relative' }}
+        {...{ [COLLAGE_SPLIT_ATTR]: split.id }}
+      >
+        {children}
+        {!locked &&
+          split.children.slice(0, -1).map((_child, gapIndex) => (
+            <div
+              // Keyed on the SPLIT's id and the gap, not on the loop index
+              // alone: a split's id is stable across every edit, so a handle
+              // keeps its DOM (and an in-flight pointer capture) when a
+              // sibling elsewhere in the tree changes.
+              key={`${split.id}:${gapIndex}`}
+              aria-hidden="true"
+              style={dividerStyle(split, gapIndex)}
+              {...{ [COLLAGE_DIVIDER_ATTR]: `${split.id}:${gapIndex}`, [COLLAGE_CONTROL_ATTR]: '' }}
+              onPointerDown={(event) => handleDividerDown(event, split, gapIndex)}
+              onPointerMove={(event) => handleDividerMove(event, split)}
+              onPointerUp={handleDividerUp}
+              onPointerCancel={handleDividerUp}
+            />
+          ))}
+      </div>
+    );
+  }
+
   function renderCollagePhoto(path: string, photo: CollagePhoto, box: CollageBox, image: ReactNode): ReactNode {
     const overlay = overlayFor(photo.id);
     const swapSourceId = swapArmed && !locked ? selectedId : null;
@@ -361,6 +502,66 @@ export function useCollageEditor({ tree, onChange, locked, previews }: CollageEd
   const selectedIndex = selected === null ? -1 : photos.findIndex((p) => p.id === selected.id);
   const thumbnailSrc = selected === null ? undefined : previews.urls[collageNodePath(selected)] ?? selected.src;
 
+  // ---------------------------------------------------------------------
+  // Task 5, Step 3: the same divider, worked by buttons.
+  //
+  // A divider is a few pixels wide, and on a 390px screen it is not a touch
+  // target at all -- the spec's Risks section says so and calls the button
+  // path a mandate rather than a preference. Same data, same divider, same
+  // conservation rule: these move `collageResizeTarget`'s gap by
+  // RESIZE_STEP_SHARE of what the pair shares, which is exactly what dragging
+  // the line does continuously.
+  const resizeTarget = tree === null || selected === null ? null : collageResizeTarget(tree, selected.id);
+  // Defaults to the horizontal pair of words when there is no divider at all
+  // (a one-photo collage): both controls are disabled in that case anyway,
+  // and "Wider/Narrower" is the natural reading for a box that fills the
+  // whole hero.
+  const horizontal = resizeTarget === null || resizeTarget.split.direction === 'row';
+  // How much of the PAIR the selected box itself holds -- the gap's own share
+  // belongs to `children[gapIndex]`, which is this box only when it is the
+  // first of the two.
+  const ownShare =
+    resizeTarget === null
+      ? 0
+      : resizeTarget.first
+        ? collagePairShare(resizeTarget.split, resizeTarget.gapIndex)
+        : 1 - collagePairShare(resizeTarget.split, resizeTarget.gapIndex);
+  // A hair inside the clamp, so a box sitting exactly on the floor reports
+  // itself as stopped rather than offering a tap that would do nothing.
+  const CLAMP_EPSILON = 1e-6;
+  const canBeBigger = resizeTarget !== null && ownShare < 1 - MIN_PAIR_SHARE - CLAMP_EPSILON;
+  const canBeSmaller = resizeTarget !== null && ownShare > MIN_PAIR_SHARE + CLAMP_EPSILON;
+
+  // Never a silent no-op: at every boundary the control goes disabled AND a
+  // sentence says which boundary it is. This project has shipped a control
+  // that quietly did nothing before.
+  const resizeReason =
+    selected === null
+      ? null
+      : resizeTarget === null
+        ? 'This photo fills the whole collage — there is nothing beside it to take the space from.'
+        : !canBeBigger
+          ? horizontal
+            ? 'This box is as wide as it goes — the photo beside it needs room too.'
+            : 'This box is as tall as it goes — the photo below it needs room too.'
+          : !canBeSmaller
+            ? horizontal
+              ? 'This box is as narrow as it goes — any less and you could not see what is in it.'
+              : 'This box is as short as it goes — any less and you could not see what is in it.'
+            : null;
+
+  function changeSelectedSize(delta: number) {
+    if (tree === null || resizeTarget === null) return;
+    const nextOwn = ownShare + delta;
+    const next = resizeCollageSplit(
+      tree,
+      resizeTarget.split.id,
+      resizeTarget.gapIndex,
+      resizeTarget.first ? nextOwn : 1 - nextOwn,
+    );
+    if (next !== tree) onChange(next);
+  }
+
   const panel =
     selected === null && notice === null ? null : (
       <div
@@ -388,10 +589,36 @@ export function useCollageEditor({ tree, onChange, locked, previews }: CollageEd
                 <p className="font-['Montserrat'] text-xs text-gray-500">
                   {swapArmed
                     ? 'Now tap the photo you want it to trade places with.'
-                    : 'Drag it onto another photo to trade places, or use the button.'}
+                    : 'Drag it onto another photo to trade places, or drag the line beside it to change how big it is.'}
                 </p>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  aria-label={
+                    horizontal
+                      ? 'Make this photo wider, and the one beside it narrower'
+                      : 'Make this photo taller, and the one beside it shorter'
+                  }
+                  disabled={locked || !canBeBigger}
+                  onClick={() => changeSelectedSize(RESIZE_STEP_SHARE)}
+                  className="rounded border border-gray-300 bg-white px-3 py-2 font-['Montserrat'] text-sm text-[#222] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {horizontal ? 'Wider' : 'Taller'}
+                </button>
+                <button
+                  type="button"
+                  aria-label={
+                    horizontal
+                      ? 'Make this photo narrower, and the one beside it wider'
+                      : 'Make this photo shorter, and the one beside it taller'
+                  }
+                  disabled={locked || !canBeSmaller}
+                  onClick={() => changeSelectedSize(-RESIZE_STEP_SHARE)}
+                  className="rounded border border-gray-300 bg-white px-3 py-2 font-['Montserrat'] text-sm text-[#222] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {horizontal ? 'Narrower' : 'Shorter'}
+                </button>
                 {/* Plain buttons, deliberately NOT CollageControlButton.
                     That component exists to stamp `data-collage-control` on a
                     control living INSIDE the page, so EditMode's capture-phase
@@ -423,6 +650,9 @@ export function useCollageEditor({ tree, onChange, locked, previews }: CollageEd
               </div>
             </div>
           )}
+          {resizeReason !== null && (
+            <p className="mt-2 font-['Montserrat'] text-xs text-gray-500">{resizeReason}</p>
+          )}
           {locked && (
             <p className="mt-2 font-['Montserrat'] text-xs text-gray-500">
               Publishing… arranging the collage is paused for a moment.
@@ -437,8 +667,5 @@ export function useCollageEditor({ tree, onChange, locked, previews }: CollageEd
       </div>
     );
 
-  // The split seam is the PUBLIC renderer, unchanged, until Task 5 gives it
-  // dividers -- one definition rather than a second copy of the same four
-  // lines living here.
-  return { renderCollagePhoto, renderCollageSplit: defaultRenderCollageSplit, panel };
+  return { renderCollagePhoto, renderCollageSplit, panel };
 }

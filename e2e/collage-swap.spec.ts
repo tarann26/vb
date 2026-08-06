@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { mockEditBackend } from './edit-backend';
+import { collageBoxes as boxes, grabPoint, openCollage, waitForStableLayout } from './collage-page';
 
 // Plan 9, Task 4: dragging one collage photo onto another exchanges the two,
 // and changes no box.
@@ -22,89 +22,26 @@ import { mockEditBackend } from './edit-backend';
 //      component dies with them.
 //   4. The same edit is reachable with no drag at all, by real touch taps.
 
-const CONTENT_CLASS = 'section .absolute.inset-0.flex';
-
-interface Rect {
-  id: string;
-  src: string | null;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
-// Every photo box, in document order, with the photo currently inside it.
-// Document order is POSITION -- what must not change -- and `id`/`src` are the
-// photo sitting there, which is what a swap moves.
-async function boxes(page: Page): Promise<Rect[]> {
-  return page.evaluate((selector) => {
-    const container = document.querySelector(selector);
-    if (!container) throw new Error('collage container not found');
-    return [...container.querySelectorAll('[data-collage-photo-id]')].map((el) => {
-      const r = el.getBoundingClientRect();
-      return {
-        id: el.getAttribute('data-collage-photo-id') ?? '',
-        src: el.querySelector('img')?.getAttribute('src') ?? null,
-        x: Math.round(r.x),
-        y: Math.round(r.y),
-        width: Math.round(r.width),
-        height: Math.round(r.height),
-      };
-    });
-  }, CONTENT_CLASS);
-}
-
-// A viewport point that REALLY resolves to this photo's box -- asked of the
-// browser rather than assumed from the rectangle.
-//
-// The obvious "use the centre of the box" is wrong here for two independent
-// reasons this hero actually has: Hero.tsx's own content column is
-// `relative z-10` and paints over the middle of the collage (the same
-// stacking fact e2e/collage-hit-test.spec.ts exists for), and every box's
-// bottom-right corner is EditableImage's camera badge, a <label> whose press
-// must never start a drag. Scanning and checking what is under each candidate
-// finds a point that is neither.
-async function grabPoint(page: Page, photoId: string): Promise<{ x: number; y: number }> {
-  const point = await page.evaluate((id) => {
-    const box = document.querySelector(`[data-collage-photo-id="${id}"]`);
-    if (!box) return null;
-    const r = box.getBoundingClientRect();
-    for (let fy = 0.2; fy <= 0.8; fy += 0.15) {
-      for (let fx = 0.2; fx <= 0.8; fx += 0.15) {
-        const x = Math.round(r.x + r.width * fx);
-        const y = Math.round(r.y + r.height * fy);
-        if (x < 1 || y < 1 || x > window.innerWidth - 2 || y > window.innerHeight - 2) continue;
-        const hit = document.elementFromPoint(x, y);
-        if (!hit) continue;
-        if (hit.closest('label, button')) continue;
-        if (hit.closest('[data-collage-photo-id]')?.getAttribute('data-collage-photo-id') === id) return { x, y };
-      }
-    }
-    return null;
-  }, photoId);
-  expect(point, `no point inside ${photoId} resolves to it -- it is covered by something`).not.toBeNull();
-  return point as { x: number; y: number };
-}
-
-// A point inside the collage that is NOT any photo box: one of the 4px gaps
-// between two children of a split. That is one of the three "nothing to drop
+// The centre of a divider handle -- the first of the three "nothing to drop
 // on" cases the plan names (a divider, the gap, outside).
-async function gapPoint(page: Page): Promise<{ x: number; y: number }> {
-  const point = await page.evaluate((selector) => {
-    const container = document.querySelector(selector);
-    if (!container) return null;
-    const r = container.getBoundingClientRect();
-    for (let y = Math.round(r.y) + 2; y < Math.min(r.bottom, window.innerHeight) - 2; y += 3) {
-      for (let x = Math.round(r.x) + 2; x < Math.min(r.right, window.innerWidth) - 2; x += 1) {
-        const hit = document.elementFromPoint(x, y);
-        if (!hit || !container.contains(hit)) continue;
-        if (hit.closest('[data-collage-photo-id]')) continue;
-        return { x, y };
-      }
-    }
-    return null;
-  }, CONTENT_CLASS);
-  expect(point, 'no gap between two boxes was reachable -- the scan found only photos').not.toBeNull();
+//
+// It is the gap, too, and that is not a coincidence: from Task 5 a 16px handle
+// is centred on every 4px gap in the collage, so at /edit there is no bare gap
+// left to land on. Dropping a photo on the line between two boxes is exactly
+// the mistake this refusal exists for.
+async function dividerPoint(page: Page): Promise<{ x: number; y: number }> {
+  const point = await page.evaluate(() => {
+    const handle = document.querySelector('[data-collage-divider]');
+    if (!handle) return null;
+    const r = handle.getBoundingClientRect();
+    const x = Math.round(r.x + r.width / 2);
+    const y = Math.round(r.y + r.height / 2);
+    if (y < 1 || y > window.innerHeight - 2) return null;
+    // Asked of the browser, not assumed: if something paints over the handle
+    // this is not the case the test means to exercise.
+    return document.elementFromPoint(x, y)?.closest('[data-collage-divider]') ? { x, y } : null;
+  });
+  expect(point, 'no divider handle was reachable to drop onto').not.toBeNull();
   return point as { x: number; y: number };
 }
 
@@ -113,82 +50,6 @@ async function gapPoint(page: Page): Promise<{ x: number; y: number }> {
 // the same role.
 function panelStatus(page: Page) {
   return page.locator('[data-collage-panel]').getByRole('status');
-}
-
-async function settle(page: Page): Promise<void> {
-  await page.addStyleTag({ content: 'html { scroll-behavior: auto !important; }' });
-  await page.evaluate(async () => {
-    const bounded = <T>(p: Promise<T>, ms: number) => Promise.race([p, new Promise((r) => setTimeout(r, ms))]);
-    await bounded(document.fonts.ready, 3000);
-    const images = [...document.querySelectorAll('img')].filter((img) => !img.complete);
-    await bounded(
-      Promise.all(
-        images.map(
-          (img) =>
-            new Promise((r) => {
-              img.addEventListener('load', r, { once: true });
-              img.addEventListener('error', r, { once: true });
-            }),
-        ),
-      ),
-      5000,
-    );
-  });
-}
-
-// Puts the hero's own top edge at the top of the viewport. The collage is
-// `absolute inset-0` inside a `min-h-screen` section, and at /edit that
-// section starts ~286px down the page (the Publish bar and the dashboard
-// link sit above it), so a third of the collage is below the fold until this
-// runs -- and `document.elementFromPoint`, which every drag here depends on,
-// only ever hit-tests what is currently ON screen. Called after `settle`,
-// which is what forces `scroll-behavior: auto`; without that the app's own
-// smooth scrolling leaves this still animating while the first measurement is
-// taken.
-async function focusCollage(page: Page): Promise<void> {
-  await page.evaluate(() => {
-    const section = document.querySelector('section');
-    if (!section) throw new Error('no hero section');
-    window.scrollTo(0, section.getBoundingClientRect().top + window.scrollY);
-  });
-}
-
-// Waits until the collage's own rectangle stops moving.
-//
-// `settle` above bounds every wait it makes (an unbounded wait on an image
-// that fires neither load nor error hangs the whole spec), which means it can
-// return while a late webfont or a lazily-decoded photo is still about to
-// change the hero's height -- and this hero's height is content-driven
-// (`min-h-screen` is a FLOOR). A point measured a frame before that lands
-// somewhere else a frame after, which is exactly the shape of flake that
-// teaches everyone to ignore a suite. Two agreeing measurements, not a fixed
-// sleep: under four parallel workers the dev server is slow by an amount no
-// constant is right for.
-async function waitForStableLayout(page: Page): Promise<void> {
-  await expect
-    .poll(
-      async () =>
-        page.evaluate(async (selector) => {
-          const read = () => {
-            const r = document.querySelector(selector)?.getBoundingClientRect();
-            return r ? `${Math.round(r.x)},${Math.round(r.y)},${Math.round(r.width)},${Math.round(r.height)}` : 'none';
-          };
-          const first = read();
-          await new Promise((resolve) => setTimeout(resolve, 120));
-          return first === read() ? first : 'moving';
-        }, CONTENT_CLASS),
-      { timeout: 10_000 },
-    )
-    .not.toBe('moving');
-}
-
-async function openEdit(page: Page): Promise<void> {
-  await mockEditBackend(page);
-  await page.goto('/edit');
-  await expect(page.locator('[data-collage-photo-id]')).toHaveCount(16);
-  await settle(page);
-  await focusCollage(page);
-  await waitForStableLayout(page);
 }
 
 async function dragBetween(page: Page, from: { x: number; y: number }, to: { x: number; y: number }): Promise<void> {
@@ -205,7 +66,7 @@ test.describe('dragging one collage photo onto another, at 1440px', () => {
   test.use({ viewport: { width: 1440, height: 900 } });
 
   test('the two photos exchange places and not one of the sixteen boxes moves', async ({ page }) => {
-    await openEdit(page);
+    await openCollage(page, '/edit');
     const before = await boxes(page);
     // Two photos in different branches of the tree, so a swap that merely
     // reordered siblings could not produce this.
@@ -243,7 +104,7 @@ test.describe('dragging one collage photo onto another, at 1440px', () => {
   // carried is marked as the source. Both marks are `data-collage-overlay`,
   // which is why they can be asserted rather than eyeballed.
   test('mid-drag, the box under the pointer is marked as the destination', async ({ page }) => {
-    await openEdit(page);
+    await openCollage(page, '/edit');
     const from = await grabPoint(page, 'photo-1');
     const to = await grabPoint(page, 'photo-16');
 
@@ -261,11 +122,11 @@ test.describe('dragging one collage photo onto another, at 1440px', () => {
     await page.mouse.up();
   });
 
-  test('a drop into the gap between two boxes changes nothing, and says so out loud', async ({ page }) => {
-    await openEdit(page);
+  test('a drop onto the line between two boxes changes nothing, and says so out loud', async ({ page }) => {
+    await openCollage(page, '/edit');
     const before = await boxes(page);
 
-    await dragBetween(page, await grabPoint(page, 'photo-1'), await gapPoint(page));
+    await dragBetween(page, await grabPoint(page, 'photo-1'), await dividerPoint(page));
 
     await expect(panelStatus(page)).toHaveText(
       'Nothing to swap with there — this photo stayed where it was. Drop it on top of another photo.',
@@ -290,7 +151,7 @@ test.describe('dragging one collage photo onto another, at 1440px', () => {
         body: JSON.stringify({ path: 'assets-source/hero/e2e.jpg', contentPath: '/images/hero/e2e-not-built-yet.webp' }),
       });
     });
-    await openEdit(page);
+    await openCollage(page, '/edit');
 
     const source = page.locator('[data-editable-image-path="galleries.heroCollage.photo-1"]');
     await source.locator('input[type="file"]').setInputFiles({
@@ -337,7 +198,7 @@ test.describe('rearranging the collage by tapping, at 390px', () => {
         true,
       );
     });
-    await openEdit(page);
+    await openCollage(page, '/edit');
     const before = await boxes(page);
     const fromIndex = before.findIndex((b) => b.id === 'photo-1');
     const toIndex = before.findIndex((b) => b.id === 'photo-16');
@@ -377,7 +238,7 @@ test.describe('rearranging the collage by tapping, at 390px', () => {
   // event would not scroll anything, so the property under test would not
   // even arise.
   test('a finger sliding across the collage scrolls the page, and starts nothing', async ({ page }) => {
-    await openEdit(page);
+    await openCollage(page, '/edit');
     const start = await grabPoint(page, 'photo-1');
     const cdp = await page.context().newCDPSession(page);
     const touch = (type: 'touchStart' | 'touchMove' | 'touchEnd', y: number) =>

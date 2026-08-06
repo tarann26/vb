@@ -12,8 +12,15 @@ import {
   countCollagePhotos,
   findCollagePhoto,
   isCollageNodeKind,
+  MIN_PAIR_SHARE,
+  RESIZE_STEP_SHARE,
+  collagePairShare,
+  collageResizeTarget,
+  findCollageParent,
+  findCollageSplit,
   isNormalizedSizes,
   isSplitDirection,
+  resizeCollageSplit,
   normalizeCollageTree,
   normalizeSizes,
   setCollagePhotoSrc,
@@ -463,5 +470,154 @@ describe('collageTreeProblems: the write boundary', () => {
   it('quotes the real minimum in the message, rather than a hardcoded two', () => {
     const oneChild = { kind: 'split', id: 'root', direction: 'row', children: [photo('a')], sizes: [1] };
     expect(collageTreeProblems(oneChild)[0].message).toContain(`at least ${MIN_SPLIT_CHILDREN} boxes`);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Task 5's operation. The owner's requirement is a conservation law: making
+// one box bigger takes the space from the box beside it, and from that box
+// only.
+
+describe('collage: finding a split and a node’s parent', () => {
+  it('finds a split by id, and never a photo', () => {
+    expect(findCollageSplit(sampleTree(), 'inner')?.direction).toBe('row');
+    expect(findCollageSplit(sampleTree(), 'a')).toBeNull();
+    expect(findCollageSplit(sampleTree(), 'nobody')).toBeNull();
+  });
+
+  it('reports which child of which split a node is', () => {
+    expect(findCollageParent(sampleTree(), 'e')).toMatchObject({ index: 2 });
+    expect(findCollageParent(sampleTree(), 'e')?.split.id).toBe('root');
+    expect(findCollageParent(sampleTree(), 'd')?.split.id).toBe('inner');
+    expect(findCollageParent(sampleTree(), 'd')?.index).toBe(1);
+  });
+
+  it('reports no parent for the root, which is what a one-photo collage is', () => {
+    expect(findCollageParent(sampleTree(), 'root')).toBeNull();
+    expect(findCollageParent(photo('only'), 'only')).toBeNull();
+  });
+});
+
+describe('collage: moving one divider', () => {
+  // Three children, so "every OTHER child is untouched" is a real assertion
+  // and not vacuous the way it would be on a pair.
+  function band(): CollageSplit {
+    return split('band', 'row', [photo('x'), photo('y'), photo('z')]);
+  }
+
+  it('gives the first of the pair the share it is asked for, and the rest to the second', () => {
+    const after = resizeCollageSplit(band(), 'band', 0, 0.75) as CollageSplit;
+    // The pair shared 2 of the 3 units between them; 0.75 of that is 1.5.
+    expect(after.sizes).toEqual([1.5, 0.5, 1]);
+  });
+
+  it('conserves the pair’s total, so one box widening IS the other narrowing', () => {
+    const before = band();
+    [0.2, 0.35, 0.5, 0.64, 0.8].forEach((share) => {
+      const after = resizeCollageSplit(before, 'band', 0, share) as CollageSplit;
+      const pairBefore = before.sizes[0] + before.sizes[1];
+      const pairAfter = after.sizes[0] + after.sizes[1];
+      expect(pairAfter).toBeCloseTo(pairBefore, 5);
+    });
+  });
+
+  it('leaves every other child of that split exactly as it was', () => {
+    const after = resizeCollageSplit(band(), 'band', 0, 0.8) as CollageSplit;
+    expect(after.sizes[2]).toBe(band().sizes[2]);
+    const other = resizeCollageSplit(band(), 'band', 1, 0.8) as CollageSplit;
+    expect(other.sizes[0]).toBe(band().sizes[0]);
+  });
+
+  it('stops at the floor instead of undoing the drag, at both ends', () => {
+    const tiny = resizeCollageSplit(band(), 'band', 0, -5) as CollageSplit;
+    expect(collagePairShare(tiny, 0)).toBeCloseTo(MIN_PAIR_SHARE, 5);
+    const huge = resizeCollageSplit(band(), 'band', 0, 5) as CollageSplit;
+    expect(collagePairShare(huge, 0)).toBeCloseTo(1 - MIN_PAIR_SHARE, 5);
+    // ...and neither end ever produces a size at or below zero, which is what
+    // validateContent refuses.
+    expect(Math.min(...tiny.sizes, ...huge.sizes)).toBeGreaterThan(0);
+  });
+
+  it('leaves the tree valid at both ends -- normalised, and accepted by the guard', () => {
+    const after = resizeCollageSplit(sampleTree(), 'inner', 0, 0.7);
+    expect(collageTreeProblems(after)).toEqual([]);
+    expect(() => assertCollageTree(after)).not.toThrow();
+    expect(isNormalizedSizes((findCollageSplit(after, 'inner') as CollageSplit).sizes)).toBe(true);
+  });
+
+  it('rounds what it writes, so a drag does not put float noise into the file', () => {
+    const after = resizeCollageSplit(band(), 'band', 0, 1 / 3) as CollageSplit;
+    after.sizes.forEach((size) => expect(String(size).replace(/^\d+\.?/, '').length).toBeLessThanOrEqual(6));
+  });
+
+  it('rebuilds only the path to the split it touched', () => {
+    const before = sampleTree() as CollageSplit;
+    const after = resizeCollageSplit(before, 'inner', 0, 0.7) as CollageSplit;
+    expect(after.children[0]).toBe(before.children[0]);
+    expect(after.children[2]).toBe(before.children[2]);
+    expect(after.children[1]).not.toBe(before.children[1]);
+    // The input is never mutated: `inner` in the ORIGINAL tree still has the
+    // sizes it was built with.
+    expect((findCollageSplit(before, 'inner') as CollageSplit).sizes).toEqual([1, 1]);
+    expect((findCollageSplit(after, 'inner') as CollageSplit).sizes).toEqual([1.4, 0.6]);
+  });
+
+  // The assertion above only reaches LEAVES off the path, and a leaf comes
+  // back by reference even from a rebuild-everything implementation. This one
+  // reaches a whole SPLIT off the path, which is what actually decides whether
+  // React re-renders half the collage on every frame of a drag.
+  it('leaves a sibling SUBTREE at its prior identity, not just the photos in it', () => {
+    const before = split('root', 'row', [
+      split('L', 'column', [photo('a'), photo('b')]),
+      split('R', 'column', [photo('c'), photo('d')]),
+    ]);
+    const after = resizeCollageSplit(before, 'L', 0, 0.7) as CollageSplit;
+    expect(after.children[1]).toBe(before.children[1]);
+    expect(after.children[0]).not.toBe(before.children[0]);
+  });
+
+  it('is a no-op, by reference, for anything that is not a divider', () => {
+    const before = band();
+    expect(resizeCollageSplit(before, 'nobody', 0, 0.7)).toBe(before);
+    // A photo's id is not a split's.
+    expect(resizeCollageSplit(before, 'x', 0, 0.7)).toBe(before);
+    // The last child has no gap after it.
+    expect(resizeCollageSplit(before, 'band', 2, 0.7)).toBe(before);
+    expect(resizeCollageSplit(before, 'band', -1, 0.7)).toBe(before);
+    expect(resizeCollageSplit(before, 'band', 0.5, 0.7)).toBe(before);
+    expect(resizeCollageSplit(before, 'band', 0, Number.NaN)).toBe(before);
+    // ...and a drag that has not actually moved the divider yet.
+    expect(resizeCollageSplit(before, 'band', 0, 0.5)).toBe(before);
+  });
+
+  it('reports how much of a pair the first of the two holds', () => {
+    expect(collagePairShare(band(), 0)).toBeCloseTo(0.5, 6);
+    const uneven = split('band', 'row', [photo('x'), photo('y')], [3, 1]);
+    expect(collagePairShare(uneven, 0)).toBeCloseTo(0.75, 6);
+  });
+});
+
+describe('collage: which divider a box’s own buttons move', () => {
+  function band(): CollageSplit {
+    return split('band', 'row', [photo('x'), photo('y'), photo('z')]);
+  }
+
+  it('uses the gap AFTER a box that has one, and says the box is the first of the pair', () => {
+    expect(collageResizeTarget(band(), 'x')).toMatchObject({ gapIndex: 0, first: true });
+    expect(collageResizeTarget(band(), 'y')).toMatchObject({ gapIndex: 1, first: true });
+  });
+
+  it('uses the gap BEFORE the last box, where it is the second of the pair', () => {
+    expect(collageResizeTarget(band(), 'z')).toMatchObject({ gapIndex: 1, first: false });
+  });
+
+  it('has no answer for a box that is the whole collage', () => {
+    expect(collageResizeTarget(photo('only'), 'only')).toBeNull();
+  });
+
+  // The two constants the UI quotes at her: seven taps from an even split to
+  // the floor. Pinned so a change to either without the other is caught.
+  it('takes seven steps to travel from an even split to the floor', () => {
+    expect(Math.ceil((0.5 - MIN_PAIR_SHARE) / RESIZE_STEP_SHARE)).toBe(7);
   });
 });
