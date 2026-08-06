@@ -356,8 +356,9 @@ export interface PublishBarProps {
   // e2e/publish-confirm.spec.ts is what pins this now; jsdom has no layout
   // engine and cannot hit-test, so no vitest test in this repo can.
   //
-  // Applied as an inline style rather than a utility class, following
-  // CollageTile.tsx's own precedent for the reason it gives: the shared
+  // Applied as an inline style rather than a utility class, for the same
+  // reason the grid-based collage's own CollageTile.tsx (since deleted along
+  // with the grid machinery) once gave for the identical choice: the shared
   // stylesheet carries a byte ceiling every admin-only class counts
   // against, and no existing utility fits anyway -- the largest top margin
   // with a rule in the shipped stylesheet today is 48px, which would leave
@@ -944,12 +945,19 @@ const PublishBar: React.FC<PublishBarProps> = ({
 // have no rule in the shipped stylesheet today, against a byte ceiling with
 // roughly two hundred bytes of headroom.
 //
-// The className below is CollageTile.tsx's own move/resize panel string,
-// character for character, so this whole feature adds no CSS rule at all.
-// `zIndex: 70` as an inline style, above that panel's own 50 and above
-// CollageTile's refusal toast at 60, so which of the three paints on top is
-// never decided by portal insertion order -- the same reasoning CollageTile
-// itself records for choosing 60 over 50.
+// The className below is the same bottom-docked panel string
+// src/admin/CollageEditor.tsx's own panel carries -- z-50 included --
+// character for character except for the edges it docks to, so this whole
+// feature adds no CSS rule at all. `zIndex: 70` as an inline style is what
+// puts this ABOVE that panel's own 50 (both are bottom-docked and can be on
+// screen at once -- e2e/publish-confirm.spec.ts reads the collage panel's
+// live z-index rather than a constant for exactly that reason), so which of
+// the two paints on top is never decided by portal insertion order. (This
+// string was first CollageTile.tsx's, in the grid-based collage Plan 6
+// built; that component -- and the z-60 refusal toast its own version of
+// this reasoning once named -- was deleted with the grid machinery when
+// Plan 9 rebuilt the collage as a split tree. Nothing in this repo is at
+// z-60 any more.)
 //
 // `aria-modal="true"` plus a real focus trap, not a non-modal dialog: a
 // dialog you can Tab straight past is not a stop. Known and deliberate

@@ -7,8 +7,10 @@ import { site } from '../content';
 // to append every enabled page's own `/<slug>`) -- the static
 // public/sitemap.xml this file used to read is what Vite copies into dist/
 // BEFORE this plugin's own write, not what a crawler ever actually reaches.
-// Gated the same way src/test/bundle.post-build.test.ts's and
-// src/test/collage-css.test.ts's own dist-dependent checks already are:
+// Gated the same way src/test/bundle.post-build.test.ts's own dist-dependent
+// checks already are (src/test/collage-css.test.ts used to be a second
+// example of the same pattern; Plan 9's split-tree rewrite deleted it along
+// with the grid machinery it tested):
 // `npm run test`/`npm run test:deploy` both run before `dist/` exists, so a
 // bare `existsSync` alone can't tell "no dist/ yet" apart from "dist/
 // should be here and isn't" -- see that file's own comment for the exact

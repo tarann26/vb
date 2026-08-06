@@ -3,9 +3,12 @@ import { defineConfig, devices } from '@playwright/test';
 // I-B review finding (repair of Plan 6): "no Playwright dependency, no
 // *.spec.ts, and no committed browser test anywhere in the repo" -- every
 // browser-verified claim across Plans 5 and 6, including the two z-index
-// fixes CollageTile.tsx and EditableImage.tsx both carry their own long
-// comments about, was a one-shot manual run recorded in prose, never
-// re-checked by anything that runs again. jsdom (every vitest test in this
+// fixes CollageTile.tsx and EditableImage.tsx each carried their own long
+// comments about (CollageTile.tsx was later deleted whole, along with the
+// grid machinery, when Plan 9 rebuilt the collage as a split tree --
+// EditableImage.tsx's own copy of that comment is the one still readable),
+// was a one-shot manual run recorded in prose, never re-checked by anything
+// that runs again. jsdom (every vitest test in this
 // repo) has no layout engine and cannot hit-test a stacking-context
 // regression at all -- confirmed directly, the reviewer's own mutation
 // (revert both `z-20`s back to `z-10`) left 1844 passed, 1 skipped, nothing

@@ -290,8 +290,11 @@ function wrapperClassName(imgClassName: string | undefined): string {
 // hit-tested) on top of the entire collage, including this badge, for the
 // whole life of Plan 5's photo-replace feature. `z-20` wins that
 // comparison outright; nothing else on this page needs to sit above this
-// badge. See CollageTile.tsx's own select button for the identical fix,
-// found and applied together.
+// badge. The grid-based collage's own select button (CollageTile.tsx) carried
+// the identical fix, found and applied together -- that component was later
+// deleted whole, along with the grid machinery, when the collage was rebuilt
+// as a split tree; CollageSelectBadge.tsx is its replacement and records the
+// same z-index reasoning now.
 const CONTROL_LABEL_CLASSNAME =
   'absolute bottom-1 right-1 z-20 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border border-white/70 bg-black/60 text-white shadow focus-within:ring-2 focus-within:ring-[#6B8B59]';
 
