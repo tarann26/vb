@@ -896,6 +896,11 @@ const EditMode: React.FC = () => {
     // ADDED collage photo's bytes travel with the same publish as the tree
     // that now names them.
     stage: staged.stage,
+    // ...and what it currently holds, which removing a photo has to be able to
+    // read: it drops that photo's staged bytes (otherwise they are committed
+    // as an orphan asset and keep occupying one of the eight slots a publish
+    // allows), and the Undo beside that message puts the same bytes back.
+    stagedFiles: staged.files,
   });
 
   if (status === 'checking') {

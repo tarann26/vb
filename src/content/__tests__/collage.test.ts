@@ -119,6 +119,23 @@ describe('collage: sizes normalise to a known sum', () => {
     expect(() => normalizeSizes([Number.NaN, 1])).toThrow(/summing to NaN/);
   });
 
+  // Review finding (Minor), and a contract violation rather than a live
+  // defect: rounding to SIZE_PRECISION turns any value that scales below 5e-7
+  // into exactly 0, so this function could return an array its OWN
+  // `isNormalizedSizes` refuses and that both validators reject -- the
+  // "something plausible" the throw above exists to rule out. Latent today
+  // only because MIN_PAIR_SHARE is 0.15, a constant in a different function
+  // whose own comment already flags it as "the number to revisit"; a 4000-op
+  // targeted squeeze bottomed out at 2.6e-4, ~500x above the threshold.
+  // Refused here so lowering that constant can never quietly write a
+  // zero-width box into content instead.
+  it('refuses a value too small to survive its own rounding, rather than returning a zero', () => {
+    expect(() => normalizeSizes([1e-9, 1])).toThrow(/too small/);
+    // ...and the output of a legal call is always something the predicate
+    // that guards content accepts, which is the property the throw protects.
+    expect(isNormalizedSizes(normalizeSizes([1e-6, 1]))).toBe(true);
+  });
+
   it('recognises a normalised array, and refuses one that is merely close', () => {
     expect(isNormalizedSizes([1, 1])).toBe(true);
     expect(isNormalizedSizes([0.666667, 1.333333])).toBe(true);

@@ -28,9 +28,10 @@ import { mockEditBackend } from './edit-backend';
 //      and it did not: nothing else is bottom-docked in the scenario this
 //      spec drives, so portal insertion order alone carried the hit test,
 //      and removing `style={{ zIndex: 70 }}` from PublishBar left it green
-//      at both viewports. A probe that opened CollageTile's own bottom-
-//      docked move/resize panel first was green either way too, so no
-//      hit-test formulation was found that discriminates. What CAN be
+//      at both viewports. A probe that opened the collage's own bottom-docked
+//      panel first (CollageTile's then, CollageEditor's now) was green either
+//      way too, so no hit-test formulation was found that discriminates. What
+//      CAN be
 //      checked, and is only checkable in a real browser (jsdom computes no
 //      styles at all), is the resolved z-index of both elements as the
 //      engine actually sees them -- inline style, class, cascade and all.
@@ -140,11 +141,26 @@ for (const viewport of VIEWPORTS) {
         .evaluate((el) => Number.parseInt(getComputedStyle(el).zIndex, 10));
       expect(navZ, 'the nav should still be the z-50 this ordering was chosen against').toBe(50);
       expect(panelZ, `the confirm panel resolved to z-index ${panelZ}, at or below the nav's ${navZ}`).toBeGreaterThan(navZ);
-      // CollageTile's own refusal toast is a fixed 60 (CollageTile.tsx), and
-      // its move/resize panel is bottom-docked at 50 -- the same edge this
-      // panel occupies. Above both, so which paints on top is never decided
-      // by portal insertion order.
-      expect(panelZ, `the confirm panel resolved to z-index ${panelZ}, at or below CollageTile's toast (60)`).toBeGreaterThan(60);
+      // The OTHER thing docked to this same edge: the collage editor's own
+      // panel, which is bottom-docked at z-50 and is on screen whenever a
+      // photo is selected -- which is its state throughout editing. Read off
+      // the live element rather than compared against a constant: this used to
+      // assert `> 60` and justify it against "CollageTile's refusal toast",
+      // and CollageTile.tsx has not existed since the split-tree rewrite --
+      // nothing in the repo is at 60 any more, so a genuine regression here
+      // would have sent whoever debugged it looking for a deleted file.
+      //
+      // Selected through the collage's own select badge (the control
+      // CollageSelectBadge.tsx puts on every photo), which is exactly how she
+      // would put both panels on screen at once.
+      await page.locator('[data-collage-photo-id="photo-1"] [data-collage-select]').click();
+      const collagePanel = page.locator('[data-collage-panel]');
+      await expect(collagePanel).toHaveCount(1);
+      const collagePanelZ = await collagePanel.evaluate((el) => Number.parseInt(getComputedStyle(el).zIndex, 10));
+      expect(
+        panelZ,
+        `the confirm panel resolved to z-index ${panelZ}, at or below the collage panel's ${collagePanelZ} -- both are docked to the bottom edge, so which paints on top would be decided by insertion order`,
+      ).toBeGreaterThan(collagePanelZ);
     });
   });
 }

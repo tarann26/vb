@@ -21,6 +21,7 @@ import {
   type PublishProgress,
 } from '../publish';
 import type { StagedFile } from '../staged';
+import type { DraftMap } from '../drafts';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -296,6 +297,150 @@ describe('dirtyDraftMap', () => {
     };
     const map = dirtyDraftMap(entries, {});
     expect(map['dishes.json']?.data).toEqual([{ id: 'a', image: '/food/x.webp' }]);
+  });
+
+  // Review finding (Important), reproduced at the function the fix lives in.
+  //
+  // Plan 9's collage is a TREE, and Task 4's swap moves a photo between
+  // BRANCHES of it -- not just between positions in one sibling array. The
+  // id match above only ever looked inside the array the record now sits in,
+  // so a photo that crossed a branch found no id match at its new level and
+  // fell through to `initial[key]`: the committed photo that used to occupy
+  // that POSITION. A staged replacement was therefore restored to a different
+  // photograph's src, leaving that photograph in the hero twice and the one
+  // she was replacing gone -- and `validateContent` has a duplicate-ID rule
+  // for the collage but no duplicate-SRC rule, so the corrupted tree
+  // publishes clean. Before this fix, a blank leaf ("always a safe,
+  // actionable value") would have been refused; this wrong-but-valid one is
+  // not, which is what makes it worse than the case the fallback was written
+  // for.
+  //
+  // Two levels, two branches, four photos -- the smallest tree in which a
+  // swap can cross a branch at all.
+  function crossBranchTree(firstSrc: string): unknown {
+    return {
+      kind: 'split',
+      id: 'root',
+      direction: 'row',
+      sizes: [1, 1],
+      children: [
+        {
+          kind: 'split',
+          id: 'left',
+          direction: 'column',
+          sizes: [1, 1],
+          children: [
+            { kind: 'photo', id: 'photo-1', src: firstSrc, alt: '' },
+            { kind: 'photo', id: 'photo-2', src: '/hero/b.webp', alt: '' },
+          ],
+        },
+        {
+          kind: 'split',
+          id: 'right',
+          direction: 'column',
+          sizes: [1, 1],
+          children: [
+            { kind: 'photo', id: 'photo-3', src: '/hero/c.webp', alt: '' },
+            { kind: 'photo', id: 'photo-4', src: '/hero/d.webp', alt: '' },
+          ],
+        },
+      ],
+    };
+  }
+
+  // The tree the crossBranchTree above becomes once photo-1 (carrying the
+  // staged src) and photo-3 have traded places -- exactly what
+  // `swapCollagePhotos` produces: each photo keeps its own id, src and alt and
+  // lands in the other's box, and no split, size or child count moves.
+  function swappedAcrossBranches(firstSrc: string): unknown {
+    const committed = crossBranchTree(firstSrc) as {
+      children: { children: { id: string; src: string }[] }[];
+    };
+    const left = committed.children[0].children;
+    const right = committed.children[1].children;
+    const moved = left[0];
+    left[0] = right[0];
+    right[0] = moved;
+    return committed;
+  }
+
+  function stagedCollagePhoto(contentPath: string): Record<string, StagedFile> {
+    return {
+      'galleries.json:galleries.heroCollage.photo-1': {
+        path: 'assets-source/hero/new.jpg',
+        content: REAL_BASE64_JPEG,
+        encoding: 'base64',
+        contentPath,
+      },
+    };
+  }
+
+  function restoredCollageSrc(map: DraftMap, id: string): string | undefined {
+    const data = map['galleries.json']?.data as { heroCollage: unknown } | undefined;
+    let found: string | undefined;
+    const walk = (node: unknown): void => {
+      if (node === null || typeof node !== 'object') return;
+      const record = node as { id?: unknown; src?: unknown; children?: unknown };
+      if (record.id === id && typeof record.src === 'string') found = record.src;
+      if (Array.isArray(record.children)) record.children.forEach(walk);
+    };
+    walk(data?.heroCollage);
+    return found;
+  }
+
+  it('a collage photo swapped into ANOTHER BRANCH is restored to its own committed src, not the box’s', () => {
+    const entries: ContentEntries = {
+      'galleries.json': {
+        data: { atmosphere: [], ourStory: [], heroCollage: swappedAcrossBranches('/images/hero/staged.webp') },
+        initial: { atmosphere: [], ourStory: [], heroCollage: crossBranchTree('/hero/a.webp') },
+        sha: 's',
+      },
+    };
+    const map = dirtyDraftMap(entries, stagedCollagePhoto('/images/hero/staged.webp'));
+    expect(restoredCollageSrc(map, 'photo-1')).toBe('/hero/a.webp');
+    // ...and the photograph it traded with is still in the collage exactly
+    // once, which is the half `validateContent` would never have caught.
+    expect(restoredCollageSrc(map, 'photo-3')).toBe('/hero/c.webp');
+  });
+
+  // The control that isolates the cause: a swap between SIBLINGS never lost
+  // the id match in the first place, and must keep working unchanged.
+  it('a collage photo swapped with its own sibling is restored to its own committed src', () => {
+    const committed = crossBranchTree('/hero/a.webp') as { children: { children: unknown[] }[] };
+    const edited = crossBranchTree('/images/hero/staged.webp') as { children: { children: unknown[] }[] };
+    const left = edited.children[0].children;
+    [left[0], left[1]] = [left[1], left[0]];
+
+    const entries: ContentEntries = {
+      'galleries.json': {
+        data: { atmosphere: [], ourStory: [], heroCollage: edited },
+        initial: { atmosphere: [], ourStory: [], heroCollage: committed },
+        sha: 's',
+      },
+    };
+    const map = dirtyDraftMap(entries, stagedCollagePhoto('/images/hero/staged.webp'));
+    expect(restoredCollageSrc(map, 'photo-1')).toBe('/hero/a.webp');
+    expect(restoredCollageSrc(map, 'photo-2')).toBe('/hero/b.webp');
+  });
+
+  // The other control: a photo ADDED this session has no committed
+  // counterpart anywhere in the file, so it still falls to blank -- the value
+  // validateContent already refuses with "collage photo N needs an image",
+  // rather than a plausible-looking reference to somebody else's photograph.
+  it('a collage photo added this session still falls back to blank, not to a neighbour', () => {
+    const edited = crossBranchTree('/hero/a.webp') as { children: { children: unknown[]; sizes: number[] }[] };
+    edited.children[0].children.push({ kind: 'photo', id: 'photo-9', src: '/images/hero/staged.webp', alt: '' });
+    edited.children[0].sizes = [1, 1, 1];
+
+    const entries: ContentEntries = {
+      'galleries.json': {
+        data: { atmosphere: [], ourStory: [], heroCollage: edited },
+        initial: { atmosphere: [], ourStory: [], heroCollage: crossBranchTree('/hero/a.webp') },
+        sha: 's',
+      },
+    };
+    const map = dirtyDraftMap(entries, stagedCollagePhoto('/images/hero/staged.webp'));
+    expect(restoredCollageSrc(map, 'photo-9')).toBe('');
   });
 });
 

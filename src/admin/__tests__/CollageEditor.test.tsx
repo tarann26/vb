@@ -64,12 +64,14 @@ function Harness({
   previews = NO_IMAGE_PREVIEWS,
   onChange,
   stage = () => {},
+  stagedFiles = {},
 }: {
   initial: CollageNode;
   locked?: boolean;
   previews?: ImagePreviews;
   onChange?: (next: CollageNode) => void;
   stage?: (key: string, file: StagedFile | null) => void;
+  stagedFiles?: Record<string, StagedFile>;
 }) {
   const [tree, setTree] = useState<CollageNode>(initial);
   const editor = useCollageEditor({
@@ -81,6 +83,7 @@ function Harness({
     locked,
     previews,
     stage,
+    stagedFiles,
   });
   return (
     <>
@@ -329,7 +332,11 @@ describe('the collage editor: swapping without a drag', () => {
     arm('p1');
     const targets = screen.getAllByRole('button', { name: 'Swap the selected photo into this box' });
     expect(targets).toHaveLength(3);
-    expect(boxFor('p1').querySelector('button')).toBeNull();
+    // The photo already chosen offers no target of its own. Scoped to the
+    // swap button by name rather than "no button at all in this box": every
+    // box also carries its own select badge (CollageSelectBadge.tsx), which is
+    // there whether anything is armed or not.
+    expect(within(boxFor('p1')).queryByRole('button', { name: 'Swap the selected photo into this box' })).toBeNull();
   });
 
   it('every control it puts inside the collage carries the marker /edit’s click guard looks for', () => {
@@ -514,8 +521,32 @@ describe('the collage editor: adding a photo', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Add another photo below this one, sharing its box' }));
     await pickFile();
     await waitFor(() =>
-      expect(screen.getByText('Added below it. The two now share the box that photo used to fill; nothing else moved.')).toBeInTheDocument(),
+      expect(
+        screen.getByText(
+          'Added below it. The two now share the box that photo used to fill; every other photo keeps the share of the collage it had.',
+        ),
+      ).toBeInTheDocument(),
     );
+  });
+
+  // Review finding (Minor): the sentence used to end "nothing else moved",
+  // which is an absolute claim and false whenever the new split is spliced
+  // into a parent that already runs the same way -- that lays one more 4px gap
+  // along the axis, and the split's other children each give up a pixel or
+  // two. What IS guaranteed is that their proportions are untouched, and that
+  // is what it now says. Measured in a real browser rather than asserted here:
+  // e2e/collage-add-remove.spec.ts adds beside a photo whose parent runs the
+  // same way and checks both the sentence and the pixels it is careful not to
+  // promise.
+  it('never claims nothing else moved, in either direction', async () => {
+    vi.spyOn(HTMLInputElement.prototype, 'click').mockImplementation(() => {});
+    render(<Harness initial={fixture()} />);
+    fireEvent.focusIn(boxFor('p2'));
+    fireEvent.click(screen.getByRole('button', { name: 'Add another photo beside this one, sharing its box' }));
+    await pickFile();
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Added beside it.'));
+    expect(screen.getByRole('status')).not.toHaveTextContent('nothing else moved');
+    expect(screen.getByRole('status')).toHaveTextContent('every other photo keeps the share of the collage it had');
   });
 
   it('refuses at the cap, with the number and what to do about it', () => {
@@ -629,5 +660,131 @@ describe('the collage editor: removing a photo', () => {
     render(<Harness initial={fixture()} locked />);
     fireEvent.focusIn(boxFor('p1'));
     expect(screen.getByRole('button', { name: 'Remove this photo from the collage' })).toBeDisabled();
+  });
+
+  // Review finding (Important): the photo left the tree and the bytes it had
+  // uploaded stayed in the shared collector -- committed on every
+  // add-then-remove as an asset nothing references, and occupying one of the
+  // eight slots MAX_STAGED_PHOTOS_PER_PUBLISH allows with nothing in the UI
+  // able to free it. At nine staged files the whole publish is refused,
+  // including every unrelated text edit on the page.
+  const PICKED_BYTES: StagedFile = {
+    path: 'assets-source/hero/picked.jpg',
+    content: 'AAAA',
+    encoding: 'base64',
+    contentPath: '/images/hero/picked.webp',
+  };
+
+  it('drops the bytes the removed photo had staged, so they are not published as an orphan', () => {
+    const stage = vi.fn();
+    render(
+      <Harness
+        initial={fixture()}
+        stage={stage}
+        stagedFiles={{ 'galleries.json:galleries.heroCollage.p2': PICKED_BYTES }}
+      />,
+    );
+    fireEvent.focusIn(boxFor('p2'));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove this photo from the collage' }));
+
+    expect(stage).toHaveBeenCalledWith('galleries.json:galleries.heroCollage.p2', null);
+  });
+
+  // Review finding (Important): the only Undo anywhere in this admin was
+  // PublishBar's post-publish one (a whole commit, not an in-session edit) and
+  // DraftBanner's all-or-nothing Discard, so a photo removed by one tap of a
+  // button the same size and shape as "Done" could only be restored by finding
+  // the original file again and re-uploading it.
+  it('offers a way back, and puts the photo and its bytes back exactly as they were', () => {
+    const stage = vi.fn();
+    const onChange = vi.fn();
+    const before = fixture();
+    render(
+      <Harness
+        initial={before}
+        stage={stage}
+        onChange={onChange}
+        stagedFiles={{ 'galleries.json:galleries.heroCollage.p2': PICKED_BYTES }}
+      />,
+    );
+    fireEvent.focusIn(boxFor('p2'));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove this photo from the collage' }));
+    expect(boxes().map((el) => el.getAttribute(COLLAGE_PHOTO_ATTR))).toEqual(['p1', 'p3', 'p4']);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Put the removed photo back' }));
+
+    expect(boxes().map((el) => el.getAttribute(COLLAGE_PHOTO_ATTR))).toEqual(['p1', 'p2', 'p3', 'p4']);
+    // The whole tree, not an approximation of it: sizes, ids and directions
+    // are what they were before the remove.
+    expect(onChange.mock.calls[1][0]).toEqual(before);
+    // ...and the bytes are back under the key the publish will look for them
+    // under, so undoing is not "the photo is on screen but publishes blank".
+    expect(stage).toHaveBeenNthCalledWith(2, 'galleries.json:galleries.heroCollage.p2', PICKED_BYTES);
+  });
+
+  it('withdraws the way back once she has changed something else', () => {
+    render(<Harness initial={fixture()} />);
+    fireEvent.focusIn(boxFor('p2'));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove this photo from the collage' }));
+    expect(screen.getByRole('button', { name: 'Put the removed photo back' })).toBeInTheDocument();
+
+    // Any later edit: restoring the whole previous tree would discard it.
+    fireEvent.focusIn(boxFor('p3'));
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Make this photo taller, and the one beside it shorter' }),
+    );
+    expect(screen.queryByRole('button', { name: 'Put the removed photo back' })).toBeNull();
+  });
+});
+
+// The MARKUP half of the Critical this badge fixes. Whether it is actually
+// reachable -- the whole point -- is a hit-test against a real layout engine
+// and lives in e2e/collage-reachable.spec.ts; jsdom reports every box as 0x0
+// and cannot answer it at all.
+describe('the collage editor: the select badge every box carries', () => {
+  it('gives every photo one, named by the same position the panel names', () => {
+    render(<Harness initial={fixture()} />);
+    ['p1', 'p2', 'p3', 'p4'].forEach((id, i) => {
+      expect(within(boxFor(id)).getByRole('button', { name: `Choose photo ${i + 1} of 4` })).toBeInTheDocument();
+    });
+  });
+
+  it('sits above Hero’s own z-10 content column, which is the only reason it is reachable', () => {
+    render(<Harness initial={fixture()} />);
+    const badge = within(boxFor('p3')).getByRole('button', { name: 'Choose photo 3 of 4' });
+    expect(badge.style.zIndex).toBe('20');
+    expect(badge.style.position).toBe('absolute');
+  });
+
+  it('selects the photo it belongs to, and reports which one is chosen', () => {
+    render(<Harness initial={fixture()} />);
+    const badge = within(boxFor('p3')).getByRole('button', { name: 'Choose photo 3 of 4' });
+    expect(badge).toHaveAttribute('aria-pressed', 'false');
+    fireEvent.click(badge);
+    expect(screen.getByText('Photo 3 of 4')).toBeInTheDocument();
+    expect(within(boxFor('p3')).getByRole('button', { name: 'Choose photo 3 of 4' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+  });
+
+  it('carries the marker that lets a press on it start a gesture, unlike every other control in a box', () => {
+    // The camera badge must never begin a drag; this one is the only control
+    // that must. Pinned as markup because the drag itself needs a real
+    // browser -- see e2e/collage-reachable.spec.ts.
+    render(<Harness initial={fixture()} />);
+    const badge = within(boxFor('p1')).getByRole('button', { name: 'Choose photo 1 of 4' });
+    expect(badge).toHaveAttribute('data-collage-select');
+    expect(badge).toHaveAttribute('data-collage-control');
+
+    // Every OTHER control inside a box is excluded from that handler. Checked
+    // against the swap target rather than against EditableImage's camera badge
+    // only because this harness renders the PUBLIC image seam, so there is no
+    // camera badge here to compare with; the exclusion is the same one.
+    fireEvent.focusIn(boxFor('p1'));
+    fireEvent.click(screen.getByRole('button', { name: 'Swap this photo with another photo' }));
+    const swapTarget = within(boxFor('p4')).getByRole('button', { name: 'Swap the selected photo into this box' });
+    expect(swapTarget).toHaveAttribute('data-collage-control');
+    expect(swapTarget.hasAttribute('data-collage-select')).toBe(false);
   });
 });

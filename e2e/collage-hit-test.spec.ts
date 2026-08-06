@@ -11,12 +11,33 @@ import { mockEditBackend } from './edit-backend';
 // jsdom has no layout engine to hit-test against, and the reviewer's own
 // mutation (both `z-20`s back to `z-10`) left the entire suite green.
 //
-// This spec used to cover CollageTile's select badge too. The split tree
-// deleted that control along with the grid placement it moved, so what is
-// left is the one affordance a collage photo still carries -- and the tree
-// makes this MORE worth checking, not less: the collage is now nested flex
-// containers rather than one grid, so every level is a fresh chance for a
-// stacking context to swallow a badge.
+// It also covers the SELECT badge on every photo -- an assertion this spec
+// used to make about CollageTile's own version of that control, and lost when
+// the split tree deleted CollageTile without replacing the control. A review
+// found what that cost, measured in this same browser: with no select badge,
+// choosing a photo meant pressing its box, and a photo box carries no z-index
+// at all, so Hero.tsx's `relative z-10` content column swallowed the press for
+// NINE of the sixteen boxes at 390x844 and for the whole of photo-9 at
+// 1440x900. Every gesture the collage editor offers is gated on choosing a
+// photo first. src/admin/CollageSelectBadge.tsx is the replacement, and this
+// is the assertion that keeps it honest -- for both badges at once, since they
+// share the layer and a regression would take both.
+//
+// The tree makes this MORE worth checking than the grid did, not less: the
+// collage is nested flex containers now rather than one grid, so every level
+// is a fresh chance for a stacking context to swallow a badge.
+//
+// SCOPE, stated because the obvious reading is wider than the truth: this
+// measures a page with NOTHING selected. The collage panel is a bottom-docked
+// `fixed ... z-50` sheet, so once something IS selected it covers the bottom
+// band of the viewport, and a control whose own rectangle falls inside that
+// band resolves to the panel instead. Measured with photo-16 selected: one of
+// the sixteen select badges (photo-15's) and a handful of camera badges are
+// occluded that way at each viewport. That is a property of a bottom sheet
+// rather than of this collage -- pressing Done, or scrolling, clears it -- and
+// dropping a dragged photo onto a box under the panel does work, because
+// CollageEditor asks `elementsFromPoint` for the whole stack rather than
+// `elementFromPoint` for the top of it.
 //
 // `document.elementFromPoint` at the badge's own measured centre, not a
 // Playwright `.click()`: a real click on the camera badge opens the OS's
@@ -85,7 +106,7 @@ for (const viewport of VIEWPORTS) {
   test.describe(`hero collage badges are hit-testable at ${viewport.label}`, () => {
     test.use({ viewport: { width: viewport.width, height: viewport.height } });
 
-    test('all sixteen photos: the camera badge resolves to itself under document.elementFromPoint', async ({ page }) => {
+    test('all sixteen photos: both badges resolve to themselves under document.elementFromPoint', async ({ page }) => {
       await mockEditBackend(page);
       await page.goto('/edit');
 
@@ -95,6 +116,8 @@ for (const viewport of VIEWPORTS) {
       const photos = page.locator('[data-editable-image-path^="galleries.heroCollage."]');
       // Non-vacuous: sixteen real photos, not a smaller stand-in fixture.
       await expect(photos).toHaveCount(16);
+      const boxes = page.locator('[data-collage-photo-id]');
+      await expect(boxes).toHaveCount(16);
       await settleLayout(page);
 
       const count = await photos.count();
@@ -110,6 +133,23 @@ for (const viewport of VIEWPORTS) {
         const cameraHit = await hitTestLabel(cameraLabel);
         expect(cameraHit, `photo ${i}: camera badge is occluded (hit something with no matching aria-label)`).toBe(
           'Replace this photo',
+        );
+
+        // The select badge, on the opposite corner. Located from the BOX
+        // rather than from `photos.nth(i)`: EditableImage's own wrapper is
+        // what carries `data-editable-image-path`, and the badge is that
+        // wrapper's sibling inside the box, not its descendant. Same document
+        // order, one box per photo. `data-collage-select` is set by
+        // CollageSelectBadge and by nothing else, so this is addressed by the
+        // same marker the editor's own pointer handler carves out -- one
+        // spelling, not two that can drift. Its label names the position, so
+        // this also proves the badge she presses and the "Photo N of 16" she
+        // then reads are talking about the same photograph.
+        const selectBadge = boxes.nth(i).locator('[data-collage-select]');
+        await expect(selectBadge).toBeVisible();
+        const selectHit = await hitTestLabel(selectBadge);
+        expect(selectHit, `photo ${i}: select badge is occluded -- this photo cannot be chosen at all`).toBe(
+          `Choose photo ${i + 1} of 16`,
         );
       }
     });

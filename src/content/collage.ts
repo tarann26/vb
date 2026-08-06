@@ -143,9 +143,25 @@ export function isNormalizedSizes(sizes: readonly number[]): boolean {
 
 // Scales `sizes` so they sum to `sizes.length`, rounded to SIZE_PRECISION.
 // Throws -- rather than returning something plausible -- for a sum that is
-// zero, negative or non-finite: there is no proportion to preserve in that
-// input, and a silent fallback here would write a wrong-but-valid-looking
-// arrangement into content.
+// zero, negative or non-finite, and for any single value too small to survive
+// the rounding: there is no proportion to preserve in either input, and a
+// silent fallback here would write a wrong-but-valid-looking arrangement into
+// content.
+//
+// The per-value check is the one a review found missing, and it is a contract
+// violation rather than a live defect. Rounding to six decimal places sends
+// anything that scales below 5e-7 to exactly 0, so this function could hand
+// back an array its own `isNormalizedSizes` (above) refuses, that
+// `collageTreeProblems` and `assertCollageTree` both reject, and that
+// `resizeCollageSplit` would happily write -- a box collapsed to 0px at /edit
+// and on the public page, and every later publish refused with "every box in
+// this collage needs a size greater than zero", a message that names no box.
+// Nothing reaches it today: the only thing keeping a size off the floor is
+// MIN_PAIR_SHARE (0.15), a constant in a different function, and a targeted
+// 4000-operation squeeze against it bottomed out at 2.6e-4 -- some 500x above
+// the threshold. That margin is an accident of a number this file's own
+// comment already invites a future reader to lower, which is exactly when a
+// latent violation becomes a live one.
 export function normalizeSizes(sizes: readonly number[]): number[] {
   if (sizes.length === 0) throw new Error('collage: cannot normalise an empty sizes array');
   const sum = sizes.reduce((total, size) => total + size, 0);
@@ -153,7 +169,14 @@ export function normalizeSizes(sizes: readonly number[]): number[] {
     throw new Error(`collage: cannot normalise sizes summing to ${String(sum)}`);
   }
   const scale = sizes.length / sum;
-  return sizes.map((size) => Math.round(size * scale * SIZE_ROUNDING) / SIZE_ROUNDING);
+  const scaled = sizes.map((size) => Math.round(size * scale * SIZE_ROUNDING) / SIZE_ROUNDING);
+  const vanished = scaled.findIndex((size) => size <= 0);
+  if (vanished !== -1) {
+    throw new Error(
+      `collage: cannot normalise sizes -- size[${vanished}] (${String(sizes[vanished])}) is too small to keep a proportion`,
+    );
+  }
+  return scaled;
 }
 
 // Rebuilds `node` with every split's sizes normalised, top to bottom.

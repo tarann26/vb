@@ -268,7 +268,52 @@ export function buildPublishRequest(entries: ContentEntries, staged: Record<stri
 // return handles the same way scrubStagedReferences' own default does: a
 // blank leaf is always a safe, actionable value (validateContent's own
 // "needs an image" rule), never a broken reference.
-function initialCounterpart(initial: unknown, key: string | number, sibling: unknown): unknown {
+// Review finding (Important), and the reason the id match above cannot stop at
+// the sibling array it is handed.
+//
+// `galleries.heroCollage` is a TREE, and Plan 9's drag-to-swap moves a photo
+// between BRANCHES of it, not merely between positions in one array (see
+// src/content/collage.ts's `swapCollagePhotos`: each photo carries its own id,
+// src and alt into the other's box). A photo that crossed a branch has no id
+// match among its new siblings, so the walk fell through to `initial[key]` --
+// the committed photo that used to occupy that POSITION -- and restored a
+// staged photo to a DIFFERENT photograph's src: one photograph in the hero
+// twice, the one she was replacing gone, and nothing to refuse it, since
+// validateContent has a duplicate-ID rule for the collage but no duplicate-SRC
+// rule. That is strictly worse than the blank this fallback was reasoned
+// about ("a blank leaf is always a safe, actionable value"), because a blank
+// IS refused and this is not.
+//
+// So the id lookup is widened from "these siblings" to "anywhere in this
+// file's committed value", built once per file rather than searched per miss.
+// Every content file's ids are unique within the file -- validateContent's own
+// duplicate-id rules (collage nodes, dishes/drinks/press/menus/pages/sections
+// records) are what make that true rather than a coincidence -- so an id names
+// at most one committed record and the answer is unambiguous. A record ADDED
+// this session is in no index at all and still falls through to blank, which
+// is the case the fallback was written for and the one that stays.
+function indexInitialById(value: unknown, into: Map<string, unknown>): Map<string, unknown> {
+  if (Array.isArray(value)) {
+    value.forEach((item) => indexInitialById(item, into));
+    return into;
+  }
+  if (value !== null && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    // First one wins, in document order -- with ids unique per file there is
+    // never a second, and a file that somehow carried one gets a stable answer
+    // rather than one that depends on walk order.
+    if (typeof record.id === 'string' && !into.has(record.id)) into.set(record.id, value);
+    Object.values(record).forEach((child) => indexInitialById(child, into));
+  }
+  return into;
+}
+
+function initialCounterpart(
+  initial: unknown,
+  key: string | number,
+  sibling: unknown,
+  byId: Map<string, unknown>,
+): unknown {
   if (Array.isArray(initial)) {
     if (typeof key !== 'number') return undefined;
     const siblingId = sibling !== null && typeof sibling === 'object' ? (sibling as Record<string, unknown>).id : undefined;
@@ -277,6 +322,11 @@ function initialCounterpart(initial: unknown, key: string | number, sibling: unk
         (item) => item !== null && typeof item === 'object' && (item as Record<string, unknown>).id === siblingId,
       );
       if (match !== undefined) return match;
+      // Not among these siblings: it moved somewhere else in this file (a
+      // collage swap across branches) rather than being new. See
+      // `indexInitialById` above.
+      const moved = byId.get(siblingId);
+      if (moved !== undefined) return moved;
     }
     return initial[key];
   }
@@ -307,18 +357,25 @@ function initialCounterpart(initial: unknown, key: string | number, sibling: unk
 // forgotten it ever staged: Restore is safe by construction, not by asking
 // her to notice a warning count and act on it (staleStagedCount's own,
 // separate, honest "some picked files were lost" note is what THAT is for).
-function scrubStagedReferences(data: unknown, initial: unknown, stagedContentPaths: Set<string>): unknown {
+function scrubStagedReferences(
+  data: unknown,
+  initial: unknown,
+  stagedContentPaths: Set<string>,
+  byId: Map<string, unknown>,
+): unknown {
   if (typeof data === 'string') {
     if (!stagedContentPaths.has(data)) return data;
     return typeof initial === 'string' ? initial : '';
   }
   if (Array.isArray(data)) {
-    return data.map((item, index) => scrubStagedReferences(item, initialCounterpart(initial, index, item), stagedContentPaths));
+    return data.map((item, index) =>
+      scrubStagedReferences(item, initialCounterpart(initial, index, item, byId), stagedContentPaths, byId),
+    );
   }
   if (data !== null && typeof data === 'object') {
     const result: Record<string, unknown> = {};
     Object.entries(data as Record<string, unknown>).forEach(([key, value]) => {
-      result[key] = scrubStagedReferences(value, initialCounterpart(initial, key, value), stagedContentPaths);
+      result[key] = scrubStagedReferences(value, initialCounterpart(initial, key, value, byId), stagedContentPaths, byId);
     });
     return result;
   }
@@ -343,7 +400,10 @@ export function dirtyDraftMap(entries: ContentEntries, staged: Record<string, St
   const map: DraftMap = {};
   dirtyContentFiles(entries).forEach((file) => {
     const entry = entries[file]!;
-    const data = stagedContentPaths.size === 0 ? entry.data : scrubStagedReferences(entry.data, entry.initial, stagedContentPaths);
+    const data =
+      stagedContentPaths.size === 0
+        ? entry.data
+        : scrubStagedReferences(entry.data, entry.initial, stagedContentPaths, indexInitialById(entry.initial, new Map()));
     map[file] = { data, savedAt: now };
   });
   return map;

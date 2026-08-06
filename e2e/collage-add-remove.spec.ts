@@ -96,6 +96,48 @@ test.describe('adding and removing collage photos at 1440px', () => {
     await expect(page.locator('img[src="/images/hero/added-not-built-yet.webp"]')).toHaveCount(0);
   });
 
+  // Review finding (Minor): the sentence she reads after adding used to end
+  // "nothing else moved", which is an absolute claim and false in exactly this
+  // case. photo-16's parent (`right-bottom`) already runs as a row, so adding
+  // BESIDE it splices the new pair into that parent rather than nesting -- and
+  // one more child along a row means one more 4px gap to subtract before the
+  // proportions are applied, so its sibling subtree (photo-13, photo-14,
+  // photo-15) gives up a pixel or two. The test above adds BELOW a photo whose
+  // parent runs the other way, which nests instead and genuinely moves nothing
+  // -- which is why it stayed green while the sentence was wrong.
+  test('adding into a parent that already runs the same way keeps every other photo’s share, and says only that', async ({
+    page,
+  }) => {
+    await mockUpload(page);
+    await openCollage(page, '/edit');
+    const before = await collageBoxes(page);
+
+    await selectPhoto(page, 'photo-16');
+    await panel(page).getByRole('button', { name: 'Add another photo beside this one, sharing its box' }).click();
+    await panel(page).locator('input[type="file"]').setInputFiles(PICKED);
+    await expect(page.locator('[data-collage-photo-id]')).toHaveCount(17);
+
+    const status = panel(page).getByRole('status');
+    await expect(status).toContainText('every other photo keeps the share of the collage it had');
+    await expect(status).not.toContainText('nothing else moved');
+
+    // ...and the pixels back that up: the divided box is the only one that
+    // really changes. Everything else is within the gap arithmetic above --
+    // measured at 1-2px on this arrangement, bounded here at 2 -- rather than
+    // pinned at zero, which is the claim the sentence no longer makes.
+    const after = await collageBoxes(page);
+    const added = after.find((box) => !before.some((old) => old.id === box.id));
+    expect(added).toBeDefined();
+    before.forEach((box) => {
+      if (box.id === 'photo-16') return;
+      const now = after.find((candidate) => candidate.id === box.id);
+      expect(now, `${box.id} left the collage`).toBeDefined();
+      (['x', 'y', 'width', 'height'] as const).forEach((side) => {
+        expect(Math.abs(now![side] - box[side]), `${box.id} ${side} moved more than the gap arithmetic`).toBeLessThanOrEqual(2);
+      });
+    });
+  });
+
   test('remove gives the space back to what the photo shared its box with', async ({ page }) => {
     await openCollage(page, '/edit');
     const before = await collageBoxes(page);

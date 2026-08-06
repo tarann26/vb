@@ -65,6 +65,7 @@ import { checkPhotoSize, convertHeic, uploadAndEncode } from './upload-photo';
 import { fromStagedPhoto } from './staged';
 import type { StagedFile } from './staged';
 import CollageControlButton, { COLLAGE_CONTROL_ATTR } from './CollageControlButton';
+import CollageSelectBadge, { COLLAGE_SELECT_ATTR } from './CollageSelectBadge';
 import type { ImagePreviews } from './previews';
 
 // Every photo box carries its own photo id, so a drop can ask the DOM what is
@@ -81,6 +82,14 @@ const DRAG_THRESHOLD_PX = 6;
 // How long a notice stays on screen. Long enough to read a sentence, short
 // enough that it is gone before she wonders whether it is still true.
 const NOTICE_MS = 5000;
+
+// How long a notice that carries a way BACK stays. Four times as long, and
+// deliberately: that notice is not only telling her what happened, it is the
+// only route back from the one gesture on this surface that is otherwise
+// irreversible (see `removeSelected`). Five seconds is not enough time to
+// notice a photograph is missing, decide it was a mistake, and reach the
+// button.
+const UNDO_NOTICE_MS = 20_000;
 
 // ---------------------------------------------------------------------------
 // The chrome each box wears while a gesture is in flight. Inline styles, not
@@ -166,6 +175,17 @@ interface Notice {
   // that did NOT happen has to say which photo it is about, because nothing
   // moved to show her.
   tone: 'refused' | 'done';
+  // The way back from a destructive edit, offered beside the sentence that
+  // reports it. Only `removeSelected` sets this.
+  undo?: () => void;
+  // The tree this `undo` was computed against. The offer is drawn ONLY while
+  // the live tree is still that exact object -- restoring is a whole-tree
+  // replacement, so an Undo taken after she has resized or swapped something
+  // else would silently throw that work away too. Comparing by reference is
+  // exact and costs nothing: every operation in src/content/collage.ts
+  // returns a new root when anything changed and the same root when nothing
+  // did.
+  undoFrom?: CollageNode;
 }
 
 export interface CollageEditor {
@@ -193,10 +213,31 @@ export interface CollageEditorOptions {
   // publish as the tree that now names them, or the collage would commit a
   // path pointing at an asset nobody ever sent.
   stage: (key: string, file: StagedFile | null) => void;
+  // What that collector currently holds. Read for exactly one thing: removing
+  // a photo drops its staged bytes (see `removeSelected`), and the Undo beside
+  // that message has to be able to put the same bytes back -- `stage` can
+  // write but not read, so without this the way back would restore the tree
+  // and lose the photograph.
+  stagedFiles: Record<string, StagedFile>;
 }
 
-export function useCollageEditor({ tree, onChange, locked, previews, stage }: CollageEditorOptions): CollageEditor {
+export function useCollageEditor({
+  tree,
+  onChange,
+  locked,
+  previews,
+  stage,
+  stagedFiles,
+}: CollageEditorOptions): CollageEditor {
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Whether the press that made THIS selection was a finger. Recorded from the
+  // pointer event itself rather than guessed from `matchMedia('(pointer:
+  // coarse)')` or a viewport width, because it is the only thing that is
+  // actually true: a small laptop window has a mouse and a large tablet does
+  // not. It decides one sentence -- the panel must not tell a phone to "drag
+  // it onto another photo", since `handlePointerDown` deliberately never arms
+  // a drag for `pointerType === 'touch'` (see this file's header for why).
+  const [selectedByTouch, setSelectedByTouch] = useState(false);
   const [swapArmed, setSwapArmed] = useState(false);
   const [dragId, setDragId] = useState<string | null>(null);
   const [hoverId, setHoverId] = useState<string | null>(null);
@@ -227,9 +268,37 @@ export function useCollageEditor({ tree, onChange, locked, previews, stage }: Co
   // unrelated re-render never restarts the clock.
   useEffect(() => {
     if (notice === null) return;
-    const timer = window.setTimeout(() => setNotice(null), NOTICE_MS);
+    const timer = window.setTimeout(() => setNotice(null), notice.undo === undefined ? NOTICE_MS : UNDO_NOTICE_MS);
     return () => window.clearTimeout(timer);
   }, [notice]);
+
+  // Whether the press currently in progress began inside the panel.
+  //
+  // A TAP THAT OPENS THIS PANEL MUST NOT ALSO PRESS ONE OF ITS BUTTONS.
+  // Measured in a real 390x844 touch context, not reasoned about: the panel is
+  // a bottom sheet 235px tall on a phone -- more than a quarter of the screen
+  // -- so choosing a photo whose own controls sit in that band puts a panel
+  // button under her finger within the same gesture. The browser then
+  // dispatches the touch's COMPATIBILITY click, which hit-tests the DOM as it
+  // stands at that moment, i.e. with the panel already there. Recorded
+  // exactly: one tap on photo-15 selected photo-15 AND pressed "Make this
+  // photo shorter, and the one beside it taller"; in a sixteen-photo sweep the
+  // same thing pressed "Remove" and a photograph left the collage with no
+  // gesture that meant to remove it.
+  //
+  // So a press-driven click inside the panel is honoured only when the press
+  // that produced it STARTED there. Recorded on a capture-phase document
+  // listener rather than on the panel alone, so a press anywhere else clears
+  // it and there is no state in which a stale `true` lets one through.
+  const pressStartedInPanel = useRef(false);
+  useEffect(() => {
+    const onPointerDown = (event: PointerEvent) => {
+      pressStartedInPanel.current =
+        event.target instanceof Element && event.target.closest('[data-collage-panel]') !== null;
+    };
+    document.addEventListener('pointerdown', onPointerDown, true);
+    return () => document.removeEventListener('pointerdown', onPointerDown, true);
+  }, []);
 
   // A photo that is no longer in the tree cannot stay selected: it would hold
   // the panel open over a box that does not exist. Reachable today only by a
@@ -261,8 +330,7 @@ export function useCollageEditor({ tree, onChange, locked, previews, stage }: Co
     [tree, onChange],
   );
 
-  function finishDrag(dropped: Element | null, photoId: string) {
-    const droppedOn = dropped?.closest(`[${COLLAGE_PHOTO_ATTR}]`)?.getAttribute(COLLAGE_PHOTO_ATTR) ?? null;
+  function finishDrag(droppedOn: string | null, photoId: string) {
     setDragId(null);
     setHoverId(null);
     if (droppedOn !== null && droppedOn !== photoId) {
@@ -283,11 +351,52 @@ export function useCollageEditor({ tree, onChange, locked, previews, stage }: Co
     });
   }
 
+  // Which photo box is under this viewport point -- asked of the browser, and
+  // asked of the WHOLE stack at that point rather than only of whatever is on
+  // top.
+  //
+  // Review finding (Critical), the other half of the one CollageSelectBadge
+  // exists for: Hero.tsx's own content column is `relative z-10` and paints
+  // over the middle of the collage, so `document.elementFromPoint` answers
+  // "the heading" for a large part of this hero -- at 1440x900, for every
+  // single point inside photo-9. A drop there was refused with "Nothing to
+  // swap with there", over a box that is plainly a photograph, and mid-drag
+  // that box was never marked as the destination either. Raising the boxes is
+  // not the fix (the column holds her editable heading and has to stay
+  // clickable), so the question this asks has to change instead: not "what is
+  // on top here", but "which photo box is here at all".
+  //
+  // `elementsFromPoint` returns the stack in paint order, topmost first, and
+  // honours `pointer-events` exactly as `elementFromPoint` does -- so the
+  // first entry belonging to a photo box is the box she is pointing at, and
+  // anything painted over it that is not part of the collage (the content
+  // column, the bottom-docked panel) is stepped past rather than mistaken for
+  // "nothing".
+  function photoIdAtPoint(x: number, y: number): string | null {
+    for (const element of document.elementsFromPoint(x, y)) {
+      const id = element.closest(`[${COLLAGE_PHOTO_ATTR}]`)?.getAttribute(COLLAGE_PHOTO_ATTR);
+      if (id !== undefined && id !== null) return id;
+    }
+    return null;
+  }
+
   function handlePointerDown(event: ReactPointerEvent<HTMLDivElement>, photoId: string) {
     if (locked) return;
     // The camera badge, and every control this module renders, keep their own
     // clicks: a press that starts on one of them is never a drag.
-    if (event.target instanceof Element && event.target.closest(`label, button, [${COLLAGE_CONTROL_ATTR}]`)) return;
+    //
+    // The select badge is the ONE exception, and it is the reason the check is
+    // written this way round: for a box Hero's content column covers -- nine
+    // of the sixteen at 390px -- that badge is the only reachable pixel in the
+    // box, so if a press on it could not start a gesture, those photos could
+    // be neither tapped nor dragged at all. See CollageSelectBadge.tsx.
+    if (
+      event.target instanceof Element &&
+      event.target.closest(`[${COLLAGE_SELECT_ATTR}]`) === null &&
+      event.target.closest(`label, button, [${COLLAGE_CONTROL_ATTR}]`) !== null
+    ) {
+      return;
+    }
     // Left button only for a mouse; any contact for pen and touch.
     if (event.pointerType === 'mouse' && event.button !== 0) return;
     const canDrag = event.pointerType !== 'touch';
@@ -313,8 +422,7 @@ export function useCollageEditor({ tree, onChange, locked, previews, stage }: Co
     // sends every move to the box the drag STARTED on, so the event's own
     // target is always the source box and would name the wrong destination
     // every time.
-    const under = document.elementFromPoint(event.clientX, event.clientY);
-    const overId = under?.closest(`[${COLLAGE_PHOTO_ATTR}]`)?.getAttribute(COLLAGE_PHOTO_ATTR) ?? null;
+    const overId = photoIdAtPoint(event.clientX, event.clientY);
     // Recorded even when it is the box the drag STARTED on. Excluding that
     // case would be a branch nothing could distinguish: `overlayFor` below
     // asks "is this the photo being carried?" before it asks "is this the
@@ -333,10 +441,11 @@ export function useCollageEditor({ tree, onChange, locked, previews, stage }: Co
     }
     if (!drag.moved) {
       setSelectedId(photoId);
+      setSelectedByTouch(event.pointerType === 'touch');
       setSwapArmed(false);
       return;
     }
-    finishDrag(document.elementFromPoint(event.clientX, event.clientY), photoId);
+    finishDrag(photoIdAtPoint(event.clientX, event.clientY), photoId);
   }
 
   function handlePointerCancel(event: ReactPointerEvent<HTMLDivElement>, photoId: string) {
@@ -481,6 +590,9 @@ export function useCollageEditor({ tree, onChange, locked, previews, stage }: Co
     const overlay = overlayFor(photo.id);
     const swapSourceId = swapArmed && !locked ? selectedId : null;
     const armedTarget = swapSourceId !== null && swapSourceId !== photo.id;
+    // The same "Photo N of M" the panel names it by, so the badge she presses
+    // and the sentence she then reads agree.
+    const position = photos.findIndex((candidate) => candidate.id === photo.id) + 1;
     return (
       <div
         key={path}
@@ -506,6 +618,19 @@ export function useCollageEditor({ tree, onChange, locked, previews, stage }: Co
         }}
       >
         {image}
+        {/* The one reachable pixel of a box the hero's own content column
+            paints over -- and, because a press on it is the one press this
+            module lets through to the drag handler, the place a drag on such
+            a box begins. See CollageSelectBadge.tsx for the sweep that
+            measured which boxes those are. */}
+        <CollageSelectBadge
+          label={`Choose photo ${position} of ${photos.length}`}
+          selected={selectedId === photo.id}
+          onSelect={() => {
+            setSelectedId(photo.id);
+            setSwapArmed(false);
+          }}
+        />
         {overlay !== null && (
           // `data-collage-overlay` names WHICH state this is, so a browser
           // test can assert that the box under the pointer really is marked
@@ -618,10 +743,20 @@ export function useCollageEditor({ tree, onChange, locked, previews, stage }: Co
       setNotice({
         photoId: id,
         tone: 'done',
+        // Review finding (Minor): this used to end "nothing else moved",
+        // which is an absolute claim and not quite true. Splicing the new
+        // split into a parent that already runs the same way lays one MORE
+        // 4px gap along that axis, so its other children really do give up a
+        // pixel or two -- measured: adding beside photo-16 at 1440x900 also
+        // narrows photo-13, photo-14 and photo-15 by 1-2px. Their
+        // PROPORTIONS are untouched, which is the thing that is actually
+        // guaranteed (canonicalizeCollageTree's own comment,
+        // src/content/collage.ts, records the same arithmetic), so that is
+        // what the sentence now says.
         text:
           direction === 'row'
-            ? 'Added beside it. The two now share the box that photo used to fill; nothing else moved.'
-            : 'Added below it. The two now share the box that photo used to fill; nothing else moved.',
+            ? 'Added beside it. The two now share the box that photo used to fill; every other photo keeps the share of the collage it had.'
+            : 'Added below it. The two now share the box that photo used to fill; every other photo keeps the share of the collage it had.',
       });
     } catch (error) {
       URL.revokeObjectURL(localUrl);
@@ -633,6 +768,26 @@ export function useCollageEditor({ tree, onChange, locked, previews, stage }: Co
     if (tree === null || selected === null) return;
     const next = removeCollagePhoto(tree, selected.id);
     if (next === tree) return;
+    const previous = tree;
+    const removed = selected;
+
+    // Review finding (Important): this dropped the photo from the tree and
+    // left the bytes it had uploaded sitting in the shared collector. Those
+    // bytes were then committed as an asset nothing in the site references --
+    // on every add-then-remove -- and, worse, kept occupying one of the eight
+    // slots MAX_STAGED_PHOTOS_PER_PUBLISH allows, with nothing in the UI able
+    // to free it: removing the photo is the natural gesture and it did not.
+    // At nine staged files `buildPublishRequest` refuses the whole publish,
+    // including every unrelated text edit on the page, with advice she cannot
+    // act on. `stage(key, null)` is staged.ts's own documented contract for
+    // exactly this -- "an abandoned or superseded pick" -- and the key is the
+    // same one `handleAddFile` above and EditMode's own renderImage both stage
+    // under, so it covers a photo she ADDED and one she merely REPLACED
+    // equally.
+    const stagedKey = `galleries.json:${collageNodePath(removed)}`;
+    const orphaned = stagedFiles[stagedKey] ?? null;
+    stage(stagedKey, null);
+
     onChange(next);
     setSelectedId(null);
     setSwapArmed(false);
@@ -640,6 +795,25 @@ export function useCollageEditor({ tree, onChange, locked, previews, stage }: Co
       photoId: null,
       tone: 'done',
       text: 'Removed. The photos it shared a box with have taken the space back.',
+      // Review finding (Important): every other gesture on this surface is
+      // reversible -- drag it back, swap it back, drag the divider back -- and
+      // this one was not, from a single tap of a button the same size and
+      // shape as "Done", with the only escapes being a whole-commit undo after
+      // publishing or DraftBanner's all-or-nothing Discard. Restoring the
+      // previous tree by reference is exact: nothing about the removed photo
+      // has to be reconstructed, including the bytes, which go back under the
+      // same key they were staged under.
+      undo: () => {
+        onChange(previous);
+        if (orphaned !== null) stage(stagedKey, orphaned);
+        setSelectedId(removed.id);
+        setNotice({
+          photoId: removed.id,
+          tone: 'done',
+          text: 'Put back. The collage is exactly as it was before that photo was removed.',
+        });
+      },
+      undoFrom: next,
     });
   }
 
@@ -706,6 +880,34 @@ export function useCollageEditor({ tree, onChange, locked, previews, stage }: Co
     if (next !== tree) onChange(next);
   }
 
+  // What she can actually do with the photo in front of her -- chosen from
+  // what is true here, never a constant.
+  //
+  // Review finding (Minor): this was one fixed sentence telling her to "drag
+  // it onto another photo to trade places", including on a phone, where a
+  // finger drag is deliberately never armed as a swap (`canDrag =
+  // event.pointerType !== 'touch'`, above) -- so the gesture it named scrolled
+  // the page and did nothing, repeatedly, until she happened to notice the
+  // "Swap with another photo" button that does the same job. The divider half
+  // of it IS true on touch and is kept; only the photo-drag half is dropped
+  // there. The same sentence also promised both gestures for a ONE-PHOTO
+  // collage, where there is no other photo to trade with and no line to drag.
+  const instruction = swapArmed
+    ? 'Now tap the photo you want it to trade places with.'
+    : resizeTarget === null
+      ? 'Use the buttons here to add another photo beside or below this one.'
+      : selectedByTouch
+        // "change its size", not the one-word verb for it: this project's
+        // Tailwind content scan has no JS parser, and that verb is a real,
+        // bare, no-argument utility. Measured, not guessed -- the first draft
+        // of this sentence put a rule for it in the ONE stylesheet every
+        // public visitor downloads (+20 bytes for a word in a message), and
+        // the rule-level build diff is what caught it. Not spelled out even
+        // in this warning, because that is how this project has shipped the
+        // same rule twice before: from a comment cautioning against it.
+        ? 'Drag the line beside it to change how big it is — or use the buttons here to swap it, change its size, add another or remove it.'
+        : 'Drag it onto another photo to trade places, or drag the line beside it to change how big it is — or use the buttons here.';
+
   const panel =
     selected === null && notice === null ? null : (
       <div
@@ -715,6 +917,18 @@ export function useCollageEditor({ tree, onChange, locked, previews, stage }: Co
         // EditableImage carries `data-editable-image-path`.
         data-collage-panel=""
         className="fixed bottom-0 left-0 right-0 z-50 border-t border-gray-200 bg-white p-3 shadow-[0_-4px_12px_rgba(0,0,0,0.15)]"
+        // See `pressStartedInPanel` above: the compatibility click a touch
+        // produces would otherwise press whichever control this panel has just
+        // put under her finger. `detail === 0` is what a keyboard activation
+        // and a programmatic `input.click()` (the Add picker below is opened
+        // that way) both produce, and those are let through untouched -- which
+        // is the whole reason this is provenance-based rather than the
+        // time-based ghost-click guard that would break both.
+        onClickCapture={(event) => {
+          if (event.detail === 0 || pressStartedInPanel.current) return;
+          event.preventDefault();
+          event.stopPropagation();
+        }}
       >
         <div className="mx-auto max-w-3xl">
           {selected !== null && (
@@ -734,11 +948,7 @@ export function useCollageEditor({ tree, onChange, locked, previews, stage }: Co
               />
               <div className="flex-1">
                 <p className="font-['Montserrat'] text-sm text-[#222]">{`Photo ${selectedIndex + 1} of ${photos.length}`}</p>
-                <p className="font-['Montserrat'] text-xs text-gray-500">
-                  {swapArmed
-                    ? 'Now tap the photo you want it to trade places with.'
-                    : 'Drag it onto another photo to trade places, or drag the line beside it to change how big it is — or use the buttons here.'}
-                </p>
+                <p className="font-['Montserrat'] text-xs text-gray-500">{instruction}</p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <button
@@ -865,9 +1075,27 @@ export function useCollageEditor({ tree, onChange, locked, previews, stage }: Co
             </p>
           )}
           {notice !== null && (
-            <p role="status" className="mt-2 font-['Montserrat'] text-sm text-[#222]">
-              {notice.text}
-            </p>
+            <div className="mt-2 flex flex-wrap items-center gap-3">
+              <p role="status" className="font-['Montserrat'] text-sm text-[#222]">
+                {notice.text}
+              </p>
+              {/* Drawn only while the tree is still the exact one this undo
+                  was computed against -- see Notice.undoFrom. Once she has
+                  moved anything else, restoring the whole previous tree would
+                  quietly discard that work too, so the offer is withdrawn
+                  rather than left to do something she did not ask for. */}
+              {notice.undo !== undefined && notice.undoFrom === tree && (
+                <button
+                  type="button"
+                  aria-label="Put the removed photo back"
+                  disabled={locked}
+                  onClick={notice.undo}
+                  className="rounded border border-gray-300 bg-white px-3 py-2 font-['Montserrat'] text-sm text-[#222] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Undo
+                </button>
+              )}
+            </div>
           )}
         </div>
       </div>
