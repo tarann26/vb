@@ -70,6 +70,9 @@ import {
 // and has no transitive path to src/content/index.ts (the build-time
 // snapshot). See src/admin/__tests__/content.test.ts, which pins that.
 import { setCollagePhotoSrc } from '../content/collage';
+import { useCollageEditor } from './CollageEditor';
+import { NO_IMAGE_PREVIEWS, useImagePreviews } from './previews';
+import type { ImagePreviews } from './previews';
 import type {
   ContentBundle,
   SectionId,
@@ -331,6 +334,19 @@ type ImageTarget =
 // actually shows).
 const TEMPLATE_SECTION_CATEGORY: UploadCategory = 'atmosphere';
 
+// The two things `/edit` hands `buildBundle` that the public page has no
+// equivalent of. Both optional so the direct-call tests below keep compiling;
+// see `buildBundle`'s own comment for what absence means.
+export interface EditModeSeams {
+  // Where the local preview of a just-picked photo lives now that it may not
+  // live inside EditableImage -- see src/admin/previews.ts.
+  previews?: ImagePreviews;
+  // The collage's own two node renderers, from `useCollageEditor`
+  // (src/admin/CollageEditor.tsx). Absent means the PUBLIC renderers, i.e. a
+  // collage that draws correctly and cannot be rearranged.
+  collage?: Pick<ContentBundle, 'renderCollagePhoto' | 'renderCollageSplit'>;
+}
+
 function resolveImageTarget(path: string): ImageTarget | null {
   const gallery = path.match(/^galleries\.(atmosphere|ourStory)\.(\d+)$/);
   if (gallery) {
@@ -439,13 +455,26 @@ function setItemImage<T extends { id: string; image: string | null }>(items: T[]
 // against the real homepage's grid and flex layout. All three gates fall
 // back to render paths that already exist, are already tested, and are
 // already documented as layout-neutral.
+//
+// `seams` is the fifth parameter, optional and defaulted, for the same reason
+// `locked` is: this file's own tests call `buildBundle` directly at a dozen
+// sites, and a required parameter would break every one of them under
+// `tsc -b`. What each half of it does when absent is stated on its own field
+// below; the real /edit screen always passes both.
 // eslint-disable-next-line react-refresh/only-export-components
 export function buildBundle(
   entries: ContentEntries,
   registry: ContentRegistry,
   stage: (key: string, file: StagedFile | null) => void,
   locked = false,
+  seams: EditModeSeams = {},
 ): ContentBundle {
+  // No preview store => no local preview at all: every <img> shows the
+  // content-supplied path. Only a direct `buildBundle(...)` call in a test
+  // can reach that; the component below always hands over the real one, and
+  // the drag-to-swap e2e spec (which asserts a picked photo's blob preview
+  // travels with it) is what would fail if it stopped.
+  const previews = seams.previews ?? NO_IMAGE_PREVIEWS;
   const copy = pick(entries, 'copy.json', EMPTY_COPY);
   const galleries = pick(entries, 'galleries.json', EMPTY_GALLERIES);
   const dishes = pick(entries, 'dishes.json', []);
@@ -632,20 +661,21 @@ export function buildBundle(
           onStaged={(staged) => stage(`${stageFile}:${path}`, fromStagedPhoto(staged))}
           onReplace={(contentPath) => commitImage(path, contentPath)}
           locked={locked}
+          previewUrl={previews.urls[path] ?? null}
+          onPreview={(url) => previews.set(path, url)}
           {...props}
         />
       );
     },
-    // The collage's two node seams. /edit takes the SAME implementations the
-    // public page uses (src/content/context.ts), not a copy of them and not a
-    // stub: the photos inside are already editable, because Hero.tsx routes
-    // every one of them through `renderImage` above, which is what puts
-    // EditableImage's camera badge on each box. The affordances that need a
-    // seam of their own -- drag-to-swap on a photo, a divider between two
-    // children of a split -- are the next tasks in this plan, and these two
-    // parameters are what they attach to.
-    renderCollagePhoto: defaultRenderCollagePhoto,
-    renderCollageSplit: defaultRenderCollageSplit,
+    // The collage's two node seams. Without an editor they are the SAME
+    // implementations the public page uses (src/content/context.ts), not a
+    // copy of them and not a stub: the photos inside are already editable,
+    // because Hero.tsx routes every one of them through `renderImage` above,
+    // which is what puts EditableImage's camera badge on each box. With one
+    // (Task 4 onward) they are `useCollageEditor`'s, which wrap those same
+    // renderers and add the gestures -- see src/admin/CollageEditor.tsx.
+    renderCollagePhoto: seams.collage?.renderCollagePhoto ?? defaultRenderCollagePhoto,
+    renderCollageSplit: seams.collage?.renderCollageSplit ?? defaultRenderCollageSplit,
   };
 }
 
@@ -843,6 +873,27 @@ const EditMode: React.FC = () => {
     ...useValidation('pages.json', entries['pages.json']?.data as ContentTypeMap['pages.json'] | undefined),
   ];
 
+  // Both hooks are called HERE, unconditionally, above the
+  // `status === 'checking'` early return below -- React's own rule that hooks
+  // cannot run conditionally, the same reason `useValidation` is hoisted
+  // above it.
+  const previews = useImagePreviews();
+  const liveGalleries = pick(entries, 'galleries.json', EMPTY_GALLERIES);
+  const collage = useCollageEditor({
+    // `null` until galleries.json loads -- the tree's own spelling of
+    // "nothing to draw" (types.ts's Galleries). The editor renders no panel
+    // and offers no gesture for it, which is correct: there is nothing on
+    // screen to rearrange yet.
+    tree: liveGalleries.heroCollage,
+    // registry.updateData, never register -- the same Finding C4 reasoning
+    // commitText and commitImage above both follow: `register` overwrites a
+    // sha `markPublished` already refreshed, and produces a false conflict on
+    // the file's SECOND publish in a session.
+    onChange: (next) => registry.updateData('galleries.json', { ...liveGalleries, heroCollage: next }),
+    locked: publishLocked,
+    previews,
+  });
+
   if (status === 'checking') {
     // Same reasoning as AdminApp.tsx's own 'checking' branch: the lazy
     // chunk itself is already covered by src/App.tsx's <Suspense
@@ -851,7 +902,7 @@ const EditMode: React.FC = () => {
     return null;
   }
 
-  const bundle = buildBundle(entries, registry, staged.stage, publishLocked);
+  const bundle = buildBundle(entries, registry, staged.stage, publishLocked, { previews, collage });
   const erroredFiles = Object.keys(fileErrors) as ContentFileName[];
   const loadedOrErroredCount = CONTENT_FILES.filter(
     (file) => entries[file] !== undefined || fileErrors[file] !== undefined,
@@ -921,18 +972,22 @@ const EditMode: React.FC = () => {
   //      before the input ever sees it) -- both the label's own click and
   //      the forwarded one land inside the identical wrapper, so one
   //      carve-out clears both.
-  //   4. Plan 6, Task 3: CollageTile's own move/size-change controls carry
-  //      `data-collage-control` -- the same reasoning as carve-out 3, with
-  //      one difference C1 didn't have to deal with: the control PANEL is
-  //      rendered via `createPortal` into `document.body`, so its buttons'
-  //      real DOM ancestors are `document.body`'s, never a collage tile's
-  //      own wrapper `<div>`. `closest()` walks the real DOM, not the React
-  //      tree, so a carve-out keyed on nesting inside the tile (the way
-  //      carve-out 3 nests inside EditableImage's own wrapper) would miss
-  //      the portaled panel entirely -- every interactive element the panel
-  //      renders carries this marker directly instead (CollageTile.tsx's
-  //      own `ControlButton` centralises that, so a future button in the
-  //      panel can't be added without it).
+  //   4. Every control the collage editor renders INSIDE the collage itself
+  //      carries `data-collage-control` -- the same reasoning as carve-out 3,
+  //      keyed on a marker rather than on nesting because these controls sit
+  //      inside a photo box whose own wrapper is Hero.tsx's, not the
+  //      editor's. Plan 9 review finding (Minor): between the split-tree
+  //      rewrite and Task 4 this carve-out had NO producer at all -- the
+  //      component that used to set the marker (CollageTile.tsx) was deleted
+  //      with the grid machinery, and this comment still named it, so a
+  //      control added here on the strength of that sentence would have been
+  //      silently inert. The producer is now
+  //      `src/admin/CollageEditor.tsx`'s module-private
+  //      `CollageControlButton`, which is the ONLY thing that builds a
+  //      control inside the collage and always sets this attribute; that
+  //      file's own tests assert it, so the carve-out and its producer
+  //      cannot drift apart again. The editor's PANEL needs no carve-out: it
+  //      is rendered outside this guard's own wrapper entirely (see below).
   //
   // Everything else stays blocked, including Hero's reserve button
   // (fires the WhatsApp beacon) and BlogTeaser's "View all"
@@ -1154,6 +1209,14 @@ const EditMode: React.FC = () => {
             </SectionErrorBoundary>
           </div>
         </div>
+        {/* The collage editor's panel. Rendered OUTSIDE the
+            `onClickCapture` wrapper above, deliberately: that guard cancels
+            every click it does not recognise, so anything rendered inside it
+            needs a carve-out to work at all, and a control surface that is
+            not part of the page being edited has no business needing one.
+            It is `fixed` (CollageEditor.tsx), so where it sits in the
+            document does not move it on screen. */}
+        {collage.panel}
       </PublishBar>
       {/* Overlay, not a replacement: EditMode must never unmount the page
           above on status === 'out' (Step 3's whole point). A 401 mid-load

@@ -198,6 +198,52 @@ export function findCollagePhoto(node: CollageNode, id: string): CollagePhoto | 
   return collagePhotos(node).find((photo) => photo.id === id) ?? null;
 }
 
+// Exchanges the POSITIONS of the two photos `idA` and `idB` name, carrying
+// each photo's whole payload -- id, src and alt -- with it. Exactly the
+// gesture the owner described: "The boxes keep their shape. The photos are
+// the ones -- it's like the photo fills the box it travels to."
+//
+// So NOTHING structural moves: every split keeps its id, its direction, its
+// sizes array and its children count, and only two of the leaves change. That
+// is what makes `galleries.heroCollage.<id>` keep naming the same photograph
+// across a swap (types.ts's CollagePhoto comment), and it is why a
+// replacement she staged for a photo travels with the photo rather than
+// staying on the box it left.
+//
+// A no-op -- by reference, so React re-renders nothing -- when either id
+// names no photo, and equally when the two ids are the SAME. Both are
+// reachable: dropping on a box whose photo was removed in another tab, and
+// dropping a photo on itself.
+//
+// The same-id case deliberately has no early return of its own. It would be a
+// branch nothing could ever distinguish: with `idA === idB` both lookups find
+// the identical object, so `exchangePhotos` replaces that photo with itself,
+// every `next === child` holds, and the tree comes back by reference anyway --
+// a guard whose only effect is to skip two lookups, and whose removal no test
+// could ever turn red. This project counts a branch like that as a defect
+// rather than as caution.
+export function swapCollagePhotos(node: CollageNode, idA: string, idB: string): CollageNode {
+  const a = findCollagePhoto(node, idA);
+  const b = findCollagePhoto(node, idB);
+  if (a === null || b === null) return node;
+  return exchangePhotos(node, a, b);
+}
+
+function exchangePhotos(node: CollageNode, a: CollagePhoto, b: CollagePhoto): CollageNode {
+  if (node.kind === 'photo') {
+    if (node.id === a.id) return b;
+    if (node.id === b.id) return a;
+    return node;
+  }
+  let changed = false;
+  const children = node.children.map((child) => {
+    const next = exchangePhotos(child, a, b);
+    if (next !== child) changed = true;
+    return next;
+  });
+  return changed ? { ...node, children } : node;
+}
+
 // Rewrites exactly the one photo `id` names, leaving every other node -- and
 // every split's sizes and children order -- at its prior object identity
 // where nothing on its path changed. The same "spread the touched level only"

@@ -17,6 +17,7 @@ import {
   normalizeCollageTree,
   normalizeSizes,
   setCollagePhotoSrc,
+  swapCollagePhotos,
 } from '../collage';
 import { assertCollageTree } from '../guards';
 import { collageTreeProblems } from '../validate';
@@ -171,6 +172,93 @@ describe('collage: walking the tree', () => {
   it('returns the identical tree, by reference, when no photo matches', () => {
     const before = sampleTree();
     expect(setCollagePhotoSrc(before, 'nobody', '/hero/x.webp')).toBe(before);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Task 4's operation. The owner's own description of it is the specification:
+// "The boxes keep their shape. The photos are the ones -- it's like the photo
+// fills the box it travels to."
+
+// Everything about a tree EXCEPT which photo sits where. If a swap changes any
+// of this, it moved a box, and the whole point of the gesture is that it does
+// not.
+function skeleton(node: CollageNode): unknown {
+  if (node.kind === 'photo') return 'photo';
+  return {
+    id: node.id,
+    direction: node.direction,
+    sizes: node.sizes,
+    children: node.children.map(skeleton),
+  };
+}
+
+describe('collage: swapping two photos', () => {
+  it('exchanges two cousins and changes no box, no size and no split', () => {
+    const before = sampleTree();
+    const after = swapCollagePhotos(before, 'a', 'd');
+
+    // Document order is where each photo SITS, so the two named photos have
+    // traded places and nothing else has.
+    expect(collagePhotos(before).map((p) => p.id)).toEqual(['a', 'b', 'c', 'd', 'e']);
+    expect(collagePhotos(after).map((p) => p.id)).toEqual(['d', 'b', 'c', 'a', 'e']);
+    expect(skeleton(after)).toEqual(skeleton(before));
+  });
+
+  it('exchanges two siblings of the same split', () => {
+    const after = swapCollagePhotos(sampleTree(), 'c', 'd');
+    expect(collagePhotos(after).map((p) => p.id)).toEqual(['a', 'b', 'd', 'c', 'e']);
+    expect(skeleton(after)).toEqual(skeleton(sampleTree()));
+  });
+
+  it('carries each photo’s whole payload with it -- id, src and alt together', () => {
+    const before = split('root', 'row', [
+      { kind: 'photo', id: 'left', src: '/hero/left.webp', alt: 'the left one' },
+      { kind: 'photo', id: 'right', src: '/hero/right.webp', alt: 'the right one' },
+    ]);
+    const after = swapCollagePhotos(before, 'left', 'right') as CollageSplit;
+    expect(after.children[0]).toEqual({ kind: 'photo', id: 'right', src: '/hero/right.webp', alt: 'the right one' });
+    expect(after.children[1]).toEqual({ kind: 'photo', id: 'left', src: '/hero/left.webp', alt: 'the left one' });
+  });
+
+  it('keeps every node id in the tree, so nothing is renamed by moving', () => {
+    const before = sampleTree();
+    const after = swapCollagePhotos(before, 'a', 'd');
+    expect([...collageNodeIds(after)].sort()).toEqual([...collageNodeIds(before)].sort());
+  });
+
+  it('leaves branches containing neither photo at their prior object identity', () => {
+    const before = sampleTree() as CollageSplit;
+    const after = swapCollagePhotos(before, 'c', 'd') as CollageSplit;
+    // `a` and `e` are on no path to either photo, so React must see the very
+    // same objects and never re-render those boxes.
+    expect(after.children[0]).toBe(before.children[0]);
+    expect(after.children[2]).toBe(before.children[2]);
+    expect(after.children[1]).not.toBe(before.children[1]);
+    // ...and the input is untouched: this is a rebuild, never a mutation.
+    expect(collagePhotos(before).map((p) => p.id)).toEqual(['a', 'b', 'c', 'd', 'e']);
+  });
+
+  it('is a no-op, by reference, for the same photo twice or for a name no photo carries', () => {
+    const before = sampleTree();
+    expect(swapCollagePhotos(before, 'c', 'c')).toBe(before);
+    expect(swapCollagePhotos(before, 'c', 'nobody')).toBe(before);
+    expect(swapCollagePhotos(before, 'nobody', 'c')).toBe(before);
+    // A SPLIT's id is not a photo's, so naming one swaps nothing.
+    expect(swapCollagePhotos(before, 'a', 'mid')).toBe(before);
+  });
+
+  it('is its own inverse -- swapping the same pair back restores the tree exactly', () => {
+    const before = sampleTree();
+    const there = swapCollagePhotos(before, 'a', 'd');
+    const back = swapCollagePhotos(there, 'a', 'd');
+    expect(back).toEqual(before);
+  });
+
+  it('still validates at both ends -- a swapped tree is a legal tree', () => {
+    const swapped = swapCollagePhotos(sampleTree(), 'a', 'd');
+    expect(collageTreeProblems(swapped)).toEqual([]);
+    expect(() => assertCollageTree(swapped)).not.toThrow();
   });
 });
 

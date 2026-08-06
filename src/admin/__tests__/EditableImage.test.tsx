@@ -8,7 +8,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { useState } from 'react';
 import EditableImage from '../EditableImage';
+import type { EditableImageProps } from '../EditableImage';
 import type { StagedPhoto } from '../upload-photo';
 
 const heicToMock = vi.fn();
@@ -62,11 +64,22 @@ function jpegFile(name = 'photo.jpg'): File {
   return new File([JPEG_BYTES], name, { type: 'image/jpeg' });
 }
 
-function renderImage(overrides: Partial<Parameters<typeof EditableImage>[0]> = {}) {
+// The preview is owned by the SCREEN now, not by EditableImage (see
+// src/admin/previews.ts for why: a swap unmounts the box, and a preview held
+// inside the component died with it). Every test here therefore renders it
+// through a tiny owner that does exactly what `useImagePreviews` does for
+// /edit -- which makes these tests check the real path rather than a
+// component-local shortcut that no longer exists.
+function PreviewOwner(props: Omit<EditableImageProps, 'previewUrl' | 'onPreview'>) {
+  const [url, setUrl] = useState<string | null>(null);
+  return <EditableImage {...props} previewUrl={url} onPreview={setUrl} />;
+}
+
+function renderImage(overrides: Partial<EditableImageProps> = {}) {
   const onStaged = vi.fn();
   const onReplace = vi.fn();
   const { container } = render(
-    <EditableImage
+    <PreviewOwner
       path="galleries.heroCollage.5"
       category="hero"
       src="/atmosphere/dining.webp"
@@ -192,7 +205,16 @@ describe('EditableImage', () => {
 
     it('an image with no className at all leaves the wrapper exactly as it was', () => {
       const { container } = render(
-        <EditableImage path="galleries.ourStory.0" category="our_story" src="/x.webp" alt="x" onStaged={() => {}} onReplace={() => {}} />,
+        <EditableImage
+          path="galleries.ourStory.0"
+          category="our_story"
+          src="/x.webp"
+          alt="x"
+          onStaged={() => {}}
+          onReplace={() => {}}
+          previewUrl={null}
+          onPreview={() => {}}
+        />,
       );
       expect((container.querySelector('[data-editable-image-path]') as HTMLElement).className).toBe('relative');
     });

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import type { ImgHTMLAttributes } from 'react';
 import { convertHeic, checkPhotoSize, uploadAndEncode, type StagedPhoto } from './upload-photo';
 import type { UploadCategory } from '../shared/upload-categories';
@@ -48,6 +48,24 @@ export interface EditableImageProps extends ImgHTMLAttributes<HTMLImageElement> 
   // display only, and the fix is to keep the component rather than the
   // affordance.
   locked?: boolean;
+  // The local preview of a photo she has just picked, OWNED BY THE SCREEN
+  // (src/admin/previews.ts) rather than by this component. Required, not
+  // optional: this component used to hold it in its own `useState` and revoke
+  // the object URL in its own unmount cleanup, which made the preview exactly
+  // as durable as the mounted <img> -- and Plan 9's drag-to-swap unmounts
+  // both boxes it touches (each photo's React key is its own id, and a swap
+  // carries the id along with the photo), so a preview held here is destroyed
+  // by the very gesture that moves the photo it belongs to. See previews.ts's
+  // own header comment for the full history: the same "something unmounted
+  // EditableImage and her photo turned into a broken derivative path" defect
+  // has now been found three times, and holding this above the component is
+  // what stops it being reachable at all.
+  previewUrl: string | null;
+  // Called with a fresh object URL the instant a valid file is ready --
+  // BEFORE the upload starts, so she sees the photo immediately -- and never
+  // called with `null` by this component. Revoking is the owner's job, for
+  // the same reason: this component's lifetime is not the preview's.
+  onPreview: (url: string) => void;
 }
 
 type Status = { kind: 'idle' } | { kind: 'uploading'; percent: number } | { kind: 'error'; message: string };
@@ -285,17 +303,17 @@ const ERROR_CONTROL_LABEL_CLASSNAME =
 // public/ and trip the deploy gate's own asset-existence check.
 const CAMERA_GLYPH = '\u{1F4F7}';
 
-const EditableImage: React.FC<EditableImageProps> = ({ path, category, onStaged, onReplace, locked = false, ...imgProps }) => {
+const EditableImage: React.FC<EditableImageProps> = ({
+  path,
+  category,
+  onStaged,
+  onReplace,
+  locked = false,
+  previewUrl,
+  onPreview,
+  ...imgProps
+}) => {
   const [status, setStatus] = useState<Status>({ kind: 'idle' });
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const objectUrlRef = useRef<string | null>(null);
-
-  useEffect(
-    () => () => {
-      if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
-    },
-    [],
-  );
 
   async function handlePick(fileList: FileList | null) {
     const picked = fileList?.[0];
@@ -333,10 +351,10 @@ const EditableImage: React.FC<EditableImageProps> = ({ path, category, onStaged,
       return;
     }
 
-    if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
-    const url = URL.createObjectURL(file);
-    objectUrlRef.current = url;
-    setPreviewUrl(url);
+    // Handed straight up to the owner, which revokes whatever this path held
+    // before it. Nothing is revoked here, and nothing is revoked when this
+    // component unmounts -- see `previewUrl`'s own comment above.
+    onPreview(URL.createObjectURL(file));
 
     try {
       const staged = await uploadAndEncode(category, file, (percent) => setStatus({ kind: 'uploading', percent }));
@@ -355,7 +373,9 @@ const EditableImage: React.FC<EditableImageProps> = ({ path, category, onStaged,
   // The local, just-staged preview always wins over the content-supplied
   // `src` -- she sees the photo she just picked immediately, the same
   // "never show a not-yet-live path as if it were" reasoning PhotoField.tsx's
-  // own comment gives for the identical choice.
+  // own comment gives for the identical choice. It arrives as a prop now
+  // rather than from this component's own state, which is what makes it
+  // survive a swap unmounting this box.
   const src = previewUrl ?? imgProps.src;
 
   // Computed from the props THIS render was handed, not captured once: a

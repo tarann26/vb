@@ -2006,3 +2006,102 @@ describe('Plan 5 Task 5: publishing from /edit', () => {
     expect(link.compareDocumentPosition(banner) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Plan 9, Task 4: the collage editor is actually wired into /edit.
+//
+// CollageEditor.test.tsx checks what the editor DOES; this checks that /edit
+// hands it to `buildBundle` at all, and that the one thing which cannot be
+// checked from inside the editor -- how the capture-phase click guard treats
+// its controls -- comes out right on the real page.
+describe('EditMode: the hero collage is rearrangeable at /edit', () => {
+  async function renderEdit() {
+    stubFetch();
+    render(
+      <MemoryRouter>
+        <EditMode />
+      </MemoryRouter>,
+    );
+    await screen.findByRole('heading', { level: 1 });
+    await waitFor(() => expect(document.querySelectorAll('[data-collage-photo-id]').length).toBeGreaterThan(0));
+  }
+
+  // Mutation this guards: dropping `collage` from the object EditMode passes
+  // `buildBundle` as its fifth argument, so the bundle falls back to the
+  // PUBLIC renderers -- a collage that still draws perfectly and cannot be
+  // touched, which is exactly the failure mode that would otherwise ship
+  // unnoticed.
+  it('every one of the sixteen photos is a box the editor owns, named by its own id', async () => {
+    await renderEdit();
+    const ids = [...document.querySelectorAll('[data-collage-photo-id]')].map((el) =>
+      el.getAttribute('data-collage-photo-id'),
+    );
+    expect(ids).toEqual(collagePhotos(GALLERIES.heroCollage!).map((p) => p.id));
+  });
+
+  // The panel is rendered OUTSIDE the `onClickCapture` wrapper, which is why
+  // it needs no carve-out. Mutation this guards: moving `{collage.panel}`
+  // inside that wrapper -- the guard then cancels every button in it.
+  it('the panel’s own buttons are not cancelled by the guard that stops the page’s links', async () => {
+    await renderEdit();
+    fireEvent.focusIn(document.querySelector('[data-collage-photo-id]') as HTMLElement);
+    const button = screen.getByRole('button', { name: 'Swap this photo with another photo' });
+    const event = new MouseEvent('click', { bubbles: true, cancelable: true });
+    button.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(false);
+  });
+
+  // ...and the controls that genuinely are inside the page -- the "Swap
+  // here" targets, which sit within a collage box -- survive it only because
+  // of the fourth carve-out, whose producer this is. Mutation this guards:
+  // deleting the `data-collage-control` branch from `handleCaptureClick` --
+  // confirmed red; the button's click is then cancelled and the swap can
+  // never happen from a tap.
+  it('a control inside the collage survives that guard, via the marker its producer always sets', async () => {
+    await renderEdit();
+    fireEvent.focusIn(document.querySelector('[data-collage-photo-id]') as HTMLElement);
+    fireEvent.click(screen.getByRole('button', { name: 'Swap this photo with another photo' }));
+    const targets = screen.getAllByRole('button', { name: 'Swap the selected photo into this box' });
+    expect(targets).toHaveLength(15);
+    expect(targets[0].closest('[data-collage-photo-id]')).not.toBeNull();
+    const event = new MouseEvent('click', { bubbles: true, cancelable: true });
+    targets[0].dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(false);
+  });
+
+  // Mutation this guards: EditMode passing `NO_IMAGE_PREVIEWS` (or nothing)
+  // instead of its own `useImagePreviews()` store -- the <img> then keeps
+  // showing the content path while she is looking at a photo she just
+  // picked, which is the defect previews.ts exists for.
+  it('a photo she has just picked is previewed from the screen’s own store', async () => {
+    class FakeXHR {
+      static instances: FakeXHR[] = [];
+      status = 0;
+      responseText = '';
+      upload: { onprogress: null } = { onprogress: null };
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      constructor() {
+        FakeXHR.instances.push(this);
+      }
+      open() {}
+      send() {}
+      respond(status: number, body: unknown) {
+        this.status = status;
+        this.responseText = JSON.stringify(body);
+        this.onload?.();
+      }
+    }
+    vi.stubGlobal('XMLHttpRequest', FakeXHR as unknown as typeof XMLHttpRequest);
+    await renderEdit();
+    const box = document.querySelector(`[data-editable-image-path="${COLLAGE_DINING_PATH}"]`) as HTMLElement;
+    const input = within(box).getByTitle('Replace this photo').querySelector('input[type="file"]') as HTMLInputElement;
+    Object.defineProperty(input, 'files', {
+      value: [new File([new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 0, 0, 0])], 'p.jpg', { type: 'image/jpeg' })],
+      configurable: true,
+    });
+    fireEvent.change(input);
+    await waitFor(() => expect(FakeXHR.instances.length).toBeGreaterThan(0));
+    await waitFor(() => expect(within(box).getByRole('presentation', { hidden: true })).toHaveAttribute('src', expect.stringMatching(/^blob:/)));
+  });
+});
