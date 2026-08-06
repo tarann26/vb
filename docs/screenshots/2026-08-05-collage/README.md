@@ -9,11 +9,19 @@ section only, real content, all images loaded.
 
 ## What to look at
 
-**Thirteen of the sixteen photos are in exactly the same place, at exactly the
-same size.** The only visible change is the top-left corner: it was empty in
-the "before" — bare wall texture, no photo — and the three photos on the left
-edge (the dining room, and the two pasta close-ups beside it) now grow upward
-to fill it.
+Measured directly — a real Chromium render of both pages, before and after,
+at 390px and 1440px, every one of the sixteen `<img>` boxes read off
+`getBoundingClientRect()` — rather than eyeballed: **none of the sixteen
+photos sits at exactly the same rectangle.** Thirteen shift by under 3px
+(CSS Grid's tracks and the tree's nested flex round their gaps slightly
+differently; invisible at normal viewing distance, and the same order of
+magnitude as the 1-2px this project's own add/remove operations already
+disclose to her elsewhere). The other three move substantially: the arched
+dining room (with its wall mirror), the woven wall-hanging beside it, and the
+hand-filling-pasta shot below both — not "two pasta close-ups", only the
+last of the three is pasta — grow upward from the middle of the collage into
+the top-left corner, which was empty in the "before": bare wall texture, no
+photo.
 
 That emptiness was not a design decision anybody made. The old layout asked
 the browser to auto-place three of the sixteen photos, and the browser pushed
