@@ -44,17 +44,26 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactNode } from 'react';
 import {
+  MAX_COLLAGE_PHOTOS,
   MIN_PAIR_SHARE,
   RESIZE_STEP_SHARE,
+  addCollagePhoto,
+  collageAddRefusal,
   collagePairShare,
   collagePhotos,
+  collageRemoveRefusal,
   collageResizeTarget,
   findCollagePhoto,
+  nextCollageId,
+  removeCollagePhoto,
   resizeCollageSplit,
   swapCollagePhotos,
 } from '../content/collage';
 import { COLLAGE_GAP_PX, collageNodePath } from '../content/context';
-import type { CollageBox, CollageNode, CollagePhoto, CollageSplit, ContentBundle } from '../content/types';
+import type { CollageBox, CollageNode, CollagePhoto, CollageSplit, ContentBundle, SplitDirection } from '../content/types';
+import { checkPhotoSize, convertHeic, uploadAndEncode } from './upload-photo';
+import { fromStagedPhoto } from './staged';
+import type { StagedFile } from './staged';
 import CollageControlButton, { COLLAGE_CONTROL_ATTR } from './CollageControlButton';
 import type { ImagePreviews } from './previews';
 
@@ -143,6 +152,11 @@ export const COLLAGE_DIVIDER_ATTR = 'data-collage-divider';
 const DIVIDER_HIT_PX = 16;
 const DIVIDER_OVERHANG_PX = (DIVIDER_HIT_PX - COLLAGE_GAP_PX) / 2;
 
+// While a photo she picked for "add" is on its way up. The tree gains nothing
+// until this resolves, so there is never a moment at which a box with no photo
+// in it exists -- see `handleAddFile`.
+type AddStatus = { kind: 'idle' } | { kind: 'uploading'; percent: number } | { kind: 'error'; message: string };
+
 interface Notice {
   // Which photo the sentence is about, so its own box can carry the matching
   // highlight. `null` for a message about no particular photo.
@@ -171,16 +185,32 @@ export interface CollageEditorOptions {
   // takes.
   locked: boolean;
   // So the panel's thumbnail shows the photo she just picked, not the
-  // /images/... derivative that will not exist until the deploy finishes.
+  // /images/... derivative that will not exist until the deploy finishes --
+  // and so an ADDED photo shows the file she chose from the moment it lands.
   previews: ImagePreviews;
+  // The same shared collector every other picker on the page uses
+  // (src/admin/staged.ts). An added photo's BYTES have to reach the same
+  // publish as the tree that now names them, or the collage would commit a
+  // path pointing at an asset nobody ever sent.
+  stage: (key: string, file: StagedFile | null) => void;
 }
 
-export function useCollageEditor({ tree, onChange, locked, previews }: CollageEditorOptions): CollageEditor {
+export function useCollageEditor({ tree, onChange, locked, previews, stage }: CollageEditorOptions): CollageEditor {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [swapArmed, setSwapArmed] = useState(false);
   const [dragId, setDragId] = useState<string | null>(null);
   const [hoverId, setHoverId] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
+  // Task 6: "add" opens the picker immediately and the tree gains the photo
+  // only once the upload has actually returned a path. There is no placeholder
+  // stage at any point, which is why `validateContent` needs no rule refusing
+  // one: a blank box is unrepresentable rather than merely forbidden.
+  const [addStatus, setAddStatus] = useState<AddStatus>({ kind: 'idle' });
+  const addInputRef = useRef<HTMLInputElement>(null);
+  // Which of the two buttons opened the picker, read back when the file
+  // arrives. A ref, not state: nothing draws it, and the change handler must
+  // see the value the click set even if no render has happened in between.
+  const addDirectionRef = useRef<SplitDirection>('row');
   // The transient half of a drag -- read and written inside pointer handlers
   // that fire many times a second. Kept out of state on purpose: re-rendering
   // sixteen boxes on every pointermove to store a number nothing draws is the
@@ -499,6 +529,120 @@ export function useCollageEditor({ tree, onChange, locked, previews }: CollageEd
     );
   }
 
+  // ---------------------------------------------------------------------
+  // Task 6: adding a photo, and removing one.
+
+  const addBesideRefusal = tree === null || selected === null ? 'unknown' : collageAddRefusal(tree, selected.id, 'row');
+  const addBelowRefusal = tree === null || selected === null ? 'unknown' : collageAddRefusal(tree, selected.id, 'column');
+  const removeRefusal = tree === null || selected === null ? 'unknown' : collageRemoveRefusal(tree, selected.id);
+  const adding = addStatus.kind === 'uploading';
+
+  // One sentence, chosen from what is actually refused -- never a constant.
+  // The depth answer is per DIRECTION on purpose: dividing a box the way its
+  // parent already runs adds a sibling rather than a level, so the same box is
+  // usually still divisible one way when it is not divisible the other, and
+  // saying which way is a real answer rather than a dead end.
+  const addReason =
+    selected === null
+      ? null
+      : addBesideRefusal === 'cap' || addBelowRefusal === 'cap'
+        ? `The collage already holds ${MAX_COLLAGE_PHOTOS} photos, which is the most it can. Remove one to make room for another.`
+        : addBesideRefusal === 'depth' && addBelowRefusal === 'depth'
+          ? 'This box has been divided as far as it can be — anything smaller would be too small to see. Make it bigger first, or add the photo somewhere else.'
+          : addBesideRefusal === 'depth'
+            ? 'This box cannot be divided side by side again — divide it top to bottom instead.'
+            : addBelowRefusal === 'depth'
+              ? 'This box cannot be divided top to bottom again — divide it side by side instead.'
+              : null;
+
+  const removeReason =
+    selected !== null && removeRefusal === 'floor'
+      ? 'This is the only photo in the collage — there has to be at least one, so it cannot be removed.'
+      : null;
+
+  function openPicker(direction: SplitDirection) {
+    addDirectionRef.current = direction;
+    setAddStatus({ kind: 'idle' });
+    // Reset so picking the SAME file twice in a row still fires `change` --
+    // an unchanged <input type="file"> value raises no second event.
+    if (addInputRef.current !== null) {
+      addInputRef.current.value = '';
+      addInputRef.current.click();
+    }
+  }
+
+  async function handleAddFile(fileList: FileList | null) {
+    const picked = fileList?.[0];
+    if (picked === undefined || tree === null || selected === null) return;
+    const direction = addDirectionRef.current;
+    const targetId = selected.id;
+
+    let file: File;
+    try {
+      file = await convertHeic(picked);
+    } catch (error) {
+      setAddStatus({ kind: 'error', message: error instanceof Error ? error.message : 'Could not read that photo. Try a different one.' });
+      return;
+    }
+    const sizeError = checkPhotoSize(file);
+    if (sizeError !== null) {
+      setAddStatus({ kind: 'error', message: sizeError });
+      return;
+    }
+
+    setAddStatus({ kind: 'uploading', percent: 0 });
+    // The object URL is created BEFORE the upload, so the moment the box
+    // exists it already shows the photo she chose rather than the
+    // /images/... derivative the deploy has not written yet.
+    const localUrl = URL.createObjectURL(file);
+    try {
+      const staged = await uploadAndEncode('hero', file, (percent) => setAddStatus({ kind: 'uploading', percent }));
+      const id = nextCollageId(tree, 'photo');
+      const photo: CollagePhoto = { kind: 'photo', id, src: staged.contentPath, alt: '' };
+      const next = addCollagePhoto(tree, targetId, direction, photo);
+      if (next === tree) {
+        URL.revokeObjectURL(localUrl);
+        setAddStatus({ kind: 'error', message: 'That photo could not be added here. Try another box.' });
+        return;
+      }
+      const path = collageNodePath(photo);
+      previews.set(path, localUrl);
+      // The same key shape EditMode's own renderImage stages under, so a
+      // later REPLACEMENT of this very photo supersedes these bytes instead
+      // of publishing both.
+      stage(`galleries.json:${path}`, fromStagedPhoto(staged));
+      onChange(next);
+      setAddStatus({ kind: 'idle' });
+      setSelectedId(id);
+      setSwapArmed(false);
+      setNotice({
+        photoId: id,
+        tone: 'done',
+        text:
+          direction === 'row'
+            ? 'Added beside it. The two now share the box that photo used to fill; nothing else moved.'
+            : 'Added below it. The two now share the box that photo used to fill; nothing else moved.',
+      });
+    } catch (error) {
+      URL.revokeObjectURL(localUrl);
+      setAddStatus({ kind: 'error', message: error instanceof Error ? error.message : 'Upload failed.' });
+    }
+  }
+
+  function removeSelected() {
+    if (tree === null || selected === null) return;
+    const next = removeCollagePhoto(tree, selected.id);
+    if (next === tree) return;
+    onChange(next);
+    setSelectedId(null);
+    setSwapArmed(false);
+    setNotice({
+      photoId: null,
+      tone: 'done',
+      text: 'Removed. The photos it shared a box with have taken the space back.',
+    });
+  }
+
   const selectedIndex = selected === null ? -1 : photos.findIndex((p) => p.id === selected.id);
   const thumbnailSrc = selected === null ? undefined : previews.urls[collageNodePath(selected)] ?? selected.src;
 
@@ -574,7 +718,11 @@ export function useCollageEditor({ tree, onChange, locked, previews }: CollageEd
       >
         <div className="mx-auto max-w-3xl">
           {selected !== null && (
-            <div className="flex items-center gap-3">
+            // `flex-wrap`, so the button group drops onto its own line rather
+            // than being squeezed beside the thumbnail at 390px -- there are
+            // seven controls here and a phone has room for about three
+            // across.
+            <div className="flex flex-wrap items-center gap-3">
               {/* A thumbnail, not "Photo 5 of the collage" -- the owner's own
                   objection to the panel this replaces was that it "has no
                   information in it". */}
@@ -589,7 +737,7 @@ export function useCollageEditor({ tree, onChange, locked, previews }: CollageEd
                 <p className="font-['Montserrat'] text-xs text-gray-500">
                   {swapArmed
                     ? 'Now tap the photo you want it to trade places with.'
-                    : 'Drag it onto another photo to trade places, or drag the line beside it to change how big it is.'}
+                    : 'Drag it onto another photo to trade places, or drag the line beside it to change how big it is — or use the buttons here.'}
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
@@ -638,6 +786,33 @@ export function useCollageEditor({ tree, onChange, locked, previews }: CollageEd
                 </button>
                 <button
                   type="button"
+                  aria-label="Add another photo beside this one, sharing its box"
+                  disabled={locked || adding || addBesideRefusal !== null}
+                  onClick={() => openPicker('row')}
+                  className="rounded border border-gray-300 bg-white px-3 py-2 font-['Montserrat'] text-sm text-[#222] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Add beside
+                </button>
+                <button
+                  type="button"
+                  aria-label="Add another photo below this one, sharing its box"
+                  disabled={locked || adding || addBelowRefusal !== null}
+                  onClick={() => openPicker('column')}
+                  className="rounded border border-gray-300 bg-white px-3 py-2 font-['Montserrat'] text-sm text-[#222] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Add below
+                </button>
+                <button
+                  type="button"
+                  aria-label="Remove this photo from the collage"
+                  disabled={locked || adding || removeRefusal !== null}
+                  onClick={removeSelected}
+                  className="rounded border border-gray-300 bg-white px-3 py-2 font-['Montserrat'] text-sm text-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Remove
+                </button>
+                <button
+                  type="button"
                   aria-label="Close this panel"
                   onClick={() => {
                     setSelectedId(null);
@@ -647,11 +822,42 @@ export function useCollageEditor({ tree, onChange, locked, previews }: CollageEd
                 >
                   Done
                 </button>
+                {/* The picker itself. "Add" opens it immediately rather than
+                    inserting an empty box she then has to find the camera
+                    badge inside -- two steps for one intention, and a blank
+                    box that reached the live homepage would be worse than no
+                    button at all. `sr-only` rather than `display: none`: a
+                    hidden input cannot be clicked programmatically in every
+                    browser, and this one is opened by the buttons above. */}
+                <input
+                  ref={addInputRef}
+                  type="file"
+                  accept="image/*"
+                  aria-hidden="true"
+                  tabIndex={-1}
+                  className="sr-only"
+                  onChange={(event) => {
+                    void handleAddFile(event.target.files);
+                    event.target.value = '';
+                  }}
+                />
               </div>
             </div>
           )}
           {resizeReason !== null && (
             <p className="mt-2 font-['Montserrat'] text-xs text-gray-500">{resizeReason}</p>
+          )}
+          {addReason !== null && <p className="mt-2 font-['Montserrat'] text-xs text-gray-500">{addReason}</p>}
+          {removeReason !== null && <p className="mt-2 font-['Montserrat'] text-xs text-gray-500">{removeReason}</p>}
+          {addStatus.kind === 'uploading' && (
+            <p role="status" className="mt-2 font-['Montserrat'] text-xs text-gray-500">
+              {`Adding the photo… ${addStatus.percent}%`}
+            </p>
+          )}
+          {addStatus.kind === 'error' && (
+            <p role="alert" className="mt-2 font-['Montserrat'] text-sm text-red-700">
+              {addStatus.message}
+            </p>
           )}
           {locked && (
             <p className="mt-2 font-['Montserrat'] text-xs text-gray-500">

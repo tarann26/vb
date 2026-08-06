@@ -93,11 +93,18 @@ export const MAX_COLLAGE_PHOTOS = 24;
 // tree can never become a rendering stack the browser has to walk, and so
 // `collageDepth` below is a total function on anything that validates.
 //
-// Note for Task 6 (add/remove): repeatedly adding INTO the box just created
-// deepens the tree by one each time, so this limit -- not MAX_COLLAGE_PHOTOS
-// -- is what stops that particular sequence, at 11 such adds. That refusal
-// needs its own sentence in the UI; it is a real answer ("this box is
-// already too small to divide again"), not a bug.
+// Note for Task 6 (add/remove): repeatedly dividing the box just created is
+// what this limit -- not MAX_COLLAGE_PHOTOS -- stops. HOW MANY such adds it
+// allows is not a constant, and an earlier version of this comment said "11",
+// which is only true starting from a one-photo collage: what is left is
+// MAX_COLLAGE_DEPTH minus the box's OWN level, so on the committed
+// arrangement the shallowest photo allows nine and the deepest six. A gate
+// review measured both. The UI must therefore compute that refusal
+// (`collageAddRefusal` below) rather than quote a number -- and it gets a
+// better answer for free: dividing a box ALONG its parent's own direction adds
+// a sibling instead of a level once the tree is canonicalised, so the same box
+// is often divisible one way when it is not divisible the other, and "divide
+// it the other way instead" is a real answer.
 export const MAX_COLLAGE_DEPTH = 12;
 
 // ---------------------------------------------------------------------------
@@ -410,4 +417,200 @@ export function collageResizeTarget(
   const { split, index } = parent;
   const last = index === split.children.length - 1;
   return { split, gapIndex: last ? index - 1 : index, first: !last };
+}
+
+// ---------------------------------------------------------------------------
+// Task 6: growing and pruning the tree.
+//
+// CANONICAL FORM, and why it is not cosmetic. A split must never hold a child
+// split of its OWN direction. Three boxes side by side have to be one row of
+// three, not a row holding a row -- because a divider is "(this split, the gap
+// at index i)" and resolves to `children[i]` and `children[i + 1]`, so if
+// `children[1]` is secretly a pair, the line she sees between the second and
+// third boxes belongs to the INNER split while the line she grabs at the outer
+// level moves two boxes against one. That is exactly "a divider drag moves
+// something she did not point at", the failure the plan names and the reason
+// n-ary children were chosen over binary splits in the first place
+// (types.ts's CollageSplit comment).
+//
+// The committed arrangement is canonical -- it alternates row/column at every
+// level -- so nothing today violates it. Only EDITING can: removing a child
+// leaves a one-child split that must fold into its parent, and the child it
+// folds up may share the parent's direction. A gate review found precisely
+// this, by running the operations before they existed.
+//
+// So both operations below finish by canonicalising, and canonicalising is
+// the IDENTITY on a tree that is already canonical -- `canonicalizeCollageTree
+// (t) === t`, by reference. That is what makes "this tree is canonical" an
+// assertion a test can make, rather than a property a comment claims.
+
+export function canonicalizeCollageTree(node: CollageNode): CollageNode {
+  if (node.kind === 'photo') return node;
+
+  let changed = false;
+  const canonical = node.children.map((child) => {
+    const next = canonicalizeCollageTree(child);
+    if (next !== child) changed = true;
+    return next;
+  });
+
+  // Splice any same-direction child's children into this level, scaling their
+  // sizes by the slot the child occupied -- so the boxes on screen keep the
+  // proportions they had. (One level of nesting also means one fewer gap
+  // along that axis, so the pixels move by 4px; the proportions do not.)
+  const children: CollageNode[] = [];
+  const sizes: number[] = [];
+  canonical.forEach((child, i) => {
+    if (child.kind === 'split' && child.direction === node.direction) {
+      changed = true;
+      const childTotal = child.sizes.reduce((sum, size) => sum + size, 0);
+      child.children.forEach((grandchild, j) => {
+        children.push(grandchild);
+        sizes.push((node.sizes[i] * child.sizes[j]) / childTotal);
+      });
+      return;
+    }
+    children.push(child);
+    sizes.push(node.sizes[i]);
+  });
+
+  // A split of one is not a split -- it is its child, wearing a box. Folding
+  // it away is what stops the tree deepening forever under repeated
+  // add/remove. Children are already canonical here, so this cannot expose a
+  // new same-direction pair at THIS level; the parent's own pass, which runs
+  // after this one returns, is what handles it one level up.
+  if (children.length === 1) return children[0];
+  if (!changed) return node;
+  return { ...node, children, sizes: normalizeSizes(sizes) };
+}
+
+// The first id of the form `<prefix>-<n>` that no node in the tree already
+// carries. Deterministic, so an added photo's id is the same in a test as it
+// is on screen, and so the JSON diff a human reads says `photo-17` rather than
+// a random string.
+export function nextCollageId(node: CollageNode, prefix: string): string {
+  const taken = new Set(collageNodeIds(node));
+  let n = 1;
+  while (taken.has(`${prefix}-${n}`)) n += 1;
+  return `${prefix}-${n}`;
+}
+
+// Replaces the photo `targetId` names with a split holding it and `photo`,
+// side by side or stacked. No checks: `addCollagePhoto` below is what applies
+// them, and `collageAddRefusal` uses this to ask what the result WOULD be.
+function subdivide(
+  node: CollageNode,
+  targetId: string,
+  direction: SplitDirection,
+  photo: CollagePhoto,
+  splitId: string,
+): CollageNode {
+  if (node.kind === 'photo') {
+    if (node.id !== targetId) return node;
+    return { kind: 'split', id: splitId, direction, children: [node, photo], sizes: [1, 1] };
+  }
+  let changed = false;
+  const children = node.children.map((child) => {
+    const next = subdivide(child, targetId, direction, photo, splitId);
+    if (next !== child) changed = true;
+    return next;
+  });
+  return changed ? { ...node, children } : node;
+}
+
+// Why an add can be refused. Each one has its own sentence in the UI, because
+// each one has a different answer: "remove one first" for the cap, and
+// "divide it the other way" for the depth.
+export type CollageAddRefusal = 'unknown' | 'cap' | 'depth';
+
+// Asked by BOTH the control (to disable itself with the right reason) and by
+// `addCollagePhoto` (to refuse), so the message she reads and the rule that
+// binds cannot disagree. The depth answer is computed from what the result
+// would actually be, never from a constant: subdividing a box whose parent
+// already runs in the same direction adds a sibling rather than a level once
+// the tree is canonicalised, so the SAME box can be divisible one way and not
+// the other -- which is what makes "divide it the other way instead" a real
+// answer rather than a consolation.
+export function collageAddRefusal(
+  node: CollageNode,
+  targetId: string,
+  direction: SplitDirection,
+): CollageAddRefusal | null {
+  if (findCollagePhoto(node, targetId) === null) return 'unknown';
+  if (countCollagePhotos(node) >= MAX_COLLAGE_PHOTOS) return 'cap';
+  const probe: CollagePhoto = { kind: 'photo', id: PROBE_ID, src: '/probe', alt: '' };
+  const would = canonicalizeCollageTree(subdivide(node, targetId, direction, probe, PROBE_SPLIT_ID));
+  return collageDepth(would) > MAX_COLLAGE_DEPTH ? 'depth' : null;
+}
+
+// Two ids that exist only inside the depth probe above and never reach a
+// tree. Named rather than inlined so it is obvious they are not content.
+const PROBE_ID = '__probe__';
+const PROBE_SPLIT_ID = '__probe-split__';
+
+// Divides exactly one box in two and leaves every other proportion alone: the
+// chosen photo keeps half of the box it had, and the new photo takes the other
+// half. Nothing else in the tree changes at all -- which is the whole payoff of
+// the tree model, since there is no free cell to find and no grid to fit into.
+//
+// Refused -- returning the tree by reference -- when `collageAddRefusal` says
+// so, and when `photo.id` is already taken (a caller that minted a colliding
+// id would otherwise produce a tree the guard refuses at build time).
+export function addCollagePhoto(
+  node: CollageNode,
+  targetId: string,
+  direction: SplitDirection,
+  photo: CollagePhoto,
+): CollageNode {
+  if (collageAddRefusal(node, targetId, direction) !== null) return node;
+  if (collageNodeIds(node).includes(photo.id)) return node;
+  return canonicalizeCollageTree(subdivide(node, targetId, direction, photo, nextCollageId(node, 'split')));
+}
+
+// Why a remove can be refused. 'floor' is MIN_COLLAGE_PHOTOS: one photo is a
+// legitimate full-bleed hero, none is a hero with no background at all.
+export type CollageRemoveRefusal = 'unknown' | 'floor';
+
+export function collageRemoveRefusal(node: CollageNode, photoId: string): CollageRemoveRefusal | null {
+  if (findCollagePhoto(node, photoId) === null) return 'unknown';
+  if (countCollagePhotos(node) <= MIN_COLLAGE_PHOTOS) return 'floor';
+  return null;
+}
+
+// Gives the photo's box to what it shared that box with, and folds away the
+// split that is left holding one child -- see `canonicalizeCollageTree` above
+// for why folding is the load-bearing half. The survivors keep their ratios to
+// each other; only the removed photo's share is redistributed.
+export function removeCollagePhoto(node: CollageNode, photoId: string): CollageNode {
+  if (collageRemoveRefusal(node, photoId) !== null) return node;
+  const parent = findCollageParent(node, photoId);
+  // Unreachable: the refusal above has already established both that this
+  // photo exists and that it is not the only one, so the root is a split and
+  // every photo hangs off something. Treated as "nothing to do" rather than
+  // given a branch of its own -- the same "unreachable state, not a reason to
+  // invent one" posture EditMode.tsx's own commitSectionField takes.
+  if (parent === null) return node;
+  const remaining = parent.split.children.filter((_child, i) => i !== parent.index);
+  const remainingSizes = parent.split.sizes.filter((_size, i) => i !== parent.index);
+  // The split is rebuilt even when one child is left, and the fold is left
+  // entirely to `canonicalizeCollageTree` below. A `remaining.length === 1`
+  // special case here would be a branch nothing could distinguish -- proven
+  // rather than assumed: mutating it to never fold left every test green,
+  // because canonicalising folds the same one-child split one line later.
+  const replacement = { ...parent.split, children: remaining, sizes: normalizeSizes(remainingSizes) };
+  return canonicalizeCollageTree(replaceCollageNode(node, parent.split.id, replacement));
+}
+
+// How far below the root a node sits -- the root itself is level 1. What the
+// UI needs to say how many more times a box could be divided, which is
+// MAX_COLLAGE_DEPTH minus this, and not a constant: the shallowest photo in
+// the committed arrangement can be divided far more times than the deepest.
+export function collageNodeLevel(node: CollageNode, id: string, level = 1): number | null {
+  if (node.id === id) return level;
+  if (node.kind === 'photo') return null;
+  for (const child of node.children) {
+    const found = collageNodeLevel(child, id, level + 1);
+    if (found !== null) return found;
+  }
+  return null;
 }

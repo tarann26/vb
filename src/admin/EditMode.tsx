@@ -892,6 +892,10 @@ const EditMode: React.FC = () => {
     onChange: (next) => registry.updateData('galleries.json', { ...liveGalleries, heroCollage: next }),
     locked: publishLocked,
     previews,
+    // The same collector every other picker on this page stages into, so an
+    // ADDED collage photo's bytes travel with the same publish as the tree
+    // that now names them.
+    stage: staged.stage,
   });
 
   if (status === 'checking') {

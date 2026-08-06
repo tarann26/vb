@@ -14,16 +14,24 @@
 // markup each box carries, that the sizing handed to the seam survives the
 // override, that the native image drag is cancelled, and what the model does
 // when a real <button> is clicked or focus lands inside a box.
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useState } from 'react';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import Hero from '../../components/Hero';
 import { ContentProvider, defaultBundle } from '../../content/ContentContext';
 import { COLLAGE_PHOTO_ATTR, useCollageEditor } from '../CollageEditor';
 import { NO_IMAGE_PREVIEWS } from '../previews';
 import type { ImagePreviews } from '../previews';
-import { findCollageSplit } from '../../content/collage';
-import type { CollageNode } from '../../content/types';
+import type { StagedFile } from '../staged';
+import {
+  MAX_COLLAGE_DEPTH,
+  MAX_COLLAGE_PHOTOS,
+  collageDepth,
+  collagePhotos,
+  findCollagePhoto,
+  findCollageSplit,
+} from '../../content/collage';
+import type { CollageNode, CollageSplit } from '../../content/types';
 
 function photo(id: string, src = `/hero/${id}.webp`): CollageNode {
   return { kind: 'photo', id, src, alt: '' };
@@ -55,11 +63,13 @@ function Harness({
   locked = false,
   previews = NO_IMAGE_PREVIEWS,
   onChange,
+  stage = () => {},
 }: {
   initial: CollageNode;
   locked?: boolean;
   previews?: ImagePreviews;
   onChange?: (next: CollageNode) => void;
+  stage?: (key: string, file: StagedFile | null) => void;
 }) {
   const [tree, setTree] = useState<CollageNode>(initial);
   const editor = useCollageEditor({
@@ -70,6 +80,7 @@ function Harness({
     },
     locked,
     previews,
+    stage,
   });
   return (
     <>
@@ -373,5 +384,250 @@ describe('the collage editor: swapping without a drag', () => {
     render(<Harness initial={photo('only')} />);
     fireEvent.focusIn(boxFor('only'));
     expect(screen.getByRole('button', { name: 'Swap this photo with another photo' })).toBeDisabled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Task 6: adding and removing photos.
+//
+// The upload is faked with the same FakeXHR double PhotoField.test.tsx and
+// EditableImage.test.tsx both use, for the identical reason: neither fetch nor
+// jsdom's own XHR implements `XMLHttpRequest.upload.onprogress`, which the
+// real pipeline reports progress through.
+class FakeXHR {
+  static instances: FakeXHR[] = [];
+  status = 0;
+  responseText = '';
+  timeout = 0;
+  withCredentials = false;
+  upload: { onprogress: ((event: { lengthComputable: boolean; loaded: number; total: number }) => void) | null } = {
+    onprogress: null,
+  };
+  onload: (() => void) | null = null;
+  onerror: (() => void) | null = null;
+  ontimeout: (() => void) | null = null;
+  constructor() {
+    FakeXHR.instances.push(this);
+  }
+  open() {}
+  send() {}
+  respond(status: number, body: unknown) {
+    this.status = status;
+    this.responseText = JSON.stringify(body);
+    this.onload?.();
+  }
+}
+
+const JPEG = new File([new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 0, 0, 0])], 'added.jpg', { type: 'image/jpeg' });
+
+function addInput(): HTMLInputElement {
+  const input = document.querySelector<HTMLInputElement>('[data-collage-panel] input[type="file"]');
+  if (!input) throw new Error('no add-photo picker in the panel');
+  return input;
+}
+
+async function pickFile() {
+  Object.defineProperty(addInput(), 'files', { value: [JPEG], configurable: true });
+  fireEvent.change(addInput());
+  await waitFor(() => expect(FakeXHR.instances).toHaveLength(1));
+  FakeXHR.instances[0].respond(200, { path: 'assets-source/hero/new.jpg', contentPath: '/images/hero/new.webp' });
+}
+
+describe('the collage editor: adding a photo', () => {
+  beforeEach(() => {
+    FakeXHR.instances = [];
+    vi.stubGlobal('XMLHttpRequest', FakeXHR as unknown as typeof XMLHttpRequest);
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('opens the picker straight away rather than putting an empty box on the page', async () => {
+    const onChange = vi.fn();
+    const clicked = vi.spyOn(HTMLInputElement.prototype, 'click').mockImplementation(() => {});
+    try {
+      render(<Harness initial={fixture()} onChange={onChange} />);
+      fireEvent.focusIn(boxFor('p1'));
+      fireEvent.click(screen.getByRole('button', { name: 'Add another photo below this one, sharing its box' }));
+      expect(clicked).toHaveBeenCalled();
+      // ...and NOTHING has been added yet: no box exists until a real photo
+      // has finished uploading, which is why no rule is needed to stop a blank
+      // one being published.
+      expect(onChange).not.toHaveBeenCalled();
+      expect(boxes()).toHaveLength(4);
+    } finally {
+      clicked.mockRestore();
+    }
+  });
+
+  it('divides the chosen box in two, and moves no other box', async () => {
+    const onChange = vi.fn();
+    const initial = fixture() as CollageSplit;
+    vi.spyOn(HTMLInputElement.prototype, 'click').mockImplementation(() => {});
+    render(<Harness initial={initial} onChange={onChange} />);
+    fireEvent.focusIn(boxFor('p1'));
+    fireEvent.click(screen.getByRole('button', { name: 'Add another photo below this one, sharing its box' }));
+    await pickFile();
+
+    await waitFor(() => expect(onChange).toHaveBeenCalledTimes(1));
+    const next = onChange.mock.calls[0][0] as CollageSplit;
+    // The minted id is the first `photo-<n>` no node in THIS tree carries.
+    expect(collagePhotos(next).map((p) => p.id)).toEqual(['p1', 'photo-1', 'p2', 'p3', 'p4']);
+    // The new photo names the path the upload returned, not a placeholder.
+    expect(findCollagePhoto(next, 'photo-1')?.src).toBe('/images/hero/new.webp');
+    // p1's box is still exactly the share of the root it always was, and the
+    // right-hand branch is the very same object -- React re-renders none of it.
+    expect(next.sizes).toEqual([1.5, 0.5]);
+    expect(next.children[1]).toBe(initial.children[1]);
+  });
+
+  it('stages the bytes under the key a later replacement would supersede', async () => {
+    const stage = vi.fn();
+    vi.spyOn(HTMLInputElement.prototype, 'click').mockImplementation(() => {});
+    render(<Harness initial={fixture()} stage={stage} />);
+    fireEvent.focusIn(boxFor('p1'));
+    fireEvent.click(screen.getByRole('button', { name: 'Add another photo beside this one, sharing its box' }));
+    await pickFile();
+
+    await waitFor(() => expect(stage).toHaveBeenCalledTimes(1));
+    expect(stage.mock.calls[0][0]).toBe('galleries.json:galleries.heroCollage.photo-1');
+    expect(stage.mock.calls[0][1]).toMatchObject({ contentPath: '/images/hero/new.webp', encoding: 'base64' });
+  });
+
+  it('shows the photo she picked, not the path the deploy has not built yet', async () => {
+    const set = vi.fn();
+    vi.spyOn(HTMLInputElement.prototype, 'click').mockImplementation(() => {});
+    render(<Harness initial={fixture()} previews={{ urls: {}, set }} />);
+    fireEvent.focusIn(boxFor('p1'));
+    fireEvent.click(screen.getByRole('button', { name: 'Add another photo beside this one, sharing its box' }));
+    await pickFile();
+
+    await waitFor(() => expect(set).toHaveBeenCalled());
+    expect(set.mock.calls[0][0]).toBe('galleries.heroCollage.photo-1');
+    expect(String(set.mock.calls[0][1])).toMatch(/^blob:/);
+  });
+
+  it('says which way it divided the box, once it lands', async () => {
+    vi.spyOn(HTMLInputElement.prototype, 'click').mockImplementation(() => {});
+    render(<Harness initial={fixture()} />);
+    fireEvent.focusIn(boxFor('p1'));
+    fireEvent.click(screen.getByRole('button', { name: 'Add another photo below this one, sharing its box' }));
+    await pickFile();
+    await waitFor(() =>
+      expect(screen.getByText('Added below it. The two now share the box that photo used to fill; nothing else moved.')).toBeInTheDocument(),
+    );
+  });
+
+  it('refuses at the cap, with the number and what to do about it', () => {
+    const atCap: CollageNode = {
+      kind: 'split',
+      id: 'root',
+      direction: 'row',
+      sizes: Array.from({ length: MAX_COLLAGE_PHOTOS }, () => 1),
+      children: Array.from({ length: MAX_COLLAGE_PHOTOS }, (_, i) => photo(`c${i}`)),
+    };
+    render(<Harness initial={atCap} />);
+    fireEvent.focusIn(boxFor('c0'));
+    expect(screen.getByRole('button', { name: 'Add another photo beside this one, sharing its box' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Add another photo below this one, sharing its box' })).toBeDisabled();
+    expect(
+      screen.getByText(
+        `The collage already holds ${MAX_COLLAGE_PHOTOS} photos, which is the most it can. Remove one to make room for another.`,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  // The refusal the depth limit produces, and the reason it is computed
+  // per direction rather than quoted as a number: dividing a box the way its
+  // parent already runs adds a sibling, not a level, so the same box stays
+  // divisible one way after it has stopped being divisible the other.
+  it('refuses only the direction that would divide too deep, and says which way still works', () => {
+    let deep: CollageNode = photo('deep-0');
+    for (let level = 1; level < MAX_COLLAGE_DEPTH; level += 1) {
+      deep = {
+        kind: 'split',
+        id: `s${level}`,
+        direction: level % 2 === 0 ? 'row' : 'column',
+        sizes: [1, 1],
+        children: [photo(`side-${level}`), deep],
+      };
+    }
+    render(<Harness initial={deep} />);
+    fireEvent.focusIn(boxFor('deep-0'));
+    // Its parent is `s1`, a column, so a column add is a sibling and a row add
+    // is a new level.
+    expect(screen.getByRole('button', { name: 'Add another photo below this one, sharing its box' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Add another photo beside this one, sharing its box' })).toBeDisabled();
+    expect(
+      screen.getByText('This box cannot be divided side by side again — divide it top to bottom instead.'),
+    ).toBeInTheDocument();
+  });
+
+  it('refuses both add controls while a publish is in flight', () => {
+    render(<Harness initial={fixture()} locked />);
+    fireEvent.focusIn(boxFor('p1'));
+    expect(screen.getByRole('button', { name: 'Add another photo beside this one, sharing its box' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Add another photo below this one, sharing its box' })).toBeDisabled();
+  });
+
+  it('says so when the upload fails, and adds nothing', async () => {
+    const onChange = vi.fn();
+    vi.spyOn(HTMLInputElement.prototype, 'click').mockImplementation(() => {});
+    render(<Harness initial={fixture()} onChange={onChange} />);
+    fireEvent.focusIn(boxFor('p1'));
+    fireEvent.click(screen.getByRole('button', { name: 'Add another photo beside this one, sharing its box' }));
+    Object.defineProperty(addInput(), 'files', { value: [JPEG], configurable: true });
+    fireEvent.change(addInput());
+    await waitFor(() => expect(FakeXHR.instances).toHaveLength(1));
+    FakeXHR.instances[0].respond(500, { message: 'The server said no.' });
+
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('The server said no.'));
+    expect(onChange).not.toHaveBeenCalled();
+    expect(boxes()).toHaveLength(4);
+  });
+});
+
+describe('the collage editor: removing a photo', () => {
+  it('gives the box back to what it shared it with', () => {
+    const onChange = vi.fn();
+    render(<Harness initial={fixture()} onChange={onChange} />);
+    fireEvent.focusIn(boxFor('p2'));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove this photo from the collage' }));
+
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(boxes().map((el) => el.getAttribute(COLLAGE_PHOTO_ATTR))).toEqual(['p1', 'p3', 'p4']);
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Removed. The photos it shared a box with have taken the space back.',
+    );
+  });
+
+  it('folds the split away when only one photo is left in it, rather than deepening the tree', () => {
+    const onChange = vi.fn();
+    render(<Harness initial={fixture()} onChange={onChange} />);
+    fireEvent.focusIn(boxFor('p2'));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove this photo from the collage' }));
+    fireEvent.focusIn(boxFor('p3'));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove this photo from the collage' }));
+
+    const next = onChange.mock.calls[1][0] as CollageNode;
+    // `right` held three; two removals leave one, so it folds into the root
+    // and p4 becomes the root's own second child.
+    expect(collageDepth(next)).toBe(2);
+    expect((next as CollageSplit).children.map((child) => child.id)).toEqual(['p1', 'p4']);
+  });
+
+  it('refuses to remove the last photo, and says why', () => {
+    render(<Harness initial={photo('only')} />);
+    fireEvent.focusIn(boxFor('only'));
+    expect(screen.getByRole('button', { name: 'Remove this photo from the collage' })).toBeDisabled();
+    expect(
+      screen.getByText('This is the only photo in the collage — there has to be at least one, so it cannot be removed.'),
+    ).toBeInTheDocument();
+  });
+
+  it('refuses to remove anything while a publish is in flight', () => {
+    render(<Harness initial={fixture()} locked />);
+    fireEvent.focusIn(boxFor('p1'));
+    expect(screen.getByRole('button', { name: 'Remove this photo from the collage' })).toBeDisabled();
   });
 });

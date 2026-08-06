@@ -503,8 +503,21 @@ export function collageTreeProblems(raw: unknown): ValidationProblem[] {
 
   walk(raw, 1, []);
 
-  // Counted from what the walk actually reached, so a malformed subtree that
-  // stopped the walk early cannot also produce a confusing "too many photos".
+  // Counted from what the walk actually reached.
+  //
+  // Reported whatever ELSE is wrong with the tree. It used to be gated behind
+  // `problems.length === 0`, on the reasoning that a malformed subtree stops
+  // the walk early and would produce a confusing count -- but a Plan 9 gate
+  // review pointed out what that gate actually costs: a 25-photo collage that
+  // also has one photo with a non-string `alt` reported only the alt, so she
+  // fixed it, published again, and only THEN learned she was over the cap.
+  // Two round trips to be told two things. And the gate never made the count
+  // wrong-proof anyway: an early return can only make `photoIndex` an
+  // UNDERcount, so `photoIndex > MAX_COLLAGE_PHOTOS` is still true of a tree
+  // that really is over, and a tree that is under can never trip it. The
+  // build-time guard (guards.ts's assertCollageTree) has never had this
+  // condition, so removing it also stops the two ends disagreeing about WHEN
+  // the cap is reported.
   //
   // Only the UPPER bound is checked here, and that is not an oversight: a
   // tree with ZERO photos is unrepresentable by construction. Every node is
@@ -515,7 +528,7 @@ export function collageTreeProblems(raw: unknown): ValidationProblem[] {
   // `validateGalleries`'s own MIN_COLLAGE_PHOTOS check on the `heroCollage`
   // field itself, not this function's. A check here would be one that cannot
   // fail, which this project counts as a defect rather than as caution.
-  if (problems.length === 0 && photoIndex > MAX_COLLAGE_PHOTOS) {
+  if (photoIndex > MAX_COLLAGE_PHOTOS) {
     problems.push(
       problem('heroCollage', `the collage has ${photoIndex} photos — ${MAX_COLLAGE_PHOTOS} is the most it can hold`),
     );

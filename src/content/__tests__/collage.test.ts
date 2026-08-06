@@ -12,8 +12,16 @@ import {
   countCollagePhotos,
   findCollagePhoto,
   isCollageNodeKind,
+  MIN_COLLAGE_PHOTOS,
   MIN_PAIR_SHARE,
   RESIZE_STEP_SHARE,
+  addCollagePhoto,
+  canonicalizeCollageTree,
+  collageAddRefusal,
+  collageNodeLevel,
+  collageRemoveRefusal,
+  nextCollageId,
+  removeCollagePhoto,
   collagePairShare,
   collageResizeTarget,
   findCollageParent,
@@ -28,7 +36,8 @@ import {
 } from '../collage';
 import { assertCollageTree } from '../guards';
 import { collageTreeProblems } from '../validate';
-import type { CollageNode, CollageSplit } from '../types';
+import { galleries } from '../index';
+import type { CollageNode, CollagePhoto, CollageSplit } from '../types';
 
 // Every fixture here is built from these two helpers rather than written out
 // as an object literal per test: a literal repeated fifteen times drifts, and
@@ -451,6 +460,26 @@ describe('collageTreeProblems: the write boundary', () => {
     ]);
   });
 
+  // Gate review finding (Minor): the cap used to be reported only when
+  // NOTHING else was wrong, so a 25-photo collage that also had one bad `alt`
+  // told her about the alt, took the fix, and only then mentioned the cap --
+  // two round trips to be told two things. The guard also made the two ends
+  // disagree: `assertCollageTree` has never had it.
+  it('reports the cap even when something else is wrong too', () => {
+    const overCap: CollageNode = {
+      kind: 'split',
+      id: 'root',
+      direction: 'row',
+      sizes: Array.from({ length: MAX_COLLAGE_PHOTOS + 1 }, () => 1),
+      children: Array.from({ length: MAX_COLLAGE_PHOTOS + 1 }, (_, i) =>
+        i === 3 ? ({ kind: 'photo', id: 'p3', src: '/hero/p3.webp', alt: 7 } as unknown as CollageNode) : photo(`p${i}`),
+      ),
+    };
+    const messages = collageTreeProblems(overCap).map((p) => p.message);
+    expect(messages).toContain('collage photo 4 needs alt text, or an empty one');
+    expect(messages).toContain(`the collage has ${MAX_COLLAGE_PHOTOS + 1} photos — ${MAX_COLLAGE_PHOTOS} is the most it can hold`);
+  });
+
   it('refuses a tree deeper than the limit', () => {
     expect(collageTreeProblems(comb(MAX_COLLAGE_DEPTH))).toEqual([]);
     expect(collageTreeProblems(comb(MAX_COLLAGE_DEPTH + 1)).map((p) => p.message)).toEqual([
@@ -619,5 +648,334 @@ describe('collage: which divider a box’s own buttons move', () => {
   // the floor. Pinned so a change to either without the other is caught.
   it('takes seven steps to travel from an even split to the floor', () => {
     expect(Math.ceil((0.5 - MIN_PAIR_SHARE) / RESIZE_STEP_SHARE)).toBe(7);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Task 6's operations, and the invariant they exist to keep.
+
+// The tree's STRUCTURE with the sizes left out -- what add-then-remove must
+// restore. `skeleton` above keeps the sizes too, which is right for a swap
+// (nothing at all may change) and wrong here (see the note below on why
+// removing redistributes proportionally rather than exactly undoing an add).
+function shape(node: CollageNode): unknown {
+  if (node.kind === 'photo') return 'photo';
+  return { id: node.id, direction: node.direction, children: node.children.map(shape) };
+}
+
+function newPhoto(id: string): CollagePhoto {
+  return { kind: 'photo', id, src: `/hero/${id}.webp`, alt: '' };
+}
+
+// "This tree is canonical" is expressible because canonicalising is the
+// IDENTITY on one that already is -- by reference, not by value. Every
+// assertion below leans on that rather than on a separate checker that could
+// itself be wrong.
+function isCanonical(node: CollageNode): boolean {
+  return canonicalizeCollageTree(node) === node;
+}
+
+describe('collage: canonical form', () => {
+  it('is the identity, by reference, on a tree that is already canonical', () => {
+    const before = sampleTree();
+    expect(canonicalizeCollageTree(before)).toBe(before);
+    const alone = photo('only');
+    expect(canonicalizeCollageTree(alone)).toBe(alone);
+  });
+
+  it('the committed arrangement is already canonical -- nothing today violates this', () => {
+    const tree = galleries.heroCollage;
+    expect(tree).not.toBeNull();
+    expect(isCanonical(tree as CollageNode)).toBe(true);
+  });
+
+  it('splices a same-direction child into its parent, keeping the boxes’ proportions', () => {
+    // A row holding [x, a row of (y, z)] is three boxes side by side, and the
+    // line between y and z belongs to the wrong split until this runs.
+    const nested: CollageNode = {
+      kind: 'split',
+      id: 'outer',
+      direction: 'row',
+      sizes: [1, 1],
+      children: [photo('x'), { kind: 'split', id: 'inner', direction: 'row', sizes: [1, 1], children: [photo('y'), photo('z')] }],
+    };
+    const flat = canonicalizeCollageTree(nested) as CollageSplit;
+    expect(flat.children.map((child) => child.id)).toEqual(['x', 'y', 'z']);
+    // x held half the row; y and z held a quarter each. Normalised to sum to
+    // three, that is [1.5, 0.75, 0.75].
+    expect(flat.sizes).toEqual([1.5, 0.75, 0.75]);
+    expect(isNormalizedSizes(flat.sizes)).toBe(true);
+  });
+
+  it('leaves a child split of the OTHER direction exactly where it is', () => {
+    const before = split('outer', 'row', [photo('x'), split('inner', 'column', [photo('y'), photo('z')])]);
+    expect(canonicalizeCollageTree(before)).toBe(before);
+  });
+
+  it('folds a split that is left holding one child into that child', () => {
+    const lonely: CollageNode = {
+      kind: 'split',
+      id: 'outer',
+      direction: 'row',
+      sizes: [1, 1],
+      children: [photo('x'), { kind: 'split', id: 'inner', direction: 'column', sizes: [1], children: [photo('y')] }],
+    };
+    const folded = canonicalizeCollageTree(lonely) as CollageSplit;
+    expect(folded.children.map((child) => child.id)).toEqual(['x', 'y']);
+  });
+
+  it('folds through more than one level in a single pass', () => {
+    // column( row( column( a, b ) ) ) -- the outer column holds one child,
+    // which folds; what is left is a row holding one child, which folds too.
+    const stack: CollageNode = {
+      kind: 'split',
+      id: 'l1',
+      direction: 'column',
+      sizes: [1],
+      children: [
+        { kind: 'split', id: 'l2', direction: 'row', sizes: [1], children: [split('l3', 'column', [photo('a'), photo('b')])] },
+      ],
+    };
+    const folded = canonicalizeCollageTree(stack) as CollageSplit;
+    // The OUTER node survives and the content is spliced into it -- l2 folds
+    // into l1 because it holds one child, and l3 then shares l1's direction,
+    // so its two photos become l1's own.
+    expect(folded.id).toBe('l1');
+    expect(folded.direction).toBe('column');
+    expect(folded.children.map((child) => child.id)).toEqual(['a', 'b']);
+    expect(collageDepth(folded)).toBe(2);
+  });
+});
+
+describe('collage: minting an id', () => {
+  it('takes the first number no node already carries, for that prefix', () => {
+    expect(nextCollageId(sampleTree(), 'photo')).toBe('photo-1');
+    expect(nextCollageId(split('root', 'row', [photo('photo-1'), photo('photo-3')]), 'photo')).toBe('photo-2');
+    expect(nextCollageId(galleries.heroCollage as CollageNode, 'photo')).toBe('photo-17');
+  });
+});
+
+describe('collage: adding a photo', () => {
+  it('divides exactly one box, and leaves every other proportion alone', () => {
+    const before = split('root', 'row', [photo('a'), photo('b'), photo('c')], [2, 1, 1]);
+    const after = addCollagePhoto(before, 'a', 'column', newPhoto('n')) as CollageSplit;
+
+    // a's box became a stack of a and n...
+    const divided = after.children[0] as CollageSplit;
+    expect(divided.direction).toBe('column');
+    expect(divided.children.map((child) => child.id)).toEqual(['a', 'n']);
+    // ...and that box is still exactly the share of the row it always was,
+    // while b and c have not moved.
+    expect(after.sizes).toEqual(before.sizes);
+  });
+
+  it('adds a SIBLING, not a level, when the box is divided the way its parent already runs', () => {
+    const before = split('root', 'row', [photo('a'), photo('b')]);
+    const after = addCollagePhoto(before, 'a', 'row', newPhoto('n')) as CollageSplit;
+    expect(after.children.map((child) => child.id)).toEqual(['a', 'n', 'b']);
+    // a and n split what a used to hold; b keeps its half of the row.
+    expect(after.sizes).toEqual([0.75, 0.75, 1.5]);
+    expect(collageDepth(after)).toBe(collageDepth(before));
+  });
+
+  it('adds a level when the box is divided across its parent’s direction', () => {
+    const before = split('root', 'row', [photo('a'), photo('b')]);
+    const after = addCollagePhoto(before, 'a', 'column', newPhoto('n'));
+    expect(collageDepth(after)).toBe(collageDepth(before) + 1);
+  });
+
+  it('leaves the tree canonical, normalised and valid at both ends', () => {
+    const after = addCollagePhoto(sampleTree(), 'c', 'column', newPhoto('n'));
+    expect(isCanonical(after)).toBe(true);
+    expect(collageTreeProblems(after)).toEqual([]);
+    expect(() => assertCollageTree(after)).not.toThrow();
+  });
+
+  it('refuses, by reference, at the photo cap', () => {
+    const atCap = split('root', 'row', Array.from({ length: MAX_COLLAGE_PHOTOS }, (_, i) => photo(`p${i}`)));
+    expect(collageAddRefusal(atCap, 'p0', 'column')).toBe('cap');
+    expect(addCollagePhoto(atCap, 'p0', 'column', newPhoto('n'))).toBe(atCap);
+  });
+
+  it('refuses at the depth ceiling -- and only in the direction that would deepen it', () => {
+    // A comb exactly at the limit. Its deepest leaf cannot be divided ACROSS
+    // its parent's direction, because that adds a level; dividing it ALONG
+    // that direction adds a sibling instead, and is still allowed.
+    const full = comb(MAX_COLLAGE_DEPTH);
+    expect(collageDepth(full)).toBe(MAX_COLLAGE_DEPTH);
+    const parent = findCollageParent(full, 'leaf-0');
+    expect(parent).not.toBeNull();
+    const along = (parent as { split: CollageSplit }).split.direction;
+    const across = along === 'row' ? 'column' : 'row';
+    expect(collageAddRefusal(full, 'leaf-0', across)).toBe('depth');
+    expect(collageAddRefusal(full, 'leaf-0', along)).toBeNull();
+    expect(addCollagePhoto(full, 'leaf-0', across, newPhoto('n'))).toBe(full);
+    expect(addCollagePhoto(full, 'leaf-0', along, newPhoto('n'))).not.toBe(full);
+  });
+
+  it('refuses a target no photo carries, and an id some node already carries', () => {
+    const before = sampleTree();
+    expect(collageAddRefusal(before, 'nobody', 'row')).toBe('unknown');
+    expect(addCollagePhoto(before, 'nobody', 'row', newPhoto('n'))).toBe(before);
+    // 'mid' is a SPLIT's id, not a photo's -- adding "into" it is not a thing.
+    expect(addCollagePhoto(before, 'mid', 'row', newPhoto('n'))).toBe(before);
+    // ...and an id collision would build a tree the guard refuses at build
+    // time, so it never gets built.
+    expect(addCollagePhoto(before, 'a', 'row', newPhoto('e'))).toBe(before);
+  });
+});
+
+describe('collage: removing a photo', () => {
+  it('gives the box to what it shared it with, and folds the split away', () => {
+    const before = split('root', 'row', [photo('a'), split('pair', 'column', [photo('b'), photo('c')])]);
+    const after = removeCollagePhoto(before, 'c') as CollageSplit;
+    expect(after.children.map((child) => child.id)).toEqual(['a', 'b']);
+    expect(collageDepth(after)).toBe(2);
+    expect(after.sizes).toEqual([1, 1]);
+  });
+
+  it('keeps the survivors’ ratios to each other when the split holds more than two', () => {
+    const before = split('band', 'row', [photo('a'), photo('b'), photo('c')], [2, 1, 1]);
+    const after = removeCollagePhoto(before, 'a') as CollageSplit;
+    expect(after.children.map((child) => child.id)).toEqual(['b', 'c']);
+    expect(after.sizes).toEqual([1, 1]);
+    const uneven = removeCollagePhoto(split('band', 'row', [photo('a'), photo('b'), photo('c')], [1, 2, 1]), 'a') as CollageSplit;
+    // b held twice what c held before, and still does.
+    expect(uneven.sizes[0] / uneven.sizes[1]).toBeCloseTo(2, 5);
+
+    // Removing a child that is NOT the first, out of a split whose three
+    // sizes are all different. Every case above happens to survive dropping
+    // the wrong INDEX from the sizes array -- with [1, 1, 2] or [2, 1, 1] and
+    // a removal at index 0, dropping index 0 by mistake gives the identical
+    // answer -- so this is the one that can actually see it.
+    const middle = removeCollagePhoto(split('band', 'row', [photo('a'), photo('b'), photo('c')], [1, 2, 3]), 'b') as CollageSplit;
+    expect(middle.children.map((child) => child.id)).toEqual(['a', 'c']);
+    expect(middle.sizes[1] / middle.sizes[0]).toBeCloseTo(3, 5);
+  });
+
+  it('never leaves a split holding a split of its own direction', () => {
+    // The exact shape a gate review found: removing photo-5 folds
+    // `right-top-left` away and would drop a ROW split straight into a ROW
+    // split, so the line she sees between two boxes would move three.
+    const tree = galleries.heroCollage as CollageNode;
+    const after = removeCollagePhoto(tree, 'photo-5');
+    expect(after).not.toBe(tree);
+    expect(isCanonical(after)).toBe(true);
+    expect(collageTreeProblems(after)).toEqual([]);
+  });
+
+  it('refuses to remove the only photo there is', () => {
+    const alone = photo('only');
+    expect(collageRemoveRefusal(alone, 'only')).toBe('floor');
+    expect(removeCollagePhoto(alone, 'only')).toBe(alone);
+    expect(countCollagePhotos(alone)).toBe(MIN_COLLAGE_PHOTOS);
+  });
+
+  it('refuses a photo no node carries, by reference', () => {
+    const before = sampleTree();
+    expect(collageRemoveRefusal(before, 'nobody')).toBe('unknown');
+    expect(removeCollagePhoto(before, 'nobody')).toBe(before);
+    expect(removeCollagePhoto(before, 'mid')).toBe(before);
+  });
+
+  it('leaves the tree valid at both ends', () => {
+    const after = removeCollagePhoto(sampleTree(), 'c');
+    expect(collageTreeProblems(after)).toEqual([]);
+    expect(() => assertCollageTree(after)).not.toThrow();
+  });
+});
+
+describe('collage: repeated editing does not deepen the tree', () => {
+  // The plan's own warning: "without it every removal leaves a redundant split
+  // behind, the tree deepens forever, and after enough edits a divider drag
+  // moves something she did not point at."
+  it('five add-then-remove cycles leave the depth and the shape where they started', () => {
+    const start = galleries.heroCollage as CollageNode;
+    let tree = start;
+    for (let cycle = 0; cycle < 5; cycle += 1) {
+      const id = nextCollageId(tree, 'photo');
+      tree = addCollagePhoto(tree, 'photo-8', cycle % 2 === 0 ? 'column' : 'row', newPhoto(id));
+      expect(countCollagePhotos(tree)).toBe(17);
+      expect(isCanonical(tree)).toBe(true);
+      tree = removeCollagePhoto(tree, id);
+      expect(countCollagePhotos(tree)).toBe(16);
+      expect(isCanonical(tree)).toBe(true);
+      expect(collageTreeProblems(tree)).toEqual([]);
+    }
+    expect(collageDepth(tree)).toBe(collageDepth(start));
+    expect(shape(tree)).toEqual(shape(start));
+  });
+
+  // Sizes are deliberately NOT expected to come back to exactly where they
+  // were, and that is a decision rather than a gap: removing a photo hands its
+  // share back to the survivors IN PROPORTION (so they keep their ratios to
+  // each other -- see the test above), which is not the exact inverse of
+  // halving one box to make room. Making it exact would mean dumping the whole
+  // of a removed box's space onto whichever neighbour it was split from, which
+  // is arbitrary from her point of view and worse to look at. What must hold
+  // across any number of edits is that the numbers stay bounded, normalised
+  // and valid -- which is what this checks.
+  it('keeps every size normalised and publishable across a long run of edits', () => {
+    let tree = galleries.heroCollage as CollageNode;
+    for (let cycle = 0; cycle < 12; cycle += 1) {
+      const id = nextCollageId(tree, 'photo');
+      tree = addCollagePhoto(tree, 'photo-12', cycle % 2 === 0 ? 'row' : 'column', newPhoto(id));
+      tree = resizeCollageSplit(tree, (findCollageParent(tree, id) as { split: CollageSplit }).split.id, 0, 0.3);
+      tree = removeCollagePhoto(tree, id);
+    }
+    expect(collageTreeProblems(tree)).toEqual([]);
+    expect(() => assertCollageTree(tree)).not.toThrow();
+    expect(collageDepth(tree)).toBeLessThanOrEqual(MAX_COLLAGE_DEPTH);
+  });
+
+  // The other sequence the depth limit exists for: dividing the box just
+  // created, over and over. It is refused by depth long before the photo cap,
+  // and how soon depends on where she started -- which is why the UI computes
+  // it (collageAddRefusal) rather than quoting a number.
+  it('dividing the new box again and again is stopped by the depth limit, not the cap', () => {
+    let tree: CollageNode = photo('seed');
+    let target = 'seed';
+    let adds = 0;
+    // Bounded, and the bound is deliberately well past the answer: a test that
+    // can spin forever is not a test, and one that ends BY the bound would be
+    // reporting the bound rather than the limit -- which the assertion on
+    // `adds` below is what rules out.
+    for (let attempt = 0; attempt < MAX_COLLAGE_PHOTOS + 5; attempt += 1) {
+      const id = nextCollageId(tree, 'photo');
+      // Always ACROSS the parent's direction, so every add is a new level.
+      const parent = findCollageParent(tree, target);
+      const direction = parent === null ? 'row' : parent.split.direction === 'row' ? 'column' : 'row';
+      if (collageAddRefusal(tree, target, direction) !== null) break;
+      const next = addCollagePhoto(tree, target, direction, newPhoto(id));
+      // An add that was not refused must actually change the tree; anything
+      // else is the loop above going nowhere.
+      expect(next).not.toBe(tree);
+      tree = next;
+      target = id;
+      adds += 1;
+    }
+    expect(collageDepth(tree)).toBe(MAX_COLLAGE_DEPTH);
+    expect(countCollagePhotos(tree)).toBeLessThan(MAX_COLLAGE_PHOTOS);
+    expect(collageAddRefusal(tree, target, 'row')).not.toBe('cap');
+    expect(adds).toBe(MAX_COLLAGE_DEPTH - 1);
+  });
+});
+
+describe('collage: how far below the root a node sits', () => {
+  it('counts the root as one and each split as one more', () => {
+    expect(collageNodeLevel(sampleTree(), 'root')).toBe(1);
+    expect(collageNodeLevel(sampleTree(), 'a')).toBe(2);
+    expect(collageNodeLevel(sampleTree(), 'inner')).toBe(3);
+    expect(collageNodeLevel(sampleTree(), 'd')).toBe(4);
+    expect(collageNodeLevel(sampleTree(), 'nobody')).toBeNull();
+  });
+
+  // The number the UI would have got wrong if it quoted a constant: what is
+  // left is MAX_COLLAGE_DEPTH minus the box's own level, and the committed
+  // arrangement's photos do not all sit at the same level.
+  it('differs between photos of the same collage', () => {
+    const tree = galleries.heroCollage as CollageNode;
+    const levels = collagePhotos(tree).map((p) => collageNodeLevel(tree, p.id));
+    expect(new Set(levels).size).toBeGreaterThan(1);
   });
 });
