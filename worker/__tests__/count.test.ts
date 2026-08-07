@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import worker, { WA_DAILY_CAP, type Env } from '../index';
 import { hashPassword, signToken } from '../auth';
 import { todayInKolkata } from '../date';
+import { site } from '../../src/content';
 
 // The session key is TOKEN_SECRET bound to the current password hash, so a
 // password change revokes every token already issued (worker/auth.ts).
@@ -28,7 +29,20 @@ const PASSWORD_HASH = 'test-only-password-hash-placeholder';
 // specific assertion below is what catches it, not just that the test
 // happens to pass today.
 
-const SITE_ORIGIN = 'https://viabiancadelhi.com';
+// Derived from site.json's own seo.url, NOT written down here. Every request
+// these tests build is addressed to this host, which is the whole point.
+//
+// This was a `https://viabiancadelhi.com` literal, and worker/index.ts held a
+// second copy of the same literal as the origin it would accept. The two
+// agreed with each other and with nothing else: the site runs on the host in
+// site.json, so every real beacon from the live button was answered 403 while
+// this file's "accepts a same-origin post" test went on passing, because it
+// was addressing the same wrong domain the Worker was checking against.
+//
+// A test cannot catch a constant naming the wrong host while it supplies that
+// same constant. Sourcing it from the content the site is actually built from
+// is what makes the assertions below able to fail.
+const SITE_ORIGIN = new URL(site.seo.url).origin;
 
 // A hand-built fake, not an import from @cloudflare/workers-types --
 // KVNamespace has no runtime shape in this repo's test environment (see
@@ -77,13 +91,13 @@ function postWa(opts: { origin?: string | null; ip?: string } = {}): Request {
   const origin = 'origin' in opts ? opts.origin : SITE_ORIGIN;
   if (origin !== null && origin !== undefined) headers['Origin'] = origin;
   headers['CF-Connecting-IP'] = opts.ip ?? '1.2.3.4';
-  return new Request('https://viabiancadelhi.com/api/wa', { method: 'POST', headers });
+  return new Request(`${SITE_ORIGIN}/api/wa`, { method: 'POST', headers });
 }
 
 async function getWa(cookie?: string): Promise<Request> {
   const headers: Record<string, string> = {};
   if (cookie) headers['Cookie'] = cookie;
-  return new Request('https://viabiancadelhi.com/api/wa', { headers });
+  return new Request(`${SITE_ORIGIN}/api/wa`, { headers });
 }
 
 // Takes the env, because the session key is now derived from BOTH
@@ -123,6 +137,27 @@ describe('POST /api/wa', () => {
   it('accepts a same-origin post and returns 204', async () => {
     const response = await worker.fetch(postWa(), env);
     expect(response.status).toBe(204);
+  });
+
+  // The regression test for the bug above. Addresses the route at the host
+  // the site is ACTUALLY served from -- read from site.json here, and read
+  // from the request itself in worker/index.ts, so neither side holds a
+  // domain literal that the other has to keep agreeing with.
+  //
+  // Against the previous `WA_ORIGIN = 'https://viabiancadelhi.com'` this is
+  // a 403 and this test is red, which is exactly what should have happened
+  // the moment the site moved and nothing did.
+  it('accepts a tap from the host the site is actually served from', async () => {
+    const request = new Request(`${new URL(site.seo.url).origin}/api/wa`, {
+      method: 'POST',
+      headers: { Origin: new URL(site.seo.url).origin, 'CF-Connecting-IP': '1.2.3.4' },
+    });
+    const response = await worker.fetch(request, env);
+    expect(response.status).toBe(204);
+    // Accepted for real, not merely answered 204 -- the daily-cap path also
+    // returns 204 without recording anything (see handleRecordWaTap), so the
+    // status alone cannot tell "counted" from "silently dropped".
+    expect(kv.puts.some((p) => p.key === 'wa:counts')).toBe(true);
   });
 
   it('records nothing but the date -- one KV key, whose value has no field but today\'s count', async () => {

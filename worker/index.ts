@@ -88,6 +88,123 @@ async function sessionCookie(
 // window is a visible omission rather than a silent one.
 export const AUTHENTICATED_PATHS = new Set(['/api/publish', '/api/undo', '/api/content', '/api/upload', '/api/build-status']);
 
+// ---------------------------------------------------------------------------
+// Per-route rate limits for the authenticated routes that SPEND something a
+// session alone should not be able to spend without bound.
+//
+// The threat is not an anonymous flood -- every route below answers 401
+// before it touches KV, GitHub or Cloudflare, so an unauthenticated caller
+// can only ever cost an HMAC verify. It is a session that has been stolen,
+// or a client stuck in a loop, running up caps that are hard rather than
+// soft:
+//
+//   publish  Cloudflare Pages Free allows 500 BUILDS PER MONTH and every
+//            publish is one. That averages ~16/day, so 12 per 6 hours (48/day
+//            worst case) still cannot burn the month's quota in a day -- it
+//            would take better than a fortnight of sustained abuse, which is
+//            the point: the cap exists to leave time to notice.
+//   undo     Same GitHub write path, 8 subrequests, also a build.
+//   upload   25MB per file straight into the git repository (worker/upload.ts).
+//            Bounded because git history does not shrink.
+//
+// WHY THESE THREE AND NOT ALL FIVE. The limiter's own bookkeeping is a KV
+// write, and KV Free allows 1,000 writes/day across the WHOLE namespace,
+// shared with login's counters and the wa:counts key (which budgets itself
+// 500 -- see WA_DAILY_CAP). A limit whose worst case exhausts that budget
+// would take login rate limiting down with it, which is a strictly worse
+// trade than the gap it closes.
+//
+// So the two read-only routes are deliberately excluded rather than
+// forgotten. GET /api/build-status is POLLED by the dashboard throughout a
+// publish -- a write per poll is ~60 per publish, the single largest
+// consumer on this Worker, spent guarding a route whose entire cost is one
+// Cloudflare API read. GET /api/wa reads one KV key. Both are authenticated,
+// neither writes anything, neither spends a capped quota; the volumetric
+// backstop for them is the WAF rate-limiting rule in
+// docs/cloudflare-cutover.md, not this table.
+//
+// The three limits below total (12 + 8 + 50) * 4 = 280 writes/day at their
+// absolute worst, which fits alongside wa's 500 with room left.
+//
+// Six hours, not a day: `recordHit` (worker/ratelimit.ts) re-sets the TTL on
+// every recorded hit, so the window runs from the LAST hit, not the first --
+// meaning the cap is also the lockout. A 24-hour window would lock her out
+// until tomorrow for the crime of a busy afternoon. Six hours bounds that,
+// and matches SESSION_IDLE_SECONDS, so the worst case is "log back in and
+// carry on" rather than two different waits to explain.
+interface RatePolicy {
+  prefix: string;
+  max: number;
+  windowSeconds: number;
+  message: string;
+}
+
+const RATE_WINDOW_SECONDS = 6 * 60 * 60;
+
+export const RATE_POLICIES: Record<string, RatePolicy> = {
+  '/api/publish': {
+    prefix: 'pub',
+    max: 12,
+    windowSeconds: RATE_WINDOW_SECONDS,
+    message: 'Too many publishes in a short time. Try again in a few hours.',
+  },
+  '/api/undo': {
+    prefix: 'undo',
+    max: 8,
+    windowSeconds: RATE_WINDOW_SECONDS,
+    message: 'Too many undos in a short time. Try again in a few hours.',
+  },
+  '/api/upload': {
+    prefix: 'up',
+    max: 50,
+    windowSeconds: RATE_WINDOW_SECONDS,
+    message: 'Too many uploads in a short time. Try again in a few hours.',
+  },
+};
+
+// Applied in the router, wrapping the handler, for the same reason
+// `withSlidingSession` is: threading a limiter through each handler is three
+// chances to forget one.
+//
+// CHECK before, RECORD after -- and only when the handler did NOT answer 401.
+// That ordering is what keeps the KV budget above honest: an unauthenticated
+// request costs a read and never a write, so the one caller who can hammer
+// these paths for free is also the one who gets nothing for it. Every other
+// status records, including 400 and 409 -- a session sending malformed
+// publishes is still spending this Worker's time, and exempting failures
+// would leave the cheapest abuse unmetered.
+async function withRateLimit(
+  request: Request,
+  env: Env,
+  policy: RatePolicy,
+  run: () => Promise<Response>,
+): Promise<Response> {
+  // Set by Cloudflare itself on every request that reaches a Worker, so
+  // unlike an arbitrary header a client cannot forge it to dodge its own
+  // limit or pin someone else's -- see handleLogin's own use of it.
+  const ip = request.headers.get('CF-Connecting-IP') ?? 'unknown';
+  const key = `${policy.prefix}:${ip}`;
+
+  if (!(await checkRate(env.KV, key, policy.max))) {
+    return json(429, { message: policy.message });
+  }
+
+  const response = await run();
+  if (response.status !== 401) {
+    // Swallowed for the same reason handleLogin swallows
+    // recordLoginFailure's: KV Free's write cap is shared, and the one
+    // moment a write is refused must not turn a publish that otherwise
+    // succeeded into an exception page. Bookkeeping that fails degrades the
+    // limiter; it does not fail the request.
+    try {
+      await recordHit(env.KV, key, policy.windowSeconds);
+    } catch {
+      // Deliberately swallowed -- see the comment above.
+    }
+  }
+  return response;
+}
+
 // Slides the idle window on a successful authenticated request. Applied in the
 // router, once, rather than inside each handler: the handlers already
 // authenticate themselves, and threading a cookie back out of every one of
@@ -116,6 +233,49 @@ function json(status: number, body: unknown, extraHeaders: Record<string, string
   return new Response(JSON.stringify(body), {
     status,
     headers: { 'Content-Type': 'application/json', ...extraHeaders },
+  });
+}
+
+// Applied once, to everything this Worker returns, rather than per handler --
+// including worker/status.ts's and worker/upload.ts's responses, which are
+// built by their own local `json` helpers this file never sees. A header set
+// in the router cannot be forgotten by a route added later; a header set in
+// four `json` helpers already had been.
+//
+// `no-store` on EVERY response, not just the ones carrying content. It was
+// previously set on GET /api/content alone, which left GET /api/build-status
+// and GET /api/wa -- both authenticated, both plain 200 GETs with no
+// Cache-Control at all -- eligible for a browser's heuristic freshness
+// calculation, where a response with no directives and no validator gets
+// cached anyway at the browser's discretion. Nothing this Worker returns is
+// worth caching: the reads exist precisely because their answers change.
+//
+// `default-src 'none'` is the whole CSP an API needs. A JSON response has no
+// legitimate subresource of any kind, so the correct policy is the empty one,
+// and `frame-ancestors 'none'` alongside X-Frame-Options covers both the
+// modern and the legacy spelling of "do not put this in a frame".
+//
+// `nosniff` is not decoration here. This site has twice served a response
+// under the wrong Content-Type through a poisoned edge cache (see
+// public/_headers' own account), and content sniffing is the step that turns
+// a wrong Content-Type into executed script.
+const SECURITY_HEADERS: Record<string, string> = {
+  'X-Content-Type-Options': 'nosniff',
+  'X-Frame-Options': 'DENY',
+  'Referrer-Policy': 'no-referrer',
+  'Content-Security-Policy': "default-src 'none'; frame-ancestors 'none'",
+  'Cache-Control': 'no-store',
+};
+
+function withSecurityHeaders(response: Response): Response {
+  const headers = new Headers(response.headers);
+  for (const [name, value] of Object.entries(SECURITY_HEADERS)) {
+    headers.set(name, value);
+  }
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
   });
 }
 
@@ -586,16 +746,25 @@ async function handleGetContent(request: Request, env: Env): Promise<Response> {
     if (!file) {
       return json(404, { message: 'That file does not exist yet.' });
     }
-    // This route's entire purpose is freshness -- see this task's own
+    // `Cache-Control: no-store` matters more on this route than on any
+    // other: its entire purpose is freshness -- see this task's own
     // reasoning on why the dashboard cannot read from the build-time
     // bundle. A cache sitting between here and the browser (or the browser
     // itself, on a back/forward navigation) serving a stale response would
     // quietly reintroduce exactly that problem. Degrades safely even
-    // without this header (a stale `sha` sent back as `baseSha` just yields
+    // without the header (a stale `sha` sent back as `baseSha` just yields
     // a 409, never a silent overwrite), but she'd see stale content AND a
     // conflict a reload can't clear -- `no-store` is what keeps the reload
     // she's told to do on a 409 actually work.
-    return json(200, { content: file.content, sha: file.sha }, { 'Cache-Control': 'no-store' });
+    //
+    // Set by withSecurityHeaders now, on everything this Worker returns,
+    // rather than passed in here. This route used to be the ONLY one that
+    // asked for it, which is how GET /api/build-status and GET /api/wa --
+    // both authenticated, both plain 200 GETs -- ended up with no
+    // Cache-Control at all. A local copy here would also make this route
+    // the one place where deleting the central header changes nothing and
+    // no test notices.
+    return json(200, { content: file.content, sha: file.sha });
   } catch (error) {
     return json(502, { message: error instanceof Error ? error.message : 'Could not read that file.' });
   }
@@ -664,7 +833,24 @@ async function handleGetContent(request: Request, env: Env): Promise<Response> {
 // count.
 // ---------------------------------------------------------------------------
 
-const WA_ORIGIN = 'https://viabiancadelhi.com';
+// The origin a tap must come from, derived from the request rather than
+// written down. This was a hardcoded `https://viabiancadelhi.com` literal,
+// and a security review of the check found the control working perfectly
+// against the wrong value: the site runs on the host in site.json's
+// `seo.url`, so every real sendBeacon from the live button was answered 403
+// and the number she makes decisions on had been pinned at zero for as long
+// as it had been deployed.
+//
+// wrangler.toml routes this Worker to exactly one hostname, so the request's
+// own origin IS the site's origin -- which makes this self-configuring, and
+// means buying the real domain cannot silently re-break it the way a second
+// literal (or a var someone has to remember to set) just did. It is not a
+// weaker check either: `Origin` is set by the browser, not the page, so a
+// cross-site caller still cannot present this value.
+function siteOriginOf(request: Request): string {
+  return new URL(request.url).origin;
+}
+
 const WA_RATE_MAX = 20;
 const WA_RATE_WINDOW_SECONDS = 60;
 // A budget on ACCEPTED taps/day, not on requests -- and, because recordHit
@@ -718,7 +904,7 @@ async function readWaCounts(kv: KVNamespace): Promise<Record<string, number>> {
 async function handleRecordWaTap(request: Request, env: Env): Promise<Response> {
   // Origin first, before any KV is even read -- see the file comment above
   // for why this is the one route on this Worker that needs it at all.
-  if (request.headers.get('Origin') !== WA_ORIGIN) {
+  if (request.headers.get('Origin') !== siteOriginOf(request)) {
     return json(403, { message: 'Not allowed.' });
   }
 
@@ -792,63 +978,82 @@ async function handleReadWaCounts(request: Request, env: Env): Promise<Response>
 // ---------------------------------------------------------------------------
 
 export default {
+  // Every response leaves through withSecurityHeaders -- see its own comment
+  // for why that is here rather than in the four `json` helpers scattered
+  // across this Worker's modules.
   async fetch(request: Request, env: Env): Promise<Response> {
-    const url = new URL(request.url);
-
-    // Unauthenticated by design and reveals nothing (no version, no commit
-    // sha, no env var, no account/zone detail) -- its only job is letting a
-    // human confirm the Worker route is actually live rather than the
-    // request having silently fallen through to the Pages SPA catch-all.
-    // public/_redirects cannot express that check itself (Cloudflare Pages'
-    // _redirects only accepts a handful of status codes, none of which can
-    // signal "this path is unrouted" -- see that file's own comment), so
-    // this is the endpoint docs/cloudflare-cutover.md's deploy-time curl
-    // check hits: `text/html` back means the SPA answered instead of this
-    // Worker, `application/json` means the route is working.
-    if (url.pathname === '/api/health') {
-      return new Response(JSON.stringify({ ok: true }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
-
-    if (url.pathname === '/api/login' && request.method === 'POST') {
-      return handleLogin(request, env);
-    }
-
-    // Every authenticated route goes through withSlidingSession, which pushes
-    // the 6-hour idle window forward on success. AUTHENTICATED_PATHS is
-    // asserted against this list by worker/__tests__/index.test.ts, so a new
-    // authenticated route added here without a decision about the session
-    // fails a test rather than quietly never sliding.
-    if (url.pathname === '/api/publish' && request.method === 'POST') {
-      return withSlidingSession(request, env, await handlePublish(request, env));
-    }
-
-    if (url.pathname === '/api/undo' && request.method === 'POST') {
-      return withSlidingSession(request, env, await handleUndo(request, env));
-    }
-
-    if (url.pathname === '/api/content' && request.method === 'GET') {
-      return withSlidingSession(request, env, await handleGetContent(request, env));
-    }
-
-    if (url.pathname === '/api/upload' && request.method === 'POST') {
-      return withSlidingSession(request, env, await handleUpload(request, env));
-    }
-
-    if (url.pathname === '/api/build-status' && request.method === 'GET') {
-      return withSlidingSession(request, env, await handleBuildStatus(request, env));
-    }
-
-    if (url.pathname === '/api/wa' && request.method === 'POST') {
-      return handleRecordWaTap(request, env);
-    }
-
-    if (url.pathname === '/api/wa' && request.method === 'GET') {
-      return handleReadWaCounts(request, env);
-    }
-
-    return new Response('Not found', { status: 404 });
+    return withSecurityHeaders(await route(request, env));
   },
 };
+
+async function route(request: Request, env: Env): Promise<Response> {
+  const url = new URL(request.url);
+
+  // Unauthenticated by design and reveals nothing (no version, no commit
+  // sha, no env var, no account/zone detail) -- its only job is letting a
+  // human confirm the Worker route is actually live rather than the
+  // request having silently fallen through to the Pages SPA catch-all.
+  // public/_redirects cannot express that check itself (Cloudflare Pages'
+  // _redirects only accepts a handful of status codes, none of which can
+  // signal "this path is unrouted" -- see that file's own comment), so
+  // this is the endpoint docs/cloudflare-cutover.md's deploy-time curl
+  // check hits: `text/html` back means the SPA answered instead of this
+  // Worker, `application/json` means the route is working.
+  if (url.pathname === '/api/health') {
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  if (url.pathname === '/api/login' && request.method === 'POST') {
+    return handleLogin(request, env);
+  }
+
+  // Every authenticated route goes through withSlidingSession, which pushes
+  // the 6-hour idle window forward on success. AUTHENTICATED_PATHS is
+  // asserted against this list by worker/__tests__/index.test.ts, so a new
+  // authenticated route added here without a decision about the session
+  // fails a test rather than quietly never sliding.
+  //
+  // The three that spend a capped quota are additionally wrapped in
+  // withRateLimit, OUTSIDE the session slide: a request refused for rate
+  // never reaches the handler, so it must not refresh a session either. See
+  // RATE_POLICIES for which routes are limited and why the other two
+  // deliberately are not.
+  if (url.pathname === '/api/publish' && request.method === 'POST') {
+    return withRateLimit(request, env, RATE_POLICIES['/api/publish'], async () =>
+      withSlidingSession(request, env, await handlePublish(request, env)),
+    );
+  }
+
+  if (url.pathname === '/api/undo' && request.method === 'POST') {
+    return withRateLimit(request, env, RATE_POLICIES['/api/undo'], async () =>
+      withSlidingSession(request, env, await handleUndo(request, env)),
+    );
+  }
+
+  if (url.pathname === '/api/content' && request.method === 'GET') {
+    return withSlidingSession(request, env, await handleGetContent(request, env));
+  }
+
+  if (url.pathname === '/api/upload' && request.method === 'POST') {
+    return withRateLimit(request, env, RATE_POLICIES['/api/upload'], async () =>
+      withSlidingSession(request, env, await handleUpload(request, env)),
+    );
+  }
+
+  if (url.pathname === '/api/build-status' && request.method === 'GET') {
+    return withSlidingSession(request, env, await handleBuildStatus(request, env));
+  }
+
+  if (url.pathname === '/api/wa' && request.method === 'POST') {
+    return handleRecordWaTap(request, env);
+  }
+
+  if (url.pathname === '/api/wa' && request.method === 'GET') {
+    return handleReadWaCounts(request, env);
+  }
+
+  return new Response('Not found', { status: 404 });
+}
