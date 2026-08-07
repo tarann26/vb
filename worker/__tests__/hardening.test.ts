@@ -1,5 +1,11 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import worker, { AUTHENTICATED_PATHS, RATE_POLICIES, WA_DAILY_CAP, type Env } from '../index';
+import worker, {
+  AUTHENTICATED_PATHS,
+  AUTHENTICATED_UNLIMITED,
+  RATE_POLICIES,
+  WA_DAILY_CAP,
+  type Env,
+} from '../index';
 import { hashPassword, signToken } from '../auth';
 import { site } from '../../src/content';
 
@@ -64,6 +70,7 @@ function buildEnv(kv: FakeKV): Env {
     CLOUDFLARE_ACCOUNT_ID: 'hardening-test-account-id',
     CLOUDFLARE_PAGES_PROJECT: 'hardening-test-project',
     CLOUDFLARE_API_TOKEN: 'hardening-test-cf-token-not-real',
+    CF_WEB_ANALYTICS_SITE_TAG: '29e1ba52fba74885a5fc44875a48a078',
   };
 }
 
@@ -237,6 +244,28 @@ describe('rate limits on the routes that spend a capped quota', () => {
       new Set(['/api/publish', '/api/undo', '/api/upload']),
     );
     for (const path of Object.keys(RATE_POLICIES)) {
+      expect(AUTHENTICATED_PATHS.has(path)).toBe(true);
+    }
+  });
+
+  // The case above cannot tell an authenticated route left unlimited ON
+  // PURPOSE from one whose author never thought about it -- both are simply
+  // absent from RATE_POLICIES, and it would go on passing while a new
+  // authenticated route quietly shipped with no limiter and no decision
+  // behind it. AUTHENTICATED_UNLIMITED is the second, named set that closes
+  // that: an authenticated route now has to appear in one list or the other,
+  // and a future limiter has to EDIT a list rather than slip past one.
+  //
+  // Disjoint, because a route cannot be both limited and deliberately
+  // unlimited. A subset of AUTHENTICATED_PATHS, because "deliberately
+  // unlimited" is a statement about authenticated routes -- listing an
+  // unauthenticated path here would be claiming a decision that does not
+  // apply.
+  it('names the authenticated read-only routes that are deliberately unlimited', () => {
+    expect([...AUTHENTICATED_UNLIMITED].sort()).toEqual(['/api/analytics', '/api/build-status']);
+
+    for (const path of AUTHENTICATED_UNLIMITED) {
+      expect(Object.keys(RATE_POLICIES)).not.toContain(path);
       expect(AUTHENTICATED_PATHS.has(path)).toBe(true);
     }
   });

@@ -29,6 +29,23 @@ GITHUB_BRANCH = "main"   # the branch Cloudflare Pages builds from
 CLOUDFLARE_ACCOUNT_ID = "e352283475b003efeab1a35e45932927"
 CLOUDFLARE_PAGES_PROJECT = "vb"
 
+# The Cloudflare Web Analytics site tag. An identifier, not a secret -- the
+# same non-sensitive-var treatment CLOUDFLARE_PAGES_PROJECT above gets, and
+# for the same reason: it is a FILTER VALUE. It says which site's rows to
+# read; it grants nothing. The thing that actually grants read access is the
+# CLOUDFLARE_API_TOKEN secret, which needs Account Analytics: Read added to
+# its existing Account.Cloudflare Pages: Read before GET /api/analytics can
+# return anything (worker/analytics.ts's PagesEnv/WebAnalyticsEnv split owns
+# this shape).
+#
+# NOT a placeholder, unlike the two above were: this value was read off the
+# live Cloudflare dashboard and is the same tag the beacon snippet in
+# index.html carries. It is bound to the ZONE aionxxxi.uk today, and putting
+# it here as well as in the HTML is what lets the data survive the eventual
+# move to viabiancadelhi.com -- the tag travels with the repo rather than
+# with the zone.
+CF_WEB_ANALYTICS_SITE_TAG = "29e1ba52fba74885a5fc44875a48a078"
+
 # An EXPLICIT empty list, not a deleted `[triggers]` section. Those are not
 # the same thing to `wrangler deploy`, and the difference is the whole reason
 # this stays here.

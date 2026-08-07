@@ -83,6 +83,7 @@ async function buildEnv(kv = new FakeKV()): Promise<Env> {
     CLOUDFLARE_ACCOUNT_ID: 'count-test-account-id',
     CLOUDFLARE_PAGES_PROJECT: 'count-test-project',
     CLOUDFLARE_API_TOKEN: 'count-test-fixture-cf-token-not-real',
+    CF_WEB_ANALYTICS_SITE_TAG: '29e1ba52fba74885a5fc44875a48a078',
   };
 }
 

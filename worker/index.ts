@@ -1,8 +1,8 @@
 // The admin Worker's entry point. `/api/*` on the site's own zone is the
 // only thing routed to this Worker (see wrangler.toml); every path other
 // than /api/health, POST /api/login, POST /api/publish, POST /api/undo,
-// POST /api/upload, GET /api/build-status, GET /api/content and POST/GET
-// /api/wa replies 404.
+// POST /api/upload, GET /api/build-status, GET /api/analytics,
+// GET /api/content and POST/GET /api/wa replies 404.
 //
 // This Worker has no `scheduled` export and wrangler.toml declares no cron
 // triggers: publishing is instantaneous. A commit lands, Cloudflare's own
@@ -32,14 +32,17 @@ import {
 import { validateContent, type ValidationProblem } from '../src/content/validate';
 import { handleUpload } from './upload';
 import { handleBuildStatus, type PagesEnv } from './status';
+import { handleAnalytics, type WebAnalyticsEnv } from './analytics';
 import { todayInKolkata } from './date';
+import { WA_COUNTS_KV_KEY, readWaCounts } from './wa';
 
 // Grows as later tasks need more bindings -- only what this file actually
 // reads belongs here. GITHUB_OWNER/REPO/BRANCH/TOKEN come in via GitHubEnv
 // (worker/github.ts); CLOUDFLARE_ACCOUNT_ID/PAGES_PROJECT/API_TOKEN come in
-// via PagesEnv (worker/status.ts) -- each module owns the shape of the vars
-// it actually reads, so there's one definition, not two that could drift.
-export interface Env extends GitHubEnv, PagesEnv {
+// via PagesEnv (worker/status.ts); CF_WEB_ANALYTICS_SITE_TAG comes in via
+// WebAnalyticsEnv (worker/analytics.ts) -- each module owns the shape of the
+// vars it actually reads, so there's one definition, not two that could drift.
+export interface Env extends GitHubEnv, PagesEnv, WebAnalyticsEnv {
   KV: KVNamespace;
   ADMIN_PASSWORD_HASH: string;
   TOKEN_SECRET: string;
@@ -86,7 +89,14 @@ async function sessionCookie(
 // The routes that require a session. Listed here rather than inferred, so
 // adding an authenticated route without deciding whether it should slide the
 // window is a visible omission rather than a silent one.
-export const AUTHENTICATED_PATHS = new Set(['/api/publish', '/api/undo', '/api/content', '/api/upload', '/api/build-status']);
+export const AUTHENTICATED_PATHS = new Set([
+  '/api/publish',
+  '/api/undo',
+  '/api/content',
+  '/api/upload',
+  '/api/build-status',
+  '/api/analytics',
+]);
 
 // ---------------------------------------------------------------------------
 // Per-route rate limits for the authenticated routes that SPEND something a
@@ -161,6 +171,31 @@ export const RATE_POLICIES: Record<string, RatePolicy> = {
     message: 'Too many uploads in a short time. Try again in a few hours.',
   },
 };
+
+// The authenticated routes that are read-only and are DELIBERATELY not in
+// RATE_POLICIES, named rather than merely absent.
+//
+// Absence is not a decision anyone can see. `Object.keys(RATE_POLICIES)`
+// being exactly the three mutating routes is already pinned by
+// worker/__tests__/hardening.test.ts, but that test cannot tell an
+// authenticated route left unlimited ON PURPOSE from one whose author never
+// thought about it -- both look identical from the RATE_POLICIES side. This
+// list is the difference: adding an authenticated route now means either
+// putting it in RATE_POLICIES or putting it here, and hardening.test.ts
+// asserts the two are disjoint and that everything here is in
+// AUTHENTICATED_PATHS.
+//
+// Why these two are unlimited is the KV-write budget argued at length above:
+// this repo's limiter records a hit with a KV WRITE, KV Free allows 1,000
+// writes/day across the whole namespace, and roughly 800 are already
+// committed. Limiting a read-only route would spend the budget that keeps
+// LOGIN rate limiting alive, which is a strictly worse trade than the gap it
+// closes. GET /api/analytics has its own load control that costs no writes
+// at all: a single 10-minute Cache API entry (worker/analytics.ts), which
+// bounds upstream GraphQL calls to six per hour per colo no matter how often
+// the dashboard reloads. The volumetric backstop for both is the WAF
+// rate-limiting rule in docs/cloudflare-cutover.md, not this table.
+export const AUTHENTICATED_UNLIMITED = ['/api/build-status', '/api/analytics'] as const;
 
 // Applied in the router, wrapping the handler, for the same reason
 // `withSlidingSession` is: threading a limiter through each handler is three
@@ -956,33 +991,14 @@ const WA_RATE_WINDOW_SECONDS = 60;
 // exactly this value rather than looping hundreds of real requests to
 // reach it.
 export const WA_DAILY_CAP = 250;
-const WA_COUNTS_KV_KEY = 'wa:counts';
+
+// WA_COUNTS_KV_KEY and readWaCounts moved to worker/wa.ts, unchanged, once
+// worker/analytics.ts became a second reader of the same key. See that
+// file's header for why a shared module rather than a copy or an ad hoc
+// export from here.
 
 function waRateKeyFor(ip: string): string {
   return `wa:${ip}`;
-}
-
-// Never throws: a corrupted or hand-edited KV value must not crash this
-// route -- fail closed to "nothing recorded yet" rather than propagating a
-// parse error into a visitor-facing beacon response. Silently drops
-// any entry whose value isn't a finite number rather than propagating a
-// bad one forward -- the only way a non-numeric value could exist here is
-// hand-editing this key directly, since every write below only ever stores
-// `previous + 1`.
-async function readWaCounts(kv: KVNamespace): Promise<Record<string, number>> {
-  const raw = await kv.get(WA_COUNTS_KV_KEY);
-  if (!raw) return {};
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
-    const counts: Record<string, number> = {};
-    for (const [date, value] of Object.entries(parsed as Record<string, unknown>)) {
-      if (typeof value === 'number' && Number.isFinite(value)) counts[date] = value;
-    }
-    return counts;
-  } catch {
-    return {};
-  }
 }
 
 async function handleRecordWaTap(request: Request, env: Env): Promise<Response> {
@@ -1143,6 +1159,15 @@ async function route(request: Request, env: Env): Promise<Response> {
 
   if (url.pathname === '/api/build-status' && request.method === 'GET') {
     return withSlidingSession(request, env, await handleBuildStatus(request, env));
+  }
+
+  // Slides the session for the same reason GET /api/content does: reading
+  // the Numbers screen IS her using the tool, and a route that
+  // authenticates but does not slide would log her out mid-read of the one
+  // screen she only ever reads. Deliberately NOT rate-limited -- see
+  // AUTHENTICATED_UNLIMITED above.
+  if (url.pathname === '/api/analytics' && request.method === 'GET') {
+    return withSlidingSession(request, env, await handleAnalytics(request, env));
   }
 
   if (url.pathname === '/api/wa' && request.method === 'POST') {
