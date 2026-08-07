@@ -107,6 +107,20 @@ it('points every icon link at a file that exists, with exact case', () => {
   }
 });
 
+// Deliberate overlap with src/test/analytics.test.ts, which owns "exactly
+// one beacon, and here is why the assertion was inverted". This one owns a
+// narrower job: index.html's head-and-tail markup is edited by hand and has
+// drifted before, and the beacon is the one tag in it whose absence produces
+// no symptom at all -- the site looks perfect and the owner's Numbers screen
+// silently reports nothing forever. So it is pinned next to the other
+// hand-maintained strings, where an edit to this file will trip over it.
+it('still carries the Cloudflare Web Analytics beacon with this site\'s token', () => {
+  const markup = readFileSync('index.html', 'utf8').replace(/<!--[\s\S]*?-->/g, '');
+  expect(markup).toMatch(
+    /<script[^>]*src="https:\/\/static\.cloudflareinsights\.com\/beacon\.min\.js"[^>]*data-cf-beacon='\{"token": "7d977bcbda6e4e38884875918d153e7f"\}'/,
+  );
+});
+
 describe('share card', () => {
   it('exists in public/ with exact case', () => {
     expect(publicFiles.has(site.seo.ogImage)).toBe(true);

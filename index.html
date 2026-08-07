@@ -105,13 +105,37 @@
     </div>
     <script type="module" src="/src/main.tsx"></script>
     <!--
-      No Cloudflare beacon <script> here, on purpose. Web Analytics for this
-      site is enabled at the Cloudflare Pages project level (dashboard >
-      Workers & Pages > this project > Analytics > Web Analytics > Enable),
-      not by hand-placing a snippet. Cloudflare injects its own beacon into
-      every response it serves for the project once that is on -- see
-      docs/cloudflare-cutover.md Step 4. Adding a beacon script here as well
-      would put two on the page and double-count every visit.
+      The Cloudflare Web Analytics beacon, placed by hand. This reverses what
+      this comment used to say, and the reversal is measured rather than
+      assumed, so the old reasoning is recorded here alongside why it no
+      longer holds.
+
+      What it used to say: Web Analytics is switched on at the Cloudflare
+      Pages project level, Cloudflare therefore injects its own beacon into
+      every response it serves, and a snippet here as well would put two on
+      the page and double-count every visit. That was a correct description
+      of what auto-install is documented to do.
+
+      What was actually measured: auto-install is on for this site (site_tag
+      29e1ba52fba74885a5fc44875a48a078, bound to the aionxxxi.uk zone) and it
+      never reaches the HTML. Three cache-busted requests to the live site
+      came back with no beacon in the response at all, which is why the
+      dataset was empty. Cloudflare's HTML injection happens on responses the
+      zone serves and is not applied to responses served by Pages -- and on
+      this site every response is served by Pages. So the count being
+      protected was not one, it was zero.
+
+      The snippet also outlasts the domain. Auto-install carries the token on
+      the ZONE; this carries it in the markup, so the numbers keep accruing
+      to one site_tag through the eventual move to viabiancadelhi.com instead
+      of restarting from nothing on the new zone.
+
+      Auto-install is to be turned OFF in the dashboard, which is what keeps
+      the old double-count worry from ever becoming real: this tag is then
+      the one beacon on the page. src/test/analytics.test.ts asserts the
+      COUNT rather than the presence for exactly that reason -- a duplicated
+      tag passes a presence check and doubles every number she reads.
     -->
+    <script type="module" src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "7d977bcbda6e4e38884875918d153e7f"}'></script>
   </body>
 </html>
