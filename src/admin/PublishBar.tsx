@@ -23,6 +23,7 @@ import {
 import { clearDraft, formatRelativeTime, mostRecentSavedAt, saveDraft, type DraftMap, type DraftSurface } from './drafts';
 import type { StagedFiles } from './staged';
 import { CONTENT_FILE_LABELS, type ContentFileName } from './content';
+import { barSummary } from './publish-summary';
 import {
   clearUndoRecord,
   describePaths,
@@ -241,14 +242,13 @@ function validationHeading(count: number): string {
   return `Publishing will be refused until ${count === 1 ? 'this is' : 'these are'} fixed:`;
 }
 
-function summaryMessage(dirtyCount: number, stagedCount: number): string {
-  const total = dirtyCount + stagedCount;
-  if (total === 0) return 'No changes to publish yet.';
-  const parts: string[] = [];
-  if (dirtyCount > 0) parts.push(`${dirtyCount} ${dirtyCount === 1 ? 'section' : 'sections'} edited`);
-  if (stagedCount > 0) parts.push(`${stagedCount} ${stagedCount === 1 ? 'file' : 'files'} staged`);
-  return `${parts.join(', ')} — ready to publish.`;
-}
+// Lifted to src/admin/publish-summary.ts, byte-identical, and imported back
+// here. It moved because the header's new status strip needs to say
+// something about unsaved work too, a couple of inches from this bar, and
+// two sentences that differ only in a trailing clause read as a bug -- see
+// that module's own header for which sentence owns which words. This bar's
+// copy is unchanged in every state, which is what keeps this file's own
+// test suite passing with no edits.
 
 const PUBLISH_BUTTON_CLASSNAME =
   "rounded bg-[#6B8B59] px-6 py-2 font-['Montserrat'] uppercase tracking-wide text-white transition hover:bg-[#5a7349] disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500";
@@ -792,7 +792,7 @@ const PublishBar: React.FC<PublishBarProps> = ({
     >
       <div className="mx-auto mb-8 max-w-3xl rounded border border-gray-200 bg-white p-4" style={{ marginTop: offsetTop }}>
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="font-['Montserrat'] text-sm text-gray-600">{summaryMessage(dirtyFiles.length, stagedCount)}</p>
+          <p className="font-['Montserrat'] text-sm text-gray-600">{barSummary(dirtyFiles.length, stagedCount)}</p>
           {/* type="submit", not a plain onClick handler -- see PublishBarProps'
               own `children` comment for why the form this button submits
               needs to be the one wrapping every content section, not just
@@ -1040,7 +1040,7 @@ function ConfirmPanel({
             taken when this opened, which would go stale the moment a photo
             upload that was in flight when she clicked Publish finishes and
             stages itself. */}
-        <p className="mb-3 font-['Montserrat'] text-sm text-[#222]">{summaryMessage(dirtyFiles.length, stagedCount)}</p>
+        <p className="mb-3 font-['Montserrat'] text-sm text-[#222]">{barSummary(dirtyFiles.length, stagedCount)}</p>
         {dirtyFiles.length > 0 && (
           <p className="mb-3 font-['Montserrat'] text-sm text-[#222]">
             {`Changing: ${dirtyFiles.map((file) => CONTENT_FILE_LABELS[file]).join(', ')}.`}
