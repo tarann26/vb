@@ -229,6 +229,35 @@ async function withSlidingSession(request: Request, env: Env, response: Response
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 }
 
+// A ceiling on the JSON bodies /api/publish and /api/undo will read into
+// memory. worker/upload.ts has had one since it was written (25MB, checked
+// from Content-Length before the body is touched, because formData() buffers
+// the whole thing); these two routes call request.json(), which buffers just
+// the same, and had none. The asymmetry was the finding -- one route in this
+// Worker guarding its body size and its neighbours not is the kind of gap
+// that reads as a decision later.
+//
+// 2MB is enormous for what these actually carry. Every content JSON file in
+// the repository put together is a small fraction of it, and a publish sends
+// only the files that changed. The number is a bound on abuse, not a budget
+// anyone should ever approach.
+//
+// Low severity on its own, and worth saying so rather than dressing it up:
+// both routes are behind a session and a rate limit, and a Worker that runs
+// out of memory fails that one request rather than the site. This is depth.
+const MAX_JSON_BODY_BYTES = 2 * 1024 * 1024;
+
+// Best-effort, exactly like upload.ts's: a client that omits Content-Length
+// or understates it is not stopped here. What it does stop is the honest
+// large body -- a runaway client looping, or a draft store that has grown
+// without bound -- costing memory before anything has looked at it.
+function tooLargeToRead(request: Request): boolean {
+  const header = request.headers.get('Content-Length');
+  if (header === null) return false;
+  const length = Number(header);
+  return Number.isFinite(length) && length > MAX_JSON_BODY_BYTES;
+}
+
 function json(status: number, body: unknown, extraHeaders: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -426,6 +455,13 @@ async function handlePublish(request: Request, env: Env): Promise<Response> {
   const now = Math.floor(Date.now() / 1000);
   if (!token || !(await verifyToken(env.TOKEN_SECRET, env.ADMIN_PASSWORD_HASH, token, now))) {
     return json(401, { message: 'Not authenticated.' });
+  }
+
+  // 1a. Size, before the body is read at all -- see MAX_JSON_BODY_BYTES.
+  // After the session check on purpose: an unauthenticated caller should not
+  // learn this route's limits, and 401 is the cheaper answer anyway.
+  if (tooLargeToRead(request)) {
+    return json(413, { message: 'That is too much to publish at once.' });
   }
 
   // 2. Parse. A malformed envelope (not JSON, no `files` array, a file
@@ -644,6 +680,12 @@ async function handleUndo(request: Request, env: Env): Promise<Response> {
   const now = Math.floor(Date.now() / 1000);
   if (!token || !(await verifyToken(env.TOKEN_SECRET, env.ADMIN_PASSWORD_HASH, token, now))) {
     return json(401, { message: 'Not authenticated.' });
+  }
+
+  // 1a. Same ceiling as handlePublish -- an undo body is one sha, so this is
+  // pure backstop rather than a limit anything legitimate approaches.
+  if (tooLargeToRead(request)) {
+    return json(413, { message: 'That is too much to send.' });
   }
 
   // 2. Parse.

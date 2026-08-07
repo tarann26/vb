@@ -353,3 +353,86 @@ describe('cross-origin write protection', () => {
     expect(good.status).toBe(204);
   });
 });
+
+describe('body size ceiling on the JSON write routes', () => {
+  let kv: FakeKV;
+  let env: Env;
+  let sessionCookie: string;
+
+  beforeEach(async () => {
+    kv = new FakeKV();
+    env = buildEnv(kv);
+    sessionCookie = await cookie();
+  });
+
+  const OVER = String(3 * 1024 * 1024);
+
+  // worker/upload.ts has capped its body since it was written; these two
+  // routes call request.json(), which buffers the whole body exactly as
+  // formData() does, and had no cap at all. The asymmetry was the finding.
+  for (const path of ['/api/publish', '/api/undo']) {
+    it(`refuses an oversized body on ${path} before reading it`, async () => {
+      const response = await worker.fetch(
+        new Request(`${SITE_ORIGIN}${path}`, {
+          method: 'POST',
+          headers: {
+            Cookie: sessionCookie,
+            Origin: SITE_ORIGIN,
+            'CF-Connecting-IP': '7.7.7.7',
+            'Content-Length': OVER,
+          },
+          body: '{}',
+        }),
+        env,
+      );
+      expect(response.status).toBe(413);
+    });
+
+    // The half that keeps the cap from being a bug of its own. A limit that
+    // rejected ordinary publishes would pass the test above and break the
+    // only thing this Worker exists to do.
+    //
+    // Content-Length is set EXPLICITLY, and that is the whole point of this
+    // test rather than an incidental detail. The first version reused
+    // authedGarbage(), whose Request carries no Content-Length header at all
+    // -- Node populates it at send time, not at construction -- so
+    // tooLargeToRead's `header === null` branch returned early and the
+    // assertion held for ANY limit. Proven by mutation: setting the cap to
+    // one single byte left it green. A cap this cannot distinguish from no
+    // cap is not being tested.
+    //
+    // 200KB is comfortably more than every content JSON file in the
+    // repository put together, which is the realistic ceiling for a publish
+    // that sends only what changed.
+    it(`still accepts a realistic ${path} body of 200KB`, async () => {
+      const response = await worker.fetch(
+        new Request(`${SITE_ORIGIN}${path}`, {
+          method: 'POST',
+          headers: {
+            Cookie: sessionCookie,
+            Origin: SITE_ORIGIN,
+            'CF-Connecting-IP': '7.7.7.7',
+            'Content-Length': String(200 * 1024),
+          },
+          body: '{}',
+        }),
+        env,
+      );
+      expect(response.status).not.toBe(413);
+    });
+
+    // Checked AFTER the session check, deliberately: an unauthenticated
+    // caller should not learn this route's limits, and 401 is cheaper anyway.
+    it(`answers 401 before 413 on ${path} when there is no session`, async () => {
+      const response = await worker.fetch(
+        new Request(`${SITE_ORIGIN}${path}`, {
+          method: 'POST',
+          headers: { Origin: SITE_ORIGIN, 'CF-Connecting-IP': '7.7.7.7', 'Content-Length': OVER },
+          body: '{}',
+        }),
+        env,
+      );
+      expect(response.status).toBe(401);
+    });
+  }
+});
