@@ -3,12 +3,25 @@ import { ExternalLink, Calendar, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useNavigate } from 'react-router-dom';
 import { useContent } from '../content/ContentContext';
 import { formatArticleDate } from '../content/article-date';
+import { useCanonical } from './useCanonical';
 
 const BlogsPage: React.FC = () => {
   const navigate = useNavigate();
   const content = useContent();
-  const { press, copy } = content;
+  const { press, copy, site } = content;
   const [currentPage, setCurrentPage] = useState(1);
+
+  // /blogs is listed in public/sitemap.xml and was the ONE indexable route
+  // with no canonical of its own -- the homepage has SeoHead's and every
+  // `/<slug>` page has PageSeoHead's. That gap stopped being harmless once
+  // Cloudflare Pages began serving this whole site from its generated
+  // preview subdomain as well: two public hosts, identical content, and
+  // nothing on this route telling a crawler which URL is the real one.
+  //
+  // Deliberately NOT per-page (no `?page=2` variant): the paginated views are
+  // slices of one collection reached by client-side state, not distinct URLs
+  // -- the address bar never changes -- so every one of them IS /blogs.
+  useCanonical(`${site.seo.url}/blogs`);
   const articlesPerPage = 10;
 
   // Calculate pagination. press.json is already sorted newest first at source.

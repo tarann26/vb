@@ -13,6 +13,7 @@ import BlogsPage from './components/BlogsPage';
 import SeoHead from './components/SeoHead';
 import PageSeoHead from './components/PageSeoHead';
 import NotFound from './components/NotFound';
+import { useNoindexOnPreviewHost } from './components/useCanonical';
 import type { SectionId, Section } from './content';
 import { useContent } from './content/ContentContext';
 import TextSection from './components/templates/TextSection';
@@ -132,6 +133,11 @@ function PageRoute() {
 }
 
 export function AppRoutes() {
+  // Mounted here rather than per route, because it is a property of the HOST
+  // this bundle was served from, not of any route -- and because /edit and
+  // NotFound need it as much as the indexable routes do.
+  useNoindexOnPreviewHost();
+
   return (
     <Routes>
       <Route path="/" element={<HomePage />} />

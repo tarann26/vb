@@ -53,12 +53,106 @@ describe('canonical url per route', () => {
     expect(canonicals().map((link) => link.getAttribute('href'))).toEqual([site.seo.url]);
   });
 
-  it('is absent on /blogs rather than pointing at the homepage', () => {
+  // This used to assert /blogs had NO canonical, and that was the right call
+  // when it was written: index.html is served for every route, so a canonical
+  // there would name the homepage on /blogs too, and "no canonical" leaves a
+  // page indexed under its own URL, which was correct while the site had one
+  // URL.
+  //
+  // It has two. Cloudflare Pages serves the entire site from its generated
+  // preview subdomain as well -- publicly, with `Allow: /` in robots.txt --
+  // so "indexed under its own URL" now means indexed under both hosts'
+  // versions of it, competing. /blogs was the only indexable route with
+  // nothing to break that tie: the homepage has SeoHead's canonical and every
+  // `/<slug>` page has PageSeoHead's.
+  //
+  // The property that mattered then still holds and is still asserted: the
+  // canonical on /blogs is /blogs' own, NOT the homepage's. That was the real
+  // failure the old test was guarding against, and pointing at the homepage
+  // would now be worse than emitting nothing at all -- it would actively ask
+  // Google to drop the page.
+  it('is /blogs\' own url on /blogs, never the homepage\'s', () => {
     render(
       <MemoryRouter initialEntries={['/blogs']}>
         <AppRoutes />
       </MemoryRouter>,
     );
-    expect(canonicals()).toHaveLength(0);
+    expect(canonicals().map((link) => link.getAttribute('href'))).toEqual([`${site.seo.url}/blogs`]);
+  });
+
+  // Exactly one, on every route that has one. Two canonical links on a page
+  // have no defined winner, and the append-on-mount/remove-on-unmount shape
+  // these components share is precisely the thing that produces a duplicate
+  // if a cleanup is ever dropped -- which a single-element assertion above
+  // would still catch, but only for the route it runs on.
+  it('never emits more than one canonical on any route', () => {
+    for (const route of ['/', '/blogs']) {
+      const { unmount } = render(
+        <MemoryRouter initialEntries={[route]}>
+          <AppRoutes />
+        </MemoryRouter>,
+      );
+      expect(canonicals(), `on ${route}`).toHaveLength(1);
+      unmount();
+      // And nothing left behind for the next route to inherit.
+      expect(canonicals(), `after leaving ${route}`).toHaveLength(0);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The `noindex` that stops Cloudflare Pages' generated preview subdomain
+// being indexed as a second, competing copy of the whole site.
+// ---------------------------------------------------------------------------
+describe('noindex on the preview host', () => {
+  const robots = () => Array.from(document.head.querySelectorAll('meta[name="robots"]'));
+
+  function renderAt(hostname: string) {
+    // jsdom's `location` is not assignable, so the whole object is replaced.
+    // Restored by the caller, since leaking a fake hostname into later tests
+    // would make them assert against a site that isn't this one.
+    const original = window.location;
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: { ...original, hostname, href: `https://${hostname}/` },
+    });
+    const result = render(
+      <MemoryRouter initialEntries={['/']}>
+        <AppRoutes />
+      </MemoryRouter>,
+    );
+    return {
+      ...result,
+      restore: () => Object.defineProperty(window, 'location', { configurable: true, value: original }),
+    };
+  }
+
+  it('marks a *.pages.dev host noindex', () => {
+    const { restore, unmount } = renderAt('vb-c7r.pages.dev');
+    expect(robots().map((m) => m.getAttribute('content'))).toEqual(['noindex, nofollow']);
+    unmount();
+    // Removed on unmount, so a client-side navigation cannot strand it.
+    expect(robots()).toHaveLength(0);
+    restore();
+  });
+
+  // The failure mode this design exists to make impossible. An earlier,
+  // more natural-reading version of the check ("hostname is not the one in
+  // site.seo.url") would serve `noindex` to Googlebot on the real site for
+  // as long as site.seo.url lagged the domain actually in use -- which is
+  // the exact state this repository has been in for weeks while running on
+  // a test host. Suffix matching cannot express that mistake.
+  it.each([
+    'viabiancadelhi.com',
+    'www.viabiancadelhi.com',
+    'vb.aionxxxi.uk',
+    'localhost',
+    // The nastiest near-miss: a real domain that merely CONTAINS the string.
+    'pages.dev.viabiancadelhi.com',
+  ])('never marks %s noindex, whatever site.seo.url currently says', (hostname) => {
+    const { restore, unmount } = renderAt(hostname);
+    expect(robots()).toHaveLength(0);
+    unmount();
+    restore();
   });
 });

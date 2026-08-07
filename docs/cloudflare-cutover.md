@@ -764,3 +764,56 @@ So the check is three steps, not one:
 `index.html` by the SPA catch-all in `_redirects` and all four carry the
 headers. That is what makes a future per-path policy (a stricter
 Content-Security-Policy on the public site than on `/edit`) possible at all.
+
+## 17. The preview subdomain is a second public copy of the site
+
+Cloudflare Pages publishes every project on a generated `*.pages.dev`
+subdomain as well as its custom domain. For this project that is
+**`vb-c7r.pages.dev`** — the suffix exists because `vb.pages.dev` was already
+taken by an unrelated project, which is worth knowing before testing against
+it: `vb.pages.dev` is somebody else's website, not this one.
+
+The security side is fine, and was measured rather than assumed:
+
+- All five security headers **and** the full CSP apply there, because they
+  come from `public/_headers`, which is a Pages-level file rather than a zone
+  setting.
+- `POST /api/login` returns **405**. `wrangler.toml` routes the admin Worker
+  to `vb.aionxxxi.uk` only, so that origin has no login, no session and no API
+  at all. There is nothing to attack and no way in.
+
+The problem is search. That copy is public and its `robots.txt` says
+`Allow: /`, so without intervention Google can index the entire site twice and
+the two compete.
+
+**What the repository does about it**, neither of which is a complete fix on
+its own:
+
+1. Every indexable route now declares a canonical URL naming the real domain —
+   `/` (SeoHead), `/blogs` (BlogsPage) and each `/<slug>` page (PageSeoHead),
+   all through one `useCanonical` hook. `/blogs` was the gap; it had none.
+2. `useNoindexOnPreviewHost` adds `<meta name="robots" content="noindex,
+   nofollow">` when the hostname ends in `.pages.dev`.
+
+Both depend on the crawler executing JavaScript, which is the same accepted
+tradeoff the rest of this site's metadata already makes.
+
+**The durable fix is yours to make, in the dashboard**, and it takes a minute:
+
+> Cloudflare dashboard → **Workers & Pages** → this project → **Settings** →
+> **General** → **Preview deployments**, or add a **Cloudflare Access** policy
+> covering `vb-c7r.pages.dev`.
+
+Putting Access in front of the preview subdomain removes it from the public
+internet entirely, which makes both mitigations above redundant rather than
+load-bearing. Worth doing before the real domain goes live and there is
+actual search traffic to split.
+
+**Do not** be tempted to write the noindex check as "hostname is not the one
+in `site.seo.url`". It reads better and it is a loaded gun: for as long as
+`seo.url` lags the domain actually in use — the state this repository has been
+in for weeks — that version serves `noindex` to Googlebot on the **real**
+site. The suffix match cannot express that mistake, and
+src/components/__tests__/SeoHead.test.tsx pins exactly that, including a
+hostname (`pages.dev.viabiancadelhi.com`) that a substring check would wrongly
+match.

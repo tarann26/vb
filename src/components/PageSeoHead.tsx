@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { useContent } from '../content/ContentContext';
+import { useCanonical } from './useCanonical';
 import type { Page } from '../content/types';
 
 interface PageSeoHeadProps {
@@ -51,19 +52,19 @@ const PageSeoHead: React.FC<PageSeoHeadProps> = ({ page }) => {
       descriptionMeta.setAttribute('content', page.seo.description);
     }
 
-    const link = document.createElement('link');
-    link.rel = 'canonical';
-    link.href = canonical;
-    document.head.appendChild(link);
-
     return () => {
       document.title = previousTitle;
       if (descriptionMeta && previousDescription !== null) {
         descriptionMeta.setAttribute('content', previousDescription);
       }
-      link.remove();
     };
-  }, [page.seo.title, page.seo.description, canonical]);
+  }, [page.seo.title, page.seo.description]);
+
+  // Split out of the effect above rather than left inside it: the canonical
+  // has nothing to do with the title/description restore dance those lines
+  // exist for, and it is now the same one definition /blogs and the homepage
+  // use.
+  useCanonical(canonical);
 
   return null;
 };

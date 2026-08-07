@@ -1,7 +1,7 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { useContent } from '../content/ContentContext';
+import { useCanonical } from './useCanonical';
 import { toSchemaOpeningHours } from '../content/hours';
-
 interface SeoHeadProps {
   // Post-review Fix 6: EditMode.tsx (src/admin/) now ALSO mounts this exact
   // component -- Task 2's whole premise is that /edit renders the real
@@ -25,7 +25,6 @@ interface SeoHeadProps {
   // byte-identical pin, which does not move.
   emitMetadata?: boolean;
 }
-
 // index.html deliberately carries no <link rel="canonical">: public/_redirects
 // rewrites every route to that one file, so a canonical there would tell
 // Google that /blogs is a duplicate of the homepage even as
@@ -48,20 +47,10 @@ const SeoHead: React.FC<SeoHeadProps> = ({ emitMetadata = true }) => {
   // mounted this component, so the SectionErrorBoundary EditMode.tsx wraps
   // it in stays genuinely tested (see that file's own Fix 6 comment).
   const canonical = site.seo.url;
-
-  useEffect(() => {
-    if (!emitMetadata) return undefined;
-    const link = document.createElement('link');
-    link.rel = 'canonical';
-    link.href = canonical;
-    document.head.appendChild(link);
-    return () => {
-      link.remove();
-    };
-  }, [canonical, emitMetadata]);
-
+  // `null` when suppressed, rather than skipping the call -- see
+  // useCanonical's own comment on why that is a value and not a condition.
+  useCanonical(emitMetadata ? canonical : null);
   if (!emitMetadata) return null;
-
   const json = {
     '@context': 'https://schema.org',
     '@type': 'Restaurant',
@@ -82,5 +71,4 @@ const SeoHead: React.FC<SeoHeadProps> = ({ emitMetadata = true }) => {
   };
   return <script type="application/ld+json">{JSON.stringify(json)}</script>;
 };
-
 export default SeoHead;
