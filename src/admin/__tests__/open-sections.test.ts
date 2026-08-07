@@ -3,7 +3,14 @@
 // silent when wrong -- which direction it fails in, and that it never
 // throws.
 import { beforeEach, describe, expect, it } from 'vitest';
-import { loadSectionOpen, saveSectionOpen, SECTION_OPEN_KEY_PREFIX } from '../open-sections';
+import {
+  AREA_SEEDED_KEY_PREFIX,
+  hasSeededArea,
+  loadSectionOpen,
+  markAreaSeeded,
+  saveSectionOpen,
+  SECTION_OPEN_KEY_PREFIX,
+} from '../open-sections';
 
 // A Storage that rejects every operation -- Safari private browsing's real
 // behaviour, and the reason drafts.ts takes `storage` as a parameter too.
@@ -86,5 +93,41 @@ describe('saveSectionOpen', () => {
   it('does not throw when storage refuses the write', () => {
     expect(() => saveSectionOpen('dishes', true, THROWING_STORAGE)).not.toThrow();
     expect(() => saveSectionOpen('dishes', false, THROWING_STORAGE)).not.toThrow();
+  });
+});
+
+// The one-time "open this area's first panel" flag. Additive: every case
+// above is unchanged, which is what proves the fold contract itself was left
+// alone.
+describe('hasSeededArea / markAreaSeeded', () => {
+  it('an area never visited has not been seeded', () => {
+    expect(hasSeededArea('menu')).toBe(false);
+  });
+
+  it('reads back what markAreaSeeded wrote, per area', () => {
+    markAreaSeeded('menu');
+    expect(hasSeededArea('menu')).toBe(true);
+    expect(hasSeededArea('pages')).toBe(false);
+  });
+
+  // The key shape is the whole reason this can be reasoned about
+  // independently of the ten fold keys: it shares no prefix with them, so
+  // nothing here can be mistaken for a section that was left open, and no
+  // migration is needed for anything already in her browser.
+  it('writes under its own prefix, never the section-open one', () => {
+    markAreaSeeded('menu');
+    expect(window.localStorage.getItem(`${AREA_SEEDED_KEY_PREFIX}menu`)).toBe('1');
+    expect(window.localStorage.getItem(`${SECTION_OPEN_KEY_PREFIX}menu`)).toBeNull();
+    expect(loadSectionOpen('menu')).toBe(false);
+  });
+
+  // Falling back to "already seeded" would silently withdraw the one-time
+  // open on exactly the device that cannot store the flag.
+  it('answers not-seeded rather than throwing when storage refuses', () => {
+    expect(hasSeededArea('menu', THROWING_STORAGE)).toBe(false);
+  });
+
+  it('does not throw when storage refuses the write', () => {
+    expect(() => markAreaSeeded('menu', THROWING_STORAGE)).not.toThrow();
   });
 });

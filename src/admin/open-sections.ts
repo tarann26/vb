@@ -49,3 +49,53 @@ export function saveSectionOpen(id: string, open: boolean, storage: Storage = wi
     // Best effort, the same posture saveDraft takes for a quota failure.
   }
 }
+
+// ---------------------------------------------------------------------------
+// "This area has been visited before", one key per area.
+//
+// The problem it solves: once the ten panels are grouped into five areas,
+// the flow on a phone she has never used is home (five rows) -> area (three
+// folded headings) -> content. Five decisions replaced by five, then three.
+// Opening the first panel of an area by itself, ONCE, is what makes the
+// second step land on something rather than on another list.
+//
+// Why this cannot be a `defaultOpen` prop on CollapsibleSection.
+// `saveSectionOpen` REMOVES the key when a section is closed, so "never
+// opened" and "deliberately closed" are the same stored state -- and a naive
+// default would therefore re-open, on every single reload, the one panel she
+// keeps closing. A separate per-area key is the only thing that can tell
+// those two apart.
+//
+// The two functions below are purely additive. `loadSectionOpen` and
+// `saveSectionOpen` above are not modified, the fold contract is unchanged,
+// and NO key migration is needed: the prefix here shares no prefix with
+// SECTION_OPEN_KEY_PREFIX, so nothing already in her browser is read or
+// written differently than it was yesterday.
+export const AREA_SEEDED_KEY_PREFIX = 'vb:area-seeded:v1:';
+
+function seedKeyFor(slug: string): string {
+  return `${AREA_SEEDED_KEY_PREFIX}${slug}`;
+}
+
+// False for an unreadable, unwritten or malformed value, exactly as
+// `loadSectionOpen` is -- and the direction matters here too: falling back to
+// "already seeded" would silently withdraw the one-time open on precisely
+// the device that could not store the flag, which is the device where she is
+// most likely seeing this screen for the first time.
+export function hasSeededArea(slug: string, storage: Storage = window.localStorage): boolean {
+  try {
+    return storage.getItem(seedKeyFor(slug)) === '1';
+  } catch {
+    return false;
+  }
+}
+
+// Never throws -- the same reasoning as `saveSectionOpen`. A failed write
+// costs her one extra tap the next time she opens that area.
+export function markAreaSeeded(slug: string, storage: Storage = window.localStorage): void {
+  try {
+    storage.setItem(seedKeyFor(slug), '1');
+  } catch {
+    // Best effort, same posture as above.
+  }
+}
