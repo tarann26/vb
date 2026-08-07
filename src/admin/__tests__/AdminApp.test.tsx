@@ -8,9 +8,15 @@
 // `ArraySection` at all. A broken Remove button, or a fetch error that
 // never surfaces, would ship with nothing here to catch it.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import AdminApp from '../AdminApp';
+// Every case mounts through this helper rather than `render(<AdminApp />)`
+// directly -- see renderDashboard.tsx for why, and for what the route
+// argument means. Each case is given the route of the AREA whose panel it
+// asserts on: Menu (dishes, drinks, menus), Pages (pages, homepage
+// sections), Story & Photos (galleries, our story, press) and Hours &
+// Wording (opening hours, page copy).
+import { renderDashboard } from './renderDashboard';
 import { DISH_FIELDS } from '../fields';
 import { collagePhotos } from '../../content/collage';
 import type { Article, Copy, Dish, Drink, Galleries, MenuFile, Section, SiteContent, StoryContent } from '../../content/types';
@@ -130,7 +136,7 @@ describe('AdminApp: fetches each content file once logged in, loading state firs
     const gate = deferred<Response>();
     stubFetch(gate.promise);
 
-    render(<AdminApp />);
+    renderDashboard('/edit/manage/menu');
     expect(await screen.findByText(/loading dishes/i)).toBeInTheDocument();
     // Not yet rendered -- the gate hasn't been released.
     expect(screen.queryByDisplayValue('Dish A')).not.toBeInTheDocument();
@@ -142,7 +148,7 @@ describe('AdminApp: fetches each content file once logged in, loading state firs
 
   it('fetches and renders drinks and press independently of dishes', async () => {
     stubFetch();
-    render(<AdminApp />);
+    renderDashboard('/edit/manage/menu');
     expect(await screen.findByDisplayValue('Drink X')).toBeInTheDocument();
     expect(screen.getByDisplayValue('Drink Y')).toBeInTheDocument();
     expect(await screen.findByDisplayValue('Article P')).toBeInTheDocument();
@@ -162,7 +168,7 @@ describe('AdminApp: fetches each content file once logged in, loading state firs
   // default-folded opened.
   it('marks the folded section as needing attention, and shows the real message once opened', async () => {
     stubFetch(new Response(null, { status: 401 }));
-    render(<AdminApp />);
+    renderDashboard('/edit/manage/menu');
     expect(await screen.findByText(/needs attention/i)).toBeInTheDocument();
 
     const section = await dishesSection();
@@ -267,7 +273,7 @@ describe('AdminApp: Add, Remove and Reorder, exercised through the real componen
   it('"Add a dish" appends one new, blank row -- not a third copy of an existing one', async () => {
     stubFetch();
     const user = userEvent.setup();
-    render(<AdminApp />);
+    renderDashboard('/edit/manage/menu');
     const section = await dishesSection();
     await within(section).findByDisplayValue('Dish A');
 
@@ -282,7 +288,7 @@ describe('AdminApp: Add, Remove and Reorder, exercised through the real componen
   it('"Remove Dish A" drops only that record, leaving Dish B intact', async () => {
     stubFetch();
     const user = userEvent.setup();
-    render(<AdminApp />);
+    renderDashboard('/edit/manage/menu');
     const section = await dishesSection();
     await within(section).findByDisplayValue('Dish A');
 
@@ -296,7 +302,7 @@ describe('AdminApp: Add, Remove and Reorder, exercised through the real componen
   it('"Move Dish A down" swaps the two dishes, each with its own values intact', async () => {
     stubFetch();
     const user = userEvent.setup();
-    render(<AdminApp />);
+    renderDashboard('/edit/manage/menu');
     const section = await dishesSection();
     await within(section).findByDisplayValue('Dish A');
 
@@ -323,7 +329,7 @@ describe('AdminApp: Add, Remove and Reorder, exercised through the real componen
 describe("AdminApp: no duplicate DOM ids across sibling sections -- a label click reaches its OWN section's input", () => {
   it('every id on the fully-rendered page is unique -- confirmed by counting every id, not just spot-checking one', async () => {
     stubFetch();
-    render(<AdminApp />);
+    renderDashboard('/edit/manage/menu');
     await screen.findByDisplayValue('Dish A');
     await screen.findByDisplayValue('Drink X');
     await screen.findByDisplayValue('Article P');
@@ -337,7 +343,7 @@ describe("AdminApp: no duplicate DOM ids across sibling sections -- a label clic
 
   it('Dishes\' and Drinks\' own Photo fields have DIFFERENT ids, namespaced by file', async () => {
     stubFetch();
-    render(<AdminApp />);
+    renderDashboard('/edit/manage/menu');
     const dSection = await dishesSection();
     await within(dSection).findByDisplayValue('Dish A');
     const drSection = await sectionByHeading('Drinks');
@@ -353,7 +359,7 @@ describe("AdminApp: no duplicate DOM ids across sibling sections -- a label clic
   it('clicking the "Photo" label under Drinks focuses the DRINK\'s own input, never the dish\'s', async () => {
     stubFetch();
     const user = userEvent.setup();
-    render(<AdminApp />);
+    renderDashboard('/edit/manage/menu');
     const dSection = await dishesSection();
     await within(dSection).findByDisplayValue('Dish A');
     const drSection = await sectionByHeading('Drinks');
@@ -372,7 +378,7 @@ describe("AdminApp: no duplicate DOM ids across sibling sections -- a label clic
 describe('AdminApp: the real "Homepage sections" screen', () => {
   it('fetches sections.json and renders all seven, in the order the file gave them', async () => {
     stubFetch();
-    render(<AdminApp />);
+    renderDashboard('/edit/manage/pages');
     const section = await sectionByHeading('Homepage sections');
     expect(within(section).getAllByText(/^(Hero|Our Story|Atmosfera|Menu|Drinks|Stories|Visit Us)$/)).toHaveLength(7);
   });
@@ -380,7 +386,7 @@ describe('AdminApp: the real "Homepage sections" screen', () => {
   it('reordering the real screen calls through to a genuine onReorder, visible in the rendered order', async () => {
     stubFetch();
     const user = userEvent.setup();
-    render(<AdminApp />);
+    renderDashboard('/edit/manage/pages');
     const section = await sectionByHeading('Homepage sections');
     await within(section).findByText('Hero');
 
@@ -396,7 +402,7 @@ describe('AdminApp: the real "Homepage sections" screen', () => {
   it('hero cannot be unchecked from the real, mounted screen', async () => {
     stubFetch();
     const user = userEvent.setup();
-    render(<AdminApp />);
+    renderDashboard('/edit/manage/pages');
     const section = await sectionByHeading('Homepage sections');
     await within(section).findByText('Hero');
 
@@ -413,7 +419,7 @@ describe('AdminApp: the real "Homepage sections" screen', () => {
   it('"Add a text section" on the real, mounted screen adds a template section beneath the seven bespoke ones', async () => {
     stubFetch();
     const user = userEvent.setup();
-    render(<AdminApp />);
+    renderDashboard('/edit/manage/pages');
     const section = await sectionByHeading('Homepage sections');
     await within(section).findByText('Hero');
 
@@ -429,7 +435,7 @@ describe('AdminApp: the real "Homepage sections" screen', () => {
 describe('AdminApp: the real "Pages" screen', () => {
   it('fetches pages.json and offers "Add a page"', async () => {
     stubFetch();
-    render(<AdminApp />);
+    renderDashboard('/edit/manage/pages');
     const section = await sectionByHeading('Pages');
     expect(within(section).getByRole('button', { name: 'Add a page' })).toBeInTheDocument();
   });
@@ -437,7 +443,7 @@ describe('AdminApp: the real "Pages" screen', () => {
   it('"Add a page" on the real, mounted screen adds a page row she can then open and edit', async () => {
     stubFetch();
     const user = userEvent.setup();
-    render(<AdminApp />);
+    renderDashboard('/edit/manage/pages');
     const section = await sectionByHeading('Pages');
 
     await user.click(within(section).getByRole('button', { name: 'Add a page' }));
@@ -452,7 +458,7 @@ describe('AdminApp: the real "Pages" screen', () => {
 describe('AdminApp: the real "Opening hours" screen', () => {
   it('fetches site.json and renders its hours row', async () => {
     stubFetch();
-    render(<AdminApp />);
+    renderDashboard('/edit/manage/details');
     const section = await sectionByHeading('Opening hours');
     expect(within(section).getByDisplayValue('12:00')).toBeInTheDocument();
     expect(within(section).getByDisplayValue('23:00')).toBeInTheDocument();
@@ -460,7 +466,7 @@ describe('AdminApp: the real "Opening hours" screen', () => {
 
   it('a past-midnight close, entered on the real screen, produces no validation problem', async () => {
     stubFetch();
-    render(<AdminApp />);
+    renderDashboard('/edit/manage/details');
     const section = await sectionByHeading('Opening hours');
     await within(section).findByDisplayValue('23:00');
 
@@ -489,7 +495,7 @@ describe('AdminApp: the real "Opening hours" screen', () => {
   // real fetch -> HoursSection -> HoursField -> RecordForm wiring.
   it('(companion to the above) a malformed opens time on the real screen DOES surface an alert after the same wait', async () => {
     stubFetch();
-    render(<AdminApp />);
+    renderDashboard('/edit/manage/details');
     const section = await sectionByHeading('Opening hours');
     await within(section).findByDisplayValue('12:00');
 
@@ -509,7 +515,7 @@ describe('AdminApp: the real "Opening hours" screen', () => {
 describe('AdminApp: the new prose, gallery, menus and copy screens all render, fetched independently', () => {
   it('renders Menus, prefilled with both real menu labels', async () => {
     stubFetch();
-    render(<AdminApp />);
+    renderDashboard('/edit/manage/menu');
     const section = await sectionByHeading('Menus');
     expect(await within(section).findByDisplayValue('Food Menu')).toBeInTheDocument();
     expect(within(section).getByDisplayValue('Drinks Menu')).toBeInTheDocument();
@@ -517,7 +523,7 @@ describe('AdminApp: the new prose, gallery, menus and copy screens all render, f
 
   it('renders Galleries, prefilled with real atmosphere/ourStory alt text and one row per collage photo', async () => {
     stubFetch();
-    render(<AdminApp />);
+    renderDashboard('/edit/manage/story');
     const section = await sectionByHeading('Galleries');
     expect(await within(section).findByDisplayValue(GALLERIES.atmosphere[0].alt)).toBeInTheDocument();
     expect(within(section).getByDisplayValue(GALLERIES.ourStory[0].alt)).toBeInTheDocument();
@@ -534,7 +540,7 @@ describe('AdminApp: the new prose, gallery, menus and copy screens all render, f
 
   it('renders Our Story, prefilled with the real heading and first paragraph', async () => {
     stubFetch();
-    render(<AdminApp />);
+    renderDashboard('/edit/manage/story');
     const section = await sectionByHeading('Our Story');
     expect(await within(section).findByDisplayValue(STORY.heading)).toBeInTheDocument();
     expect(within(section).getByDisplayValue(STORY.paragraphs[0])).toBeInTheDocument();
@@ -542,7 +548,7 @@ describe('AdminApp: the new prose, gallery, menus and copy screens all render, f
 
   it('renders Page copy, grouped by section, with the real footer hours heading value', async () => {
     stubFetch();
-    render(<AdminApp />);
+    renderDashboard('/edit/manage/details');
     const section = await sectionByHeading('Page copy');
     expect(await within(section).findByDisplayValue(COPY.footer.hoursHeading)).toBeInTheDocument();
     expect(within(section).getByRole('heading', { name: 'Footer' })).toBeInTheDocument();
@@ -553,7 +559,7 @@ describe('AdminApp: the new prose, gallery, menus and copy screens all render, f
   // at all, since an ordinary space looks IDENTICAL in the browser.
   it("shows footer.followLabel's non-breaking space as a visible marker, not an invisible raw space", async () => {
     stubFetch();
-    render(<AdminApp />);
+    renderDashboard('/edit/manage/details');
     const section = await sectionByHeading('Page copy');
     await within(section).findByDisplayValue(COPY.footer.hoursHeading);
     expect(within(section).getByText(/Shown with its non-breaking space marked:/)).toHaveTextContent('␣');
@@ -593,7 +599,7 @@ describe('AdminApp: a malformed content file costs one section, not the whole da
       }),
     );
 
-    render(<AdminApp />);
+    renderDashboard('/edit/manage/story');
 
     // The rest of the dashboard is unaffected -- proven by reaching real,
     // interactive content in sections that have NOTHING to do with
@@ -601,8 +607,12 @@ describe('AdminApp: a malformed content file costs one section, not the whole da
     await screen.findByDisplayValue('Dish A');
     expect(screen.getByDisplayValue('Drink X')).toBeInTheDocument();
     expect(screen.getByDisplayValue('Article P')).toBeInTheDocument();
-    const menusSection = await sectionByHeading('Menus');
-    expect(within(menusSection).getByDisplayValue('Food Menu')).toBeInTheDocument();
+    // Queried by display value rather than through `sectionByHeading`,
+    // deliberately: Menus lives in a different AREA from Galleries, and
+    // role queries do not reach into a hidden one. "Food Menu" is unique
+    // on this page and is the same evidence -- menus.json loaded and
+    // rendered -- without the query needing that area to be on screen.
+    expect(await screen.findByDisplayValue('Food Menu')).toBeInTheDocument();
 
     // Galleries itself shows a named, recognizable fallback instead of
     // silently vanishing or crashing the page.
@@ -628,7 +638,7 @@ describe("AdminApp: Task 9's wiring, proven end-to-end -- staged photos across D
   it('staging a photo on a dish, then a DIFFERENT photo on a drink, grows the same staged-file count -- neither replaces the other', async () => {
     stubFetch();
     const user = userEvent.setup();
-    render(<AdminApp />);
+    renderDashboard('/edit/manage/menu');
 
     const dSection = await dishesSection();
     await within(dSection).findByDisplayValue('Dish A');
@@ -680,7 +690,7 @@ describe("AdminApp: Task 9's wiring -- replacing a menu PDF under the SAME name 
   it("uploads under the CURRENT file's own stem (\"food-menu\"), not the record's `id` (\"food\") -- so it overwrites the same live path", async () => {
     stubFetch();
     const user = userEvent.setup();
-    render(<AdminApp />);
+    renderDashboard('/edit/manage/menu');
     const section = await sectionByHeading('Menus');
     await within(section).findByDisplayValue('Food Menu');
 
@@ -694,7 +704,7 @@ describe("AdminApp: Task 9's wiring -- replacing a menu PDF under the SAME name 
   it('a completed same-name replacement still grows the staged-file count -- the bytes really are collected, not dropped on the floor', async () => {
     stubFetch();
     const user = userEvent.setup();
-    render(<AdminApp />);
+    renderDashboard('/edit/manage/menu');
     const section = await sectionByHeading('Menus');
     await within(section).findByDisplayValue('Food Menu');
 
@@ -773,7 +783,7 @@ describe('AdminApp: Critical review fix -- a restored draft cannot publish a pho
   it('stage a photo, edit the name, lose the tab, reload -- the banner names the lost photo, and Restore + Publish carries the ORIGINAL image with the name edit intact', async () => {
     stubFetchWithPublish();
     const user = userEvent.setup();
-    const { unmount } = render(<AdminApp />);
+    const { unmount } = renderDashboard('/edit/manage/menu');
 
     const dSection = await dishesSection();
     const nameInput = await within(dSection).findByDisplayValue('Dish A');
@@ -797,7 +807,7 @@ describe('AdminApp: Critical review fix -- a restored draft cannot publish a pho
     // She reloads: a fresh AdminApp, a fresh (empty) staged-files collector,
     // against the SAME, unchanged server content.
     const publishBodies = stubFetchWithPublish();
-    render(<AdminApp />);
+    renderDashboard('/edit/manage/menu');
 
     const banner = await screen.findByRole('alert');
     expect(banner).toHaveTextContent(/you have unsaved changes/i);
@@ -835,7 +845,7 @@ describe('AdminApp: Task 10 -- a reload mid-edit offers to restore the draft', (
   it('a draft already in localStorage shows the banner, and blocks every section from mounting until she decides', async () => {
     window.localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(DRAFT));
     stubFetch();
-    render(<AdminApp />);
+    renderDashboard('/edit/manage/menu');
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/you have unsaved changes from/i);
     // Never auto-apply: nothing below the banner has mounted at all yet --
@@ -848,7 +858,7 @@ describe('AdminApp: Task 10 -- a reload mid-edit offers to restore the draft', (
     window.localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(DRAFT));
     stubFetch();
     const user = userEvent.setup();
-    render(<AdminApp />);
+    renderDashboard('/edit/manage/menu');
 
     await user.click(await screen.findByRole('button', { name: 'Restore' }));
 
@@ -865,7 +875,7 @@ describe('AdminApp: Task 10 -- a reload mid-edit offers to restore the draft', (
     window.localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(DRAFT));
     stubFetch();
     const user = userEvent.setup();
-    render(<AdminApp />);
+    renderDashboard('/edit/manage/menu');
 
     await user.click(await screen.findByRole('button', { name: 'Discard' }));
 
@@ -877,7 +887,7 @@ describe('AdminApp: Task 10 -- a reload mid-edit offers to restore the draft', (
 
   it('no draft in localStorage -- the dashboard renders normally, banner absent', async () => {
     stubFetch();
-    render(<AdminApp />);
+    renderDashboard('/edit/manage/menu');
     await screen.findByDisplayValue('Dish A');
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
@@ -928,7 +938,7 @@ describe('AdminApp: Task 10 review fix -- a 401 mid-edit does not destroy the dr
   it('edit -> Publish -> 401 -> log back in on the same page -> the draft is offered, not silently gone', async () => {
     const getPublishCalls = stubFetchWithLoginAndPublish();
     const user = userEvent.setup();
-    render(<AdminApp />);
+    renderDashboard('/edit/manage/menu');
 
     const dishNameInput = await screen.findByDisplayValue('Dish A');
     await user.clear(dishNameInput);
@@ -970,7 +980,7 @@ describe('AdminApp: Task 10 review fix -- a 401 mid-edit does not destroy the dr
     vi.stubGlobal('XMLHttpRequest', FakeXHR as unknown as typeof XMLHttpRequest);
     const getPublishCalls = stubFetchWithLoginAndPublish();
     const user = userEvent.setup();
-    render(<AdminApp />);
+    renderDashboard('/edit/manage/menu');
 
     const dSection = await dishesSection();
     await within(dSection).findByDisplayValue('Dish A');
@@ -1005,7 +1015,7 @@ describe('AdminApp: Minor -- a pre-existing /edit draft is mentioned, never rest
   it('an /edit draft on disk is mentioned as a plain sentence, and the dashboard offers nothing to restore for it', async () => {
     saveDraft('edit', { 'dishes.json': { data: DISHES, savedAt: 1_000 } });
     stubFetch();
-    render(<AdminApp />);
+    renderDashboard('/edit/manage/menu');
 
     expect(await screen.findByText(/unpublished changes saved on the live-page editor/i)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Restore' })).not.toBeInTheDocument();
@@ -1013,7 +1023,7 @@ describe('AdminApp: Minor -- a pre-existing /edit draft is mentioned, never rest
 
   it('with no /edit draft on disk, nothing is said about the other surface', async () => {
     stubFetch();
-    render(<AdminApp />);
+    renderDashboard('/edit/manage/menu');
 
     await screen.findByRole('heading', { name: 'Via Bianca Dashboard' });
     expect(screen.queryByText(/unpublished changes saved on the live-page editor/i)).not.toBeInTheDocument();
@@ -1058,7 +1068,7 @@ describe('AdminApp: editing is paused while a publish request is in flight', () 
   // Dirties dishes.json through the real UI and takes the publish as far as
   // the POST, returning the Dish A name input to assert against.
   async function publishAndGetDishInput(user: ReturnType<typeof userEvent.setup>) {
-    render(<AdminApp />);
+    renderDashboard('/edit/manage/menu');
     const input = await screen.findByDisplayValue('Dish A');
     await user.type(input, '!');
     await user.click(screen.getByRole('button', { name: 'Publish' }));
@@ -1091,7 +1101,7 @@ describe('AdminApp: editing is paused while a publish request is in flight', () 
   it('the whole section dims and reports itself busy, not just dead', async () => {
     const user = userEvent.setup();
     stubFetchWithPublish(() => new Promise<Response>(() => {}));
-    render(<AdminApp />);
+    renderDashboard('/edit/manage/menu');
     const input = (await screen.findByDisplayValue('Dish A')) as HTMLInputElement;
     const fieldset = input.closest('fieldset')!;
 
@@ -1131,7 +1141,7 @@ describe('AdminApp: editing is paused while a publish request is in flight', () 
   it('a section heading still folds while the POST is open -- it is navigation, not editing', async () => {
     const user = userEvent.setup();
     stubFetchWithPublish(() => new Promise<Response>(() => {}));
-    render(<AdminApp />);
+    renderDashboard('/edit/manage/menu');
     const input = (await screen.findByDisplayValue('Dish A')) as HTMLInputElement;
     const toggle = screen.getByRole('button', { name: 'Dishes' });
 
