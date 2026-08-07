@@ -182,6 +182,21 @@ async function withRateLimit(
   // Set by Cloudflare itself on every request that reaches a Worker, so
   // unlike an arbitrary header a client cannot forge it to dodge its own
   // limit or pin someone else's -- see handleLogin's own use of it.
+  //
+  // That claim was an assertion for as long as it had been written down, and
+  // the whole per-IP design rests on it, so it was finally measured against
+  // the live site rather than left to trust. Cloudflare does not merely
+  // overwrite a supplied value -- it REFUSES the request outright, at the
+  // edge, before this Worker runs at all:
+  //
+  //   POST /api/wa with X-Forwarded-For: 1.2.3.4    -> 204 (accepted; unread)
+  //   POST /api/wa with CF-Connecting-IP: 9.9.9.9   -> 403, Cloudflare error 1000
+  //   POST /api/wa with neither                     -> 204 (control)
+  //
+  // So an attacker cannot spread a flood across invented IPs to multiply
+  // their allowance, and cannot pin the counter to somebody else's address to
+  // lock them out. X-Forwarded-For is client-settable and is deliberately
+  // never read here for exactly that reason.
   const ip = request.headers.get('CF-Connecting-IP') ?? 'unknown';
   const key = `${policy.prefix}:${ip}`;
 
