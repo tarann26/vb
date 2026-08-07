@@ -53,6 +53,36 @@
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: geolocation=(), camera=(), microphone=(), payment=(), usb=(), magnetometer=(), gyroscope=(), accelerometer=()
   Strict-Transport-Security: max-age=31536000; includeSubDomains
+  X-VB-Header-Probe: catch-all
+
+# TEMPORARY probe, to be deleted in the commit that ships the CSP.
+#
+# The Content-Security-Policy this site needs cannot be one policy: the admin
+# at /edit converts iPhone HEIC photos in a Worker built from a blob URL,
+# which inherits the creating document's CSP, and that decoder generates code
+# at runtime -- so /edit needs 'unsafe-eval' and the public site must not have
+# it. That requires a per-path block, and two facts about Cloudflare Pages
+# decide whether a per-path block can express it. Neither is documented, and
+# guessing wrong breaks either the live site or iPhone uploads.
+#
+#   1. Does a SPECIFIC pattern match a route with no file behind it? /edit is
+#      served index.html by the SPA catch-all in _redirects. The `/*` block is
+#      already known to reach it, but `/*` matches everything by construction,
+#      so it proves nothing about `/edit`.
+#
+#   2. When two matching blocks set the SAME header, does the more specific
+#      one REPLACE it or is it APPENDED? This is the one that would fail
+#      silently: two Content-Security-Policy headers on one response are not
+#      "the second wins", they are enforced as the INTERSECTION, so an
+#      appending Cloudflare would leave the strict policy still blocking
+#      'unsafe-eval' on /edit while every header looked correct.
+#
+# One request answers both. Fetch /edit and read X-VB-Header-Probe:
+#   "specific"             -> specific patterns match, and they replace. Ship.
+#   "catch-all, specific"  -> they append; CSP would intersect. Need another way.
+#   "catch-all"            -> specific patterns do not match a rewritten route.
+/edit
+  X-VB-Header-Probe: specific
 
 /assets/*
   Cache-Control: public, max-age=31536000, immutable, s-maxage=86400

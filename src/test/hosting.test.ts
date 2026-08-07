@@ -36,14 +36,27 @@ function blockPath(block: string): string {
 }
 
 // The block that applies to every response: security headers, no caching
-// policy of its own. Excluded from the three caching tests below because it
-// deliberately sets no Cache-Control -- it is not an asset rule.
+// policy of its own.
 const SECURITY_BLOCK = '/*';
 
+// The unhashed-asset caching rules, identified by the SHAPE of their pattern
+// -- `/*.<ext>`, one per file type -- rather than by subtracting the blocks
+// that happen not to be them.
+//
+// The subtractive version ("everything that isn't /assets/ or /*") was one
+// exclusion behind the file at all times: every new non-caching block (the
+// security headers, and now a per-path policy block) landed in the "unhashed
+// assets" list and failed three caching tests for a reason that had nothing
+// to do with caching. Worse, the obvious fix -- filtering to blocks that
+// declare a Cache-Control at all -- would have made those tests silently
+// stop covering any future `/*.gif` rule that forgot one, which is the exact
+// thing they exist to catch.
+//
+// Matching the pattern shape has neither problem: a new `/*.gif` block IS in
+// this list and must carry the week-long policy like its siblings, and a new
+// block for a route rather than a file type simply is not an asset rule.
 function unhashedAssetBlocks(blocks: string[]): string[] {
-  return blocks.filter(
-    (b) => !b.startsWith('/assets/') && blockPath(b) !== SECURITY_BLOCK && !/no-store/.test(b),
-  );
+  return blocks.filter((b) => /^\/\*\.[a-z0-9]+$/.test(blockPath(b)));
 }
 
 describe('cloudflare hosting config', () => {
