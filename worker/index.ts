@@ -267,6 +267,33 @@ const SECURITY_HEADERS: Record<string, string> = {
   'Cache-Control': 'no-store',
 };
 
+// A second, independent answer to "did this write come from this site?".
+//
+// Today the only thing standing between a random page and a publish is the
+// session cookie's `SameSite=Strict`, which means a cross-site POST carries
+// no cookie and lands on a 401. That works, and it is one attribute deep: a
+// future edit that relaxes it to `Lax` for some navigation-flow reason --
+// the usual reason people relax it -- silently removes the entire CSRF
+// defence for /api/publish, /api/undo and /api/upload at once, and nothing
+// would fail.
+//
+// Rejects on MISMATCH, never on ABSENCE, and the asymmetry is the whole
+// design. Browsers set `Origin` on every request whose method is not
+// GET/HEAD, so a cross-origin attack always carries one and is always
+// caught. A client that sends none cannot be a cross-origin browser page,
+// and treating absence as hostile would be betting the owner's ability to
+// log in on every proxy and browser in the world agreeing to send a header
+// -- a bad trade for a check that is defence in depth, not the primary
+// control.
+//
+// POST /api/wa deliberately keeps its own, stricter rule (Origin must be
+// present AND match): it is unauthenticated, so it has no session to fall
+// back on and nothing to lose by refusing a caller that isn't a browser.
+function isCrossOriginWrite(request: Request): boolean {
+  const origin = request.headers.get('Origin');
+  return origin !== null && origin !== siteOriginOf(request);
+}
+
 function withSecurityHeaders(response: Response): Response {
   const headers = new Headers(response.headers);
   for (const [name, value] of Object.entries(SECURITY_HEADERS)) {
@@ -1004,6 +1031,20 @@ async function route(request: Request, env: Env): Promise<Response> {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     });
+  }
+
+  // Checked once, here, for every state-changing route -- including
+  // /api/login, which has no session for SameSite to protect and so is the
+  // one place this is the ONLY cross-origin control. Without it a hostile
+  // page can drive password guesses through a visitor's browser, spending
+  // that visitor's IP against the login limiter rather than its own.
+  //
+  // Deliberately before the route match rather than inside each handler, and
+  // deliberately not applied to the GET routes: a browser sends no `Origin`
+  // on a same-origin GET, so the same rule there would reject nothing while
+  // adding a way to get it wrong.
+  if (request.method === 'POST' && url.pathname !== '/api/wa' && isCrossOriginWrite(request)) {
+    return json(403, { message: 'Not allowed.' });
   }
 
   if (url.pathname === '/api/login' && request.method === 'POST') {

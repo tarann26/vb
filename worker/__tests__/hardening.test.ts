@@ -277,3 +277,79 @@ describe('rate limits on the routes that spend a capped quota', () => {
     }
   });
 });
+
+describe('cross-origin write protection', () => {
+  let kv: FakeKV;
+  let env: Env;
+
+  beforeEach(() => {
+    kv = new FakeKV();
+    env = buildEnv(kv);
+  });
+
+  const WRITE_ROUTES = ['/api/login', '/api/publish', '/api/undo', '/api/upload'];
+
+  for (const path of WRITE_ROUTES) {
+    it(`refuses a POST to ${path} from another origin`, async () => {
+      const response = await worker.fetch(
+        new Request(`${SITE_ORIGIN}${path}`, {
+          method: 'POST',
+          headers: { Origin: 'https://evil.example', 'CF-Connecting-IP': '4.4.4.4' },
+          body: '{}',
+        }),
+        env,
+      );
+      expect(response.status).toBe(403);
+      // Refused before anything expensive: no KV write, so a hostile page
+      // cannot spend the shared write budget either.
+      expect(kv.puts).toEqual([]);
+    });
+
+    it(`allows a POST to ${path} carrying the site's own Origin`, async () => {
+      const response = await worker.fetch(
+        new Request(`${SITE_ORIGIN}${path}`, {
+          method: 'POST',
+          headers: { Origin: SITE_ORIGIN, 'CF-Connecting-IP': '4.4.4.4' },
+          body: '{}',
+        }),
+        env,
+      );
+      expect(response.status).not.toBe(403);
+    });
+
+    // Absence is not hostile -- see isCrossOriginWrite's comment. A browser
+    // always sends Origin on a POST, so nothing that can mount this attack
+    // gets through here; betting the owner's ability to log in on every
+    // proxy in the world preserving a header is the worse risk.
+    it(`allows a POST to ${path} with no Origin header at all`, async () => {
+      const response = await worker.fetch(
+        new Request(`${SITE_ORIGIN}${path}`, {
+          method: 'POST',
+          headers: { 'CF-Connecting-IP': '4.4.4.4' },
+          body: '{}',
+        }),
+        env,
+      );
+      expect(response.status).not.toBe(403);
+    });
+  }
+
+  // /api/wa keeps its own, stricter rule and must not be caught by the
+  // general one -- it is unauthenticated, so it refuses an absent Origin too.
+  it('leaves /api/wa on its own stricter origin rule', async () => {
+    const missing = await worker.fetch(
+      new Request(`${SITE_ORIGIN}/api/wa`, { method: 'POST', headers: { 'CF-Connecting-IP': '4.4.4.4' } }),
+      env,
+    );
+    expect(missing.status).toBe(403);
+
+    const good = await worker.fetch(
+      new Request(`${SITE_ORIGIN}/api/wa`, {
+        method: 'POST',
+        headers: { Origin: SITE_ORIGIN, 'CF-Connecting-IP': '4.4.4.4' },
+      }),
+      env,
+    );
+    expect(good.status).toBe(204);
+  });
+});
