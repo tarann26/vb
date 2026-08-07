@@ -46,8 +46,32 @@ const HASH_PATTERN = new RegExp(
     '|\\$2[aby]\\$\\d{2}\\$[./A-Za-z0-9]{53}',
 );
 
+// Cloudflare API tokens. Added because this scanner covered the GitHub token
+// the Worker uses and not the CLOUDFLARE_API_TOKEN it also uses -- an
+// asymmetry with no reason behind it. This project actively mints these:
+// docs/cloudflare-cutover.md instructs creating one for build-status, and a
+// second is still outstanding for cache purging. A leaked one can purge
+// caches, read deployments, and depending on scope rewrite DNS.
+//
+// Matched by PREFIX only, and the omission is deliberate. Cloudflare's older
+// tokens are a bare 40-character `[A-Za-z0-9_-]` run with no marker at all,
+// and a pattern for that shape would flag base64 fixtures, content hashes and
+// half the binary files in this repository. A scanner that cries wolf gets
+// switched off, which is strictly worse than one with a known blind spot
+// written down. The bare-40 form is that blind spot; prefixed tokens, which
+// is what Cloudflare issues now, are caught.
+//
+// Assembled by fragment for the same reason as the two patterns above: a
+// literal prefix here would make this file match itself.
+const CF_TOKEN_PREFIXES = [
+  ['cf', 'ut_'].join(''),
+  ['v1.0-', ''].join(''),
+];
+const CF_TOKEN_PATTERN = new RegExp(`(${CF_TOKEN_PREFIXES.join('|')})[A-Za-z0-9_-]{20,}`);
+
 function findSecret(content: string): string | null {
   if (GH_TOKEN_PATTERN.test(content)) return 'a GitHub token';
+  if (CF_TOKEN_PATTERN.test(content)) return 'a Cloudflare API token';
   if (HASH_PATTERN.test(content)) return 'a password hash';
   return null;
 }
@@ -60,7 +84,7 @@ describe('no secrets committed to the repository', () => {
     expect(TRACKED_FILES.length).toBeGreaterThan(50);
   });
 
-  it('contains no GitHub token or password hash in any tracked file', () => {
+  it('contains no GitHub token, Cloudflare token or password hash in any tracked file', () => {
     const offenders: string[] = [];
     for (const file of TRACKED_FILES) {
       if (file === SELF_PATH) continue;
