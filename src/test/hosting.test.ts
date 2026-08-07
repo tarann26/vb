@@ -208,6 +208,64 @@ describe('cloudflare hosting config', () => {
       });
     }
 
+    // The CSP gets its own assertions because the browser check that really
+    // proves it (scripts/check-csp.mjs, a real Chromium on the production
+    // bundle) is not part of `npm test` -- it needs a browser binary and a
+    // built dist/. These are the properties worth holding even in the suite
+    // that runs on every commit.
+    describe('content-security-policy', () => {
+      const directive = (name: string): string => {
+        const csp = headerValue(securityBlock(), 'Content-Security-Policy') ?? '';
+        const found = csp
+          .split(';')
+          .map((d) => d.trim())
+          .find((d) => d === name || d.startsWith(`${name} `));
+        return found ?? '';
+      };
+
+      // The three that cost nothing and close whole attack classes:
+      // object-src kills plugin-based script execution, base-uri stops an
+      // injected <base> silently re-pointing every relative script URL, and
+      // frame-ancestors is the modern spelling of the X-Frame-Options above.
+      it.each([
+        ["object-src 'none'", 'object-src'],
+        ["base-uri 'none'", 'base-uri'],
+        ["frame-ancestors 'none'", 'frame-ancestors'],
+      ])('sets %s', (expected, name) => {
+        expect(directive(name)).toBe(expected);
+      });
+
+      // `'unsafe-eval'` IS present, deliberately -- the admin's HEIC decoder
+      // generates code at runtime and a blob worker inherits this policy, so
+      // removing it breaks iPhone uploads (public/_headers explains the whole
+      // decision, including why a per-path policy cannot express it).
+      //
+      // `'unsafe-inline'` in script-src is a completely different thing and
+      // must never appear: it is what makes an injected <script> or a
+      // `javascript:` URL execute, which is the entire class this policy
+      // exists to stop. The two get conflated precisely because they look
+      // alike in a diff, so the distinction is pinned rather than trusted.
+      it("permits runtime code generation but never inline script", () => {
+        const scriptSrc = directive('script-src');
+        expect(scriptSrc).toContain("'unsafe-eval'");
+        expect(scriptSrc).not.toContain("'unsafe-inline'");
+      });
+
+      // style-src is the opposite trade and worth stating: 17 components set
+      // React style props, which become element style attributes, so inline
+      // styles are unavoidable here. Styles cannot execute script, so this
+      // costs far less than the script-src equivalent would.
+      it('allows inline style, which React style props require', () => {
+        expect(directive('style-src')).toContain("'unsafe-inline'");
+      });
+
+      // A default-src of 'self' is what makes every directive NOT listed
+      // above fail closed rather than fall back to allowing anything.
+      it("falls back to 'self' for anything not named", () => {
+        expect(directive('default-src')).toBe("default-src 'self'");
+      });
+    });
+
     // Not a style note. `preload` is a submission into a list compiled into
     // browsers; removing it later does not undo it for anyone who already
     // has it, and this site is still on a test host whose hostname is going
