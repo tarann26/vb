@@ -56,6 +56,51 @@ function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
 }
 
+// ---------------------------------------------------------------------------
+// The two shapes a value is allowed to have when the site renders it straight
+// into an `href` or a `src`.
+//
+// A security pass found every one of those fields checked with `isBlank`
+// alone -- present, non-empty, and otherwise anything at all -- with the
+// single exception of `article.url`, which had carried an `^https?://` test
+// since it was written. So the control already existed and had simply never
+// been applied to its siblings: `socials.instagram` and `socials.linkedin`
+// render as `<a href>` in Footer.tsx and NavBar.tsx, `menus[].file` renders
+// as `<a href download>` in Drinks.tsx, and a `javascript:` string in any of
+// them is script that runs on click, published through the dashboard and
+// stored in the repository.
+//
+// This is defence in depth, not a hole anyone can reach from outside:
+// writing content requires a session, and a session can already publish
+// anything. The realistic path is not an attacker, it is the owner pasting a
+// link somebody sent her. Both are closed by the same three lines, and the
+// asymmetry -- one field guarded, seven not -- is the kind that reads as
+// deliberate long after nobody remembers it wasn't.
+//
+// Both patterns reject the protocol-relative `//evil.example/x` as well as
+// the scheme-bearing ones, which is the case that looks like a path at a
+// glance and is not one.
+
+// A link off this site: press articles, Instagram, LinkedIn. `https?` rather
+// than `https` only because that is the rule `article.url` already used and
+// this is the injection boundary, not the transport one -- a press archive
+// still on http is a real thing, and downgrading it to a validation failure
+// she cannot fix would be a different bug.
+function isUnsafeExternalUrl(value: unknown): boolean {
+  return typeof value !== 'string' || !/^https?:\/\/[^/]/.test(value.trim());
+}
+
+// An asset this site serves itself: every image, and the menu PDFs. All 59
+// of them are root-relative today and nothing about this site wants them
+// otherwise -- an absolute URL here would silently move an asset off-origin,
+// leaking every visitor's IP and referrer to whoever owns it, and would slip
+// past the guardrail that checks each of these files exists under public/.
+function isUnsafeAssetPath(value: unknown): boolean {
+  if (typeof value !== 'string') return true;
+  const trimmed = value.trim();
+  return !trimmed.startsWith('/') || trimmed.startsWith('//') || trimmed.includes('..');
+}
+
 // Stricter than `asRecord`, which maps anything that isn't a plain object
 // (including `null` -- `typeof null === 'object'` in JS) to `{}` so every
 // *field-level* check above can stay a simple property read. That silent
@@ -164,6 +209,8 @@ function validateDish(raw: unknown, index: number): ValidationProblem[] {
   }
   if (isBlank(dish.image)) {
     problems.push(problem(`[${index}].image`, `"${String(dish.name ?? 'this dish')}" needs an image`));
+  } else if (isUnsafeAssetPath(dish.image)) {
+    problems.push(problem(`[${index}].image`, `"${String(dish.name ?? 'this dish')}" needs an image on this site, starting with /`));
   }
   if (!Array.isArray(dish.tags)) {
     problems.push(problem(`[${index}].tags`, `"${String(dish.name ?? 'this dish')}" needs a tags list`));
@@ -203,6 +250,8 @@ function validateDrink(raw: unknown, index: number): ValidationProblem[] {
   }
   if (drink.image !== null && isBlank(drink.image)) {
     problems.push(problem(`[${index}].image`, `"${String(drink.name ?? 'this drink')}" needs an image, or null`));
+  } else if (drink.image !== null && isUnsafeAssetPath(drink.image)) {
+    problems.push(problem(`[${index}].image`, `"${String(drink.name ?? 'this drink')}" needs an image on this site, starting with /`));
   }
   try {
     assertDrinkCategory(drink, index);
@@ -235,6 +284,8 @@ function validateArticle(raw: unknown, index: number): ValidationProblem[] {
   }
   if (isBlank(article.image)) {
     problems.push(problem(`[${index}].image`, `"${String(article.title ?? 'this article')}" needs an image`));
+  } else if (isUnsafeAssetPath(article.image)) {
+    problems.push(problem(`[${index}].image`, `"${String(article.title ?? 'this article')}" needs an image on this site, starting with /`));
   }
   if (isBlank(article.date) || Number.isNaN(new Date(article.date as string).getTime())) {
     problems.push(problem(`[${index}].date`, `"${String(article.title ?? 'this article')}" needs a real date`));
@@ -249,7 +300,7 @@ function validateArticle(raw: unknown, index: number): ValidationProblem[] {
   // every real consumer already (BlogsPage/BlogTeaser/NewsPress all gate on
   // `article.url && ...`, where `''` and `null` are equally falsy).
   const hasNoUrl = article.url === null || (typeof article.url === 'string' && article.url.trim() === '');
-  if (!hasNoUrl && (typeof article.url !== 'string' || !/^https?:\/\//.test(article.url))) {
+  if (!hasNoUrl && isUnsafeExternalUrl(article.url)) {
     problems.push(problem(`[${index}].url`, `"${String(article.title ?? 'this article')}" needs a real destination, or null`));
   }
   problems.push(...validateKnownKeys(article, ARTICLE_KEYS, `[${index}]`, String(article.title ?? 'this article')));
@@ -322,7 +373,19 @@ function validateSite(data: unknown): ValidationProblem[] {
   }
 
   const socials = asRecord(site.socials);
-  if (isBlank(socials.instagram)) problems.push(problem('socials.instagram', 'the site needs an Instagram link'));
+  if (isBlank(socials.instagram)) {
+    problems.push(problem('socials.instagram', 'the site needs an Instagram link'));
+  } else if (isUnsafeExternalUrl(socials.instagram)) {
+    problems.push(problem('socials.instagram', 'the Instagram link needs to start with https://'));
+  }
+  // LinkedIn is optional -- Footer.tsx renders it only when it is there --
+  // so this checks the shape of a value that exists rather than demanding
+  // one. Absent entirely and empty are both fine; a `javascript:` string is
+  // not.
+  if (socials.linkedin !== undefined && socials.linkedin !== null && !isBlank(socials.linkedin)
+      && isUnsafeExternalUrl(socials.linkedin)) {
+    problems.push(problem('socials.linkedin', 'the LinkedIn link needs to start with https://'));
+  }
 
   if (!Array.isArray(site.hours) || site.hours.length === 0) {
     problems.push(problem('hours', 'the site needs at least one opening-hours entry'));
@@ -367,7 +430,11 @@ function validateGalleryImages(raw: unknown, field: string, placeholderPattern: 
   return raw.flatMap((entry, i) => {
     const image = asRecord(entry);
     const problems: ValidationProblem[] = [];
-    if (isBlank(image.src)) problems.push(problem(`${field}[${i}].src`, `${field}[${i}] needs an image source`));
+    if (isBlank(image.src)) {
+      problems.push(problem(`${field}[${i}].src`, `${field}[${i}] needs an image source`));
+    } else if (isUnsafeAssetPath(image.src)) {
+      problems.push(problem(`${field}[${i}].src`, `${field}[${i}] needs an image on this site, starting with /`));
+    }
     if (isBlank(image.alt)) {
       problems.push(problem(`${field}[${i}].alt`, `${field}[${i}] needs alt text`));
     } else if (placeholderPattern.test((image.alt as string).trim())) {
@@ -473,6 +540,10 @@ export function collageTreeProblems(raw: unknown): ValidationProblem[] {
       const index = photoIndex++;
       if (isBlank(record.src)) {
         problems.push(problem(`heroCollage[${index}].src`, `collage photo ${index + 1} needs an image`));
+      } else if (isUnsafeAssetPath(record.src)) {
+        problems.push(
+          problem(`heroCollage[${index}].src`, `collage photo ${index + 1} needs an image on this site, starting with /`),
+        );
       }
       if (typeof record.alt !== 'string') {
         problems.push(problem(`heroCollage[${index}].alt`, `collage photo ${index + 1} needs alt text, or an empty one`));
@@ -548,7 +619,11 @@ function validateMenus(data: unknown): ValidationProblem[] {
     const problems: ValidationProblem[] = [];
     if (isBlank(menu.id)) problems.push(problem(`[${i}].id`, `menu at position ${i} needs an id`));
     if (isBlank(menu.label)) problems.push(problem(`[${i}].label`, `menu at position ${i} needs a label`));
-    if (isBlank(menu.file)) problems.push(problem(`[${i}].file`, `"${String(menu.label ?? 'this menu')}" needs a file`));
+    if (isBlank(menu.file)) {
+      problems.push(problem(`[${i}].file`, `"${String(menu.label ?? 'this menu')}" needs a file`));
+    } else if (isUnsafeAssetPath(menu.file)) {
+      problems.push(problem(`[${i}].file`, `"${String(menu.label ?? 'this menu')}" needs a file on this site, starting with /`));
+    }
     return problems;
   });
 }
@@ -600,7 +675,11 @@ function validateTemplateContentFields(template: string, raw: unknown, path: str
         const item = asRecord(raw);
         if (isBlank(item.name)) problems.push(problem(`${path}.items[${i}].name`, `item ${i + 1} needs a name`));
         if (isBlank(item.description)) problems.push(problem(`${path}.items[${i}].description`, `item ${i + 1} needs a description`));
-        if (isBlank(item.image)) problems.push(problem(`${path}.items[${i}].image`, `item ${i + 1} needs an image`));
+        if (isBlank(item.image)) {
+          problems.push(problem(`${path}.items[${i}].image`, `item ${i + 1} needs an image`));
+        } else if (isUnsafeAssetPath(item.image)) {
+          problems.push(problem(`${path}.items[${i}].image`, `item ${i + 1} needs an image on this site, starting with /`));
+        }
       });
     }
   } else if (template === 'gallery') {
@@ -612,7 +691,11 @@ function validateTemplateContentFields(template: string, raw: unknown, path: str
     } else {
       content.images.forEach((raw, i) => {
         const image = asRecord(raw);
-        if (isBlank(image.src)) problems.push(problem(`${path}.images[${i}].src`, `image ${i + 1} needs a source`));
+        if (isBlank(image.src)) {
+          problems.push(problem(`${path}.images[${i}].src`, `image ${i + 1} needs a source`));
+        } else if (isUnsafeAssetPath(image.src)) {
+          problems.push(problem(`${path}.images[${i}].src`, `image ${i + 1} needs an image on this site, starting with /`));
+        }
         if (isBlank(image.alt)) problems.push(problem(`${path}.images[${i}].alt`, `image ${i + 1} needs alt text`));
       });
     }

@@ -883,3 +883,94 @@ describe('validateContent: a key the type does not have is refused at the write 
     expect(problems.some((p) => p.field === '[0].toString')).toBe(true);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Every field the site renders straight into an `href` or a `src`.
+//
+// Before this, exactly one of them (`article.url`) checked its value's SHAPE;
+// the rest checked only that it was a non-empty string. So `javascript:` in
+// `socials.instagram` -- rendered as `<a href>` in both Footer.tsx and
+// NavBar.tsx -- was valid content that published cleanly and ran on click.
+//
+// Table-driven rather than eight near-identical blocks, because the point is
+// that the SAME rule reaches all of them. A field added to one of these files
+// without the guard shows up here as a missing row rather than as nothing at
+// all.
+// ---------------------------------------------------------------------------
+describe('validateContent: a value that reaches an href or src cannot carry a scheme', () => {
+  // `javascript:` is the one that executes. The other two are the cases that
+  // look harmless: `//evil.example/x` is a protocol-relative URL that reads
+  // as a path at a glance, and `data:text/html` is a same-origin-ish document
+  // in some contexts and a tracking pixel in the rest.
+  const HOSTILE = ['javascript:alert(1)', '//evil.example/x.webp', 'data:text/html;base64,PHNjcmlwdD4='];
+
+  const ASSET_FIELDS: { name: string; run: (value: string) => { field: string }[] }[] = [
+    { name: 'dishes[].image', run: (v) => validateContent('dishes.json', [{ ...validDish, image: v }]) },
+    { name: 'drinks[].image', run: (v) => validateContent('drinks.json', [{ ...validDrink, image: v }]) },
+    { name: 'press[].image', run: (v) => validateContent('press.json', [{ ...newerArticle, image: v }, olderArticle]) },
+    {
+      name: 'galleries.atmosphere[].src',
+      run: (v) => validateContent('galleries.json', { ...validGalleries, atmosphere: [{ src: v, alt: 'A' }] }),
+    },
+    {
+      name: 'galleries.heroCollage[].src',
+      run: (v) =>
+        validateContent('galleries.json', {
+          ...validGalleries,
+          heroCollage: { kind: 'photo', id: 'only', src: v, alt: '' },
+        }),
+    },
+    { name: 'menus[].file', run: (v) => validateContent('menus.json', [{ ...validMenus[0], file: v }]) },
+  ];
+
+  for (const { name, run } of ASSET_FIELDS) {
+    for (const hostile of HOSTILE) {
+      it(`refuses ${JSON.stringify(hostile)} in ${name}`, () => {
+        expect(run(hostile).length).toBeGreaterThan(0);
+      });
+    }
+
+    // The other half of every rejection test. A rule that refused all six
+    // strings above by refusing every string would pass each of those and
+    // break every real publish, and none of the assertions above can tell
+    // the difference.
+    it(`still accepts an ordinary site-relative path in ${name}`, () => {
+      expect(run('/food/a-real-photo.webp')).toEqual([]);
+    });
+  }
+
+  const LINK_FIELDS: { name: string; run: (value: string) => { field: string }[] }[] = [
+    {
+      name: 'socials.instagram',
+      run: (v) => validateContent('site.json', { ...validSite, socials: { ...validSite.socials, instagram: v } }),
+    },
+    {
+      name: 'socials.linkedin',
+      run: (v) => validateContent('site.json', { ...validSite, socials: { ...validSite.socials, linkedin: v } }),
+    },
+    { name: 'press[].url', run: (v) => validateContent('press.json', [{ ...newerArticle, url: v }, olderArticle]) },
+  ];
+
+  for (const { name, run } of LINK_FIELDS) {
+    for (const hostile of HOSTILE) {
+      it(`refuses ${JSON.stringify(hostile)} in ${name}`, () => {
+        expect(run(hostile).length).toBeGreaterThan(0);
+      });
+    }
+
+    it(`still accepts a real link in ${name}`, () => {
+      expect(run('https://instagram.com/viabiancadelhi')).toEqual([]);
+    });
+  }
+
+  // linkedin is optional -- Footer.tsx renders it only when present -- so the
+  // guard must check the shape of a value that exists without inventing a
+  // requirement for one. Both fixtures below are what the committed site.json
+  // and this file's own fixture actually use.
+  it('leaves an absent or null linkedin alone', () => {
+    expect(validateContent('site.json', { ...validSite, socials: { instagram: 'https://instagram.com/x' } })).toEqual([]);
+    expect(
+      validateContent('site.json', { ...validSite, socials: { instagram: 'https://instagram.com/x', linkedin: null } }),
+    ).toEqual([]);
+  });
+});
