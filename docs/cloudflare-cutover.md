@@ -817,3 +817,47 @@ site. The suffix match cannot express that mistake, and
 src/components/__tests__/SeoHead.test.tsx pins exactly that, including a
 hostname (`pages.dev.viabiancadelhi.com`) that a substring check would wrongly
 match.
+
+## 18. Two deployments, and only one of them is automatic
+
+This is the single easiest thing to get wrong about this project, and it has
+already been got wrong once, expensively.
+
+| What | How it reaches production | Triggered by |
+| --- | --- | --- |
+| The **site** (`src/`, `public/`, content JSON) | Cloudflare Pages build | **Automatic** on every push to `main` |
+| The **admin Worker** (`worker/`) | `npx wrangler deploy` | **Manual. Nothing else does it.** |
+
+Pushing to `main` does not deploy the Worker. Nothing in the Pages build
+touches `worker/` at all. A commit that changes an API route is live in the
+repository, green in CI, and completely absent from production until somebody
+runs that command by hand.
+
+**What this cost.** Two days of security work — the per-route rate limits, the
+API security headers, the cross-origin write check, the JSON body caps, and
+the fix for the reserve-a-table counter that had been answering `403` to every
+real tap since the site moved host — was committed, covered by tests, verified
+by mutation, reported as shipped, and was not running. The last
+`wrangler deploy` predated all of it. Nothing caught it because nothing looked:
+`/build-info.json` is written by the *Pages* build, so it reports the site's
+commit and says nothing whatsoever about the Worker's.
+
+**What now catches it.** `npm run verify:deploy` fetches `/api/health` and
+fails if the response is missing any header `worker/index.ts`'s
+`withSecurityHeaders` sets. A Worker predating that function cannot produce
+them, so their presence is proof the deployed Worker is current. The failure
+message names the command to run.
+
+So the full sequence after changing anything under `worker/`:
+
+```bash
+npx tsc -b --noEmit && npm test -- --run && npx eslint .
+npx wrangler deploy
+npm run verify:deploy
+```
+
+`wrangler deploy` does not touch secrets — `ADMIN_PASSWORD_HASH`,
+`TOKEN_SECRET`, `GITHUB_TOKEN` and `CLOUDFLARE_API_TOKEN` are stored on the
+Worker and survive every deploy, which is why the dry-run output lists only
+the plain vars and the KV binding. If a deploy goes wrong, `npx wrangler
+rollback` returns to the previous version.

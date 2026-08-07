@@ -132,6 +132,45 @@ for (const file of readdirSync('dist/assets')) {
 }
 
 // ---------------------------------------------------------------------------
+// 2b. Is the WORKER current, or only the site?
+//
+// These are two entirely separate deployments and only one of them is
+// automatic. Pushing to main makes Cloudflare Pages rebuild the site; nothing
+// in that pipeline touches worker/, which reaches production only when
+// somebody runs `wrangler deploy`. build-info.json is written by the Pages
+// build, so it reports the site's commit and says nothing at all about the
+// Worker -- meaning step 1 above can pass on a deploy where every API change
+// in the repository is still sitting unpublished.
+//
+// That is not hypothetical. Two days of security work -- rate limits, the API
+// security headers, the cross-origin write check, the body-size caps, and the
+// fix that had the reserve-a-table counter answering 403 to every real tap --
+// were committed, verified by tests, reported as shipped, and were not live.
+// The last `wrangler deploy` predated all of it. Nothing anywhere noticed,
+// because nothing anywhere looked.
+//
+// Checked behaviourally rather than by version, because there is no version
+// to compare against: a Worker predating worker/index.ts's withSecurityHeaders
+// cannot set these, so their presence IS the proof it is current. If this list
+// ever changes in worker/index.ts, it has to change here too, and that is the
+// point -- a header this repository claims to set and does not is exactly what
+// went unnoticed.
+// ---------------------------------------------------------------------------
+note('\nadmin Worker (deploys separately from the site -- `wrangler deploy`):');
+const health = await get('/api/health');
+const WORKER_HEADERS = ['x-content-type-options', 'x-frame-options', 'referrer-policy', 'content-security-policy', 'cache-control'];
+const missingWorkerHeaders = WORKER_HEADERS.filter((h) => !health.headers.get(h));
+if (!/json/i.test(health.headers.get('content-type') ?? '')) {
+  note(`  FAIL  /api/health answered ${health.status} ${health.headers.get('content-type')}`);
+  failures.push('/api/health is not being served by the Worker at all -- check the route in wrangler.toml');
+} else if (missingWorkerHeaders.length) {
+  note(`  FAIL  /api/health is missing ${missingWorkerHeaders.join(', ')}`);
+  failures.push(`the deployed Worker is STALE -- run \`npx wrangler deploy\` (missing ${missingWorkerHeaders.join(', ')})`);
+} else {
+  note('  ok    /api/health carries every header the current Worker sets');
+}
+
+// ---------------------------------------------------------------------------
 // 3. The mechanism itself, probed directly.
 //
 // Not a health check -- this one is EXPECTED to be broken today, and says so.
