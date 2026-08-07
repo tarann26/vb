@@ -182,10 +182,24 @@ try {
     // produces an empty <div id="root"> and NO console error the listener
     // above would catch, so "did anything actually render" is a separate and
     // load-bearing assertion rather than a nicety.
-    const rendered = await page.evaluate(() => document.getElementById('root')?.childElementCount ?? 0);
+    // "#root has children" stopped being evidence the moment index.html
+    // started seeding #root with a fallback message: a bundle that never runs
+    // now leaves that fallback in place, and a childElementCount check counts
+    // it and passes. So the real assertion is that the FALLBACK IS GONE --
+    // src/main.tsx removes it as its first act, so its absence is proof that
+    // module actually executed.
+    const state = await page.evaluate(() => ({
+      children: document.getElementById('root')?.childElementCount ?? 0,
+      fallbackStillThere: document.getElementById('vb-fallback') !== null,
+    }));
+    const rendered = state.children;
     violations.push(...(await page.evaluate(() => window.__cspViolations ?? [])));
 
-    if (rendered === 0) violations.push('nothing rendered into #root -- the bundle did not run');
+    if (state.fallbackStillThere) {
+      violations.push('index.html fallback still present -- src/main.tsx never ran');
+    } else if (rendered === 0) {
+      violations.push('nothing rendered into #root -- the bundle did not run');
+    }
 
     // The two capabilities that exist ONLY for iPhone photo uploads, probed
     // directly because no page load exercises them. src/admin/heic.ts
