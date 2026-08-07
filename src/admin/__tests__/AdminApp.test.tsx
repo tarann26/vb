@@ -18,69 +18,25 @@ import userEvent from '@testing-library/user-event';
 // Wording (opening hours, page copy).
 import { renderDashboard } from './renderDashboard';
 import { DISH_FIELDS } from '../fields';
+import {
+  COPY,
+  DISHES,
+  DRINKS,
+  GALLERIES,
+  MENUS,
+  PRESS,
+  SECTIONS,
+  SITE,
+  STORY,
+  WA_RESPONSE,
+  contentResponse,
+  dish,
+  stubFetch,
+} from './dashboardFixtures';
 import { collagePhotos } from '../../content/collage';
-import type { Article, Copy, Dish, Drink, Galleries, MenuFile, Section, SiteContent, StoryContent } from '../../content/types';
-// The real, committed files -- not hand-typed fixtures -- for galleries.json,
-// menus.json, story.json and copy.json specifically: each one has real
-// structural rules (assertCopy's nav.links shape and non-blank sweep,
-// validateGalleries' non-empty lists, MENU_FILE_NAME's own path shape) that
-// a hand-typed fixture would have to reproduce by hand and could easily get
-// subtly wrong. Reusing the real files is the same choice
-// useValidation.test.tsx's own REAL_DISHES already makes, for the identical
-// reason (see that file's own comment).
-import galleriesJson from '../../content/galleries.json';
-import menusJson from '../../content/menus.json';
-import storyJson from '../../content/story.json';
-import copyJson from '../../content/copy.json';
+import type { Dish } from '../../content/types';
 import { DRAFT_STORAGE_KEY, DRAFT_STAGED_COUNT_KEY, saveDraft } from '../drafts';
 import { LOCK_TIMEOUT_MS } from '../PublishBar';
-
-function dish(id: string, name: string): Dish {
-  return { id, name, description: `${name}, described.`, image: `/food/${id}.webp`, tags: [] };
-}
-function drink(id: string, name: string): Drink {
-  return { id, name, description: `${name}, described.`, category: 'cocktail', image: null };
-}
-function article(id: string, title: string): Article {
-  return { id, title, publication: 'Times', date: '2026-01-01', excerpt: 'An excerpt.', url: null, image: `/press/${id}.webp` };
-}
-
-const DISHES = [dish('a', 'Dish A'), dish('b', 'Dish B')];
-const DRINKS = [drink('x', 'Drink X'), drink('y', 'Drink Y')];
-const PRESS = [article('p', 'Article P'), article('q', 'Article Q')];
-const SECTIONS: Section[] = [
-  { kind: 'bespoke', id: 'hero', enabled: true },
-  { kind: 'bespoke', id: 'ourStory', enabled: true },
-  { kind: 'bespoke', id: 'atmosphere', enabled: true },
-  { kind: 'bespoke', id: 'food', enabled: true },
-  { kind: 'bespoke', id: 'drinks', enabled: true },
-  { kind: 'bespoke', id: 'press', enabled: true },
-  { kind: 'bespoke', id: 'visit', enabled: true },
-];
-const SITE: SiteContent = {
-  name: 'Via Bianca',
-  tagline: 'Pastificio & Ristorante',
-  strapline: 'Sip Italiano',
-  address: { street: '1 Test Street', locality: 'Delhi', postalCode: '110048', country: 'IN' },
-  phones: ['+91 00000 00000'],
-  whatsapp: { number: '910000000000', prefilledMessage: 'Hi' },
-  socials: { instagram: 'https://instagram.com/test', linkedin: null },
-  hours: [{ days: ['Mo', 'Tu'], opens: '12:00', closes: '23:00' }],
-  seo: { title: 'Via Bianca', description: 'An Italian kitchen', keywords: 'italian', ogImage: '/og.jpg', url: 'https://example.com', locale: 'en_IN' },
-  copyrightYear: 2026,
-};
-
-const GALLERIES = galleriesJson as Galleries;
-const MENUS = menusJson as MenuFile[];
-const STORY = storyJson as StoryContent;
-const COPY = copyJson as Copy;
-
-const WA_RESPONSE = () =>
-  new Response(JSON.stringify({ lowerBound: true }), { status: 200, headers: { 'content-type': 'application/json' } });
-
-function contentResponse(data: unknown, sha: string): Response {
-  return new Response(JSON.stringify({ content: JSON.stringify(data), sha }));
-}
 
 // A promise this test controls the resolution of, so a fetch handler can be
 // made to hang deliberately -- the only reliable way to observe a loading
@@ -93,31 +49,6 @@ function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
     resolve = res;
   });
   return { promise, resolve };
-}
-
-// `dishesResponse` is a Promise, not a Response, precisely so a caller can
-// gate it with `deferred()` above; every other file resolves immediately,
-// matching how the real GET /api/content calls actually behave (five
-// independent requests, not sequenced).
-function stubFetch(dishesResponse: Promise<Response> | Response = contentResponse(DISHES, 'sha-dishes')) {
-  vi.stubGlobal(
-    'fetch',
-    vi.fn(async (input: RequestInfo | URL) => {
-      const url = String(input);
-      if (url === '/api/wa') return WA_RESPONSE();
-      if (url.includes('dishes.json')) return dishesResponse;
-      if (url.includes('drinks.json')) return contentResponse(DRINKS, 'sha-drinks');
-      if (url.includes('press.json')) return contentResponse(PRESS, 'sha-press');
-      if (url.includes('sections.json')) return contentResponse(SECTIONS, 'sha-sections');
-      if (url.includes('site.json')) return contentResponse(SITE, 'sha-site');
-      if (url.includes('galleries.json')) return contentResponse(GALLERIES, 'sha-galleries');
-      if (url.includes('menus.json')) return contentResponse(MENUS, 'sha-menus');
-      if (url.includes('story.json')) return contentResponse(STORY, 'sha-story');
-      if (url.includes('copy.json')) return contentResponse(COPY, 'sha-copy');
-      if (url.includes('pages.json')) return contentResponse([], 'sha-pages');
-      throw new Error(`AdminApp.test.tsx: unexpected fetch to ${url}`);
-    }),
-  );
 }
 
 afterEach(() => {

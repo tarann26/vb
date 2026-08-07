@@ -188,6 +188,21 @@ function importsContentSnapshot(source: string, filePath: string): boolean {
   return pattern.test(source);
 }
 
+// Everything under `src/admin/__tests__/` is test infrastructure, whether or
+// not its own filename ends in `.test.ts`. The exclusion below used to be
+// spelled as that filename pattern alone, which was a proxy for this and
+// stopped being one the moment a `__tests__` module held shared fixtures
+// rather than cases (dashboardFixtures.ts, which two test files read the
+// real committed content through). The invariant this whole describe block
+// guards is bundle pollution and a stale data source reaching the browser:
+// Vitest transforms these files directly and `vite build` never touches the
+// directory at all, so nothing in it can cause either. A production file
+// doing the identical thing is still caught -- proven by the case below that
+// runs `importsContentSnapshot` against a path outside this directory.
+function isTestInfrastructure(filePath: string): boolean {
+  return filePath.startsWith('src/admin/__tests__/');
+}
+
 function gitLsFiles(dir: string): string[] {
   return execFileSync('git', ['ls-files', dir], { encoding: 'utf8' })
     .split('\n')
@@ -210,7 +225,7 @@ describe('nothing under src/admin imports the build-time content snapshot', () =
   // not the defect this check exists to catch.
   it('no production file under src/admin imports ../content or ../content/index, at the depth that actually reaches src/content', () => {
     const offenders = gitLsFiles('src/admin')
-      .filter((f) => /\.tsx?$/.test(f) && !/\.test\.tsx?$/.test(f))
+      .filter((f) => /\.tsx?$/.test(f) && !isTestInfrastructure(f))
       .filter((f) => importsContentSnapshot(readFileSync(f, 'utf8'), f));
     expect(offenders).toEqual([]);
   });
@@ -218,19 +233,32 @@ describe('nothing under src/admin imports the build-time content snapshot', () =
   // The exclusion above is scoped by filename, not blanket-applied --
   // proven directly against the real file it exists for, rather than left
   // as an assertion in a comment.
-  it('fields.test.ts really does import a JSON subpath directly, and really is excluded by the *.test.ts(x) filter', () => {
+  it('fields.test.ts really does import a JSON subpath directly, and really is excluded from the scan', () => {
     const source = readFileSync('src/admin/__tests__/fields.test.ts', 'utf8');
     expect(importsContentSnapshot(source, 'src/admin/__tests__/fields.test.ts')).toBe(true);
-    const scanned = gitLsFiles('src/admin').filter((f) => /\.tsx?$/.test(f) && !/\.test\.tsx?$/.test(f));
+    const scanned = gitLsFiles('src/admin').filter((f) => /\.tsx?$/.test(f) && !isTestInfrastructure(f));
     expect(scanned).not.toContain('src/admin/__tests__/fields.test.ts');
+  });
+
+  // The same, for the shared fixture module that is NOT named `*.test.ts`
+  // and is exactly why the exclusion is spelled as a directory. Without
+  // this, a future narrowing back to the filename pattern would go green
+  // here and red only in an unrelated file's run.
+  it('dashboardFixtures.ts imports the real committed content, and is excluded for being test infrastructure', () => {
+    const path = 'src/admin/__tests__/dashboardFixtures.ts';
+    expect(importsContentSnapshot(readFileSync(path, 'utf8'), path)).toBe(true);
+    expect(isTestInfrastructure(path)).toBe(true);
+    const scanned = gitLsFiles('src/admin').filter((f) => /\.tsx?$/.test(f) && !isTestInfrastructure(f));
+    expect(scanned).not.toContain(path);
   });
 
   // The exclusion is for TEST files specifically, not a loophole that
   // exempts every direct-JSON-import mistake -- a production file doing the
   // exact same thing fields.test.ts does must still be caught.
-  it('the same import from a hypothetical PRODUCTION file (not *.test.ts) would still match', () => {
-    const source = `import copyRaw from '../../content/copy.json';`;
-    expect(importsContentSnapshot(source, 'src/admin/__tests__/notATestFile.ts')).toBe(true);
+  it('the same import from a real PRODUCTION file would still be scanned, and would still match', () => {
+    const source = `import copyRaw from '../content/copy.json';`;
+    expect(importsContentSnapshot(source, 'src/admin/notATestFile.ts')).toBe(true);
+    expect(isTestInfrastructure('src/admin/notATestFile.ts')).toBe(false);
   });
 });
 
