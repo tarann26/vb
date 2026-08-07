@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { readdirSync } from 'node:fs';
-import { join, relative, extname } from 'node:path';
+import { join, relative, extname, basename } from 'node:path';
 import { derivativePath } from '../derivative-path';
 // Imported from paths.mjs, never from images.mjs: images.mjs loads sharp's
 // native binding at module scope, and this file runs inside
@@ -20,11 +20,31 @@ function walk(dir: string): string[] {
   });
 }
 
+// Temporary fixtures other test files write INTO assets-source/ while they
+// run. scripts/__tests__/images.derivatives.test.mjs creates
+// `assets-source/food/__corrupt-probe__.jpg` and deletes it again, and this
+// file enumerates that same directory at module load -- so whether the probe
+// appeared in `sources` depended on whether that other file happened to be
+// mid-run at the time.
+//
+// Found by upgrading vitest: the suite reported 2283 tests on one version and
+// 2282 on the next, and the single missing case was the probe. The scheduler
+// changed; the race was already here. It made the total test count
+// non-deterministic, which quietly devalues that number as a signal -- and it
+// meant this file was sometimes asserting a derivative rule against a
+// deliberately-corrupt fixture that is not a source image at all.
+//
+// Matched on the `__name__` convention rather than that one filename, so a
+// second probe added by some future test does not reintroduce this.
+const TEMP_FIXTURE = /^__.*__\./;
+
 // The same filter listSources() (scripts/images.mjs) applies -- assets-source/
 // also holds "Menu - Expanded.pdf", which is not a photo and has no
 // derivative rule to agree on.
 function realSources(): string[] {
-  return walk(SOURCE).filter((f) => IMAGE_EXT.has(extname(f).toLowerCase()));
+  return walk(SOURCE).filter(
+    (f) => IMAGE_EXT.has(extname(f).toLowerCase()) && !TEMP_FIXTURE.test(basename(f)),
+  );
 }
 
 describe("derivativePath mirrors scripts/paths.mjs's outputPathFor", () => {
