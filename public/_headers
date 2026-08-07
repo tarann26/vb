@@ -19,6 +19,41 @@
 # `purge_everything` cleared it. The bad entry is keyed on the `Origin` header
 # a browser sends and curl does not, so a single-file purge clears a different
 # variant than the one being served.
+# Security headers for every response. Deliberately declares no
+# Cache-Control -- caching is per-asset-type and lives in the blocks below.
+# Cloudflare Pages applies EVERY matching rule and merges them, so this block
+# and the more specific ones underneath both take effect rather than one
+# winning outright.
+#
+# No Content-Security-Policy here yet, on purpose, and its absence is the one
+# thing in this file worth reading before adding it. A single site-wide
+# `script-src 'self'` would break iPhone photo uploads: src/admin/heic.ts
+# dynamically imports heic-to, whose decoder runs inside a Worker built from
+# a blob URL, and a blob worker inherits the creating document's CSP rather
+# than carrying one of its own. That decoder's emscripten glue builds its
+# method callers through the dynamic-code constructor at runtime -- a live
+# path, not a dead branch, checked in the shipped dist/assets/heic-to-*.js --
+# so the only policy that lets it run is 'unsafe-eval' on whatever document
+# created the worker. Granting that site-wide, to every visitor, to support
+# one admin-only conversion is a worse trade than shipping the headers below
+# now and splitting the policy by path afterwards.
+#
+# X-Content-Type-Options is not decoration on this site specifically: it has
+# twice served a response under the wrong Content-Type through a poisoned
+# edge cache (see the comment above), and sniffing is the step that turns a
+# wrong Content-Type into executed script.
+#
+# Strict-Transport-Security carries no `preload` token, deliberately. Preload
+# is a submission into a list compiled into browsers, it is slow and awkward
+# to undo, and this is still running on a throwaway test host. `max-age` and
+# `includeSubDomains` are reversible; preload effectively is not.
+/*
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: geolocation=(), camera=(), microphone=(), payment=(), usb=(), magnetometer=(), gyroscope=(), accelerometer=()
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+
 /assets/*
   Cache-Control: public, max-age=31536000, immutable, s-maxage=86400
 

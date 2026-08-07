@@ -23,6 +23,29 @@ function headerBlocks(): string[] {
     .filter(Boolean);
 }
 
+// The path pattern a block applies to -- its first non-comment line.
+//
+// Needed because the security-header block's pattern is `/*`, and every
+// unhashed-asset block's pattern (`/*.webp`, `/*.jpg`, ...) also begins with
+// those two characters. A `startsWith('/*')` test cannot tell them apart, so
+// the caching tests below match on the WHOLE pattern instead. Getting that
+// wrong in the other direction is what would silently drop every image rule
+// out of the "unhashed" list and leave those three tests asserting nothing.
+function blockPath(block: string): string {
+  return block.split('\n')[0].trim();
+}
+
+// The block that applies to every response: security headers, no caching
+// policy of its own. Excluded from the three caching tests below because it
+// deliberately sets no Cache-Control -- it is not an asset rule.
+const SECURITY_BLOCK = '/*';
+
+function unhashedAssetBlocks(blocks: string[]): string[] {
+  return blocks.filter(
+    (b) => !b.startsWith('/assets/') && blockPath(b) !== SECURITY_BLOCK && !/no-store/.test(b),
+  );
+}
+
 describe('cloudflare hosting config', () => {
   it('rewrites every unmatched route to the SPA entry point', () => {
     expect(existsSync('public/_redirects')).toBe(true);
@@ -113,8 +136,7 @@ describe('cloudflare hosting config', () => {
   // test about the general unhashed-asset policy rather than conflating it
   // with build-info.json's deliberately different one.
   it('caches unhashed public assets for a week, revalidating', () => {
-    const blocks = headerBlocks();
-    const unhashed = blocks.filter((b) => !b.startsWith('/assets/') && !/no-store/.test(b));
+    const unhashed = unhashedAssetBlocks(headerBlocks());
     expect(unhashed.length).toBeGreaterThan(0);
     unhashed.forEach((block) => {
       expect(block).toMatch(/max-age=604800/);
@@ -123,8 +145,7 @@ describe('cloudflare hosting config', () => {
   });
 
   it('never marks unhashed assets immutable', () => {
-    const blocks = headerBlocks();
-    const unhashed = blocks.filter((b) => !b.startsWith('/assets/') && !/no-store/.test(b));
+    const unhashed = unhashedAssetBlocks(headerBlocks());
     expect(unhashed.length).toBeGreaterThan(0);
     unhashed.forEach((block) => expect(block).not.toContain('immutable'));
   });
@@ -134,6 +155,62 @@ describe('cloudflare hosting config', () => {
   // copy would tell the dashboard the previous build is the current one --
   // worse than no stamp at all, since it reports success on a deploy that
   // hasn't actually landed yet.
+  // The security headers, pinned to the `/*` block specifically rather than
+  // matched against the whole file, for the same reason the caching tests
+  // above are scoped: a whole-file regex passes as long as the string appears
+  // SOMEWHERE, including attached to a rule that covers only .webp files --
+  // which would leave every HTML response, the one that actually matters for
+  // sniffing and framing, with none of them.
+  describe('security headers', () => {
+    const EXPECTED: Record<string, RegExp> = {
+      'X-Content-Type-Options': /^nosniff$/,
+      'X-Frame-Options': /^DENY$/,
+      'Referrer-Policy': /^strict-origin-when-cross-origin$/,
+      'Permissions-Policy': /geolocation=\(\)/,
+      'Strict-Transport-Security': /^max-age=31536000; includeSubDomains$/,
+    };
+
+    function securityBlock(): string {
+      const block = headerBlocks().find((b) => blockPath(b) === SECURITY_BLOCK);
+      expect(block, `no \`${SECURITY_BLOCK}\` block in public/_headers`).toBeDefined();
+      return block!;
+    }
+
+    // Reads each header's VALUE off its own line rather than regex-matching
+    // the block as one string. `expect(block).toMatch(/nosniff/)` passes on a
+    // block that says `X-Frame-Options: nosniff`, which is not the same
+    // claim and not a working header.
+    function headerValue(block: string, name: string): string | undefined {
+      const line = block
+        .split('\n')
+        .slice(1)
+        .map((l) => l.trim())
+        .find((l) => l.toLowerCase().startsWith(`${name.toLowerCase()}:`));
+      return line?.slice(name.length + 1).trim();
+    }
+
+    for (const [name, pattern] of Object.entries(EXPECTED)) {
+      it(`sets ${name} on every response`, () => {
+        expect(headerValue(securityBlock(), name) ?? '').toMatch(pattern);
+      });
+    }
+
+    // Not a style note. `preload` is a submission into a list compiled into
+    // browsers; removing it later does not undo it for anyone who already
+    // has it, and this site is still on a test host whose hostname is going
+    // to be thrown away. See public/_headers' own comment.
+    it('does not ask to be added to the HSTS preload list', () => {
+      expect(headerValue(securityBlock(), 'Strict-Transport-Security')).not.toContain('preload');
+    });
+
+    // The security block matches every path, so a Cache-Control here would
+    // apply to hashed bundles and unhashed photos alike -- quietly competing
+    // with the three per-asset-type policies this file exists to express.
+    it('sets no caching policy of its own', () => {
+      expect(headerValue(securityBlock(), 'Cache-Control')).toBeUndefined();
+    });
+  });
+
   it('marks /build-info.json no-store, not cached like the other unhashed assets', () => {
     const blocks = headerBlocks();
     const buildInfoBlock = blocks.find((b) => b.startsWith('/build-info.json'));
