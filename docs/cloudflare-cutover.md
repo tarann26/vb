@@ -632,3 +632,71 @@ for f in $(curl -s https://HOST/ | grep -o 'assets/[A-Za-z0-9._-]*\.\(js\|css\)'
   printf '%-40s %s\n' "$f" "$(curl -s -o /dev/null -w '%{content_type}' -H "Origin: https://HOST" "https://HOST/$f")"
 done
 ```
+
+## 16. Security headers: what comes from the repo and what comes from the zone
+
+`public/_headers` sets five headers on `/*`. Only three of them are actually
+coming from this repository:
+
+| Header | Source |
+| --- | --- |
+| `X-Content-Type-Options: nosniff` | **the zone**, and also `_headers` |
+| `Referrer-Policy: strict-origin-when-cross-origin` | **the zone**, and also `_headers` |
+| `X-Frame-Options: DENY` | `_headers` only |
+| `Permissions-Policy: ...` | `_headers` only |
+| `Strict-Transport-Security: max-age=31536000; includeSubDomains` | `_headers` only |
+
+Measured, not assumed: the first two were already on every response *before*
+the deploy that added the `/*` block, when `_headers` set nothing but
+`Cache-Control`. Something at the Cloudflare zone level sets them. The values
+happen to match what `_headers` now also sets, so nothing conflicts.
+
+Why this is written down: deleting those two lines from `_headers` would not
+change a single response, so anyone testing whether the file "works" by
+removing a line has a 2-in-5 chance of picking one that proves nothing. The
+three that only exist here are the ones to test with.
+
+**HSTS carries no `preload` token, deliberately.** `max-age` and
+`includeSubDomains` are reversible by changing this file. Preload is a
+submission into a list compiled into browsers; it is slow and awkward to
+undo, and this is still running on `vb.aionxxxi.uk`, a hostname that is going
+to be thrown away (see Step 14). Revisit only after the real domain is live
+and has been serving HTTPS without incident for a while.
+
+### 16a. Verifying headers after a deploy
+
+`curl` immediately after a push does not tell you anything reliable. Observed
+directly on the deploy that added these: for several minutes the edge served a
+mix of pre- and post-deploy HTML, with `/` missing three headers while `/edit`
+had all five, then the two swapped, then both settled correct. That is the
+same poisoned-variant behaviour Step 15 and `public/_headers`' own comment
+describe, and it self-cleared here without a purge.
+
+So the check is three steps, not one:
+
+1. Poll for the build first — the sha, not a header:
+
+   ```
+   curl -s https://vb.aionxxxi.uk/build-info.json
+   ```
+
+   until `sha` equals the commit you pushed. A Pages build for this repo takes
+   roughly three minutes; anything that appears to land in seconds is the
+   previous build still answering.
+
+2. Then check the headers, on a route with no file behind it as well as one
+   with:
+
+   ```
+   curl -sI https://vb.aionxxxi.uk/ | grep -i 'x-frame-options\|permissions-policy\|strict-transport'
+   curl -sI https://vb.aionxxxi.uk/edit | grep -i 'x-frame-options\|permissions-policy\|strict-transport'
+   ```
+
+3. Then check again a minute later. A single passing read during the
+   propagation window is not evidence, and neither is a single failing one.
+
+`_headers` rules match the **requested** path, not the rewritten one --
+`/edit`, `/blogs`, `/cheeseboards` and `/membership` are all served
+`index.html` by the SPA catch-all in `_redirects` and all four carry the
+headers. That is what makes a future per-path policy (a stricter
+Content-Security-Policy on the public site than on `/edit`) possible at all.
