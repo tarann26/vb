@@ -81,7 +81,30 @@ if (live !== headSha) {
   console.error(`\nFAIL: still serving ${String(live).slice(0, 12)} after 7.5 minutes`);
   process.exit(1);
 }
-note('deploy is live\n');
+note('deploy is live');
+
+// ---------------------------------------------------------------------------
+// Then wait a little longer, and this is not politeness.
+//
+// build-info.json going live means the BUILD finished. It does not mean every
+// content-hashed asset has reached every edge node. In the window between the
+// two, a request for an asset this node does not have yet falls through the
+// SPA catch-all, gets HTML at 200, and the edge caches that HTML under a
+// content-hashed URL -- so a checker that fetches assets the instant the sha
+// flips does not observe the poisoning, it CAUSES it.
+//
+// Observed exactly that: this script reported three admin chunks serving
+// text/html with `age` equal to the number of seconds since its own run
+// started. The entries were created by the check.
+//
+// The delay does not make the race impossible, only unlikely -- a real
+// visitor arriving mid-window can still trigger it, which is why s-maxage on
+// /assets/* is an hour rather than a day. What it does is stop this script
+// being the visitor who always arrives first.
+const SETTLE_MS = Number(process.env.VB_SETTLE_MS ?? 45_000);
+note(`waiting ${Math.round(SETTLE_MS / 1000)}s for assets to propagate before touching them`);
+await new Promise((resolve) => setTimeout(resolve, SETTLE_MS));
+note('');
 
 // ---------------------------------------------------------------------------
 // 2. Every built asset, fetched the way a browser fetches it.
@@ -93,8 +116,19 @@ for (const file of readdirSync('dist/assets')) {
   const res = await get(`/assets/${file}`);
   const type = res.headers.get('content-type') ?? '';
   const ok = res.status === 200 && expected.test(type);
-  note(`  ${ok ? 'ok  ' : 'FAIL'}  ${file}  ${res.status} ${type}`);
-  if (!ok) failures.push(`/assets/${file} served ${res.status} ${type}`);
+  note(`  ${ok ? 'ok  ' : 'FAIL'}  ${file}  ${res.status} ${type} ${ok ? '' : `(${res.headers.get('cf-cache-status')}, age ${res.headers.get('age') ?? '0'})`}`);
+  if (!ok) {
+    // `cf-cache-status: HIT` on a wrong Content-Type means this is not a
+    // transient miss that will resolve itself -- the edge has stored the
+    // wrong response under a content-hashed URL, and every visitor gets it
+    // until s-maxage expires. Said out loud because the difference decides
+    // what to do next: wait, or bust the hash with a new build.
+    const cached = /HIT/i.test(res.headers.get('cf-cache-status') ?? '');
+    failures.push(
+      `/assets/${file} served ${res.status} ${type}` +
+        (cached ? ' -- CACHED, so every visitor gets this until s-maxage expires' : ''),
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
