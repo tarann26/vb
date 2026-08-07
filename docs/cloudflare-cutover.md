@@ -633,6 +633,70 @@ for f in $(curl -s https://HOST/ | grep -o 'assets/[A-Za-z0-9._-]*\.\(js\|css\)'
 done
 ```
 
+### 15a. The same thing, on the entry bundle: a blank site
+
+Everything in Step 15 happened again, to `/assets/index-*.js`, and the outcome
+was not cosmetic. Chrome refuses to execute a module script served as
+`text/html`, so nothing mounted and **every route rendered a blank white
+page**. The `Origin`-keyed variant split held exactly as described above:
+
+```
+no Origin header                  -> application/javascript   (fine)
+Origin: https://example.com       -> application/javascript   (fine)
+Origin: https://vb.aionxxxi.uk    -> text/html                (poisoned)
+```
+
+Only the site's **own** origin was poisoned, which is the one every visitor
+sends and the one no casual `curl -I` sends. There was no `Vary` header
+advertising the split.
+
+Two things changed as a result:
+
+1. `public/_headers` dropped `s-maxage` on `/assets/*` from 86400 to 3600. The
+   old number was chosen when the worst case was a stylesheet. "Poisoned until
+   tomorrow" is survivable for an unstyled page and not for a site that is
+   simply gone.
+
+2. `npm run verify:deploy` (scripts/verify-deploy.mjs) now automates this
+   whole section. It waits for `build-info.json` to report the commit under
+   test, fetches every built asset **with the site's own Origin**, checks
+   Content-Type rather than status, and then loads every route in a real
+   Chromium and asserts the page actually rendered. Run it after every push.
+
+**Also worth knowing: verifying too eagerly is a way to CAUSE this.** The
+request that poisoned the entry bundle was almost certainly the post-deploy
+check itself, hitting the new asset URL while the deploy was still
+propagating. That is not a reason to skip the check — it is a reason to run
+`verify:deploy`, which waits for the commit to be live before it fetches
+anything.
+
+### 16b. Why `_redirects` cannot just exclude `/assets/*`
+
+The obvious prevention is to stop the SPA catch-all answering for asset paths,
+so a not-yet-propagated file returns something that is not a cacheable 200 of
+HTML. It does not work, and the reasons are worth recording so nobody spends
+another afternoon on it:
+
+- **A 404 rule is silently ignored.** Cloudflare Pages' `_redirects` accepts
+  only 200, 301, 302, 303, 307 and 308. A `404` line is dropped at build time
+  with no error (see `public/_redirects`' own comment — this was tried).
+- **A 200 rewrite to anything else is still a cacheable 200.** Pointing
+  `/assets/*` at a `.txt` file just poisons the URL with `text/plain` instead
+  of `text/html`. The browser still refuses it.
+- **A 301/302 cached under a content-hashed URL is worse, not better.**
+- **Enumerating the real routes instead of using `/*` breaks NotFound.** The
+  catch-all is what lets `<Route path="*">` render the branded NotFound page
+  for a typo'd URL. Replacing it with an explicit list means any URL not on
+  the list gets a bare Pages 404, and every new page in `pages.json` needs a
+  matching `_redirects` line or it 404s — a drift hazard traded for a
+  propagation one.
+
+So the mechanism stays, and the answer is the shorter `s-maxage` above plus
+detection via `npm run verify:deploy`. That script probes the fallthrough
+directly (it fetches `/assets/index-DOES-NOT-EXIST.js` and reports the
+Content-Type) so that if Cloudflare ever changes this behaviour, in either
+direction, it shows up in the output rather than in an outage.
+
 ## 16. Security headers: what comes from the repo and what comes from the zone
 
 `public/_headers` sets five headers on `/*`. Only three of them are actually

@@ -14,7 +14,8 @@
     "preview": "vite preview",
     "images": "node scripts/images.mjs",
     "test:e2e": "playwright test",
-    "test:csp": "npm run build --silent && node scripts/check-csp.mjs"
+    "test:csp": "npm run build --silent && node scripts/check-csp.mjs",
+    "verify:deploy": "node scripts/verify-deploy.mjs"
   },
   "dependencies": {
     "heic-to": "^1.5.2",

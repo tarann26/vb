@@ -102,8 +102,30 @@
 # only when she picks a photo.
 # ---------------------------------------------------------------------------
 
+# s-maxage was 86400 and is now 3600, because the bound it sets turned out to
+# be the recovery time for a total outage rather than for a cosmetic one.
+#
+# When this reasoning was written, the two observed poisonings were a
+# stylesheet and a pair of favicons -- annoying, survivable for a day. Since
+# then the same mechanism hit the ENTRY BUNDLE: /assets/index-*.js was served
+# as text/html, Chrome refused to execute it as a module script, and every
+# route on the site rendered a blank white page. "Poisoned until tomorrow at
+# worst" is a fine answer for an unstyled page and a bad one for a site that
+# is simply gone, since the blast radius is not the asset -- it is everything.
+#
+# An hour costs nothing measurable. The edge re-fetches from Pages, which is
+# free, fast and same-datacentre, and browsers are unaffected either way:
+# max-age and immutable are untouched, so a visitor who already has these
+# bytes never re-asks, and these filenames are content-hashed, so a new build
+# is a new URL rather than a revalidation.
+#
+# This shortens recovery; it does not prevent the poisoning. The mechanism is
+# the SPA catch-all in public/_redirects answering a not-yet-propagated asset
+# with index.html at 200 -- see docs/cloudflare-cutover.md §16b for why
+# _redirects cannot be made to exclude /assets/*, and `npm run verify:deploy`
+# for the check that actually detects it.
 /assets/*
-  Cache-Control: public, max-age=31536000, immutable, s-maxage=86400
+  Cache-Control: public, max-age=31536000, immutable, s-maxage=3600
 
 /*.webp
   Cache-Control: public, max-age=604800, must-revalidate

@@ -130,9 +130,20 @@ describe('cloudflare hosting config', () => {
     // The edge gets a much shorter TTL than the browser. Without this, a
     // response cached at a content-hashed URL during a deploy's propagation
     // window is held for a year and never revalidated -- which is how this
-    // site served a stylesheet as text/html to every browser. See
-    // public/_headers' own comment.
-    expect(assetsBlock).toMatch(/s-maxage=86400/);
+    // site served a stylesheet as text/html to every browser, and later how
+    // it served its ENTRY BUNDLE as text/html and rendered a blank white page
+    // on every route. See public/_headers' own comment.
+    //
+    // Asserted as an upper bound rather than an exact value, and the
+    // difference matters: this number is a recovery time for a total outage,
+    // so a future edit is free to make it shorter and must not be able to
+    // make it longer by quietly restoring the old 86400. An equality check
+    // would have to be edited in lockstep with every tightening, which is
+    // how a limit ends up being loosened to make a test pass.
+    const sMaxAge = assetsBlock!.match(/s-maxage=(\d+)/);
+    expect(sMaxAge).not.toBeNull();
+    expect(Number(sMaxAge![1])).toBeLessThanOrEqual(3600);
+    expect(Number(sMaxAge![1])).toBeGreaterThan(0);
   });
 
   // Scoped to each unhashed-asset block, for the same reason: a whole-file
