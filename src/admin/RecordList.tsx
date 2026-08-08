@@ -1,4 +1,6 @@
+import type React from 'react';
 import RecordForm from './RecordForm';
+import type { ImagePreviews } from './previews';
 import { arrayIndexOf } from './problems';
 import type { FieldsOf } from './fields';
 import type { StagedPhoto } from './PhotoField';
@@ -27,6 +29,17 @@ export interface RecordListProps<T extends { id: string }> {
   // from producing duplicate ids (and, via `<label for>`, misdirecting a
   // click into the wrong section entirely).
   scope?: string;
+  // A picture for the row, rendered at the start of its header row. Optional
+  // and supplied by the caller rather than derived here, because only the
+  // caller knows which field of `T` holds an image path (Dish.image,
+  // Article.image, ...) and which content file to key a staged preview
+  // under. A record type with no image simply does not pass one.
+  thumbnail?: (item: T) => React.ReactNode;
+  // The shared preview store, and the content file's own name -- this
+  // component appends the record's id, the same prefix it already appends to
+  // the key it reports through `onStaged`.
+  previews?: ImagePreviews;
+  previewKeyPrefix?: string;
   // Every record type this list can hold names itself differently
   // (Dish.name, Drink.name, Article.title) -- there is no field common to
   // all of them for RecordList to read a display name from on its own, so
@@ -113,6 +126,9 @@ function RecordList<T extends { id: string }>({
   itemLabel,
   problems,
   onStaged,
+  thumbnail,
+  previews,
+  previewKeyPrefix,
   scope,
 }: RecordListProps<T>) {
   // Swaps the item at `index` with its neighbour at `otherIndex` and hands
@@ -153,8 +169,9 @@ function RecordList<T extends { id: string }>({
           const isLast = index === items.length - 1;
           return (
             <li key={item.id} className="mb-6 rounded border border-gray-200 p-4">
-              <div className="mb-3 flex items-center justify-between gap-2">
-                <div className="flex gap-2">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  {thumbnail?.(item)}
                   {/* Omitted at the ends, not disabled: a list of 38 items
                       would otherwise carry 76 buttons that read as live
                       controls but do nothing -- the exact "unassociated
@@ -198,6 +215,8 @@ function RecordList<T extends { id: string }>({
                 onChange={(next) => onChange(index, next)}
                 problems={problems}
                 onStaged={onStaged ? (fieldKey, staged) => onStaged(`${item.id}:${fieldKey}`, staged) : undefined}
+                previews={previews}
+                previewKeyPrefix={previewKeyPrefix === undefined ? undefined : `${previewKeyPrefix}:${item.id}`}
                 scope={scope}
               />
             </li>

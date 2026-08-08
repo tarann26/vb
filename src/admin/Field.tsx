@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import PhotoField, { type StagedPhoto } from './PhotoField';
+import type { ImagePreviews } from './previews';
 import type { FieldSpec } from './fields';
 import type { ValidationProblem } from '../content/validate';
 
@@ -24,6 +25,10 @@ export interface FieldProps<V> {
   // image field; RecordForm.tsx's own comment is where that guarantee
   // actually lives.
   onStaged?: (staged: StagedPhoto | null) => void;
+  // Forwarded straight to PhotoField, untouched -- see that component's own
+  // comment for why the key is composed on the way down rather than derived.
+  previews?: ImagePreviews;
+  previewKey?: string;
 }
 
 // Exported, not module-private: a sibling component that renders its own
@@ -108,7 +113,7 @@ function TagsInput({
 // Field.test.tsx asserts each of the nine actually renders an
 // accessible control, so a tenth kind reaching here without a case added
 // below fails a test, not silently.
-function Field<V>({ id, spec, value, onChange, problems, onStaged }: FieldProps<V>) {
+function Field<V>({ id, spec, value, onChange, problems, onStaged, previews, previewKey }: FieldProps<V>) {
   // Rendered directly, bypassing this function's own label/help/error shell
   // below entirely -- PhotoField already renders its own label, help text,
   // upload status and error region (it has to: a plain <input> can't show
@@ -134,6 +139,8 @@ function Field<V>({ id, spec, value, onChange, problems, onStaged }: FieldProps<
         value={(value as string | null) ?? null}
         onChange={(next) => onChange(next as V)}
         onStaged={onStaged}
+        previews={previews}
+        previewKey={previewKey}
         problems={problems}
       />
     );

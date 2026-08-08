@@ -15,19 +15,20 @@ import { replaceAt, useValidation } from '../useValidation';
 import type { StagedFile } from '../staged';
 import type { ContentRegistry } from '../publish';
 import type { DraftMap } from '../drafts';
+import type { ImagePreviews } from '../previews';
 import type { BespokeSection, Page, Section, TemplateSection } from '../../content/types';
 import type { AreaProps } from './area-props';
 
-const PagesArea: React.FC<AreaProps> = ({ registry, restoreDraft, stage, publishLocked }) => (
+const PagesArea: React.FC<AreaProps> = ({ registry, restoreDraft, stage, publishLocked, previews }) => (
   <>
     <SectionErrorBoundary name="Pages">
       <CollapsibleSection id="pages" heading="Pages" locked={publishLocked}>
-        <PagesSection registry={registry} restoreDraft={restoreDraft} stage={stage} />
+        <PagesSection registry={registry} restoreDraft={restoreDraft} stage={stage} previews={previews} />
       </CollapsibleSection>
     </SectionErrorBoundary>
     <SectionErrorBoundary name="Homepage sections">
       <CollapsibleSection id="sections" heading="Homepage sections" locked={publishLocked}>
-        <SectionsSection registry={registry} restoreDraft={restoreDraft} stage={stage} />
+        <SectionsSection registry={registry} restoreDraft={restoreDraft} stage={stage} previews={previews} />
       </CollapsibleSection>
     </SectionErrorBoundary>
   </>
@@ -53,10 +54,12 @@ function PagesSection({
   registry,
   restoreDraft,
   stage,
+  previews,
 }: {
   registry: ContentRegistry;
   restoreDraft: DraftMap | null;
   stage: (key: string, file: StagedFile | null) => void;
+  previews: ImagePreviews;
 }) {
   const [state, setState] = useState<PagesLoadState>({ status: 'loading' });
 
@@ -103,7 +106,7 @@ function PagesSection({
 
   return (
     <>
-      <PageList items={items} onChange={commit} problems={problems} stage={stage} />
+      <PageList items={items} onChange={commit} problems={problems} stage={stage} previews={previews} />
     </>
   );
 }
@@ -127,10 +130,12 @@ function SectionsSection({
   registry,
   restoreDraft,
   stage,
+  previews,
 }: {
   registry: ContentRegistry;
   restoreDraft: DraftMap | null;
   stage: (key: string, file: StagedFile | null) => void;
+  previews: ImagePreviews;
 }) {
   const [state, setState] = useState<SectionsLoadState>({ status: 'loading' });
 
@@ -213,6 +218,7 @@ function SectionsSection({
         rowPrefix={(index) => `[${bespokeItems.length + index}]`}
         idPrefix="section"
         stage={stage}
+        previews={previews}
       />
     </>
   );

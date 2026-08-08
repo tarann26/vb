@@ -9,6 +9,7 @@
 import type { ContentRegistry } from '../publish';
 import type { DraftMap } from '../drafts';
 import type { StagedFile } from '../staged';
+import type { ImagePreviews } from '../previews';
 
 export interface AreaProps {
   // publish.ts's shared registry: the one place every panel's current
@@ -27,4 +28,10 @@ export interface AreaProps {
   // `disabled` fieldset per panel, inside CollapsibleSection -- never as one
   // wrapper around a whole area, which would swallow the fold toggles too.
   publishLocked: boolean;
+  // previews.ts's shared object-URL store, created once in AdminApp and
+  // lifted here rather than a second one invented for this surface. It is
+  // what lets a 48px row thumbnail show the photo she has just picked
+  // instead of the content path PhotoField optimistically wrote -- a path
+  // with no file behind it until the build finishes minutes later.
+  previews: ImagePreviews;
 }

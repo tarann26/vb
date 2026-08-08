@@ -20,6 +20,8 @@
 import { useRef } from 'react';
 import Field from './Field';
 import PhotoField from './PhotoField';
+import Thumbnail from './manage/Thumbnail';
+import type { ImagePreviews } from './previews';
 import { GALLERY_IMAGE_FIELDS } from './fields';
 import { ADD_BUTTON_CLASSNAME, MOVE_BUTTON_CLASSNAME, REMOVE_BUTTON_CLASSNAME } from './RecordList';
 import { fromStagedPhoto, type StagedFile } from './staged';
@@ -40,6 +42,17 @@ export interface GalleryListProps {
   // See that file's own header comment for why sharing one is the whole
   // point.
   stage: (key: string, file: StagedFile | null) => void;
+  // The shared preview store (previews.ts), so a row's 48px thumbnail can
+  // show the photo she just picked rather than the content path PhotoField
+  // optimistically wrote, which has no file behind it until the build lands.
+  //
+  // Passed as the store rather than as a `thumbnail?: (item) => ReactNode`
+  // render prop, unlike RecordList: this component ALREADY composes the
+  // staged key for each row itself (`galleries.json:<prefix>:<rowId>:src`),
+  // so a caller supplying the picture would have to rebuild that key from
+  // outside -- two copies of a key shape whose whole history is about a
+  // key that got rebuilt slightly differently somewhere else.
+  previews?: ImagePreviews;
 }
 
 // `key[i].sub` -- the third field shape src/admin/problems.ts's own header
@@ -111,6 +124,7 @@ function useRowIds<T extends object>() {
 }
 
 interface GalleryImageListProps {
+  previews?: ImagePreviews;
   prefix: 'atmosphere' | 'ourStory';
   // Used for every button/banner label below ("Move {heading} photo 1",
   // "Problems with {heading}") -- her own vocabulary for this list.
@@ -133,7 +147,7 @@ interface GalleryImageListProps {
   stage: (key: string, file: StagedFile | null) => void;
 }
 
-function GalleryImageList({ prefix, heading, sectionHeading, addLabel, category, items, onChange, problems, stage }: GalleryImageListProps) {
+function GalleryImageList({ prefix, heading, sectionHeading, addLabel, category, items, onChange, problems, stage, previews }: GalleryImageListProps) {
   const banner = bannerFor(problems, prefix, items.length);
   const { rowIdFor, carryForward } = useRowIds<GalleryImage>();
 
@@ -188,8 +202,13 @@ function GalleryImageList({ prefix, heading, sectionHeading, addLabel, category,
           const rowId = rowIdFor(item);
           return (
             <li key={index} className="mb-6 rounded border border-gray-200 p-4">
-              <div className="mb-3 flex items-center justify-between gap-2">
-                <div className="flex gap-2">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Thumbnail
+                    path={item.src}
+                    previewKey={`galleries.json:${prefix}:${rowId}:src`}
+                    previews={previews}
+                  />
                   {!isFirst && (
                     <button
                       type="button"
@@ -249,6 +268,8 @@ function GalleryImageList({ prefix, heading, sectionHeading, addLabel, category,
                 // finding): 4 picks on one row left 3 staged files, 2 of
                 // them dead weight nothing on screen could remove.
                 onStaged={(staged) => stage(`galleries.json:${prefix}:${rowId}:src`, fromStagedPhoto(staged))}
+                previews={previews}
+                previewKey={`galleries.json:${prefix}:${rowId}:src`}
                 problems={rowProblems.filter((p) => itemOf(prefix, p.field)?.sub === 'src')}
               />
               <Field
@@ -346,7 +367,7 @@ function HeroCollageList({ tree, onChange, problems, stage }: HeroCollageListPro
   );
 }
 
-function GalleryList({ value, onChange, problems, stage }: GalleryListProps) {
+function GalleryList({ value, onChange, problems, stage, previews }: GalleryListProps) {
   return (
     <div>
       <GalleryImageList
@@ -359,6 +380,7 @@ function GalleryList({ value, onChange, problems, stage }: GalleryListProps) {
         onChange={(next) => onChange({ ...value, atmosphere: next })}
         problems={problems}
         stage={stage}
+        previews={previews}
       />
       <GalleryImageList
         prefix="ourStory"
@@ -370,7 +392,10 @@ function GalleryList({ value, onChange, problems, stage }: GalleryListProps) {
         onChange={(next) => onChange({ ...value, ourStory: next })}
         problems={problems}
         stage={stage}
+        previews={previews}
       />
+      {/* The hero collage gets NO thumbnail: it is not a list of rows, and
+          its own editor shows the real photographs at real size already. */}
       <HeroCollageList
         tree={value.heroCollage}
         onChange={(next) => onChange({ ...value, heroCollage: next })}

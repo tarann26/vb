@@ -4,6 +4,8 @@
 // in sections/ rather than in any one area because two areas share it.
 import { useEffect, useState } from 'react';
 import RecordList from '../RecordList';
+import Thumbnail from '../manage/Thumbnail';
+import type { ImagePreviews } from '../previews';
 import type { ContentFileName, ContentTypeMap, LoadedContent } from '../content';
 import type { FieldsOf } from '../fields';
 import { replaceAt, useValidation } from '../useValidation';
@@ -55,6 +57,13 @@ export interface ArraySectionProps<Item extends { id: string }> {
   // freshly-fetched server value without corrupting the registry's own
   // `initial`.
   restoreDraft: DraftMap | null;
+  // Which field of `Item` holds this row's photo, if it has one. Supplied by
+  // the caller rather than derived here, because `Item` is an unconstrained
+  // type parameter and nothing about it says which of its fields is an
+  // image. Absent for a record type that has no photo -- there is no
+  // placeholder box on a row that could never hold one.
+  imageField?: { key: string; path: (item: Item) => string | null };
+  previews: ImagePreviews;
 }
 
 // The one generic screen every array-shaped, id-keyed content file needs:
@@ -76,6 +85,8 @@ export function ArraySection<Item extends { id: string }>({
   stage,
   registry,
   restoreDraft,
+  imageField,
+  previews,
 }: ArraySectionProps<Item>) {
   const [state, setState] = useState<LoadState<Item>>({ status: 'loading' });
 
@@ -176,6 +187,24 @@ export function ArraySection<Item extends { id: string }>({
         // the WRONG section's input, since id resolution isn't scoped by
         // container). `file` minus its ".json" is already unique per
         // ArraySection on this page.
+        // The 48px picture at the start of each row's header. The staged
+        // key it reads is composed the same way `onStaged` above composes
+        // the key it writes -- file, then record id, then field -- so a
+        // photo she has just picked shows immediately rather than after the
+        // build.
+        thumbnail={
+          imageField === undefined
+            ? undefined
+            : (item) => (
+                <Thumbnail
+                  path={imageField.path(item)}
+                  previewKey={`${file}:${item.id}:${imageField.key}`}
+                  previews={previews}
+                />
+              )
+        }
+        previews={previews}
+        previewKeyPrefix={file}
         scope={file.replace('.json', '')}
       />
     </>

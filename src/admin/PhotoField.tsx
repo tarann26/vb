@@ -8,6 +8,8 @@ import {
   type StagedPhoto,
 } from './upload-photo';
 import type { UploadCategory } from '../shared/upload-categories';
+import { NO_IMAGE_PREVIEWS } from './previews';
+import type { ImagePreviews } from './previews';
 import type { ValidationProblem } from '../content/validate';
 
 // StagedPhoto, MAX_STAGED_PHOTOS_PER_PUBLISH and MAX_STAGED_PHOTO_BYTES all
@@ -50,6 +52,24 @@ export interface PhotoFieldProps {
   // second photo, or retrying after a failure, must not leave two staged
   // uploads fighting over the same field).
   onStaged?: (staged: StagedPhoto | null) => void;
+  // The shared preview store (previews.ts), and the key to write this
+  // field's just-picked object URL under.
+  //
+  // TWO props rather than the one the design named, and the reason is that
+  // PhotoField cannot derive the key: it is composed on the way DOWN, one
+  // level at a time -- the content file's name, then the record's id, then
+  // this field's own key -- exactly the way `onStaged` composes the same
+  // string on the way back UP. A component that only knows its own field
+  // key cannot build a string that has to start with a file name.
+  //
+  // Both default to the no-op, so every existing caller is unaffected: this
+  // component's own local preview state, and its revoke-on-unmount, are
+  // unchanged. Writing to the store IN ADDITION is what lets a 48px row
+  // thumbnail somewhere else on the page show the photo she just picked
+  // instead of the content path, which has no file behind it until the build
+  // finishes.
+  previews?: ImagePreviews;
+  previewKey?: string;
   problems: ValidationProblem[];
 }
 
@@ -84,7 +104,18 @@ const LABEL_CLASSNAME = "mb-1 block font-['Montserrat'] text-sm uppercase tracki
 const RETRY_BUTTON_CLASSNAME =
   "mt-2 rounded border border-red-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-red-600 transition hover:bg-red-600 hover:text-white";
 
-function PhotoField({ id, label, help, category, value, onChange, onStaged, problems }: PhotoFieldProps) {
+function PhotoField({
+  id,
+  label,
+  help,
+  category,
+  value,
+  onChange,
+  onStaged,
+  previews = NO_IMAGE_PREVIEWS,
+  previewKey,
+  problems,
+}: PhotoFieldProps) {
   const [status, setStatus] = useState<Status>({ kind: 'idle' });
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const objectUrlRef = useRef<string | null>(null);
@@ -164,6 +195,12 @@ function PhotoField({ id, label, help, category, value, onChange, onStaged, prob
     const url = URL.createObjectURL(file);
     objectUrlRef.current = url;
     setPreviewUrl(url);
+    // Published to the shared store IN ADDITION to this component's own
+    // state, never instead of it. The store's `set` revokes whatever that
+    // key held before, and the unmount cleanup above still revokes this
+    // component's own -- one URL, and the two revoke paths are idempotent
+    // (revoking an already-revoked URL is a no-op).
+    if (previewKey !== undefined) previews.set(previewKey, url);
 
     await upload(file);
   }

@@ -2,6 +2,7 @@ import React, { useRef, useState } from 'react';
 import { useSession } from './session';
 import Login from './Login';
 import { useStagedFiles } from './staged';
+import { useImagePreviews } from './previews';
 import { useContentRegistry } from './publish';
 import { loadDraft, loadDraftStagedCount, clearDraft } from './drafts';
 import type { DraftMap } from './drafts';
@@ -42,6 +43,11 @@ const AdminApp: React.FC = () => {
   // /api/publish across all nine content files possible at all -- see that
   // module's own header comment.
   const registry = useContentRegistry();
+  // ONE preview store for this whole surface, the same instance /edit
+  // already uses on its own (previews.ts). Created here, above the shell, so
+  // its object URLs outlive every fold, every route change and every list
+  // reorder below it -- and so there is exactly one place that revokes them.
+  const previews = useImagePreviews();
   const stagedFilesApi = { files: stagedFiles, stage, clearSent };
   // True only while the publish REQUEST itself is in flight -- seconds, not
   // the whole build. PublishBar owns the decision and reports it here; see
@@ -143,7 +149,7 @@ const AdminApp: React.FC = () => {
   // One object, spread into all four areas, so the shared plumbing they
   // depend on is declared once and a fifth area cannot quietly be given a
   // different set.
-  const areaProps = { registry, restoreDraft, stage, publishLocked };
+  const areaProps = { registry, restoreDraft, stage, publishLocked, previews };
 
   return (
     <ManageShell

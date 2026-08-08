@@ -24,6 +24,7 @@ import { ADD_BUTTON_CLASSNAME, MOVE_BUTTON_CLASSNAME } from './RecordList';
 import type { BespokeSection, Page, TemplateSection } from '../content/types';
 import type { ValidationProblem } from '../content/validate';
 import type { StagedFile } from './staged';
+import type { ImagePreviews } from './previews';
 
 export interface PageListProps {
   items: Page[];
@@ -33,6 +34,12 @@ export interface PageListProps {
   // documents.
   problems: ValidationProblem[];
   stage: (key: string, file: StagedFile | null) => void;
+  // Forwarded, untouched, to the TemplateContentForm this list renders --
+  // whose item-list and gallery-image rows DO get a thumbnail. This list's
+  // OWN rows deliberately get none: a page and a homepage section have no
+  // image field, and a placeholder box on a row that can never hold a
+  // picture is decoration.
+  previews?: ImagePreviews;
 }
 
 // A blank starting point for "Add a page" -- name and SEO fields start
@@ -53,7 +60,7 @@ function blankPage(): Page {
   };
 }
 
-function PageList({ items, onChange, problems, stage }: PageListProps) {
+function PageList({ items, onChange, problems, stage, previews }: PageListProps) {
   const [openIndex, setOpenIndex] = useState<number | null>(null);
 
   function swap(index: number, otherIndex: number): void {
@@ -222,6 +229,7 @@ function PageList({ items, onChange, problems, stage }: PageListProps) {
                           rowPrefix={(ti) => `${pagePrefix}.sections[${pageBespoke.length + ti}]`}
                           idPrefix={`${idPrefix}-sections`}
                           stage={stage}
+                          previews={previews}
                         />
                       </>
                     );

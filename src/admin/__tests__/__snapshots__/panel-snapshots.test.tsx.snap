@@ -14,11 +14,18 @@ exports[`the ten panels, as they render today > Dishes (dishes) 1`] = `
           class="mb-6 rounded border border-gray-200 p-4"
         >
           <div
-            class="mb-3 flex items-center justify-between gap-2"
+            class="mb-3 flex flex-wrap items-center justify-between gap-2"
           >
             <div
-              class="flex gap-2"
+              class="flex items-center gap-2"
             >
+              <img
+                alt=""
+                class="h-12 w-12 shrink-0 rounded border border-[#6B8B59]/40 object-cover"
+                data-thumbnail="row"
+                loading="lazy"
+                src="/food/a.webp"
+              />
               <button
                 aria-label="Move Dish A down"
                 class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-[#6B8B59] transition hover:bg-[#6B8B59] hover:text-white"
@@ -141,11 +148,18 @@ exports[`the ten panels, as they render today > Dishes (dishes) 1`] = `
           class="mb-6 rounded border border-gray-200 p-4"
         >
           <div
-            class="mb-3 flex items-center justify-between gap-2"
+            class="mb-3 flex flex-wrap items-center justify-between gap-2"
           >
             <div
-              class="flex gap-2"
+              class="flex items-center gap-2"
             >
+              <img
+                alt=""
+                class="h-12 w-12 shrink-0 rounded border border-[#6B8B59]/40 object-cover"
+                data-thumbnail="row"
+                loading="lazy"
+                src="/food/b.webp"
+              />
               <button
                 aria-label="Move Dish B up"
                 class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-[#6B8B59] transition hover:bg-[#6B8B59] hover:text-white"
@@ -290,11 +304,16 @@ exports[`the ten panels, as they render today > Drinks (drinks) 1`] = `
           class="mb-6 rounded border border-gray-200 p-4"
         >
           <div
-            class="mb-3 flex items-center justify-between gap-2"
+            class="mb-3 flex flex-wrap items-center justify-between gap-2"
           >
             <div
-              class="flex gap-2"
+              class="flex items-center gap-2"
             >
+              <div
+                aria-hidden="true"
+                class="h-12 w-12 shrink-0 rounded border border-[#6B8B59]/40 bg-[#f7f5f0]"
+                data-thumbnail="row"
+              />
               <button
                 aria-label="Move Drink X down"
                 class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-[#6B8B59] transition hover:bg-[#6B8B59] hover:text-white"
@@ -426,11 +445,16 @@ exports[`the ten panels, as they render today > Drinks (drinks) 1`] = `
           class="mb-6 rounded border border-gray-200 p-4"
         >
           <div
-            class="mb-3 flex items-center justify-between gap-2"
+            class="mb-3 flex flex-wrap items-center justify-between gap-2"
           >
             <div
-              class="flex gap-2"
+              class="flex items-center gap-2"
             >
+              <div
+                aria-hidden="true"
+                class="h-12 w-12 shrink-0 rounded border border-[#6B8B59]/40 bg-[#f7f5f0]"
+                data-thumbnail="row"
+              />
               <button
                 aria-label="Move Drink Y up"
                 class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-[#6B8B59] transition hover:bg-[#6B8B59] hover:text-white"
@@ -592,11 +616,18 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
             class="mb-6 rounded border border-gray-200 p-4"
           >
             <div
-              class="mb-3 flex items-center justify-between gap-2"
+              class="mb-3 flex flex-wrap items-center justify-between gap-2"
             >
               <div
-                class="flex gap-2"
+                class="flex items-center gap-2"
               >
+                <img
+                  alt=""
+                  class="h-12 w-12 shrink-0 rounded border border-[#6B8B59]/40 object-cover"
+                  data-thumbnail="row"
+                  loading="lazy"
+                  src="/atmosphere/dining.webp"
+                />
                 <button
                   aria-label="Move Atmosphere photo 1 down"
                   class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-[#6B8B59] transition hover:bg-[#6B8B59] hover:text-white"
@@ -662,11 +693,18 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
             class="mb-6 rounded border border-gray-200 p-4"
           >
             <div
-              class="mb-3 flex items-center justify-between gap-2"
+              class="mb-3 flex flex-wrap items-center justify-between gap-2"
             >
               <div
-                class="flex gap-2"
+                class="flex items-center gap-2"
               >
+                <img
+                  alt=""
+                  class="h-12 w-12 shrink-0 rounded border border-[#6B8B59]/40 object-cover"
+                  data-thumbnail="row"
+                  loading="lazy"
+                  src="/atmosphere/outsideLOGO.webp"
+                />
                 <button
                   aria-label="Move Atmosphere photo 2 up"
                   class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-[#6B8B59] transition hover:bg-[#6B8B59] hover:text-white"
@@ -739,11 +777,18 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
             class="mb-6 rounded border border-gray-200 p-4"
           >
             <div
-              class="mb-3 flex items-center justify-between gap-2"
+              class="mb-3 flex flex-wrap items-center justify-between gap-2"
             >
               <div
-                class="flex gap-2"
+                class="flex items-center gap-2"
               >
+                <img
+                  alt=""
+                  class="h-12 w-12 shrink-0 rounded border border-[#6B8B59]/40 object-cover"
+                  data-thumbnail="row"
+                  loading="lazy"
+                  src="/atmosphere/ambience.webp"
+                />
                 <button
                   aria-label="Move Atmosphere photo 3 up"
                   class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-[#6B8B59] transition hover:bg-[#6B8B59] hover:text-white"
@@ -816,11 +861,18 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
             class="mb-6 rounded border border-gray-200 p-4"
           >
             <div
-              class="mb-3 flex items-center justify-between gap-2"
+              class="mb-3 flex flex-wrap items-center justify-between gap-2"
             >
               <div
-                class="flex gap-2"
+                class="flex items-center gap-2"
               >
+                <img
+                  alt=""
+                  class="h-12 w-12 shrink-0 rounded border border-[#6B8B59]/40 object-cover"
+                  data-thumbnail="row"
+                  loading="lazy"
+                  src="/atmosphere/ceiling decor.webp"
+                />
                 <button
                   aria-label="Move Atmosphere photo 4 up"
                   class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-[#6B8B59] transition hover:bg-[#6B8B59] hover:text-white"
@@ -893,11 +945,18 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
             class="mb-6 rounded border border-gray-200 p-4"
           >
             <div
-              class="mb-3 flex items-center justify-between gap-2"
+              class="mb-3 flex flex-wrap items-center justify-between gap-2"
             >
               <div
-                class="flex gap-2"
+                class="flex items-center gap-2"
               >
+                <img
+                  alt=""
+                  class="h-12 w-12 shrink-0 rounded border border-[#6B8B59]/40 object-cover"
+                  data-thumbnail="row"
+                  loading="lazy"
+                  src="/atmosphere/front mirror.webp"
+                />
                 <button
                   aria-label="Move Atmosphere photo 5 up"
                   class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-[#6B8B59] transition hover:bg-[#6B8B59] hover:text-white"
@@ -970,11 +1029,18 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
             class="mb-6 rounded border border-gray-200 p-4"
           >
             <div
-              class="mb-3 flex items-center justify-between gap-2"
+              class="mb-3 flex flex-wrap items-center justify-between gap-2"
             >
               <div
-                class="flex gap-2"
+                class="flex items-center gap-2"
               >
+                <img
+                  alt=""
+                  class="h-12 w-12 shrink-0 rounded border border-[#6B8B59]/40 object-cover"
+                  data-thumbnail="row"
+                  loading="lazy"
+                  src="/atmosphere/painting board.webp"
+                />
                 <button
                   aria-label="Move Atmosphere photo 6 up"
                   class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-[#6B8B59] transition hover:bg-[#6B8B59] hover:text-white"
@@ -1047,11 +1113,18 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
             class="mb-6 rounded border border-gray-200 p-4"
           >
             <div
-              class="mb-3 flex items-center justify-between gap-2"
+              class="mb-3 flex flex-wrap items-center justify-between gap-2"
             >
               <div
-                class="flex gap-2"
+                class="flex items-center gap-2"
               >
+                <img
+                  alt=""
+                  class="h-12 w-12 shrink-0 rounded border border-[#6B8B59]/40 object-cover"
+                  data-thumbnail="row"
+                  loading="lazy"
+                  src="/atmosphere/room.webp"
+                />
                 <button
                   aria-label="Move Atmosphere photo 7 up"
                   class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-[#6B8B59] transition hover:bg-[#6B8B59] hover:text-white"
@@ -1124,11 +1197,18 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
             class="mb-6 rounded border border-gray-200 p-4"
           >
             <div
-              class="mb-3 flex items-center justify-between gap-2"
+              class="mb-3 flex flex-wrap items-center justify-between gap-2"
             >
               <div
-                class="flex gap-2"
+                class="flex items-center gap-2"
               >
+                <img
+                  alt=""
+                  class="h-12 w-12 shrink-0 rounded border border-[#6B8B59]/40 object-cover"
+                  data-thumbnail="row"
+                  loading="lazy"
+                  src="/atmosphere/table.webp"
+                />
                 <button
                   aria-label="Move Atmosphere photo 8 up"
                   class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-[#6B8B59] transition hover:bg-[#6B8B59] hover:text-white"
@@ -1211,11 +1291,18 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
             class="mb-6 rounded border border-gray-200 p-4"
           >
             <div
-              class="mb-3 flex items-center justify-between gap-2"
+              class="mb-3 flex flex-wrap items-center justify-between gap-2"
             >
               <div
-                class="flex gap-2"
+                class="flex items-center gap-2"
               >
+                <img
+                  alt=""
+                  class="h-12 w-12 shrink-0 rounded border border-[#6B8B59]/40 object-cover"
+                  data-thumbnail="row"
+                  loading="lazy"
+                  src="/our_story/cut.webp"
+                />
                 <button
                   aria-label="Move Our Story photo 1 down"
                   class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-[#6B8B59] transition hover:bg-[#6B8B59] hover:text-white"
@@ -1281,11 +1368,18 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
             class="mb-6 rounded border border-gray-200 p-4"
           >
             <div
-              class="mb-3 flex items-center justify-between gap-2"
+              class="mb-3 flex flex-wrap items-center justify-between gap-2"
             >
               <div
-                class="flex gap-2"
+                class="flex items-center gap-2"
               >
+                <img
+                  alt=""
+                  class="h-12 w-12 shrink-0 rounded border border-[#6B8B59]/40 object-cover"
+                  data-thumbnail="row"
+                  loading="lazy"
+                  src="/our_story/dinner.webp"
+                />
                 <button
                   aria-label="Move Our Story photo 2 up"
                   class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-[#6B8B59] transition hover:bg-[#6B8B59] hover:text-white"
@@ -1358,11 +1452,18 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
             class="mb-6 rounded border border-gray-200 p-4"
           >
             <div
-              class="mb-3 flex items-center justify-between gap-2"
+              class="mb-3 flex flex-wrap items-center justify-between gap-2"
             >
               <div
-                class="flex gap-2"
+                class="flex items-center gap-2"
               >
+                <img
+                  alt=""
+                  class="h-12 w-12 shrink-0 rounded border border-[#6B8B59]/40 object-cover"
+                  data-thumbnail="row"
+                  loading="lazy"
+                  src="/our_story/handmaking.webp"
+                />
                 <button
                   aria-label="Move Our Story photo 3 up"
                   class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-[#6B8B59] transition hover:bg-[#6B8B59] hover:text-white"
@@ -1435,11 +1536,18 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
             class="mb-6 rounded border border-gray-200 p-4"
           >
             <div
-              class="mb-3 flex items-center justify-between gap-2"
+              class="mb-3 flex flex-wrap items-center justify-between gap-2"
             >
               <div
-                class="flex gap-2"
+                class="flex items-center gap-2"
               >
+                <img
+                  alt=""
+                  class="h-12 w-12 shrink-0 rounded border border-[#6B8B59]/40 object-cover"
+                  data-thumbnail="row"
+                  loading="lazy"
+                  src="/our_story/oven.webp"
+                />
                 <button
                   aria-label="Move Our Story photo 4 up"
                   class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-[#6B8B59] transition hover:bg-[#6B8B59] hover:text-white"
@@ -1512,11 +1620,18 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
             class="mb-6 rounded border border-gray-200 p-4"
           >
             <div
-              class="mb-3 flex items-center justify-between gap-2"
+              class="mb-3 flex flex-wrap items-center justify-between gap-2"
             >
               <div
-                class="flex gap-2"
+                class="flex items-center gap-2"
               >
+                <img
+                  alt=""
+                  class="h-12 w-12 shrink-0 rounded border border-[#6B8B59]/40 object-cover"
+                  data-thumbnail="row"
+                  loading="lazy"
+                  src="/our_story/shape.webp"
+                />
                 <button
                   aria-label="Move Our Story photo 5 up"
                   class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-[#6B8B59] transition hover:bg-[#6B8B59] hover:text-white"
@@ -1589,11 +1704,18 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
             class="mb-6 rounded border border-gray-200 p-4"
           >
             <div
-              class="mb-3 flex items-center justify-between gap-2"
+              class="mb-3 flex flex-wrap items-center justify-between gap-2"
             >
               <div
-                class="flex gap-2"
+                class="flex items-center gap-2"
               >
+                <img
+                  alt=""
+                  class="h-12 w-12 shrink-0 rounded border border-[#6B8B59]/40 object-cover"
+                  data-thumbnail="row"
+                  loading="lazy"
+                  src="/our_story/stuff.webp"
+                />
                 <button
                   aria-label="Move Our Story photo 6 up"
                   class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-[#6B8B59] transition hover:bg-[#6B8B59] hover:text-white"
@@ -3828,11 +3950,18 @@ exports[`the ten panels, as they render today > Press (press) 1`] = `
           class="mb-6 rounded border border-gray-200 p-4"
         >
           <div
-            class="mb-3 flex items-center justify-between gap-2"
+            class="mb-3 flex flex-wrap items-center justify-between gap-2"
           >
             <div
-              class="flex gap-2"
+              class="flex items-center gap-2"
             >
+              <img
+                alt=""
+                class="h-12 w-12 shrink-0 rounded border border-[#6B8B59]/40 object-cover"
+                data-thumbnail="row"
+                loading="lazy"
+                src="/press/p.webp"
+              />
               <button
                 aria-label="Move Article P down"
                 class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-[#6B8B59] transition hover:bg-[#6B8B59] hover:text-white"
@@ -3987,11 +4116,18 @@ exports[`the ten panels, as they render today > Press (press) 1`] = `
           class="mb-6 rounded border border-gray-200 p-4"
         >
           <div
-            class="mb-3 flex items-center justify-between gap-2"
+            class="mb-3 flex flex-wrap items-center justify-between gap-2"
           >
             <div
-              class="flex gap-2"
+              class="flex items-center gap-2"
             >
+              <img
+                alt=""
+                class="h-12 w-12 shrink-0 rounded border border-[#6B8B59]/40 object-cover"
+                data-thumbnail="row"
+                loading="lazy"
+                src="/press/q.webp"
+              />
               <button
                 aria-label="Move Article Q up"
                 class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-[#6B8B59] transition hover:bg-[#6B8B59] hover:text-white"

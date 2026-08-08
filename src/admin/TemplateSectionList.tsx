@@ -18,6 +18,7 @@ import { ADD_BUTTON_CLASSNAME, MOVE_BUTTON_CLASSNAME } from './RecordList';
 import type { TemplateSection, TemplateType } from '../content/types';
 import type { ValidationProblem } from '../content/validate';
 import type { StagedFile } from './staged';
+import type { ImagePreviews } from './previews';
 
 const TEMPLATE_LABELS: Record<TemplateType, string> = {
   text: 'Text',
@@ -108,9 +109,15 @@ export interface TemplateSectionListProps {
   // collide on generated ids.
   idPrefix: string;
   stage: (key: string, file: StagedFile | null) => void;
+  // Forwarded, untouched, to the TemplateContentForm this list renders --
+  // whose item-list and gallery-image rows DO get a thumbnail. This list's
+  // OWN rows deliberately get none: a page and a homepage section have no
+  // image field, and a placeholder box on a row that can never hold a
+  // picture is decoration.
+  previews?: ImagePreviews;
 }
 
-function TemplateSectionList({ items, onChange, onReorder, onAdd, problems, rowPrefix, idPrefix, stage }: TemplateSectionListProps) {
+function TemplateSectionList({ items, onChange, onReorder, onAdd, problems, rowPrefix, idPrefix, stage, previews }: TemplateSectionListProps) {
   // Which row (by array index) currently shows its own content form --
   // collapsed by default, the same reasoning EditableImage/CollageTile's
   // own single-open-panel-at-a-time posture documents: a homepage with a
@@ -225,6 +232,7 @@ function TemplateSectionList({ items, onChange, onReorder, onAdd, problems, rowP
                     problems={problems}
                     idPrefix={rowId}
                     stage={stage}
+                    previews={previews}
                   />
                 </div>
               )}

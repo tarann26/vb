@@ -613,6 +613,57 @@ describe("AdminApp: Task 9's wiring, proven end-to-end -- staged photos across D
   });
 });
 
+// The staged-photo precedence, driven through a REAL pick rather than a
+// hand-set preview store. This is the case that says the whole preview
+// plumbing -- AdminApp -> ManageShell -> the area -> RecordList ->
+// RecordForm -> Field -> PhotoField, and back out to the row's Thumbnail --
+// is actually connected end to end.
+//
+// Why it matters at all: PhotoField optimistically writes the eventual
+// published contentPath into the record the instant an upload stages, and
+// nothing lives at that path until the build finishes minutes later. Without
+// precedence, the row she just picked a photo for shows a broken image for
+// those minutes -- the exact anxiety this redesign exists to remove.
+describe('AdminApp: a photo she has just picked wins over the content path in the row thumbnail', () => {
+  beforeEach(() => {
+    FakeXHR.instances = [];
+    vi.stubGlobal('XMLHttpRequest', FakeXHR as unknown as typeof XMLHttpRequest);
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("the row's thumbnail shows the object URL, not the path with no file behind it yet", async () => {
+    stubFetch();
+    const user = userEvent.setup();
+    renderDashboard('/edit/manage/menu');
+
+    const section = await dishesSection();
+    await within(section).findByDisplayValue('Dish A');
+    const row = within(section).getByDisplayValue('Dish A').closest('li') as HTMLElement;
+    // Non-vacuous: before the pick it really is showing the committed path.
+    expect(row.querySelector('[data-thumbnail]')).toHaveAttribute('src', '/food/a.webp');
+
+    const dishPhotoInput = within(section).getAllByLabelText(DISH_FIELDS.image.label)[0];
+    await user.upload(dishPhotoInput, jpegFile('dish.jpg'));
+    await waitFor(() => expect(FakeXHR.instances).toHaveLength(1));
+    FakeXHR.instances[0].respond(200, {
+      path: 'assets-source/food/aaa111aaa111.jpg',
+      contentPath: '/food/aaa111aaa111.webp',
+    });
+
+    // The record's own field really was rewritten to the optimistic path...
+    await waitFor(() => expect(screen.getByText(/1 file staged/)).toBeInTheDocument());
+    // ...and the thumbnail is showing the blob anyway.
+    // Mutation this guards: drop the staged precedence in Thumbnail -- the
+    // src flips back to '/food/aaa111aaa111.webp' and this goes red.
+    await waitFor(() => {
+      const src = row.querySelector('[data-thumbnail]')?.getAttribute('src') ?? '';
+      expect(src.startsWith('blob:')).toBe(true);
+    });
+  });
+});
+
 describe("AdminApp: Task 9's wiring -- replacing a menu PDF under the SAME name carries real bytes, not a silent no-op", () => {
   beforeEach(() => {
     FakeXHR.instances = [];

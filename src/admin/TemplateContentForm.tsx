@@ -10,6 +10,8 @@
 // makes that narrowing hold together at every call site, this one included.
 import Field from './Field';
 import PhotoField from './PhotoField';
+import Thumbnail from './manage/Thumbnail';
+import type { ImagePreviews } from './previews';
 import {
   TEXT_TEMPLATE_FIELDS,
   ITEM_LIST_TEMPLATE_FIELDS,
@@ -46,6 +48,10 @@ export interface TemplateContentFormProps {
   rowPrefix: string;
   problems: ValidationProblem[];
   idPrefix: string;
+  // The shared preview store -- same reasoning as GalleryList's: this
+  // component already composes the staged key for each row itself, so
+  // handing it the store is one key shape rather than two.
+  previews?: ImagePreviews;
   stage: (key: string, file: StagedFile | null) => void;
 }
 
@@ -79,7 +85,7 @@ function withWhatsApp<T extends { whatsapp?: TemplateWhatsAppButton }>(
   return { ...content, whatsapp };
 }
 
-function TemplateContentForm({ section, onChange, rowPrefix, problems, idPrefix, stage }: TemplateContentFormProps) {
+function TemplateContentForm({ section, onChange, rowPrefix, problems, idPrefix, stage, previews }: TemplateContentFormProps) {
   const contentPath = `${rowPrefix}.content`;
   const contentProblems = problems.filter((p) => matches(p.field, contentPath));
   const headingProblems = leafProblems(contentProblems, `${contentPath}.heading`);
@@ -238,7 +244,12 @@ function TemplateContentForm({ section, onChange, rowPrefix, problems, idPrefix,
             }
             return (
               <li key={index} className="mb-3 rounded border border-gray-200 p-3">
-                <div className="mb-2 flex gap-2">
+                <div className="mb-2 flex flex-wrap items-center gap-2">
+                  <Thumbnail
+                    path={item.image}
+                    previewKey={`${idPrefix}:item-${index}:image`}
+                    previews={previews}
+                  />
                   {index > 0 && (
                     <button
                       type="button"
@@ -283,6 +294,8 @@ function TemplateContentForm({ section, onChange, rowPrefix, problems, idPrefix,
                   value={item.image}
                   onChange={(next) => patchItem({ image: next ?? '' })}
                   onStaged={(staged) => stage(`${idPrefix}:item-${index}:image`, fromStagedPhoto(staged))}
+                  previews={previews}
+                  previewKey={`${idPrefix}:item-${index}:image`}
                   problems={leafProblems(problems, `${itemPath}.image`)}
                 />
                 <Field
@@ -345,7 +358,12 @@ function TemplateContentForm({ section, onChange, rowPrefix, problems, idPrefix,
             }
             return (
               <li key={index} className="mb-3 rounded border border-gray-200 p-3">
-                <div className="mb-2 flex gap-2">
+                <div className="mb-2 flex flex-wrap items-center gap-2">
+                  <Thumbnail
+                    path={image.src}
+                    previewKey={`${idPrefix}:image-${index}:src`}
+                    previews={previews}
+                  />
                   {index > 0 && (
                     <button
                       type="button"
@@ -390,6 +408,8 @@ function TemplateContentForm({ section, onChange, rowPrefix, problems, idPrefix,
                   value={image.src}
                   onChange={(next) => patchImage({ src: next ?? '' })}
                   onStaged={(staged) => stage(`${idPrefix}:image-${index}:src`, fromStagedPhoto(staged))}
+                  previews={previews}
+                  previewKey={`${idPrefix}:image-${index}:src`}
                   problems={leafProblems(problems, `${imagePath}.src`)}
                 />
                 <Field

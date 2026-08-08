@@ -3,6 +3,7 @@ import Field from './Field';
 import { problemsFor, arrayIndexOf } from './problems';
 import type { FieldsOf } from './fields';
 import type { StagedPhoto } from './PhotoField';
+import type { ImagePreviews } from './previews';
 import type { ValidationProblem } from '../content/validate';
 
 export interface RecordFormProps<T> {
@@ -43,6 +44,13 @@ export interface RecordFormProps<T> {
   // is generic over every record type, including ones with no image field
   // at all, and cannot tell the two apart at compile time).
   onStaged?: (fieldKey: string, staged: StagedPhoto | null) => void;
+  // The shared preview store, and everything of the staged key that is
+  // already known at this level (the content file's name plus this record's
+  // id). This component appends its own field key, which is the same string
+  // `onStaged` above reports upward -- one key shape, composed in one
+  // direction and consumed in the other.
+  previews?: ImagePreviews;
+  previewKeyPrefix?: string;
   // Review finding (Task 9): every DOM id this component generates was
   // `field-${key}-${index}` alone, with no per-FILE namespace -- Dishes'
   // own first record and Drinks' own first record both produce
@@ -76,7 +84,17 @@ function belongsToAnotherIndex(field: string, index: number): boolean {
   return found !== undefined && found !== index;
 }
 
-function RecordForm<T extends object>({ fields, index, value, onChange, problems, onStaged, scope }: RecordFormProps<T>) {
+function RecordForm<T extends object>({
+  fields,
+  index,
+  value,
+  onChange,
+  problems,
+  onStaged,
+  previews,
+  previewKeyPrefix,
+  scope,
+}: RecordFormProps<T>) {
   const keys = Object.keys(fields) as (keyof T)[];
 
   // Every problem actually matched to a rendered field, tracked by
@@ -125,6 +143,8 @@ function RecordForm<T extends object>({ fields, index, value, onChange, problems
         // only ever reads `onStaged` inside its own `spec.kind === 'image'`
         // branch.
         onStaged={onStaged ? (staged) => onStaged(String(key), staged) : undefined}
+        previews={previews}
+        previewKey={previewKeyPrefix === undefined ? undefined : `${previewKeyPrefix}:${String(key)}`}
       />
     );
   }

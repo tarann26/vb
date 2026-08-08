@@ -17,14 +17,15 @@ import { useValidation } from '../useValidation';
 import type { StagedFile } from '../staged';
 import type { ContentRegistry } from '../publish';
 import type { DraftMap } from '../drafts';
+import type { ImagePreviews } from '../previews';
 import type { Article, Galleries, StoryContent } from '../../content/types';
 import type { AreaProps } from './area-props';
 
-const StoryPhotosArea: React.FC<AreaProps> = ({ registry, restoreDraft, stage, publishLocked }) => (
+const StoryPhotosArea: React.FC<AreaProps> = ({ registry, restoreDraft, stage, publishLocked, previews }) => (
   <>
     <SectionErrorBoundary name="Galleries">
       <CollapsibleSection id="galleries" heading="Galleries" locked={publishLocked}>
-        <GallerySection stage={stage} registry={registry} restoreDraft={restoreDraft} />
+        <GallerySection stage={stage} registry={registry} restoreDraft={restoreDraft} previews={previews} />
       </CollapsibleSection>
     </SectionErrorBoundary>
     <SectionErrorBoundary name="Our Story">
@@ -42,6 +43,8 @@ const StoryPhotosArea: React.FC<AreaProps> = ({ registry, restoreDraft, stage, p
           fields={ARTICLE_FIELDS}
           itemLabel={(article) => article.title || 'Untitled article'}
           makeBlank={blankArticle}
+          imageField={{ key: 'image', path: (article) => article.image }}
+          previews={previews}
           stage={stage}
           registry={registry}
           restoreDraft={restoreDraft}
@@ -64,10 +67,12 @@ function GallerySection({
   stage,
   registry,
   restoreDraft,
+  previews,
 }: {
   stage: (key: string, file: StagedFile | null) => void;
   registry: ContentRegistry;
   restoreDraft: DraftMap | null;
+  previews: ImagePreviews;
 }) {
   const [state, setState] = useState<GalleriesLoadState>({ status: 'loading' });
 
@@ -115,6 +120,7 @@ function GallerySection({
         }}
         problems={problems}
         stage={stage}
+        previews={previews}
       />
     </>
   );

@@ -26,7 +26,7 @@ import type { DraftMap } from '../drafts';
 import type { Dish, Drink, MenuFile } from '../../content/types';
 import type { AreaProps } from './area-props';
 
-const MenuArea: React.FC<AreaProps> = ({ registry, restoreDraft, stage, publishLocked }) => (
+const MenuArea: React.FC<AreaProps> = ({ registry, restoreDraft, stage, publishLocked, previews }) => (
   <>
     <SectionErrorBoundary name="Dishes">
       <CollapsibleSection id="dishes" heading="Dishes" locked={publishLocked}>
@@ -38,6 +38,8 @@ const MenuArea: React.FC<AreaProps> = ({ registry, restoreDraft, stage, publishL
           fields={DISH_FIELDS}
           itemLabel={(dish) => dish.name || 'Untitled dish'}
           makeBlank={blankDish}
+          imageField={{ key: 'image', path: (dish) => dish.image }}
+          previews={previews}
           stage={stage}
           registry={registry}
           restoreDraft={restoreDraft}
@@ -54,6 +56,8 @@ const MenuArea: React.FC<AreaProps> = ({ registry, restoreDraft, stage, publishL
           fields={DRINK_FIELDS}
           itemLabel={(drink) => drink.name || 'Untitled drink'}
           makeBlank={blankDrink}
+          imageField={{ key: 'image', path: (drink) => drink.image }}
+          previews={previews}
           stage={stage}
           registry={registry}
           restoreDraft={restoreDraft}

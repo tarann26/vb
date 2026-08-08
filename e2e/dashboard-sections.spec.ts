@@ -203,6 +203,101 @@ for (const viewport of VIEWPORTS) {
 }
 
 // ---------------------------------------------------------------------------
+// Thumbnails. jsdom gives every element a zero box, so "48x48" and "the
+// row's controls still start to the right of it and stay on screen" are
+// claims only a real browser can make -- and "non-zero" would pass for a 1x1
+// image and for one that pushed the row off screen.
+for (const viewport of VIEWPORTS) {
+  test.describe(`row thumbnails at ${viewport.label}`, () => {
+    test.use({ viewport: { width: viewport.width, height: viewport.height } });
+
+    test('are 48x48, and the row\'s own controls stay on screen beside them', async ({ page }) => {
+      await asReturningVisitor(page);
+      await openDashboard(page, '/edit/manage/menu');
+      await page.getByRole('button', { name: 'Dishes' }).click();
+
+      // The first row of the Dishes panel, whatever the committed
+      // dishes.json happens to call it -- this spec runs against the REAL
+      // content, not a fixture.
+      const row = page.locator('#section-panel-dishes li').first();
+      const thumbnail = row.locator('[data-thumbnail]').first();
+      await expect(thumbnail).toBeVisible();
+      const box = await thumbnail.boundingBox();
+      expect(box).not.toBeNull();
+      expect(box!.width, 'thumbnail width').toBeGreaterThanOrEqual(46);
+      expect(box!.width, 'thumbnail width').toBeLessThanOrEqual(50);
+      expect(box!.height, 'thumbnail height').toBeGreaterThanOrEqual(46);
+      expect(box!.height, 'thumbnail height').toBeLessThanOrEqual(50);
+
+      // The row's first control sits to the RIGHT of the picture and is
+      // still inside the viewport -- a thumbnail that pushed it off the
+      // edge would satisfy any "non-zero" assertion while making the row
+      // unusable at 390px.
+      const control = row.getByRole('button').first();
+      const controlBox = await control.boundingBox();
+      expect(controlBox).not.toBeNull();
+      expect(controlBox!.x).toBeGreaterThanOrEqual(box!.x + box!.width);
+      expect(controlBox!.x + controlBox!.width).toBeLessThanOrEqual(viewport.width);
+    });
+  });
+}
+
+// A MEASURED CORRECTION to the design document, recorded here because this
+// is where it was found.
+//
+// Section 3 of the design listed "hidden panels are inside hidden
+// containers, so their thumbnails are not fetched" as a justification for
+// mounting every area at once, and required it to be tested in a real
+// browser rather than asserted. It was, and it is FALSE: Chromium fetches
+// images inside a `display: none` subtree, `loading="lazy"` included --
+// measured here at 39 photo requests while sitting on Hours & Wording, which
+// has no photos at all.
+//
+// It is not a regression, and that is the part worth being precise about.
+// Every one of those requests was already being made before thumbnails
+// existed: PhotoField renders its own preview <img> for each photo field,
+// and folded panels have always been hidden with the same attribute. What
+// this test pins is the thing that actually matters and that a change here
+// really could break -- a 48px thumbnail must reuse the SAME asset the row's
+// PhotoField already requests, because there is no width-derivative pipeline
+// in this repo and adding a second URL per photo would double the page's
+// image traffic.
+test.describe('thumbnails add no image traffic of their own', () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  test('every thumbnail reuses an asset the row already requests, and nothing is fetched twice', async ({ page }) => {
+    const photoRequests: string[] = [];
+    page.on('request', (request) => {
+      if (/\/(food|mocktails|press|atmosphere|hero)\/[^?]*\.(webp|jpg|jpeg|png)$/.test(request.url())) {
+        photoRequests.push(request.url());
+      }
+    });
+
+    await asReturningVisitor(page);
+    await openDashboard(page, '/edit/manage/menu');
+    await page.getByRole('button', { name: 'Dishes' }).click();
+    await expect(page.locator('[data-thumbnail]').first()).toBeVisible();
+    await page.waitForTimeout(500);
+
+    // Each asset is fetched once, not once per <img> that names it.
+    expect(new Set(photoRequests).size).toBe(photoRequests.length);
+
+    // And no thumbnail names a URL nothing else on the page does. A
+    // derivative path invented for the 48px box would fail here, which is
+    // the regression this is shaped to catch.
+    const { thumbSrcs, otherSrcs } = await page.evaluate(() => {
+      const all = Array.from(document.querySelectorAll('img'));
+      return {
+        thumbSrcs: all.filter((el) => el.hasAttribute('data-thumbnail')).map((el) => el.src),
+        otherSrcs: all.filter((el) => !el.hasAttribute('data-thumbnail')).map((el) => el.src),
+      };
+    });
+    expect(thumbSrcs.length).toBeGreaterThan(0);
+    thumbSrcs.forEach((src) => expect(otherSrcs).toContain(src));
+  });
+});
+
+// ---------------------------------------------------------------------------
 test.describe('the laptop shell at 1440px', () => {
   test.use({ viewport: { width: 1440, height: 900 } });
 
