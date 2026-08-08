@@ -12,10 +12,15 @@
 import React from 'react';
 import AreaNav from './AreaNav';
 
-const AreaHome: React.FC = () => (
+export interface AreaHomeProps {
+  problemSlugs: string[];
+  unsavedSlugs: string[];
+}
+
+const AreaHome: React.FC<AreaHomeProps> = ({ problemSlugs, unsavedSlugs }) => (
   <div>
     <h2 className="mb-4 font-['Montserrat'] text-sm uppercase tracking-wide text-gray-500">What would you like to change?</h2>
-    <AreaNav variant="list" activeSlug="" />
+    <AreaNav variant="list" activeSlug="" problemSlugs={problemSlugs} unsavedSlugs={unsavedSlugs} />
   </div>
 );
 

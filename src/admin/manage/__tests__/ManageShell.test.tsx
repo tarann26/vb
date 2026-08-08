@@ -386,3 +386,99 @@ describe('a button the shell brought inside the publish form', () => {
     expect(screen.getByRole('heading', { name: 'Numbers' })).toBeInTheDocument();
   });
 });
+
+// ---------------------------------------------------------------------------
+describe('the nav says which area needs attention, and which has unsaved work', () => {
+  // CollapsibleSection's own decision #2 exists because "a dishes.json that
+  // would not load looked exactly like a dishes.json she had simply not
+  // opened yet". This redesign adds a SECOND level of hiding, so a failed
+  // copy.json raises its marker inside a container she cannot see while she
+  // is in Menu. This is the second-level answer to it.
+  it('marks the area a failed load happened in, from the other side of the shell', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url === '/api/wa') return new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } });
+        // Only copy.json fails. It lives in Hours & Wording, and the test
+        // sits on Menu -- so the message itself is inside a hidden
+        // container the whole time.
+        if (url.includes('copy.json')) return new Response('nope', { status: 500 });
+        if (url.includes('dishes.json')) {
+          return new Response(JSON.stringify({ content: JSON.stringify(DISHES), sha: 'sha-dishes' }));
+        }
+        return new Response(JSON.stringify({ content: '[]', sha: 'sha' }));
+      }),
+    );
+    renderDashboard('/edit/manage/menu', { wide: true });
+
+    const nav = await screen.findByRole('navigation', { name: 'Areas' });
+    expect(
+      await within(nav).findByRole('img', { name: 'Hours & Wording needs attention' }),
+    ).toBeInTheDocument();
+    // And the message really is out of reach from here, which is the whole
+    // reason the marker exists. Queried through the container rather than
+    // through `queryByText`, which ignores visibility entirely: the message
+    // IS in the document, inside a hidden area, which is exactly the
+    // problem.
+    const message = screen.getByText(/Could not load page copy/);
+    expect(message.closest('[data-area]')).toHaveAttribute('hidden');
+    expect(message.closest('[data-area]')).toHaveAttribute('data-area', 'details');
+    // No other area is marked.
+    expect(within(nav).queryByRole('img', { name: 'Menu needs attention' })).not.toBeInTheDocument();
+
+    // Mutation this guards: narrow the observer to `childList` on direct
+    // children only -- a problem raised several levels down inside a panel
+    // stops marking its area and this goes red.
+  });
+
+  it('marks the area holding unsaved work, with a DIFFERENT marker', async () => {
+    stubFetch();
+    const user = userEvent.setup();
+    renderDashboard('/edit/manage/menu', { wide: true });
+
+    const nav = await screen.findByRole('navigation', { name: 'Areas' });
+    // Non-vacuous: nothing is marked before she types.
+    expect(within(nav).queryByRole('img', { name: /unpublished changes/ })).not.toBeInTheDocument();
+
+    const dishName = await screen.findByDisplayValue('Dish A');
+    await user.type(dishName, '!');
+
+    expect(await within(nav).findByRole('img', { name: 'Menu has unpublished changes' })).toBeInTheDocument();
+    expect(within(nav).queryByRole('img', { name: 'Pages has unpublished changes' })).not.toBeInTheDocument();
+  });
+
+  // Two different signals. Reading either as the other is worse than showing
+  // neither, so they are told apart by name and not by colour alone.
+  //
+  // Mutation this guards: render the same element for both -- the two
+  // accessible names collapse into one and this goes red.
+  it('the two markers are distinguishable by name, not only by colour', async () => {
+    stubFetch();
+    const user = userEvent.setup();
+    renderDashboard('/edit/manage/menu', { wide: true });
+
+    const dishName = await screen.findByDisplayValue('Dish A');
+    await user.clear(dishName);
+
+    const nav = await screen.findByRole('navigation', { name: 'Areas' });
+    // An empty dish name is a real validation problem AND an unsaved change,
+    // so both markers land on the same area at once.
+    expect(await within(nav).findByRole('img', { name: 'Menu needs attention' })).toBeInTheDocument();
+    expect(within(nav).getByRole('img', { name: 'Menu has unpublished changes' })).toBeInTheDocument();
+  });
+
+  it('shows both markers on the phone home list too', async () => {
+    stubFetch();
+    const user = userEvent.setup();
+    renderDashboard('/edit/manage/menu');
+
+    const dishName = await screen.findByDisplayValue('Dish A');
+    await user.type(dishName, '!');
+
+    // Back to the home list, where the same nav renders as rows.
+    await user.click(screen.getByRole('link', { name: /All areas/ }));
+    const nav = await screen.findByRole('navigation', { name: 'Areas' });
+    expect(within(nav).getByRole('img', { name: 'Menu has unpublished changes' })).toBeInTheDocument();
+  });
+});

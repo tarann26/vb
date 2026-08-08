@@ -22,6 +22,22 @@ import { AREAS, areaPath } from './areas';
 
 export interface AreaNavProps {
   variant: 'sidebar' | 'list';
+  // Areas whose content is currently reporting a problem -- a failed load, a
+  // validation message -- anywhere inside them.
+  //
+  // CollapsibleSection already carries this idea one level down, and its own
+  // decision #2 records why: "a dishes.json that would not load looked
+  // exactly like a dishes.json she had simply not opened yet". This redesign
+  // adds a SECOND level of hiding, so a failed copy.json now raises its
+  // marker inside a container she cannot see while she is in Menu. Without
+  // this the message exists, correctly, somewhere she will never look.
+  problemSlugs?: string[];
+  // Areas holding unsaved work. A DIFFERENT signal from the one above, and
+  // the two must be visually and nameably distinguishable -- one means
+  // "something here is wrong", the other means "something here is not
+  // published yet", and reading either as the other is worse than showing
+  // neither.
+  unsavedSlugs?: string[];
   // The slug currently on screen. `''` at the bare URL, and a slug matching
   // no area on the not-found screen -- in both cases nothing is marked
   // current, which is correct: neither screen IS one of the five.
@@ -43,7 +59,7 @@ const SIDEBAR_IDLE = 'border-transparent hover:border-[#6B8B59]/40 hover:bg-[#6B
 const LIST_ITEM =
   'flex items-center justify-between gap-3 rounded border border-[#6B8B59]/30 bg-white px-4 py-4 transition hover:border-[#6B8B59]';
 
-const AreaNav: React.FC<AreaNavProps> = ({ variant, activeSlug }) => {
+const AreaNav: React.FC<AreaNavProps> = ({ variant, activeSlug, problemSlugs = [], unsavedSlugs = [] }) => {
   const sidebar = variant === 'sidebar';
   return (
     // `data-variant` is not styling: the sidebar and the drill-down list
@@ -75,11 +91,33 @@ const AreaNav: React.FC<AreaNavProps> = ({ variant, activeSlug }) => {
                       because the grouping is new to her. */}
                   <span className="mt-1 block font-['Montserrat'] text-xs text-gray-500">{area.description}</span>
                 </span>
-                {!sidebar && (
-                  <span aria-hidden="true" className="font-['Montserrat'] text-lg text-[#6B8B59]">
-                    ›
-                  </span>
-                )}
+                <span className="flex shrink-0 items-center gap-2">
+                  {problemSlugs.includes(area.slug) && (
+                    // An accessible NAME, not colour alone: the two markers
+                    // have to be told apart by a screen reader as well as by
+                    // eye, and red-versus-sage is not a distinction everyone
+                    // can make.
+                    <span
+                      role="img"
+                      aria-label={`${area.label} needs attention`}
+                      className="flex h-5 w-5 items-center justify-center rounded-full bg-red-600 text-xs font-bold text-white"
+                    >
+                      !
+                    </span>
+                  )}
+                  {unsavedSlugs.includes(area.slug) && (
+                    <span
+                      role="img"
+                      aria-label={`${area.label} has unpublished changes`}
+                      className="h-2 w-2 rounded-full bg-[#6B8B59]"
+                    />
+                  )}
+                  {!sidebar && (
+                    <span aria-hidden="true" className="font-['Montserrat'] text-lg text-[#6B8B59]">
+                      ›
+                    </span>
+                  )}
+                </span>
               </Link>
             </li>
           );

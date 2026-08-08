@@ -74,7 +74,7 @@
 // queryable alongside the phone list's, which is exactly the duplicated-nav
 // bug AreaNav's own header rules out -- and the real-browser assertion that
 // the sidebar element NEVER EXISTS at 390px could not hold either.
-import React, { useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, Navigate, useLocation } from 'react-router-dom';
 import PublishBar, { DraftBanner } from '../PublishBar';
 import type { PublishPhase } from '../PublishBar';
@@ -82,7 +82,7 @@ import StatusStrip from './StatusStrip';
 import { dirtyContentFiles } from '../publish';
 import SectionErrorBoundary from '../SectionErrorBoundary';
 import { markAreaSeeded, hasSeededArea, saveSectionOpen } from '../open-sections';
-import { AREAS, MANAGE_BASE, areaPath, findArea, slugFromPathname } from './areas';
+import { AREAS, MANAGE_BASE, areaForFile, areaPath, findArea, slugFromPathname } from './areas';
 import type { AreaSlug } from './areas';
 import AreaNav from './AreaNav';
 import { BRAND_NAME, BRAND_TAGLINE } from './brand';
@@ -97,6 +97,50 @@ import type { AreaProps } from '../areas/area-props';
 import type { ContentRegistry } from '../publish';
 import type { StagedFiles } from '../staged';
 import type { DraftMap } from '../drafts';
+
+// One area's container, with a MutationObserver on it.
+//
+// Mirrors CollapsibleSection's own implementation rather than inventing new
+// plumbing, and for the same reason: `role="alert"` is what every section in
+// this dashboard ALREADY uses for a failed load and for a validation
+// banner, so this needs nothing threaded through nine components and cannot
+// drift out of sync with them.
+//
+// An observer rather than a re-read on render, also for CollapsibleSection's
+// reason: an alert appears when a PANEL's own state changes -- its fetch
+// rejects, its debounced validation pass finishes -- and that re-renders the
+// panel alone. The shell is never told. Watching the subtree is what makes
+// the nav marker arrive at the same moment the message it stands in for
+// does.
+//
+// `subtree: true`, not direct children: a validation problem is raised deep
+// inside a RecordForm, several levels below this element.
+const AreaContainer: React.FC<{
+  slug: AreaSlug;
+  hidden: boolean;
+  onProblemChange: (slug: AreaSlug, hasProblem: boolean) => void;
+  children: React.ReactNode;
+}> = ({ slug, hidden, onProblemChange, children }) => {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const read = () => onProblemChange(slug, el.querySelector('[role="alert"]') !== null);
+    read();
+    const observer = new MutationObserver(read);
+    observer.observe(el, { childList: true, subtree: true, attributes: true, attributeFilter: ['role'] });
+    return () => observer.disconnect();
+  }, [slug, onProblemChange]);
+
+  // The `hidden` ATTRIBUTE, and no display utility on this element. See this
+  // file's header.
+  return (
+    <div ref={ref} data-area={slug} hidden={hidden}>
+      {children}
+    </div>
+  );
+};
 
 export interface ManageShellProps {
   registry: ContentRegistry;
@@ -146,7 +190,27 @@ const ManageShell: React.FC<ManageShellProps> = ({
   // ONE statement about a publish rather than two that contradict each
   // other. See PublishBar's `onPhaseChange`.
   const [publishPhase, setPublishPhase] = useState<PublishPhase>('idle');
+  // Which areas are currently reporting a problem somewhere inside them.
+  // A Set held in state, updated only when an area's answer actually
+  // changes, so an observer firing on every keystroke does not re-render the
+  // nav on every keystroke.
+  const [problemSlugs, setProblemSlugs] = useState<AreaSlug[]>([]);
+  const onProblemChange = useCallback((slug: AreaSlug, hasProblem: boolean) => {
+    setProblemSlugs((previous) => {
+      const had = previous.includes(slug);
+      if (had === hasProblem) return previous;
+      return hasProblem ? [...previous, slug] : previous.filter((s) => s !== slug);
+    });
+  }, []);
   const seededRef = useRef(false);
+
+  // The same dirty-file set the status strip's sentence is built from,
+  // mapped to areas -- so the strip says WHAT is unsaved and the nav says
+  // WHERE, from one source.
+  const dirtyFiles = dirtyContentFiles(registry.getEntries());
+  const unsavedSlugs = Array.from(
+    new Set(dirtyFiles.map((file) => areaForFile(file)?.slug).filter((s): s is AreaSlug => s !== undefined)),
+  );
 
   const isBareUrl = slug === '';
   const isNotFound = !isBareUrl && area === undefined;
@@ -207,7 +271,7 @@ const ManageShell: React.FC<ManageShellProps> = ({
             one screen she can be looking at while a draft is pending is
             still a screen that should say what is going on. */}
         <StatusStrip
-          dirtyFiles={dirtyContentFiles(registry.getEntries())}
+          dirtyFiles={dirtyFiles}
           stagedCount={Object.keys(stagedFiles.files).length}
           publishPhase={publishPhase}
         />
@@ -242,7 +306,14 @@ const ManageShell: React.FC<ManageShellProps> = ({
                 exists to prevent. */}
             {redirectingHome && <Navigate replace to={areaPath(AREAS[0].slug)} />}
             <div className="lg:flex lg:items-start lg:gap-8">
-              {showSidebar && <AreaNav variant="sidebar" activeSlug={slug} />}
+              {showSidebar && (
+                <AreaNav
+                  variant="sidebar"
+                  activeSlug={slug}
+                  problemSlugs={problemSlugs}
+                  unsavedSlugs={unsavedSlugs}
+                />
+              )}
               <div className="min-w-0 flex-1">
                 {showBackControl && (
                   <Link
@@ -267,12 +338,21 @@ const ManageShell: React.FC<ManageShellProps> = ({
                   onPhaseChange={setPublishPhase}
                   onUnauthenticated={onUnauthenticated}
                 >
-                  {showHomeList && <AreaHome />}
-                  {isNotFound && <AreaNotFound showAreaList={!showSidebar} />}
+                  {showHomeList && <AreaHome problemSlugs={problemSlugs} unsavedSlugs={unsavedSlugs} />}
+                  {isNotFound && (
+                    <AreaNotFound
+                      showAreaList={!showSidebar}
+                      problemSlugs={problemSlugs}
+                      unsavedSlugs={unsavedSlugs}
+                    />
+                  )}
                   {AREAS.map((definition) => (
-                    // The `hidden` ATTRIBUTE, and no display utility on this
-                    // element. See this file's header.
-                    <div key={definition.slug} data-area={definition.slug} hidden={definition.slug !== slug}>
+                    <AreaContainer
+                      key={definition.slug}
+                      slug={definition.slug}
+                      hidden={definition.slug !== slug}
+                      onProblemChange={onProblemChange}
+                    >
                       {/* One boundary per AREA, inside the shell, on top of
                           the per-panel boundaries each area already carries.
                           An area whose own module throws leaves the lockup
@@ -282,7 +362,7 @@ const ManageShell: React.FC<ManageShellProps> = ({
                       <SectionErrorBoundary name={definition.label}>
                         {renderArea(definition.slug, definition.slug === slug, areaProps)}
                       </SectionErrorBoundary>
-                    </div>
+                    </AreaContainer>
                   ))}
                 </PublishBar>
               </div>

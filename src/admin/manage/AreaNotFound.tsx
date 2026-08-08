@@ -22,16 +22,20 @@ export interface AreaNotFoundProps {
   // time -- see AreaNav's own header for why two is a bug rather than a
   // redundancy.
   showAreaList: boolean;
+  problemSlugs: string[];
+  unsavedSlugs: string[];
 }
 
-const AreaNotFound: React.FC<AreaNotFoundProps> = ({ showAreaList }) => (
+const AreaNotFound: React.FC<AreaNotFoundProps> = ({ showAreaList, problemSlugs, unsavedSlugs }) => (
   <div>
     <h2 className="mb-2 font-['Montserrat'] text-lg uppercase tracking-wide text-[#222]">That page isn&rsquo;t here</h2>
     <p className="mb-6 font-['Montserrat'] text-sm text-gray-600">
       The address you followed doesn&rsquo;t match anything on this dashboard. Nothing is wrong with your website
       {showAreaList ? ' — pick one of these instead.' : ' — pick an area from the list beside this one.'}
     </p>
-    {showAreaList && <AreaNav variant="list" activeSlug="" />}
+    {showAreaList && (
+      <AreaNav variant="list" activeSlug="" problemSlugs={problemSlugs} unsavedSlugs={unsavedSlugs} />
+    )}
   </div>
 );
 
