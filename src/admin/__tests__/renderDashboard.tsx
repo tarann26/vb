@@ -27,6 +27,8 @@ import { render, type RenderResult } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { vi } from 'vitest';
 import AdminApp from '../AdminApp';
+import { AREAS } from '../manage/areas';
+import { markAreaSeeded } from '../open-sections';
 
 export interface RenderDashboardOptions {
   // True for the laptop layout, where the persistent sidebar exists and the
@@ -64,4 +66,17 @@ export function renderDashboard(
       <AdminApp />
     </MemoryRouter>,
   );
+}
+
+// "Not her first ever visit to this dashboard."
+//
+// The shell opens the FIRST panel of each area once, the first time that
+// area is seen on a given device (open-sections.ts's hasSeededArea /
+// markAreaSeeded). Tests clear localStorage between cases, so without this
+// every case is a first-ever visit and Dishes, Pages, Galleries and Opening
+// hours all start OPEN. That is correct production behaviour and most cases
+// do not care -- but a case about what a FOLDED panel does has to say which
+// state it means.
+export function markEveryAreaSeeded(): void {
+  AREAS.forEach((area) => markAreaSeeded(area.slug));
 }

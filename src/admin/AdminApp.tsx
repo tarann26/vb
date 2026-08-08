@@ -1,19 +1,16 @@
 import React, { useRef, useState } from 'react';
 import { useSession } from './session';
 import Login from './Login';
-import PublishBar, { DraftBanner } from './PublishBar';
 import { useStagedFiles } from './staged';
 import { useContentRegistry } from './publish';
 import { loadDraft, loadDraftStagedCount, clearDraft } from './drafts';
 import type { DraftMap } from './drafts';
-// The five areas /edit/manage is now organised into. Every panel
-// implementation lives in the area module that renders it; this file keeps
-// only the session gate, the shared plumbing (registry, staged files, draft
-// state, publish lock) and the mount.
-import MenuArea from './areas/MenuArea';
-import PagesArea from './areas/PagesArea';
-import StoryPhotosArea from './areas/StoryPhotosArea';
-import DetailsArea from './areas/DetailsArea';
+// The shell: the lockup, the nav, the one PublishBar, and the five areas
+// with the route deciding which one is visible. Every panel implementation
+// lives in the area module that renders it; this file keeps only the session
+// gate, the shared plumbing (registry, staged files, draft state, publish
+// lock) and the mount.
+import ManageShell from './manage/ManageShell';
 
 // Default export, deliberately: React.lazy (src/App.tsx) requires one --
 // there is no lazy() form that takes a named export.
@@ -149,88 +146,46 @@ const AdminApp: React.FC = () => {
   const areaProps = { registry, restoreDraft, stage, publishLocked };
 
   return (
-    <div className="min-h-screen bg-[#f7f5f0] px-4 py-10">
-      <div className="mx-auto max-w-3xl">
-        <h1 className="mb-2 font-['Parisienne'] text-3xl text-[#222]">Via Bianca Dashboard</h1>
-        {otherSurfaceDraftExists && (
-          <p className="mb-4 font-['Montserrat'] text-sm text-gray-500">
-            You also have unpublished changes saved on the live-page editor (/edit) — untouched by anything you do
-            here.
-          </p>
-        )}
-        {pendingDraft ? (
-          <DraftBanner
-            draft={pendingDraft}
-            // Minor review finding: `pendingStagedCount` alone is honest
-            // about a genuine RELOAD (staged.ts's own in-memory collector,
-            // `stagedFiles` here, really is empty then) but wrong for an
-            // in-page 401 re-login -- AdminApp never unmounts on that path
-            // (this component's own comment above on why the banner is
-            // re-offered anyway), so `stagedFiles` is the SAME collector
-            // instance she staged into before the 401, still holding every
-            // byte. Telling her those photos "will need to be picked
-            // again" when they are, right now, still in memory and will
-            // publish correctly is the opposite of what's true. Subtracting
-            // what is STILL staged from what the draft recorded as staged
-            // leaves only what a real reload would have actually lost.
-            staleStagedCount={Math.max(0, pendingStagedCount - Object.keys(stagedFiles).length)}
-            onRestore={() => {
-              setRestoreDraft(pendingDraft);
-              setPendingDraft(null);
-            }}
-            onDiscard={() => {
-              clearDraft('dashboard');
-              setPendingDraft(null);
-            }}
-          />
-        ) : (
-          <PublishBar
-            registry={registry}
-            stagedFiles={stagedFilesApi}
-            draftSurface="dashboard"
-            onPublishLockChange={setPublishLocked}
-            onUnauthenticated={(notice) => {
-              // Set BEFORE logOut -- both are plain setState calls in the
-              // same synchronous handler, batched into the one re-render
-              // that flips `status`, so <Login>'s very first paint already
-              // has the notice; there is no intermediate frame where the
-              // dashboard is gone and the notice isn't there yet. `notice`
-              // itself comes from PublishBar (its own prop comment) -- it
-              // already knows whether this 401 landed BEFORE or AFTER the
-              // commit succeeded, which is not something this callback can
-              // tell on its own.
-              setSignOutNotice(notice);
-              logOut();
-            }}
-          >
-            {/* The four content areas, rendered in sequence and all
-                visible. This commit is PURE CODE MOTION: the same ten
-                panels, on one page, in the same fold state, with no router
-                and no shell yet. Splitting the move at that boundary is
-                what makes it provably behaviour-neutral -- every
-                AdminApp.test.tsx case and e2e/dashboard-sections.spec.ts
-                still describe this screen exactly -- so all the risk of
-                losing a panel is isolated from all the risk of the routing
-                model, which arrives next and as a small diff.
-
-                Each area's own SectionErrorBoundary-per-panel wrapping
-                moved with it, unchanged: a malformed galleries.json still
-                costs the Galleries panel alone and leaves Our Story and
-                Press beside it working.
-
-                `publishLocked` is still applied as one `disabled`
-                <fieldset> per panel, inside CollapsibleSection, and never
-                as one wrapper here -- see that component's own comment for
-                why a wrapper also swallowed every fold toggle and made the
-                whole page inert for the length of a publish request. */}
-            <MenuArea {...areaProps} />
-            <PagesArea {...areaProps} />
-            <StoryPhotosArea {...areaProps} />
-            <DetailsArea {...areaProps} />
-          </PublishBar>
-        )}
-      </div>
-    </div>
+    <ManageShell
+      registry={registry}
+      stagedFiles={stagedFilesApi}
+      areaProps={areaProps}
+      otherSurfaceDraftExists={otherSurfaceDraftExists}
+      pendingDraft={pendingDraft}
+      // Minor review finding: `pendingStagedCount` alone is honest about a
+      // genuine RELOAD (staged.ts's own in-memory collector, `stagedFiles`
+      // here, really is empty then) but wrong for an in-page 401 re-login --
+      // AdminApp never unmounts on that path (this component's own comment
+      // above on why the banner is re-offered anyway), so `stagedFiles` is
+      // the SAME collector instance she staged into before the 401, still
+      // holding every byte. Telling her those photos "will need to be picked
+      // again" when they are, right now, still in memory and will publish
+      // correctly is the opposite of what's true. Subtracting what is STILL
+      // staged from what the draft recorded as staged leaves only what a
+      // real reload would have actually lost.
+      staleStagedCount={Math.max(0, pendingStagedCount - Object.keys(stagedFiles).length)}
+      onRestore={() => {
+        setRestoreDraft(pendingDraft);
+        setPendingDraft(null);
+      }}
+      onDiscard={() => {
+        clearDraft('dashboard');
+        setPendingDraft(null);
+      }}
+      onPublishLockChange={setPublishLocked}
+      onUnauthenticated={(notice) => {
+        // Set BEFORE logOut -- both are plain setState calls in the same
+        // synchronous handler, batched into the one re-render that flips
+        // `status`, so <Login>'s very first paint already has the notice;
+        // there is no intermediate frame where the dashboard is gone and the
+        // notice isn't there yet. `notice` itself comes from PublishBar (its
+        // own prop comment) -- it already knows whether this 401 landed
+        // BEFORE or AFTER the commit succeeded, which is not something this
+        // callback can tell on its own.
+        setSignOutNotice(notice);
+        logOut();
+      }}
+    />
   );
 };
 

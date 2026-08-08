@@ -16,7 +16,7 @@ import userEvent from '@testing-library/user-event';
 // asserts on: Menu (dishes, drinks, menus), Pages (pages, homepage
 // sections), Story & Photos (galleries, our story, press) and Hours &
 // Wording (opening hours, page copy).
-import { renderDashboard } from './renderDashboard';
+import { markEveryAreaSeeded, renderDashboard } from './renderDashboard';
 import { DISH_FIELDS } from '../fields';
 import {
   COPY,
@@ -98,6 +98,10 @@ describe('AdminApp: fetches each content file once logged in, loading state firs
   // the rest of this test stays green, which is exactly the gap
   // default-folded opened.
   it('marks the folded section as needing attention, and shows the real message once opened', async () => {
+    // This case is about a FOLDED panel, so it has to be a return visit:
+    // on a first-ever visit the shell opens each area's first panel once,
+    // and an open panel shows the real message rather than the marker.
+    markEveryAreaSeeded();
     stubFetch(new Response(null, { status: 401 }));
     renderDashboard('/edit/manage/menu');
     expect(await screen.findByText(/needs attention/i)).toBeInTheDocument();
@@ -1071,6 +1075,9 @@ describe('AdminApp: editing is paused while a publish request is in flight', () 
   // regardless, which is how this stayed invisible.)
   it('a section heading still folds while the POST is open -- it is navigation, not editing', async () => {
     const user = userEvent.setup();
+    // A return visit, so Dishes genuinely starts folded -- the "non-vacuous"
+    // step below depends on it (see markEveryAreaSeeded).
+    markEveryAreaSeeded();
     stubFetchWithPublish(() => new Promise<Response>(() => {}));
     renderDashboard('/edit/manage/menu');
     const input = (await screen.findByDisplayValue('Dish A')) as HTMLInputElement;
