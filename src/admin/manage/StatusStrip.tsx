@@ -161,34 +161,59 @@ const StatusStrip: React.FC<StatusStripProps> = ({
     // CollapsibleSection renders role="status" for a folded panel with a
     // problem, and with all five areas mounted several of those can exist at
     // once, so getByRole('status') is ambiguous by construction.
+    // Two columns once there is width for them, one stack when there is not.
+    // As a single stack this was four short lines pinned to the left of a
+    // full-width box, so on a laptop roughly two thirds of the strip was
+    // empty -- which reads as an unfinished component rather than a calm one.
+    // Splitting it puts what is true NOW on the left and what happened LAST
+    // on the right, which is also the more useful reading order.
+    //
+    // The DOM order is unchanged, so the reading order for a screen reader
+    // and the queries every test uses are unaffected; only the visual
+    // arrangement moves.
     <section
       aria-label="Site status"
-      className="mb-4 rounded border border-[#6B8B59]/30 bg-white px-4 py-3 font-['Montserrat'] text-sm"
+      // Vertical spacing here is NOT free, and the padding was briefly raised
+      // before an e2e run caught why: at 390x844 this strip sits above the
+      // five home rows, and the spec requires all five to fit one phone
+      // screen without scrolling. Eight extra pixels of padding pushed
+      // "Numbers" six pixels below the fold. jsdom cannot see any of that --
+      // 2557 unit tests passed on the broken version.
+      //
+      // So the two-column arrangement is applied only from the small
+      // breakpoint up, where the vertical budget is not contested, and the
+      // phone stack keeps exactly the spacing it had.
+      className="mb-4 rounded border border-[#6B8B59]/40 bg-white px-4 py-3 font-['Montserrat'] text-sm shadow-sm sm:flex sm:items-start sm:justify-between sm:gap-8"
     >
-      {/* The live region is SCOPED to the two things whose change is worth
-          announcing. Wrapping the whole strip would re-announce it every 60
-          seconds, when "2 hours ago" becomes "3 hours ago". */}
-      <div role="status" aria-live="polite">
-        {liveness !== null && <p className="text-[#222]">{liveness}</p>}
-        {/* Never blank: a blank strip is indistinguishable from a broken
-            one, which is the complaint this header exists to answer. */}
-        <p className="text-gray-600">{unsavedSentence}</p>
+      <div>
+        {/* The live region is SCOPED to the two things whose change is worth
+            announcing. Wrapping the whole strip would re-announce it every 60
+            seconds, when "2 hours ago" becomes "3 hours ago". */}
+        <div role="status" aria-live="polite">
+          {liveness !== null && <p className="font-semibold text-[#222]">{liveness}</p>}
+          {/* Never blank: a blank strip is indistinguishable from a broken
+              one, which is the complaint this header exists to answer. */}
+          <p className="text-gray-600">{unsavedSentence}</p>
+        </div>
       </div>
-      {/* Outside the live region, deliberately -- see above. */}
-      <p className="mt-1 text-gray-500" title={lastPublished.title}>
-        {lastPublished.text}
-      </p>
-      {/* Relative to this origin rather than site.json's seo.url: the
-          dashboard is served from the same host as the site it edits, so
-          this stays correct through the move to the real domain with nothing
-          to remember to change -- and it does not make the strip wait on a
-          content file that a different panel happens to own. */}
-      <p className="mt-2">
-        <a href="/" target="_blank" rel="noopener" className="text-[#6B8B59] underline">
-          {viewSiteLabel(hasUnsaved)}
-        </a>
-      </p>
-      {hasUnsaved && <p className="text-xs text-gray-500">your unpublished changes aren&rsquo;t on it yet.</p>}
+
+      <div className="mt-2 shrink-0 sm:mt-0 sm:text-right">
+        {/* Outside the live region, deliberately -- see above. */}
+        <p className="text-gray-500" title={lastPublished.title}>
+          {lastPublished.text}
+        </p>
+        {/* Relative to this origin rather than site.json's seo.url: the
+            dashboard is served from the same host as the site it edits, so
+            this stays correct through the move to the real domain with nothing
+            to remember to change -- and it does not make the strip wait on a
+            content file that a different panel happens to own. */}
+        <p className="mt-1">
+          <a href="/" target="_blank" rel="noopener" className="text-[#6B8B59] underline">
+            {viewSiteLabel(hasUnsaved)}
+          </a>
+        </p>
+        {hasUnsaved && <p className="text-xs text-gray-500">your unpublished changes aren&rsquo;t on it yet.</p>}
+      </div>
     </section>
   );
 };

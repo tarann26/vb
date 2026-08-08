@@ -248,7 +248,22 @@ const ManageShell: React.FC<ManageShellProps> = ({
   }
 
   return (
-    <div className="min-h-screen bg-[#f7f5f0] px-4 py-10">
+    // Positioned, and stacked above the brick texture `body::before` paints
+    // over the whole app (src/index.css). That texture is a PUBLIC-SITE
+    // element: it sits behind photography and large display type, where a
+    // faint wall reads as warmth. Behind a dense editing form it reads as
+    // dirt -- white panels on a grey-brown wash, every border and every field
+    // label losing contrast, which is most of why this screen still looked
+    // sad after it had been reorganised.
+    //
+    // Suppressed by stacking rather than by editing that rule, because the
+    // rule is correct for the site it was written for. `body::before` is
+    // fixed with a zero stack level, so it paints ABOVE the background of any
+    // ordinary unpositioned block -- which is exactly why the cream below was
+    // being washed out rather than covering it. A positioned wrapper on a
+    // higher level puts the whole dashboard in front of it instead, and the
+    // public site is untouched.
+    <div className="relative z-10 min-h-screen bg-[#f7f5f0] px-4 py-10">
       <div className="mx-auto max-w-5xl">
         {/* The real lockup, not a heading that says "Dashboard". Two lines,
             capped at two by design: the 390px header budget is what makes
