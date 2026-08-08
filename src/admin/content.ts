@@ -71,12 +71,21 @@ export type ContentFileName = (typeof CONTENT_FILES)[number];
 // of her, and a filename with an extension is no more meaningful to someone
 // who has never seen this repository.
 //
-// Every string here is the heading AdminApp.tsx already uses for the
-// section that owns that file (its own SectionErrorBoundary `name`), so the
-// panel names the same things the dashboard does rather than inventing a
-// second vocabulary for the same ten files. site.json is the one that needs
-// saying out loud: the dashboard section that edits it is headed "Opening
-// hours", and that is what it is called here too.
+// Every string here is the heading the dashboard already uses for the panel
+// that owns that file (its own SectionErrorBoundary `name`), so the publish
+// confirmation, the status strip and the undo description all name the same
+// things the panels do rather than inventing a second vocabulary for the
+// same ten files. site.json is the one that needs saying out loud: the panel
+// that edits it is headed "Opening hours", and that is what it is called
+// here too.
+//
+// Three of these were renamed alongside their panels ("Menus" -> "Menu
+// PDFs", "Page copy" -> "Words on the site", "Homepage sections" -> "What
+// shows on the homepage"). Renaming only the headings would have left the
+// status strip saying "Menus has changes you haven't published yet" three
+// inches under a panel headed "Menu PDFs" -- two names for one thing, in
+// the same glance, which is the exact defect the two unsaved sentences were
+// split to avoid.
 //
 // Typed as a TOTAL Record over ContentFileName, not a partial one or a
 // lookup with a fallback: an eleventh content file added to CONTENT_FILES
@@ -91,9 +100,9 @@ export const CONTENT_FILE_LABELS: Record<ContentFileName, string> = {
   'drinks.json': 'Drinks',
   'press.json': 'Press',
   'story.json': 'Our Story',
-  'menus.json': 'Menus',
-  'copy.json': 'Page copy',
-  'sections.json': 'Homepage sections',
+  'menus.json': 'Menu PDFs',
+  'copy.json': 'Words on the site',
+  'sections.json': 'What shows on the homepage',
   'pages.json': 'Pages',
 };
 

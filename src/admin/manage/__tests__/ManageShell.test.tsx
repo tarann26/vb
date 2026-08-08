@@ -104,7 +104,7 @@ describe.each([
     // Menu's, Pages' and Hours & Wording's panels are mounted but hidden, so
     // a role query -- which is what a screen reader and the tab order both
     // see -- does not reach them.
-    ['Dishes', 'Drinks', 'Menus', 'Pages', 'Opening hours', 'Page copy'].forEach((heading) => {
+    ['Dishes', 'Drinks', 'Menu PDFs', 'Pages', 'Opening hours', 'Words on the site'].forEach((heading) => {
       expect(screen.queryByRole('heading', { name: heading })).not.toBeInTheDocument();
     });
   });
@@ -298,7 +298,7 @@ describe('the first panel of each area opens by itself, exactly once', () => {
 
     expect(screen.getByRole('button', { name: 'Dishes' })).toHaveAttribute('aria-expanded', 'true');
     expect(screen.getByRole('button', { name: 'Drinks' })).toHaveAttribute('aria-expanded', 'false');
-    expect(screen.getByRole('button', { name: 'Menus' })).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByRole('button', { name: 'Menu PDFs' })).toHaveAttribute('aria-expanded', 'false');
     expect(window.localStorage.getItem(`${AREA_SEEDED_KEY_PREFIX}menu`)).toBe('1');
   });
 

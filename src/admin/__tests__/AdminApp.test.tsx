@@ -315,7 +315,7 @@ describe('AdminApp: the real "Homepage sections" screen', () => {
   it('fetches sections.json and renders all seven, in the order the file gave them', async () => {
     stubFetch();
     renderDashboard('/edit/manage/pages');
-    const section = await sectionByHeading('Homepage sections');
+    const section = await sectionByHeading('What shows on the homepage');
     expect(within(section).getAllByText(/^(Hero|Our Story|Atmosfera|Menu|Drinks|Stories|Visit Us)$/)).toHaveLength(7);
   });
 
@@ -323,7 +323,7 @@ describe('AdminApp: the real "Homepage sections" screen', () => {
     stubFetch();
     const user = userEvent.setup();
     renderDashboard('/edit/manage/pages');
-    const section = await sectionByHeading('Homepage sections');
+    const section = await sectionByHeading('What shows on the homepage');
     await within(section).findByText('Hero');
 
     await user.click(within(section).getByRole('button', { name: 'Move Hero down' }));
@@ -339,7 +339,7 @@ describe('AdminApp: the real "Homepage sections" screen', () => {
     stubFetch();
     const user = userEvent.setup();
     renderDashboard('/edit/manage/pages');
-    const section = await sectionByHeading('Homepage sections');
+    const section = await sectionByHeading('What shows on the homepage');
     await within(section).findByText('Hero');
 
     const heroToggle = within(section).getAllByLabelText('Shown on homepage')[0];
@@ -356,7 +356,7 @@ describe('AdminApp: the real "Homepage sections" screen', () => {
     stubFetch();
     const user = userEvent.setup();
     renderDashboard('/edit/manage/pages');
-    const section = await sectionByHeading('Homepage sections');
+    const section = await sectionByHeading('What shows on the homepage');
     await within(section).findByText('Hero');
 
     await user.click(within(section).getByRole('button', { name: 'Add a text section' }));
@@ -452,7 +452,7 @@ describe('AdminApp: the new prose, gallery, menus and copy screens all render, f
   it('renders Menus, prefilled with both real menu labels', async () => {
     stubFetch();
     renderDashboard('/edit/manage/menu');
-    const section = await sectionByHeading('Menus');
+    const section = await sectionByHeading('Menu PDFs');
     expect(await within(section).findByDisplayValue('Food Menu')).toBeInTheDocument();
     expect(within(section).getByDisplayValue('Drinks Menu')).toBeInTheDocument();
   });
@@ -485,7 +485,7 @@ describe('AdminApp: the new prose, gallery, menus and copy screens all render, f
   it('renders Page copy, grouped by section, with the real footer hours heading value', async () => {
     stubFetch();
     renderDashboard('/edit/manage/details');
-    const section = await sectionByHeading('Page copy');
+    const section = await sectionByHeading('Words on the site');
     expect(await within(section).findByDisplayValue(COPY.footer.hoursHeading)).toBeInTheDocument();
     expect(within(section).getByRole('heading', { name: 'Footer' })).toBeInTheDocument();
   });
@@ -496,7 +496,7 @@ describe('AdminApp: the new prose, gallery, menus and copy screens all render, f
   it("shows footer.followLabel's non-breaking space as a visible marker, not an invisible raw space", async () => {
     stubFetch();
     renderDashboard('/edit/manage/details');
-    const section = await sectionByHeading('Page copy');
+    const section = await sectionByHeading('Words on the site');
     await within(section).findByDisplayValue(COPY.footer.hoursHeading);
     expect(within(section).getByText(/Shown with its non-breaking space marked:/)).toHaveTextContent('␣');
   });
@@ -678,7 +678,7 @@ describe("AdminApp: Task 9's wiring -- replacing a menu PDF under the SAME name 
     stubFetch();
     const user = userEvent.setup();
     renderDashboard('/edit/manage/menu');
-    const section = await sectionByHeading('Menus');
+    const section = await sectionByHeading('Menu PDFs');
     await within(section).findByDisplayValue('Food Menu');
 
     const pdfInput = within(section).getAllByLabelText('PDF file')[0];
@@ -692,7 +692,7 @@ describe("AdminApp: Task 9's wiring -- replacing a menu PDF under the SAME name 
     stubFetch();
     const user = userEvent.setup();
     renderDashboard('/edit/manage/menu');
-    const section = await sectionByHeading('Menus');
+    const section = await sectionByHeading('Menu PDFs');
     await within(section).findByDisplayValue('Food Menu');
 
     const pdfInput = within(section).getAllByLabelText('PDF file')[0];

@@ -153,7 +153,7 @@ for (const viewport of VIEWPORTS) {
 
       await expect(page.getByRole('button', { name: 'Add a drink' })).toBeVisible();
       // Menus stayed folded -- opening one panel is not opening the area.
-      await expect(page.getByRole('button', { name: 'Menus' })).toHaveAttribute('aria-expanded', 'false');
+      await expect(page.getByRole('button', { name: 'Menu PDFs' })).toHaveAttribute('aria-expanded', 'false');
       const openHeight = await page.evaluate(() => document.body.scrollHeight);
       expect(openHeight, 'opening a panel did not make the page any taller').toBeGreaterThan(foldedHeight);
     });
@@ -164,13 +164,13 @@ for (const viewport of VIEWPORTS) {
     test('remembers what she left open across a reload', async ({ page }) => {
       await asReturningVisitor(page);
       await openDashboard(page, '/edit/manage/menu');
-      await page.getByRole('button', { name: 'Menus' }).click();
-      await expect(page.getByRole('button', { name: 'Menus' })).toHaveAttribute('aria-expanded', 'true');
+      await page.getByRole('button', { name: 'Menu PDFs' }).click();
+      await expect(page.getByRole('button', { name: 'Menu PDFs' })).toHaveAttribute('aria-expanded', 'true');
       await expect(page.getByRole('button', { name: 'Dishes' })).toHaveAttribute('aria-expanded', 'false');
 
       await page.reload();
       await expect(page.getByRole('heading', { name: LOCKUP_ACCESSIBLE_NAME })).toBeVisible();
-      await expect(page.getByRole('button', { name: 'Menus' })).toHaveAttribute('aria-expanded', 'true');
+      await expect(page.getByRole('button', { name: 'Menu PDFs' })).toHaveAttribute('aria-expanded', 'true');
       await expect(page.getByRole('button', { name: 'Dishes' })).toHaveAttribute('aria-expanded', 'false');
     });
   });

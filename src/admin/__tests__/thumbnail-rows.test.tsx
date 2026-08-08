@@ -154,11 +154,11 @@ describe('the panels that get no thumbnail at all', () => {
   // and decoration on a row that means nothing is the "bland" complaint in
   // miniature.
   it.each([
-    { label: 'Menus', route: '/edit/manage/menu', heading: 'Menus', panel: 'menus' },
+    { label: 'Menu PDFs', route: '/edit/manage/menu', heading: 'Menu PDFs', panel: 'menus' },
     { label: 'Pages', route: '/edit/manage/pages', heading: 'Pages', panel: 'pages' },
-    { label: 'Homepage sections', route: '/edit/manage/pages', heading: 'Homepage sections', panel: 'sections' },
+    { label: 'What shows on the homepage', route: '/edit/manage/pages', heading: 'What shows on the homepage', panel: 'sections' },
     { label: 'Opening hours', route: '/edit/manage/details', heading: 'Opening hours', panel: 'hours' },
-    { label: 'Page copy', route: '/edit/manage/details', heading: 'Page copy', panel: 'copy' },
+    { label: 'Words on the site', route: '/edit/manage/details', heading: 'Words on the site', panel: 'copy' },
   ])('$label has none', async ({ route, heading, panel }) => {
     markEveryAreaSeeded();
     stubFetchWithPhotos();

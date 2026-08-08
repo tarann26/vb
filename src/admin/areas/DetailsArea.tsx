@@ -36,8 +36,8 @@ const DetailsArea: React.FC<AreaProps> = ({ registry, restoreDraft, publishLocke
         <HoursSection registry={registry} restoreDraft={restoreDraft} />
       </CollapsibleSection>
     </SectionErrorBoundary>
-    <SectionErrorBoundary name="Page copy">
-      <CollapsibleSection id="copy" heading="Page copy" locked={publishLocked}>
+    <SectionErrorBoundary name="Words on the site">
+      <CollapsibleSection id="copy" heading="Words on the site" locked={publishLocked}>
         <CopySection registry={registry} restoreDraft={restoreDraft} />
       </CollapsibleSection>
     </SectionErrorBoundary>

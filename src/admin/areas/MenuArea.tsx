@@ -64,8 +64,8 @@ const MenuArea: React.FC<AreaProps> = ({ registry, restoreDraft, stage, publishL
         />
       </CollapsibleSection>
     </SectionErrorBoundary>
-    <SectionErrorBoundary name="Menus">
-      <CollapsibleSection id="menus" heading="Menus" locked={publishLocked}>
+    <SectionErrorBoundary name="Menu PDFs">
+      <CollapsibleSection id="menus" heading="Menu PDFs" locked={publishLocked}>
         <MenusSection stage={stage} registry={registry} restoreDraft={restoreDraft} />
       </CollapsibleSection>
     </SectionErrorBoundary>

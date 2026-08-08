@@ -2206,401 +2206,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
 </div>
 `;
 
-exports[`the ten panels, as they render today > Homepage sections (sections) 1`] = `
-<div
-  id="section-panel-sections"
->
-  <fieldset
-    aria-busy="false"
-    style="border: 0px; padding: 0px; margin: 0px; min-inline-size: 0;"
-  >
-    <div>
-      <ul>
-        <li
-          class="mb-6 rounded border border-gray-200 p-4"
-        >
-          <div
-            class="mb-3 flex items-center justify-between gap-2"
-          >
-            <div>
-              <span
-                class="font-['Montserrat'] text-base text-[#222]"
-              >
-                Hero
-              </span>
-              <span
-                class="ml-2 text-xs text-gray-500"
-              >
-                not in the navigation menu
-              </span>
-            </div>
-            <div
-              class="flex gap-2"
-            >
-              <button
-                aria-label="Move Hero down"
-                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-[#6B8B59] transition hover:bg-[#6B8B59] hover:text-white"
-                type="button"
-              >
-                Down
-              </button>
-            </div>
-          </div>
-          <label
-            class="flex items-center gap-2 font-['Montserrat'] text-sm text-[#222]"
-            for="section-enabled-hero"
-          >
-            <input
-              checked=""
-              class="h-5 w-5 rounded border-gray-300"
-              disabled=""
-              id="section-enabled-hero"
-              type="checkbox"
-            />
-            Shown on homepage
-          </label>
-          <p
-            class="mt-1 text-xs text-gray-500"
-          >
-            The homepage always needs a hero — this cannot be turned off here.
-          </p>
-        </li>
-        <li
-          class="mb-6 rounded border border-gray-200 p-4"
-        >
-          <div
-            class="mb-3 flex items-center justify-between gap-2"
-          >
-            <div>
-              <span
-                class="font-['Montserrat'] text-base text-[#222]"
-              >
-                Our Story
-              </span>
-              <span
-                class="ml-2 text-xs text-gray-500"
-              >
-                #our-story
-              </span>
-            </div>
-            <div
-              class="flex gap-2"
-            >
-              <button
-                aria-label="Move Our Story up"
-                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-[#6B8B59] transition hover:bg-[#6B8B59] hover:text-white"
-                type="button"
-              >
-                Up
-              </button>
-              <button
-                aria-label="Move Our Story down"
-                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-[#6B8B59] transition hover:bg-[#6B8B59] hover:text-white"
-                type="button"
-              >
-                Down
-              </button>
-            </div>
-          </div>
-          <label
-            class="flex items-center gap-2 font-['Montserrat'] text-sm text-[#222]"
-            for="section-enabled-ourStory"
-          >
-            <input
-              checked=""
-              class="h-5 w-5 rounded border-gray-300"
-              id="section-enabled-ourStory"
-              type="checkbox"
-            />
-            Shown on homepage
-          </label>
-        </li>
-        <li
-          class="mb-6 rounded border border-gray-200 p-4"
-        >
-          <div
-            class="mb-3 flex items-center justify-between gap-2"
-          >
-            <div>
-              <span
-                class="font-['Montserrat'] text-base text-[#222]"
-              >
-                Atmosfera
-              </span>
-              <span
-                class="ml-2 text-xs text-gray-500"
-              >
-                #gallery
-              </span>
-            </div>
-            <div
-              class="flex gap-2"
-            >
-              <button
-                aria-label="Move Atmosfera up"
-                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-[#6B8B59] transition hover:bg-[#6B8B59] hover:text-white"
-                type="button"
-              >
-                Up
-              </button>
-              <button
-                aria-label="Move Atmosfera down"
-                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-[#6B8B59] transition hover:bg-[#6B8B59] hover:text-white"
-                type="button"
-              >
-                Down
-              </button>
-            </div>
-          </div>
-          <label
-            class="flex items-center gap-2 font-['Montserrat'] text-sm text-[#222]"
-            for="section-enabled-atmosphere"
-          >
-            <input
-              checked=""
-              class="h-5 w-5 rounded border-gray-300"
-              id="section-enabled-atmosphere"
-              type="checkbox"
-            />
-            Shown on homepage
-          </label>
-        </li>
-        <li
-          class="mb-6 rounded border border-gray-200 p-4"
-        >
-          <div
-            class="mb-3 flex items-center justify-between gap-2"
-          >
-            <div>
-              <span
-                class="font-['Montserrat'] text-base text-[#222]"
-              >
-                Menu
-              </span>
-              <span
-                class="ml-2 text-xs text-gray-500"
-              >
-                #menu
-              </span>
-            </div>
-            <div
-              class="flex gap-2"
-            >
-              <button
-                aria-label="Move Menu up"
-                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-[#6B8B59] transition hover:bg-[#6B8B59] hover:text-white"
-                type="button"
-              >
-                Up
-              </button>
-              <button
-                aria-label="Move Menu down"
-                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-[#6B8B59] transition hover:bg-[#6B8B59] hover:text-white"
-                type="button"
-              >
-                Down
-              </button>
-            </div>
-          </div>
-          <label
-            class="flex items-center gap-2 font-['Montserrat'] text-sm text-[#222]"
-            for="section-enabled-food"
-          >
-            <input
-              checked=""
-              class="h-5 w-5 rounded border-gray-300"
-              id="section-enabled-food"
-              type="checkbox"
-            />
-            Shown on homepage
-          </label>
-        </li>
-        <li
-          class="mb-6 rounded border border-gray-200 p-4"
-        >
-          <div
-            class="mb-3 flex items-center justify-between gap-2"
-          >
-            <div>
-              <span
-                class="font-['Montserrat'] text-base text-[#222]"
-              >
-                Drinks
-              </span>
-              <span
-                class="ml-2 text-xs text-gray-500"
-              >
-                not in the navigation menu
-              </span>
-            </div>
-            <div
-              class="flex gap-2"
-            >
-              <button
-                aria-label="Move Drinks up"
-                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-[#6B8B59] transition hover:bg-[#6B8B59] hover:text-white"
-                type="button"
-              >
-                Up
-              </button>
-              <button
-                aria-label="Move Drinks down"
-                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-[#6B8B59] transition hover:bg-[#6B8B59] hover:text-white"
-                type="button"
-              >
-                Down
-              </button>
-            </div>
-          </div>
-          <label
-            class="flex items-center gap-2 font-['Montserrat'] text-sm text-[#222]"
-            for="section-enabled-drinks"
-          >
-            <input
-              checked=""
-              class="h-5 w-5 rounded border-gray-300"
-              id="section-enabled-drinks"
-              type="checkbox"
-            />
-            Shown on homepage
-          </label>
-        </li>
-        <li
-          class="mb-6 rounded border border-gray-200 p-4"
-        >
-          <div
-            class="mb-3 flex items-center justify-between gap-2"
-          >
-            <div>
-              <span
-                class="font-['Montserrat'] text-base text-[#222]"
-              >
-                Stories
-              </span>
-              <span
-                class="ml-2 text-xs text-gray-500"
-              >
-                #blogs
-              </span>
-            </div>
-            <div
-              class="flex gap-2"
-            >
-              <button
-                aria-label="Move Stories up"
-                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-[#6B8B59] transition hover:bg-[#6B8B59] hover:text-white"
-                type="button"
-              >
-                Up
-              </button>
-              <button
-                aria-label="Move Stories down"
-                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-[#6B8B59] transition hover:bg-[#6B8B59] hover:text-white"
-                type="button"
-              >
-                Down
-              </button>
-            </div>
-          </div>
-          <label
-            class="flex items-center gap-2 font-['Montserrat'] text-sm text-[#222]"
-            for="section-enabled-press"
-          >
-            <input
-              checked=""
-              class="h-5 w-5 rounded border-gray-300"
-              id="section-enabled-press"
-              type="checkbox"
-            />
-            Shown on homepage
-          </label>
-        </li>
-        <li
-          class="mb-6 rounded border border-gray-200 p-4"
-        >
-          <div
-            class="mb-3 flex items-center justify-between gap-2"
-          >
-            <div>
-              <span
-                class="font-['Montserrat'] text-base text-[#222]"
-              >
-                Visit Us
-              </span>
-              <span
-                class="ml-2 text-xs text-gray-500"
-              >
-                #visit
-              </span>
-            </div>
-            <div
-              class="flex gap-2"
-            >
-              <button
-                aria-label="Move Visit Us up"
-                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-[#6B8B59] transition hover:bg-[#6B8B59] hover:text-white"
-                type="button"
-              >
-                Up
-              </button>
-            </div>
-          </div>
-          <label
-            class="flex items-center gap-2 font-['Montserrat'] text-sm text-[#222]"
-            for="section-enabled-visit"
-          >
-            <input
-              checked=""
-              class="h-5 w-5 rounded border-gray-300"
-              id="section-enabled-visit"
-              type="checkbox"
-            />
-            Shown on homepage
-          </label>
-        </li>
-      </ul>
-    </div>
-    <h3
-      class="mb-4 mt-8 font-['Montserrat'] text-base uppercase tracking-wide text-[#222]"
-    >
-      Homepage template sections
-    </h3>
-    <div>
-      <ul />
-      <div
-        class="mt-4 flex flex-wrap gap-2"
-      >
-        <button
-          class="mt-2 w-full rounded border-2 border-dashed border-[#6B8B59] py-2 font-['Montserrat'] text-sm uppercase tracking-wide text-[#6B8B59] transition hover:bg-[#6B8B59]/10"
-          type="button"
-        >
-          Add a text section
-        </button>
-        <button
-          class="mt-2 w-full rounded border-2 border-dashed border-[#6B8B59] py-2 font-['Montserrat'] text-sm uppercase tracking-wide text-[#6B8B59] transition hover:bg-[#6B8B59]/10"
-          type="button"
-        >
-          Add an item list section
-        </button>
-        <button
-          class="mt-2 w-full rounded border-2 border-dashed border-[#6B8B59] py-2 font-['Montserrat'] text-sm uppercase tracking-wide text-[#6B8B59] transition hover:bg-[#6B8B59]/10"
-          type="button"
-        >
-          Add a gallery section
-        </button>
-        <button
-          class="mt-2 w-full rounded border-2 border-dashed border-[#6B8B59] py-2 font-['Montserrat'] text-sm uppercase tracking-wide text-[#6B8B59] transition hover:bg-[#6B8B59]/10"
-          type="button"
-        >
-          Add a detail block section
-        </button>
-      </div>
-    </div>
-  </fieldset>
-</div>
-`;
-
-exports[`the ten panels, as they render today > Menus (menus) 1`] = `
+exports[`the ten panels, as they render today > Menu PDFs (menus) 1`] = `
 <div
   id="section-panel-menus"
 >
@@ -3175,7 +2781,776 @@ exports[`the ten panels, as they render today > Our Story (story) 1`] = `
 </div>
 `;
 
-exports[`the ten panels, as they render today > Page copy (copy) 1`] = `
+exports[`the ten panels, as they render today > Pages (pages) 1`] = `
+<div
+  id="section-panel-pages"
+>
+  <fieldset
+    aria-busy="false"
+    style="border: 0px; padding: 0px; margin: 0px; min-inline-size: 0;"
+  >
+    <div>
+      <ul />
+      <button
+        class="mt-2 w-full rounded border-2 border-dashed border-[#6B8B59] py-2 font-['Montserrat'] text-sm uppercase tracking-wide text-[#6B8B59] transition hover:bg-[#6B8B59]/10"
+        type="button"
+      >
+        Add a page
+      </button>
+    </div>
+  </fieldset>
+</div>
+`;
+
+exports[`the ten panels, as they render today > Press (press) 1`] = `
+<div
+  id="section-panel-press"
+>
+  <fieldset
+    aria-busy="false"
+    style="border: 0px; padding: 0px; margin: 0px; min-inline-size: 0;"
+  >
+    <div>
+      <ul>
+        <li
+          class="mb-6 rounded border border-gray-200 p-4"
+        >
+          <div
+            class="mb-3 flex flex-wrap items-center justify-between gap-2"
+          >
+            <div
+              class="flex items-center gap-2"
+            >
+              <img
+                alt=""
+                class="h-12 w-12 shrink-0 rounded border border-[#6B8B59]/40 object-cover"
+                data-thumbnail="row"
+                loading="lazy"
+                src="/press/p.webp"
+              />
+              <button
+                aria-label="Move Article P down"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-[#6B8B59] transition hover:bg-[#6B8B59] hover:text-white"
+                type="button"
+              >
+                Down
+              </button>
+            </div>
+            <button
+              aria-label="Remove Article P"
+              class="rounded border border-red-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-red-600 transition hover:bg-red-600 hover:text-white"
+              type="button"
+            >
+              Remove
+            </button>
+          </div>
+          <div>
+            <div
+              class="mb-4"
+            >
+              <label
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-[#6B8B59]"
+                for="press-field-id-0"
+              >
+                ID
+              </label>
+              <input
+                aria-describedby="press-field-id-0-help"
+                class="w-full rounded border border-gray-300 px-3 py-2 text-[#222] focus:border-[#6B8B59] focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+                id="press-field-id-0"
+                type="text"
+                value="p"
+              />
+              <p
+                class="mt-1 text-xs text-gray-500"
+                id="press-field-id-0-help"
+              >
+                A short identifier used only to tell articles apart -- changing it does not rename or relink anything else.
+              </p>
+            </div>
+            <div
+              class="mb-4"
+            >
+              <label
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-[#6B8B59]"
+                for="press-field-title-0"
+              >
+                Title
+              </label>
+              <input
+                class="w-full rounded border border-gray-300 px-3 py-2 text-[#222] focus:border-[#6B8B59] focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+                id="press-field-title-0"
+                type="text"
+                value="Article P"
+              />
+            </div>
+            <div
+              class="mb-4"
+            >
+              <label
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-[#6B8B59]"
+                for="press-field-publication-0"
+              >
+                Publication
+              </label>
+              <input
+                class="w-full rounded border border-gray-300 px-3 py-2 text-[#222] focus:border-[#6B8B59] focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+                id="press-field-publication-0"
+                type="text"
+                value="Times"
+              />
+            </div>
+            <div
+              class="mb-4"
+            >
+              <label
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-[#6B8B59]"
+                for="press-field-date-0"
+              >
+                Published on
+              </label>
+              <input
+                class="w-full rounded border border-gray-300 px-3 py-2 text-[#222] focus:border-[#6B8B59] focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+                id="press-field-date-0"
+                type="date"
+                value="2026-01-01"
+              />
+            </div>
+            <div
+              class="mb-4"
+            >
+              <label
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-[#6B8B59]"
+                for="press-field-excerpt-0"
+              >
+                Excerpt
+              </label>
+              <textarea
+                class="w-full rounded border border-gray-300 px-3 py-2 text-[#222] focus:border-[#6B8B59] focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+                id="press-field-excerpt-0"
+              >
+                An excerpt.
+              </textarea>
+            </div>
+            <div
+              class="mb-4"
+            >
+              <label
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-[#6B8B59]"
+                for="press-field-url-0"
+              >
+                Link
+              </label>
+              <input
+                aria-describedby="press-field-url-0-help"
+                class="w-full rounded border border-gray-300 px-3 py-2 text-[#222] focus:border-[#6B8B59] focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+                id="press-field-url-0"
+                type="text"
+                value=""
+              />
+              <p
+                class="mt-1 text-xs text-gray-500"
+                id="press-field-url-0-help"
+              >
+                The article's full web address, or leave empty if it has none.
+              </p>
+            </div>
+            <div
+              class="mb-4"
+            >
+              <label
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-[#6B8B59]"
+                for="press-field-image-0"
+              >
+                Photo
+              </label>
+              <img
+                alt=""
+                class="mb-2 h-24 w-24 rounded border border-gray-300 object-cover"
+                src="/press/p.webp"
+              />
+              <input
+                accept="image/*"
+                class="block w-full text-sm text-[#222] file:mr-3 file:rounded file:border-0 file:bg-[#6B8B59] file:px-3 file:py-1.5 file:font-['Montserrat'] file:text-xs file:uppercase file:tracking-wide file:text-white hover:file:bg-[#5a7349]"
+                id="press-field-image-0"
+                type="file"
+              />
+            </div>
+          </div>
+        </li>
+        <li
+          class="mb-6 rounded border border-gray-200 p-4"
+        >
+          <div
+            class="mb-3 flex flex-wrap items-center justify-between gap-2"
+          >
+            <div
+              class="flex items-center gap-2"
+            >
+              <img
+                alt=""
+                class="h-12 w-12 shrink-0 rounded border border-[#6B8B59]/40 object-cover"
+                data-thumbnail="row"
+                loading="lazy"
+                src="/press/q.webp"
+              />
+              <button
+                aria-label="Move Article Q up"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-[#6B8B59] transition hover:bg-[#6B8B59] hover:text-white"
+                type="button"
+              >
+                Up
+              </button>
+            </div>
+            <button
+              aria-label="Remove Article Q"
+              class="rounded border border-red-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-red-600 transition hover:bg-red-600 hover:text-white"
+              type="button"
+            >
+              Remove
+            </button>
+          </div>
+          <div>
+            <div
+              class="mb-4"
+            >
+              <label
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-[#6B8B59]"
+                for="press-field-id-1"
+              >
+                ID
+              </label>
+              <input
+                aria-describedby="press-field-id-1-help"
+                class="w-full rounded border border-gray-300 px-3 py-2 text-[#222] focus:border-[#6B8B59] focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+                id="press-field-id-1"
+                type="text"
+                value="q"
+              />
+              <p
+                class="mt-1 text-xs text-gray-500"
+                id="press-field-id-1-help"
+              >
+                A short identifier used only to tell articles apart -- changing it does not rename or relink anything else.
+              </p>
+            </div>
+            <div
+              class="mb-4"
+            >
+              <label
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-[#6B8B59]"
+                for="press-field-title-1"
+              >
+                Title
+              </label>
+              <input
+                class="w-full rounded border border-gray-300 px-3 py-2 text-[#222] focus:border-[#6B8B59] focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+                id="press-field-title-1"
+                type="text"
+                value="Article Q"
+              />
+            </div>
+            <div
+              class="mb-4"
+            >
+              <label
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-[#6B8B59]"
+                for="press-field-publication-1"
+              >
+                Publication
+              </label>
+              <input
+                class="w-full rounded border border-gray-300 px-3 py-2 text-[#222] focus:border-[#6B8B59] focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+                id="press-field-publication-1"
+                type="text"
+                value="Times"
+              />
+            </div>
+            <div
+              class="mb-4"
+            >
+              <label
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-[#6B8B59]"
+                for="press-field-date-1"
+              >
+                Published on
+              </label>
+              <input
+                class="w-full rounded border border-gray-300 px-3 py-2 text-[#222] focus:border-[#6B8B59] focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+                id="press-field-date-1"
+                type="date"
+                value="2026-01-01"
+              />
+            </div>
+            <div
+              class="mb-4"
+            >
+              <label
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-[#6B8B59]"
+                for="press-field-excerpt-1"
+              >
+                Excerpt
+              </label>
+              <textarea
+                class="w-full rounded border border-gray-300 px-3 py-2 text-[#222] focus:border-[#6B8B59] focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+                id="press-field-excerpt-1"
+              >
+                An excerpt.
+              </textarea>
+            </div>
+            <div
+              class="mb-4"
+            >
+              <label
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-[#6B8B59]"
+                for="press-field-url-1"
+              >
+                Link
+              </label>
+              <input
+                aria-describedby="press-field-url-1-help"
+                class="w-full rounded border border-gray-300 px-3 py-2 text-[#222] focus:border-[#6B8B59] focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+                id="press-field-url-1"
+                type="text"
+                value=""
+              />
+              <p
+                class="mt-1 text-xs text-gray-500"
+                id="press-field-url-1-help"
+              >
+                The article's full web address, or leave empty if it has none.
+              </p>
+            </div>
+            <div
+              class="mb-4"
+            >
+              <label
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-[#6B8B59]"
+                for="press-field-image-1"
+              >
+                Photo
+              </label>
+              <img
+                alt=""
+                class="mb-2 h-24 w-24 rounded border border-gray-300 object-cover"
+                src="/press/q.webp"
+              />
+              <input
+                accept="image/*"
+                class="block w-full text-sm text-[#222] file:mr-3 file:rounded file:border-0 file:bg-[#6B8B59] file:px-3 file:py-1.5 file:font-['Montserrat'] file:text-xs file:uppercase file:tracking-wide file:text-white hover:file:bg-[#5a7349]"
+                id="press-field-image-1"
+                type="file"
+              />
+            </div>
+          </div>
+        </li>
+      </ul>
+      <button
+        class="mt-2 w-full rounded border-2 border-dashed border-[#6B8B59] py-2 font-['Montserrat'] text-sm uppercase tracking-wide text-[#6B8B59] transition hover:bg-[#6B8B59]/10"
+        type="button"
+      >
+        Add a article
+      </button>
+    </div>
+  </fieldset>
+</div>
+`;
+
+exports[`the ten panels, as they render today > What shows on the homepage (sections) 1`] = `
+<div
+  id="section-panel-sections"
+>
+  <fieldset
+    aria-busy="false"
+    style="border: 0px; padding: 0px; margin: 0px; min-inline-size: 0;"
+  >
+    <div>
+      <ul>
+        <li
+          class="mb-6 rounded border border-gray-200 p-4"
+        >
+          <div
+            class="mb-3 flex items-center justify-between gap-2"
+          >
+            <div>
+              <span
+                class="font-['Montserrat'] text-base text-[#222]"
+              >
+                Hero
+              </span>
+              <span
+                class="ml-2 text-xs text-gray-500"
+              >
+                not in the navigation menu
+              </span>
+            </div>
+            <div
+              class="flex gap-2"
+            >
+              <button
+                aria-label="Move Hero down"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-[#6B8B59] transition hover:bg-[#6B8B59] hover:text-white"
+                type="button"
+              >
+                Down
+              </button>
+            </div>
+          </div>
+          <label
+            class="flex items-center gap-2 font-['Montserrat'] text-sm text-[#222]"
+            for="section-enabled-hero"
+          >
+            <input
+              checked=""
+              class="h-5 w-5 rounded border-gray-300"
+              disabled=""
+              id="section-enabled-hero"
+              type="checkbox"
+            />
+            Shown on homepage
+          </label>
+          <p
+            class="mt-1 text-xs text-gray-500"
+          >
+            The homepage always needs a hero — this cannot be turned off here.
+          </p>
+        </li>
+        <li
+          class="mb-6 rounded border border-gray-200 p-4"
+        >
+          <div
+            class="mb-3 flex items-center justify-between gap-2"
+          >
+            <div>
+              <span
+                class="font-['Montserrat'] text-base text-[#222]"
+              >
+                Our Story
+              </span>
+              <span
+                class="ml-2 text-xs text-gray-500"
+              >
+                #our-story
+              </span>
+            </div>
+            <div
+              class="flex gap-2"
+            >
+              <button
+                aria-label="Move Our Story up"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-[#6B8B59] transition hover:bg-[#6B8B59] hover:text-white"
+                type="button"
+              >
+                Up
+              </button>
+              <button
+                aria-label="Move Our Story down"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-[#6B8B59] transition hover:bg-[#6B8B59] hover:text-white"
+                type="button"
+              >
+                Down
+              </button>
+            </div>
+          </div>
+          <label
+            class="flex items-center gap-2 font-['Montserrat'] text-sm text-[#222]"
+            for="section-enabled-ourStory"
+          >
+            <input
+              checked=""
+              class="h-5 w-5 rounded border-gray-300"
+              id="section-enabled-ourStory"
+              type="checkbox"
+            />
+            Shown on homepage
+          </label>
+        </li>
+        <li
+          class="mb-6 rounded border border-gray-200 p-4"
+        >
+          <div
+            class="mb-3 flex items-center justify-between gap-2"
+          >
+            <div>
+              <span
+                class="font-['Montserrat'] text-base text-[#222]"
+              >
+                Atmosfera
+              </span>
+              <span
+                class="ml-2 text-xs text-gray-500"
+              >
+                #gallery
+              </span>
+            </div>
+            <div
+              class="flex gap-2"
+            >
+              <button
+                aria-label="Move Atmosfera up"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-[#6B8B59] transition hover:bg-[#6B8B59] hover:text-white"
+                type="button"
+              >
+                Up
+              </button>
+              <button
+                aria-label="Move Atmosfera down"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-[#6B8B59] transition hover:bg-[#6B8B59] hover:text-white"
+                type="button"
+              >
+                Down
+              </button>
+            </div>
+          </div>
+          <label
+            class="flex items-center gap-2 font-['Montserrat'] text-sm text-[#222]"
+            for="section-enabled-atmosphere"
+          >
+            <input
+              checked=""
+              class="h-5 w-5 rounded border-gray-300"
+              id="section-enabled-atmosphere"
+              type="checkbox"
+            />
+            Shown on homepage
+          </label>
+        </li>
+        <li
+          class="mb-6 rounded border border-gray-200 p-4"
+        >
+          <div
+            class="mb-3 flex items-center justify-between gap-2"
+          >
+            <div>
+              <span
+                class="font-['Montserrat'] text-base text-[#222]"
+              >
+                Menu
+              </span>
+              <span
+                class="ml-2 text-xs text-gray-500"
+              >
+                #menu
+              </span>
+            </div>
+            <div
+              class="flex gap-2"
+            >
+              <button
+                aria-label="Move Menu up"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-[#6B8B59] transition hover:bg-[#6B8B59] hover:text-white"
+                type="button"
+              >
+                Up
+              </button>
+              <button
+                aria-label="Move Menu down"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-[#6B8B59] transition hover:bg-[#6B8B59] hover:text-white"
+                type="button"
+              >
+                Down
+              </button>
+            </div>
+          </div>
+          <label
+            class="flex items-center gap-2 font-['Montserrat'] text-sm text-[#222]"
+            for="section-enabled-food"
+          >
+            <input
+              checked=""
+              class="h-5 w-5 rounded border-gray-300"
+              id="section-enabled-food"
+              type="checkbox"
+            />
+            Shown on homepage
+          </label>
+        </li>
+        <li
+          class="mb-6 rounded border border-gray-200 p-4"
+        >
+          <div
+            class="mb-3 flex items-center justify-between gap-2"
+          >
+            <div>
+              <span
+                class="font-['Montserrat'] text-base text-[#222]"
+              >
+                Drinks
+              </span>
+              <span
+                class="ml-2 text-xs text-gray-500"
+              >
+                not in the navigation menu
+              </span>
+            </div>
+            <div
+              class="flex gap-2"
+            >
+              <button
+                aria-label="Move Drinks up"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-[#6B8B59] transition hover:bg-[#6B8B59] hover:text-white"
+                type="button"
+              >
+                Up
+              </button>
+              <button
+                aria-label="Move Drinks down"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-[#6B8B59] transition hover:bg-[#6B8B59] hover:text-white"
+                type="button"
+              >
+                Down
+              </button>
+            </div>
+          </div>
+          <label
+            class="flex items-center gap-2 font-['Montserrat'] text-sm text-[#222]"
+            for="section-enabled-drinks"
+          >
+            <input
+              checked=""
+              class="h-5 w-5 rounded border-gray-300"
+              id="section-enabled-drinks"
+              type="checkbox"
+            />
+            Shown on homepage
+          </label>
+        </li>
+        <li
+          class="mb-6 rounded border border-gray-200 p-4"
+        >
+          <div
+            class="mb-3 flex items-center justify-between gap-2"
+          >
+            <div>
+              <span
+                class="font-['Montserrat'] text-base text-[#222]"
+              >
+                Stories
+              </span>
+              <span
+                class="ml-2 text-xs text-gray-500"
+              >
+                #blogs
+              </span>
+            </div>
+            <div
+              class="flex gap-2"
+            >
+              <button
+                aria-label="Move Stories up"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-[#6B8B59] transition hover:bg-[#6B8B59] hover:text-white"
+                type="button"
+              >
+                Up
+              </button>
+              <button
+                aria-label="Move Stories down"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-[#6B8B59] transition hover:bg-[#6B8B59] hover:text-white"
+                type="button"
+              >
+                Down
+              </button>
+            </div>
+          </div>
+          <label
+            class="flex items-center gap-2 font-['Montserrat'] text-sm text-[#222]"
+            for="section-enabled-press"
+          >
+            <input
+              checked=""
+              class="h-5 w-5 rounded border-gray-300"
+              id="section-enabled-press"
+              type="checkbox"
+            />
+            Shown on homepage
+          </label>
+        </li>
+        <li
+          class="mb-6 rounded border border-gray-200 p-4"
+        >
+          <div
+            class="mb-3 flex items-center justify-between gap-2"
+          >
+            <div>
+              <span
+                class="font-['Montserrat'] text-base text-[#222]"
+              >
+                Visit Us
+              </span>
+              <span
+                class="ml-2 text-xs text-gray-500"
+              >
+                #visit
+              </span>
+            </div>
+            <div
+              class="flex gap-2"
+            >
+              <button
+                aria-label="Move Visit Us up"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-[#6B8B59] transition hover:bg-[#6B8B59] hover:text-white"
+                type="button"
+              >
+                Up
+              </button>
+            </div>
+          </div>
+          <label
+            class="flex items-center gap-2 font-['Montserrat'] text-sm text-[#222]"
+            for="section-enabled-visit"
+          >
+            <input
+              checked=""
+              class="h-5 w-5 rounded border-gray-300"
+              id="section-enabled-visit"
+              type="checkbox"
+            />
+            Shown on homepage
+          </label>
+        </li>
+      </ul>
+    </div>
+    <h3
+      class="mb-4 mt-8 font-['Montserrat'] text-base uppercase tracking-wide text-[#222]"
+    >
+      Homepage template sections
+    </h3>
+    <div>
+      <ul />
+      <div
+        class="mt-4 flex flex-wrap gap-2"
+      >
+        <button
+          class="mt-2 w-full rounded border-2 border-dashed border-[#6B8B59] py-2 font-['Montserrat'] text-sm uppercase tracking-wide text-[#6B8B59] transition hover:bg-[#6B8B59]/10"
+          type="button"
+        >
+          Add a text section
+        </button>
+        <button
+          class="mt-2 w-full rounded border-2 border-dashed border-[#6B8B59] py-2 font-['Montserrat'] text-sm uppercase tracking-wide text-[#6B8B59] transition hover:bg-[#6B8B59]/10"
+          type="button"
+        >
+          Add an item list section
+        </button>
+        <button
+          class="mt-2 w-full rounded border-2 border-dashed border-[#6B8B59] py-2 font-['Montserrat'] text-sm uppercase tracking-wide text-[#6B8B59] transition hover:bg-[#6B8B59]/10"
+          type="button"
+        >
+          Add a gallery section
+        </button>
+        <button
+          class="mt-2 w-full rounded border-2 border-dashed border-[#6B8B59] py-2 font-['Montserrat'] text-sm uppercase tracking-wide text-[#6B8B59] transition hover:bg-[#6B8B59]/10"
+          type="button"
+        >
+          Add a detail block section
+        </button>
+      </div>
+    </div>
+  </fieldset>
+</div>
+`;
+
+exports[`the ten panels, as they render today > Words on the site (copy) 1`] = `
 <div
   id="section-panel-copy"
 >
@@ -3910,381 +4285,6 @@ exports[`the ten panels, as they render today > Page copy (copy) 1`] = `
           />
         </div>
       </div>
-    </div>
-  </fieldset>
-</div>
-`;
-
-exports[`the ten panels, as they render today > Pages (pages) 1`] = `
-<div
-  id="section-panel-pages"
->
-  <fieldset
-    aria-busy="false"
-    style="border: 0px; padding: 0px; margin: 0px; min-inline-size: 0;"
-  >
-    <div>
-      <ul />
-      <button
-        class="mt-2 w-full rounded border-2 border-dashed border-[#6B8B59] py-2 font-['Montserrat'] text-sm uppercase tracking-wide text-[#6B8B59] transition hover:bg-[#6B8B59]/10"
-        type="button"
-      >
-        Add a page
-      </button>
-    </div>
-  </fieldset>
-</div>
-`;
-
-exports[`the ten panels, as they render today > Press (press) 1`] = `
-<div
-  id="section-panel-press"
->
-  <fieldset
-    aria-busy="false"
-    style="border: 0px; padding: 0px; margin: 0px; min-inline-size: 0;"
-  >
-    <div>
-      <ul>
-        <li
-          class="mb-6 rounded border border-gray-200 p-4"
-        >
-          <div
-            class="mb-3 flex flex-wrap items-center justify-between gap-2"
-          >
-            <div
-              class="flex items-center gap-2"
-            >
-              <img
-                alt=""
-                class="h-12 w-12 shrink-0 rounded border border-[#6B8B59]/40 object-cover"
-                data-thumbnail="row"
-                loading="lazy"
-                src="/press/p.webp"
-              />
-              <button
-                aria-label="Move Article P down"
-                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-[#6B8B59] transition hover:bg-[#6B8B59] hover:text-white"
-                type="button"
-              >
-                Down
-              </button>
-            </div>
-            <button
-              aria-label="Remove Article P"
-              class="rounded border border-red-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-red-600 transition hover:bg-red-600 hover:text-white"
-              type="button"
-            >
-              Remove
-            </button>
-          </div>
-          <div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-[#6B8B59]"
-                for="press-field-id-0"
-              >
-                ID
-              </label>
-              <input
-                aria-describedby="press-field-id-0-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-[#222] focus:border-[#6B8B59] focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="press-field-id-0"
-                type="text"
-                value="p"
-              />
-              <p
-                class="mt-1 text-xs text-gray-500"
-                id="press-field-id-0-help"
-              >
-                A short identifier used only to tell articles apart -- changing it does not rename or relink anything else.
-              </p>
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-[#6B8B59]"
-                for="press-field-title-0"
-              >
-                Title
-              </label>
-              <input
-                class="w-full rounded border border-gray-300 px-3 py-2 text-[#222] focus:border-[#6B8B59] focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="press-field-title-0"
-                type="text"
-                value="Article P"
-              />
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-[#6B8B59]"
-                for="press-field-publication-0"
-              >
-                Publication
-              </label>
-              <input
-                class="w-full rounded border border-gray-300 px-3 py-2 text-[#222] focus:border-[#6B8B59] focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="press-field-publication-0"
-                type="text"
-                value="Times"
-              />
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-[#6B8B59]"
-                for="press-field-date-0"
-              >
-                Published on
-              </label>
-              <input
-                class="w-full rounded border border-gray-300 px-3 py-2 text-[#222] focus:border-[#6B8B59] focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="press-field-date-0"
-                type="date"
-                value="2026-01-01"
-              />
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-[#6B8B59]"
-                for="press-field-excerpt-0"
-              >
-                Excerpt
-              </label>
-              <textarea
-                class="w-full rounded border border-gray-300 px-3 py-2 text-[#222] focus:border-[#6B8B59] focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="press-field-excerpt-0"
-              >
-                An excerpt.
-              </textarea>
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-[#6B8B59]"
-                for="press-field-url-0"
-              >
-                Link
-              </label>
-              <input
-                aria-describedby="press-field-url-0-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-[#222] focus:border-[#6B8B59] focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="press-field-url-0"
-                type="text"
-                value=""
-              />
-              <p
-                class="mt-1 text-xs text-gray-500"
-                id="press-field-url-0-help"
-              >
-                The article's full web address, or leave empty if it has none.
-              </p>
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-[#6B8B59]"
-                for="press-field-image-0"
-              >
-                Photo
-              </label>
-              <img
-                alt=""
-                class="mb-2 h-24 w-24 rounded border border-gray-300 object-cover"
-                src="/press/p.webp"
-              />
-              <input
-                accept="image/*"
-                class="block w-full text-sm text-[#222] file:mr-3 file:rounded file:border-0 file:bg-[#6B8B59] file:px-3 file:py-1.5 file:font-['Montserrat'] file:text-xs file:uppercase file:tracking-wide file:text-white hover:file:bg-[#5a7349]"
-                id="press-field-image-0"
-                type="file"
-              />
-            </div>
-          </div>
-        </li>
-        <li
-          class="mb-6 rounded border border-gray-200 p-4"
-        >
-          <div
-            class="mb-3 flex flex-wrap items-center justify-between gap-2"
-          >
-            <div
-              class="flex items-center gap-2"
-            >
-              <img
-                alt=""
-                class="h-12 w-12 shrink-0 rounded border border-[#6B8B59]/40 object-cover"
-                data-thumbnail="row"
-                loading="lazy"
-                src="/press/q.webp"
-              />
-              <button
-                aria-label="Move Article Q up"
-                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-[#6B8B59] transition hover:bg-[#6B8B59] hover:text-white"
-                type="button"
-              >
-                Up
-              </button>
-            </div>
-            <button
-              aria-label="Remove Article Q"
-              class="rounded border border-red-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-red-600 transition hover:bg-red-600 hover:text-white"
-              type="button"
-            >
-              Remove
-            </button>
-          </div>
-          <div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-[#6B8B59]"
-                for="press-field-id-1"
-              >
-                ID
-              </label>
-              <input
-                aria-describedby="press-field-id-1-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-[#222] focus:border-[#6B8B59] focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="press-field-id-1"
-                type="text"
-                value="q"
-              />
-              <p
-                class="mt-1 text-xs text-gray-500"
-                id="press-field-id-1-help"
-              >
-                A short identifier used only to tell articles apart -- changing it does not rename or relink anything else.
-              </p>
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-[#6B8B59]"
-                for="press-field-title-1"
-              >
-                Title
-              </label>
-              <input
-                class="w-full rounded border border-gray-300 px-3 py-2 text-[#222] focus:border-[#6B8B59] focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="press-field-title-1"
-                type="text"
-                value="Article Q"
-              />
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-[#6B8B59]"
-                for="press-field-publication-1"
-              >
-                Publication
-              </label>
-              <input
-                class="w-full rounded border border-gray-300 px-3 py-2 text-[#222] focus:border-[#6B8B59] focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="press-field-publication-1"
-                type="text"
-                value="Times"
-              />
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-[#6B8B59]"
-                for="press-field-date-1"
-              >
-                Published on
-              </label>
-              <input
-                class="w-full rounded border border-gray-300 px-3 py-2 text-[#222] focus:border-[#6B8B59] focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="press-field-date-1"
-                type="date"
-                value="2026-01-01"
-              />
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-[#6B8B59]"
-                for="press-field-excerpt-1"
-              >
-                Excerpt
-              </label>
-              <textarea
-                class="w-full rounded border border-gray-300 px-3 py-2 text-[#222] focus:border-[#6B8B59] focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="press-field-excerpt-1"
-              >
-                An excerpt.
-              </textarea>
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-[#6B8B59]"
-                for="press-field-url-1"
-              >
-                Link
-              </label>
-              <input
-                aria-describedby="press-field-url-1-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-[#222] focus:border-[#6B8B59] focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="press-field-url-1"
-                type="text"
-                value=""
-              />
-              <p
-                class="mt-1 text-xs text-gray-500"
-                id="press-field-url-1-help"
-              >
-                The article's full web address, or leave empty if it has none.
-              </p>
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-[#6B8B59]"
-                for="press-field-image-1"
-              >
-                Photo
-              </label>
-              <img
-                alt=""
-                class="mb-2 h-24 w-24 rounded border border-gray-300 object-cover"
-                src="/press/q.webp"
-              />
-              <input
-                accept="image/*"
-                class="block w-full text-sm text-[#222] file:mr-3 file:rounded file:border-0 file:bg-[#6B8B59] file:px-3 file:py-1.5 file:font-['Montserrat'] file:text-xs file:uppercase file:tracking-wide file:text-white hover:file:bg-[#5a7349]"
-                id="press-field-image-1"
-                type="file"
-              />
-            </div>
-          </div>
-        </li>
-      </ul>
-      <button
-        class="mt-2 w-full rounded border-2 border-dashed border-[#6B8B59] py-2 font-['Montserrat'] text-sm uppercase tracking-wide text-[#6B8B59] transition hover:bg-[#6B8B59]/10"
-        type="button"
-      >
-        Add a article
-      </button>
     </div>
   </fieldset>
 </div>

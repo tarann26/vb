@@ -94,7 +94,7 @@ describe('AREAS covers every dashboard panel exactly once', () => {
     expect(areaForFile('site.json')?.slug).toBe('details');
     expect(panelForFile('site.json')?.id).toBe('hours');
     expect(areaForFile('dishes.json')?.slug).toBe('menu');
-    expect(panelForFile('copy.json')?.heading).toBe('Page copy');
+    expect(panelForFile('copy.json')?.heading).toBe('Words on the site');
   });
 });
 

@@ -140,7 +140,7 @@ describe('describePaths: what she is told she is putting back', () => {
   // "nothing to undo" at exactly the moment she needs it most.
   it('names a menu PDF, because restoring it is the whole point in that case', () => {
     expect(describePaths(['public/menus/food-menu.pdf'])).toBe('a menu PDF');
-    expect(describePaths(['src/content/menus.json', 'public/menus/food-menu.pdf'])).toBe('Menus and a menu PDF');
+    expect(describePaths(['src/content/menus.json', 'public/menus/food-menu.pdf'])).toBe('Menu PDFs and a menu PDF');
   });
 
   // A photo is deliberately NOT named as something being put back. Photo

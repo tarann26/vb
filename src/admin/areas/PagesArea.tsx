@@ -26,8 +26,8 @@ const PagesArea: React.FC<AreaProps> = ({ registry, restoreDraft, stage, publish
         <PagesSection registry={registry} restoreDraft={restoreDraft} stage={stage} previews={previews} />
       </CollapsibleSection>
     </SectionErrorBoundary>
-    <SectionErrorBoundary name="Homepage sections">
-      <CollapsibleSection id="sections" heading="Homepage sections" locked={publishLocked}>
+    <SectionErrorBoundary name="What shows on the homepage">
+      <CollapsibleSection id="sections" heading="What shows on the homepage" locked={publishLocked}>
         <SectionsSection registry={registry} restoreDraft={restoreDraft} stage={stage} previews={previews} />
       </CollapsibleSection>
     </SectionErrorBoundary>

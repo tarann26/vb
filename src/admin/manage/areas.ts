@@ -57,14 +57,14 @@ export interface PanelDefinition {
 export const PANELS: Record<PanelId, PanelDefinition> = {
   dishes: { id: 'dishes', heading: 'Dishes', file: 'dishes.json' },
   drinks: { id: 'drinks', heading: 'Drinks', file: 'drinks.json' },
-  menus: { id: 'menus', heading: 'Menus', file: 'menus.json' },
+  menus: { id: 'menus', heading: 'Menu PDFs', file: 'menus.json' },
   pages: { id: 'pages', heading: 'Pages', file: 'pages.json' },
-  sections: { id: 'sections', heading: 'Homepage sections', file: 'sections.json' },
+  sections: { id: 'sections', heading: 'What shows on the homepage', file: 'sections.json' },
   galleries: { id: 'galleries', heading: 'Galleries', file: 'galleries.json' },
   story: { id: 'story', heading: 'Our Story', file: 'story.json' },
   press: { id: 'press', heading: 'Press', file: 'press.json' },
   hours: { id: 'hours', heading: 'Opening hours', file: 'site.json' },
-  copy: { id: 'copy', heading: 'Page copy', file: 'copy.json' },
+  copy: { id: 'copy', heading: 'Words on the site', file: 'copy.json' },
 };
 
 export interface AreaDefinition {
