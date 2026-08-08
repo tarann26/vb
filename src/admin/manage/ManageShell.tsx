@@ -309,7 +309,7 @@ function renderArea(slug: AreaSlug, active: boolean, areaProps: AreaProps): Reac
     case 'details':
       return <DetailsArea {...areaProps} />;
     case 'numbers':
-      return <NumbersArea active={active} />;
+      return <NumbersArea active={active} registry={areaProps.registry} />;
     default: {
       const _exhaustive: never = slug;
       return _exhaustive;

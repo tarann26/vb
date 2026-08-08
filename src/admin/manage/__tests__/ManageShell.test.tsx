@@ -357,3 +357,32 @@ describe('the status strip is on every screen', () => {
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+describe('a button the shell brought inside the publish form', () => {
+  // PublishBar is a single <form> and now wraps the whole shell, so a bare
+  // <button> anywhere inside it defaults to type="submit" and becomes a
+  // second Publish trigger. The Numbers Retry button is the first one this
+  // redesign adds; this is the case that would catch the next.
+  it('clicking analytics Retry does not open the publish confirmation', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url === '/api/wa') return new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } });
+        if (url === '/api/analytics') {
+          return new Response(JSON.stringify({ reason: 'unreachable', message: 'nope' }), { status: 502 });
+        }
+        return new Response(JSON.stringify({ content: '[]', sha: 'sha' }));
+      }),
+    );
+    const user = userEvent.setup();
+    renderDashboard('/edit/manage/numbers', { wide: true });
+
+    await user.click(await screen.findByRole('button', { name: 'Retry' }));
+
+    expect(screen.queryByText('Publish these changes to the live site?')).not.toBeInTheDocument();
+    // And it really is still on the Numbers screen, not somewhere else.
+    expect(screen.getByRole('heading', { name: 'Numbers' })).toBeInTheDocument();
+  });
+});

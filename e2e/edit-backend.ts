@@ -14,6 +14,8 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Page } from '@playwright/test';
+import { ZERO_DATA_PAYLOAD } from '../src/shared/analytics-payload';
+import type { AnalyticsPayload } from '../src/shared/analytics-payload';
 
 // Every file src/admin/content.ts's own CONTENT_FILES fetches. A name
 // missing here is answered 404 by the route below, which surfaces on screen
@@ -59,13 +61,49 @@ export function realContentJson(name: string): string {
 // the clock.
 export const BUILD_INFO_FIXTURE = { sha: 'e2ee2ee', builtAt: '2026-08-07T10:00:00.000Z' };
 
+// The two GET /api/analytics bodies worth driving a browser against, built
+// from the shared contract (src/shared/analytics-payload.ts) rather than
+// hand-typed -- a hand-typed fixture drifts from what the Worker actually
+// returns, and the first integration is then a rewrite.
+//
+// ZERO_DATA is the state the screen SHIPS in, and is therefore the default:
+// an e2e run that only ever exercised populated cards would never see the
+// copy she will actually read for the first fortnight.
+export const ANALYTICS_ZERO = ZERO_DATA_PAYLOAD;
+
+export const ANALYTICS_POPULATED: AnalyticsPayload = {
+  ...ZERO_DATA_PAYLOAD,
+  visits: 4100,
+  thisWeekVisits: 312,
+  priorWeekVisits: 240,
+  bookingTaps: { total: 512, days: 28, lowerBound: true },
+  byPath: [
+    { path: '/', visits: 2000 },
+    { path: '/catering', visits: 400 },
+  ],
+  byReferer: [
+    { kind: 'instagram', label: 'Instagram', host: null, visits: 1200 },
+    { kind: 'direct', label: 'Typed it in or used a bookmark', host: null, visits: 900 },
+  ],
+};
+
 export interface EditBackendOptions {
   // When true, /build-info.json answers 404 -- the state the strip must
   // report as "couldn't check" rather than as the site being down.
   buildInfoUnavailable?: boolean;
+  // Which analytics body GET /api/analytics answers with. Defaults to the
+  // launch state.
+  analytics?: AnalyticsPayload;
 }
 
 export async function mockEditBackend(page: Page, options: EditBackendOptions = {}): Promise<void> {
+  await page.route('**/api/analytics', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(options.analytics ?? ANALYTICS_ZERO),
+    });
+  });
   await page.route('**/build-info.json', async (route) => {
     if (options.buildInfoUnavailable) {
       await route.fulfill({ status: 404, body: 'not found' });

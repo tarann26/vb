@@ -1,8 +1,9 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { mockEditBackend } from './edit-backend';
+import { ANALYTICS_POPULATED, mockEditBackend } from './edit-backend';
 import { AREAS, PANELS, areaPath } from '../src/admin/manage/areas';
 import { AREA_SEEDED_KEY_PREFIX } from '../src/admin/open-sections';
 import { LOCKUP_ACCESSIBLE_NAME } from '../src/admin/manage/brand';
+import { CARD_HEADINGS } from '../src/admin/manage/analytics';
 
 // WHY THIS SPEC WAS REWRITTEN, recorded here rather than left to be
 // reconstructed from a diff.
@@ -316,6 +317,45 @@ for (const viewport of VIEWPORTS) {
       const name = (await headings.first().textContent()) ?? '';
       expect(name.trim().length).toBeGreaterThan(0);
       await expect(headings.first()).toBeVisible();
+    });
+  });
+}
+
+// ---------------------------------------------------------------------------
+// The Numbers screen, at the widths she uses. What each card SAYS is pinned
+// in src/admin/areas/__tests__/NumbersArea.test.tsx; this is the part only a
+// browser can answer -- that four cards' worth of copy fits, that nothing is
+// painted over anything, and that the screen genuinely reaches the route.
+for (const viewport of VIEWPORTS) {
+  test.describe(`Numbers at ${viewport.label}`, () => {
+    test.use({ viewport: { width: viewport.width, height: viewport.height } });
+
+    test('shows the four cards, framed once as early rather than four times as broken', async ({ page }) => {
+      await openDashboard(page, '/edit/manage/numbers');
+
+      // The framing sits ONCE, above the cards.
+      await expect(page.getByText(/^Visitor counting started on /)).toBeVisible();
+      await expect(page.getByText(/Nothing is wrong with your website/)).toBeVisible();
+
+      for (const heading of Object.values(CARD_HEADINGS)) {
+        await expect(page.getByText(heading)).toBeVisible();
+      }
+      // The word this copy exists to avoid.
+      await expect(page.getByText(/analytics/i)).toHaveCount(0);
+    });
+
+    test('with real numbers, both of Card A\'s honesty words survive a real render', async ({ page }) => {
+      await mockEditBackend(page, { analytics: ANALYTICS_POPULATED });
+      await page.goto('/edit/manage/numbers');
+      await expect(page.getByRole('heading', { name: LOCKUP_ACCESSIBLE_NAME })).toBeVisible();
+
+      const cardA = page.getByText(CARD_HEADINGS.a).locator('..');
+      await expect(cardA.getByText(/^about /)).toBeVisible();
+      await expect(cardA.getByText(/^at least /)).toBeVisible();
+      await expect(page.getByText(/\d+ bookings?/)).toHaveCount(0);
+      await expect(page.getByText('Busier than the week before — 312 visits, up from 240.')).toBeVisible();
+      // No chart, anywhere -- the owner asked for plain words.
+      await expect(page.locator('#section-panel-numbers canvas, [data-area="numbers"] canvas')).toHaveCount(0);
     });
   });
 }
