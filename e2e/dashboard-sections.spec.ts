@@ -175,6 +175,34 @@ for (const viewport of VIEWPORTS) {
 }
 
 // ---------------------------------------------------------------------------
+// The status strip's own layout claims. What it SAYS is pinned in
+// src/admin/manage/__tests__/StatusStrip.test.tsx; what a browser does with
+// it is only checkable here.
+for (const viewport of VIEWPORTS) {
+  test.describe(`the status strip at ${viewport.label}`, () => {
+    test.use({ viewport: { width: viewport.width, height: viewport.height } });
+
+    test('is on screen and nothing is painted over it', async ({ page }) => {
+      await openDashboard(page, '/edit/manage/menu');
+
+      const strip = page.getByLabel('Site status');
+      await expect(strip).toBeVisible();
+      // This repo has already shipped an admin control painted underneath a
+      // fixed, high-stacking-order bar once (see
+      // e2e/edit-dashboard-link.spec.ts's own comment), which is why the
+      // centre pixel is hit-tested rather than the box merely measured.
+      expect(await hitTestSelf(strip)).toEqual({ self: true, hit: expect.any(String) });
+
+      // Reading the real fixture rather than "Couldn't check when the site
+      // last updated" is what proves the /build-info.json route in
+      // e2e/edit-backend.ts is actually reached.
+      await expect(strip.getByText(/^Last published /)).toBeVisible();
+      await expect(strip.getByText('Nothing waiting to be published')).toBeVisible();
+    });
+  });
+}
+
+// ---------------------------------------------------------------------------
 test.describe('the laptop shell at 1440px', () => {
   test.use({ viewport: { width: 1440, height: 900 } });
 

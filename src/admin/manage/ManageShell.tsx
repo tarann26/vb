@@ -77,6 +77,9 @@
 import React, { useRef, useState } from 'react';
 import { Link, Navigate, useLocation } from 'react-router-dom';
 import PublishBar, { DraftBanner } from '../PublishBar';
+import type { PublishPhase } from '../PublishBar';
+import StatusStrip from './StatusStrip';
+import { dirtyContentFiles } from '../publish';
 import SectionErrorBoundary from '../SectionErrorBoundary';
 import { markAreaSeeded, hasSeededArea, saveSectionOpen } from '../open-sections';
 import { AREAS, MANAGE_BASE, areaPath, findArea, slugFromPathname } from './areas';
@@ -138,6 +141,10 @@ const ManageShell: React.FC<ManageShellProps> = ({
   const slug = slugFromPathname(pathname);
   const area = findArea(slug);
   const [wide] = useState(readWideViewport);
+  // What PublishBar is currently reporting, so the strip and the bar make
+  // ONE statement about a publish rather than two that contradict each
+  // other. See PublishBar's `onPhaseChange`.
+  const [publishPhase, setPublishPhase] = useState<PublishPhase>('idle');
   const seededRef = useRef(false);
 
   const isBareUrl = slug === '';
@@ -179,6 +186,15 @@ const ManageShell: React.FC<ManageShellProps> = ({
     <div className="min-h-screen bg-[#f7f5f0] px-4 py-10">
       <div className="mx-auto max-w-5xl">
         <h1 className="mb-2 font-['Parisienne'] text-3xl text-[#222]">Via Bianca Dashboard</h1>
+        {/* On EVERY area, on the phone home and on the not-found screen,
+            at both widths -- outside the draft ternary below, because the
+            one screen she can be looking at while a draft is pending is
+            still a screen that should say what is going on. */}
+        <StatusStrip
+          dirtyFiles={dirtyContentFiles(registry.getEntries())}
+          stagedCount={Object.keys(stagedFiles.files).length}
+          publishPhase={publishPhase}
+        />
         {otherSurfaceDraftExists && (
           <p className="mb-4 font-['Montserrat'] text-sm text-gray-500">
             You also have unpublished changes saved on the live-page editor (/edit) — untouched by anything you do
@@ -232,6 +248,7 @@ const ManageShell: React.FC<ManageShellProps> = ({
                   stagedFiles={stagedFiles}
                   draftSurface="dashboard"
                   onPublishLockChange={onPublishLockChange}
+                  onPhaseChange={setPublishPhase}
                   onUnauthenticated={onUnauthenticated}
                 >
                   {showHomeList && <AreaHome />}

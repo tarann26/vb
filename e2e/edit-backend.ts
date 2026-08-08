@@ -48,7 +48,35 @@ export function realContentJson(name: string): string {
 // call EditMode makes before first paint (one per file in CONTENT_FILES) --
 // faked here from the real files on disk so the page renders the actual
 // production content, not a stand-in.
-export async function mockEditBackend(page: Page): Promise<void> {
+// A fixed build stamp for /build-info.json.
+//
+// This fixture is REQUIRED, not a convenience. playwright.config.ts runs
+// `npm run dev`, and plugins/build-info.ts is build-only -- so under the dev
+// server that file does not exist at all, every run reads "Couldn't check
+// when the site last updated." in the status strip, and "Last published 2
+// hours ago" is untestable. Frozen rather than relative to `Date.now()` so
+// the strip's own relative-time formatting is what is being measured, not
+// the clock.
+export const BUILD_INFO_FIXTURE = { sha: 'e2ee2ee', builtAt: '2026-08-07T10:00:00.000Z' };
+
+export interface EditBackendOptions {
+  // When true, /build-info.json answers 404 -- the state the strip must
+  // report as "couldn't check" rather than as the site being down.
+  buildInfoUnavailable?: boolean;
+}
+
+export async function mockEditBackend(page: Page, options: EditBackendOptions = {}): Promise<void> {
+  await page.route('**/build-info.json', async (route) => {
+    if (options.buildInfoUnavailable) {
+      await route.fulfill({ status: 404, body: 'not found' });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(BUILD_INFO_FIXTURE),
+    });
+  });
   await page.route('**/api/wa', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
   });

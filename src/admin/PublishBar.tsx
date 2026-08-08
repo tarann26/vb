@@ -137,7 +137,13 @@ type BarState =
   // it there.
   | { phase: 'unauthenticated'; notice: string };
 
-const BUSY_PHASES = new Set<BarState['phase']>(['publishing', 'polling', 'confirming']);
+// The one thing about this bar's internal state that anything outside it is
+// allowed to know: WHICH phase, without any of the payloads attached to it.
+// Exported so the header's status strip can render one statement about a
+// publish in the same frame the bar does -- see `onPhaseChange` below.
+export type PublishPhase = BarState['phase'];
+
+const BUSY_PHASES = new Set<PublishPhase>(['publishing', 'polling', 'confirming']);
 
 // Review finding (Important): a 401 mid-POLL is not the same event as a 401
 // on the publish REQUEST itself, and reusing one sentence for both told her
@@ -383,6 +389,20 @@ export interface PublishBarProps {
   // hand a ten-minute timeout the power to freeze her page over a flaky
   // connection, for a commit that has probably already gone live.
   onPublishLockChange?: (locked: boolean) => void;
+  // Additive, optional, and alongside `onPublishLockChange` rather than
+  // instead of it: the two answer different questions. The LOCK is "may she
+  // type right now", and deliberately covers only the seconds the POST is
+  // open. The PHASE is "what is this bar reporting", which the header's
+  // status strip needs for the whole publish window -- otherwise, for the
+  // one to two minutes after she presses Publish, the strip would read "Site
+  // is live · last published 2 hours ago" in the same frame as this bar says
+  // "Publishing…". Two honest statements, and from her chair a flat
+  // contradiction whose obvious reading is "my publish didn't take", at
+  // exactly the moment this redesign exists to make calm.
+  //
+  // Nothing else about this component changes: it is one more call in the
+  // same effect shape the lock already uses.
+  onPhaseChange?: (phase: PublishPhase) => void;
   // Called once an undo has actually gone live. A full page reload, not a
   // registry correction, and not optional: after an undo every entry's
   // `sha` AND `initial` are stale, and there is no safe API to fix that in
@@ -425,6 +445,7 @@ const PublishBar: React.FC<PublishBarProps> = ({
   problems = [],
   offsetTop = 0,
   onPublishLockChange,
+  onPhaseChange,
   reload = () => window.location.reload(),
 }) => {
   const [state, setState] = useState<BarState>({ phase: 'idle' });
@@ -511,6 +532,18 @@ const PublishBar: React.FC<PublishBarProps> = ({
     return () => onPublishLockChange?.(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [locked]);
+
+  // Same shape, same reason for useLayoutEffect: the strip's sentence lands
+  // in the same paint as this bar's, not one frame later. The cleanup
+  // reports 'idle' on unmount so a bar torn down mid-publish (the
+  // dashboard's own 401 -> Login path does exactly that) cannot leave a
+  // parent stuck rendering "Publishing your changes" with no component left
+  // to correct it.
+  useLayoutEffect(() => {
+    onPhaseChange?.(state.phase);
+    return () => onPhaseChange?.('idle');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.phase]);
 
   // Step 4: every dirty content file, written to localStorage with a
   // timestamp, on every change -- `registry.version` is the one plain

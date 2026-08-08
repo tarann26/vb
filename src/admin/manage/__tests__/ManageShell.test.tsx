@@ -335,3 +335,25 @@ describe('every button on this screen declares its type', () => {
     expect(untyped.map((b) => b.textContent)).toEqual([]);
   });
 });
+
+// ---------------------------------------------------------------------------
+describe('the status strip is on every screen', () => {
+  // A loop over AREAS plus the two screens that are NOT areas, because the
+  // not-found screen is exactly where a header element gets dropped.
+  const SCREENS = [
+    ...AREAS.map((area) => ({ label: area.label, route: `/edit/manage/${area.slug}` })),
+    { label: 'the phone home', route: '/edit/manage' },
+    { label: 'the not-found screen', route: '/edit/manage/not-a-thing' },
+  ];
+
+  describe.each([
+    { label: 'laptop', wide: true },
+    { label: 'phone', wide: false },
+  ])('at $label width', ({ wide }) => {
+    it.each(SCREENS)('is present on $label', async ({ route }) => {
+      stubFetch();
+      renderDashboard(route, { wide });
+      expect(await screen.findByLabelText('Site status')).toBeInTheDocument();
+    });
+  });
+});
