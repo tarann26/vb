@@ -85,6 +85,7 @@ import { markAreaSeeded, hasSeededArea, saveSectionOpen } from '../open-sections
 import { AREAS, MANAGE_BASE, areaPath, findArea, slugFromPathname } from './areas';
 import type { AreaSlug } from './areas';
 import AreaNav from './AreaNav';
+import { BRAND_NAME, BRAND_TAGLINE } from './brand';
 import AreaHome from './AreaHome';
 import AreaNotFound from './AreaNotFound';
 import MenuArea from '../areas/MenuArea';
@@ -185,7 +186,22 @@ const ManageShell: React.FC<ManageShellProps> = ({
   return (
     <div className="min-h-screen bg-[#f7f5f0] px-4 py-10">
       <div className="mx-auto max-w-5xl">
-        <h1 className="mb-2 font-['Parisienne'] text-3xl text-[#222]">Via Bianca Dashboard</h1>
+        {/* The real lockup, not a heading that says "Dashboard". Two lines,
+            capped at two by design: the 390px header budget is what makes
+            "all five home rows fit one screen without scrolling" achievable
+            by design rather than by luck.
+
+            A single <h1> whose accessible name is the whole lockup, rather
+            than the wordmark as an image -- an image with an empty alt would
+            leave this page with no h1 at all, which is the specific way this
+            change fails silently. The e2e spec pins exactly one h1 with a
+            non-empty name at both widths. */}
+        <h1 className="mb-4 leading-tight">
+          <span className="block font-['Parisienne'] text-4xl text-[#6B8B59]">{BRAND_NAME}</span>
+          <span className="block font-['Montserrat'] text-xs uppercase tracking-[0.2em] text-gray-500">
+            {BRAND_TAGLINE}
+          </span>
+        </h1>
         {/* On EVERY area, on the phone home and on the not-found screen,
             at both widths -- outside the draft ternary below, because the
             one screen she can be looking at while a draft is pending is

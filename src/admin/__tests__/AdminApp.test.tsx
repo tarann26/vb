@@ -17,6 +17,7 @@ import userEvent from '@testing-library/user-event';
 // sections), Story & Photos (galleries, our story, press) and Hours &
 // Wording (opening hours, page copy).
 import { markEveryAreaSeeded, renderDashboard } from './renderDashboard';
+import { LOCKUP_ACCESSIBLE_NAME } from '../manage/brand';
 import { DISH_FIELDS } from '../fields';
 import {
   COPY,
@@ -1011,7 +1012,7 @@ describe('AdminApp: Minor -- a pre-existing /edit draft is mentioned, never rest
     stubFetch();
     renderDashboard('/edit/manage/menu');
 
-    await screen.findByRole('heading', { name: 'Via Bianca Dashboard' });
+    await screen.findByRole('heading', { name: LOCKUP_ACCESSIBLE_NAME });
     expect(screen.queryByText(/unpublished changes saved on the live-page editor/i)).not.toBeInTheDocument();
   });
 });

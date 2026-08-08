@@ -2,6 +2,7 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 import { mockEditBackend } from './edit-backend';
 import { AREAS, PANELS, areaPath } from '../src/admin/manage/areas';
 import { AREA_SEEDED_KEY_PREFIX } from '../src/admin/open-sections';
+import { LOCKUP_ACCESSIBLE_NAME } from '../src/admin/manage/brand';
 
 // WHY THIS SPEC WAS REWRITTEN, recorded here rather than left to be
 // reconstructed from a diff.
@@ -87,7 +88,7 @@ async function asReturningVisitor(page: Page): Promise<void> {
 async function openDashboard(page: Page, path = '/edit/manage'): Promise<void> {
   await mockEditBackend(page);
   await page.goto(path);
-  await expect(page.getByRole('heading', { name: 'Via Bianca Dashboard' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: LOCKUP_ACCESSIBLE_NAME })).toBeVisible();
   // Every area's own fetches have settled -- otherwise anything measured
   // below is measured against a page still filling in. All five areas load
   // at once (they are mounted from the first render and merely hidden), so
@@ -167,7 +168,7 @@ for (const viewport of VIEWPORTS) {
       await expect(page.getByRole('button', { name: 'Dishes' })).toHaveAttribute('aria-expanded', 'false');
 
       await page.reload();
-      await expect(page.getByRole('heading', { name: 'Via Bianca Dashboard' })).toBeVisible();
+      await expect(page.getByRole('heading', { name: LOCKUP_ACCESSIBLE_NAME })).toBeVisible();
       await expect(page.getByRole('button', { name: 'Menus' })).toHaveAttribute('aria-expanded', 'true');
       await expect(page.getByRole('button', { name: 'Dishes' })).toHaveAttribute('aria-expanded', 'false');
     });
@@ -296,6 +297,28 @@ test.describe('thumbnails add no image traffic of their own', () => {
     thumbSrcs.forEach((src) => expect(otherSrcs).toContain(src));
   });
 });
+
+// ---------------------------------------------------------------------------
+// The lockup. Its accessible name is what openDashboard above waits on, so
+// if this ever goes wrong every case in this file fails -- which is why the
+// specific failure it guards is worth naming on its own: a wordmark rendered
+// as an image with an empty alt would leave this page with NO h1 at all, and
+// nothing else here would notice.
+for (const viewport of VIEWPORTS) {
+  test.describe(`the brand lockup at ${viewport.label}`, () => {
+    test.use({ viewport: { width: viewport.width, height: viewport.height } });
+
+    test('is exactly one h1, with a non-empty accessible name', async ({ page }) => {
+      await openDashboard(page, '/edit/manage/menu');
+
+      const headings = page.getByRole('heading', { level: 1 });
+      await expect(headings).toHaveCount(1);
+      const name = (await headings.first().textContent()) ?? '';
+      expect(name.trim().length).toBeGreaterThan(0);
+      await expect(headings.first()).toBeVisible();
+    });
+  });
+}
 
 // ---------------------------------------------------------------------------
 test.describe('the laptop shell at 1440px', () => {

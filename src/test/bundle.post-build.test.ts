@@ -235,19 +235,32 @@ describe('dist/assets/ keeps admin code out of the entry chunk', () => {
   // Source file each marker's own presence test (and the shared leak check
   // below) exists to catch a leak of.
   //
-  // Task 10 re-points the AdminApp.tsx marker: its old value, "Publishing
-  // isn't built yet", was the very placeholder note this task replaces with
-  // a real Publish button, so it stopped existing in AdminApp.tsx's own
-  // source entirely. The dashboard's own <h1> ("Via Bianca Dashboard", not
-  // the bare "Via Bianca" several PUBLIC components also render -- see
-  // src/components/ErrorBoundary.tsx and ReservationPage.tsx, both
-  // legitimately part of the entry chunk, which is exactly why the bare
-  // phrase would be a false-positive marker here) is the new one: unique to
-  // this file, confirmed by a direct search of src/ for the word
-  // "Dashboard" turning up nowhere else at the time this was written.
+  // The dashboard marker has been re-pointed twice, and the reason each time
+  // is the same: it has to be text that exists ONLY in the admin chunk, and
+  // the obvious candidates are traps.
+  //
+  // Task 10 moved it off "Publishing isn't built yet" (a placeholder that
+  // stopped existing) onto the dashboard's own <h1>, "Via Bianca Dashboard".
+  // The manage-screen redesign deletes that <h1> too: it is replaced by the
+  // real brand lockup, whose two strings are "Via Bianca" and "Pastificio &
+  // Ristorante" -- BOTH of which are false positives here. Bare "Via Bianca"
+  // is rendered by src/components/ErrorBoundary.tsx and ReservationPage.tsx,
+  // and "Pastificio & Ristorante" is site.tagline, which Footer renders;
+  // both are legitimately in the entry chunk, so either would make this
+  // check pass no matter what leaked.
+  //
+  // The replacement is the phone home's own Menu description, which lives
+  // only in src/admin/manage/areas.ts. It is a full SENTENCE rather than a
+  // label, which is what makes it unlikely to be casually retouched by a
+  // wording pass, and its uniqueness against src/ was confirmed by a direct
+  // search before this landed -- one occurrence, in areas.ts. The key names
+  // that file rather than AdminApp.tsx, because that is where the string now
+  // is; what the marker MEANS is unchanged ("the admin chunk did not leak
+  // into the entry chunk"), since areas.ts is reachable only through
+  // AdminApp.
   const ADMIN_MARKERS: Record<string, string> = {
     'Login.tsx': 'Admin login', // the login form's own aria-label
-    'AdminApp.tsx': 'Via Bianca Dashboard', // the logged-in dashboard's own heading
+    'manage/areas.ts': 'Dishes, drinks and the PDF menus', // the phone home's Menu description
     // Plan 5 Task 2's own text, not shared with any other file -- confirmed
     // by a direct search of src/ for this exact sentence turning up nowhere
     // else at the time this was written. Unlike the two markers above,
