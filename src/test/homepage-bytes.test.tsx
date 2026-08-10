@@ -15,6 +15,43 @@ import { AppRoutes } from '../App';
 // this test cannot tell those apart, which is the point: it forces the
 // distinction to be made explicitly rather than silently.
 //
+// ---------------------------------------------------------------------------
+// THIS FILE IS EXCLUDED FROM `npm run test:deploy`, AND MUST STAY EXCLUDED.
+// ---------------------------------------------------------------------------
+// "Forces a developer to make the distinction explicitly" is the right
+// discipline for a developer. It is an outright bug for the restaurant owner,
+// and that was proven the hard way: a fifteen-character edit to one dish
+// description, published from the dashboard, took the homepage from 47758 to
+// 47773 bytes. The publish succeeded, the commit landed on `main`, and then
+// the Cloudflare build ran `test:deploy`, failed HERE, and refused the
+// deploy. The edit never reached the site.
+//
+// Worse, it did not fail alone. The bad commit sits on `main`, so every
+// SUBSEQUENT publish of any other file failed this same assertion too, and
+// the owner had no way out: worker/github.ts's `isContentPath` restricts
+// publishing to `src/content/*.json`, so the dashboard physically cannot
+// touch this file to update the number. Every control she could reach made
+// it worse.
+//
+// That is not an edge case. Dish names, drink descriptions, opening hours,
+// gallery images, page copy -- anything the homepage renders moves this
+// number, which is to say: normal use of the product.
+//
+// So the two audiences are split rather than the test being weakened:
+//
+//   npm test         runs this. A DEVELOPER changing the homepage without
+//                    meaning to is still caught, before merge, exactly as
+//                    designed. Nothing about that guarantee is reduced.
+//   npm run test:deploy   does not. A CONTENT PUBLISH is a deliberate,
+//                    legitimate homepage change made by someone who cannot
+//                    edit this file, so blocking the build on it blocks the
+//                    product's primary function.
+//
+// package.json's `test:deploy` carries the `--exclude` (alongside the one for
+// images.derivatives, which is excluded for its own unrelated reason), and
+// src/test/hosting.test.ts asserts that exclusion is still there -- because
+// silently losing it would restore the outage without anything going red.
+//
 // Plan 6, Task 2, Step 3: 53473 -> 53485 (+12 bytes). `galleries.json`'s
 // entry 4 gained an explicit `row-start-1` -- twelve ASCII characters,
 // including the leading space Hero.tsx's own template-literal join adds

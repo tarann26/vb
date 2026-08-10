@@ -301,6 +301,49 @@ describe('cloudflare hosting config', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// What the Cloudflare build gate must NOT contain.
+//
+// `npm run test:deploy` is the second command in the Pages build, so anything
+// it runs can refuse a deploy. That is the point for content guards. It is a
+// bug for a test that a legitimate content publish is expected to move.
+//
+// Found by publishing for real: a fifteen-character edit to one dish
+// description failed src/test/homepage-bytes.test.tsx's byte-exact assertion,
+// the build was refused, and because the commit had already landed on `main`
+// every subsequent publish failed the same way. The owner could not fix it --
+// `isContentPath` (worker/github.ts) restricts publishing to
+// `src/content/*.json`, so the dashboard cannot reach the test file blocking
+// it.
+//
+// The exclusion is what keeps publishing usable, and losing it would restore
+// that outage silently, so it is asserted rather than trusted to a comment.
+// ---------------------------------------------------------------------------
+describe('the deploy gate excludes tests a content publish is meant to move', () => {
+  function testDeployScript(): string {
+    const pkg = JSON.parse(readFileSync('package.json', 'utf8')) as { scripts: Record<string, string> };
+    return pkg.scripts['test:deploy'];
+  }
+
+  it('exists at all', () => {
+    expect(testDeployScript()).toBeTruthy();
+  });
+
+  it('excludes the byte-exact homepage snapshot', () => {
+    expect(testDeployScript()).toContain('--exclude src/test/homepage-bytes.test.tsx');
+  });
+
+  // The other half, and the half that makes this a split rather than a
+  // deletion: `npm test` must still run it, so a developer who changes the
+  // homepage without meaning to is caught before merge. An exclusion that
+  // leaked into the plain test script would turn this fix into a silent loss
+  // of coverage.
+  it('leaves the plain test script running it', () => {
+    const pkg = JSON.parse(readFileSync('package.json', 'utf8')) as { scripts: Record<string, string> };
+    expect(pkg.scripts.test).not.toContain('homepage-bytes');
+  });
+});
+
 describe('documented cloudflare build command', () => {
   // Task 2 made public/ derivatives untracked, so a fresh clone (exactly what
   // Cloudflare builds from) has none until `npm run images` runs. `npm run

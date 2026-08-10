@@ -8,7 +8,7 @@
     "build": "npm run images && tsc -b && vite build && npm run test:bundle",
     "lint": "eslint .",
     "test": "vitest run",
-    "test:deploy": "vitest run --exclude scripts/__tests__/images.derivatives.test.mjs",
+    "test:deploy": "vitest run --exclude scripts/__tests__/images.derivatives.test.mjs --exclude src/test/homepage-bytes.test.tsx",
     "test:bundle": "VB_REQUIRE_DIST=1 vitest run src/test/bundle.post-build.test.ts src/test/crawlers.test.ts",
     "test:watch": "vitest",
     "preview": "vite preview",
