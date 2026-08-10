@@ -27,7 +27,7 @@
 //
 // Run with `npm run verify:deploy` after pushing to main.
 import { chromium } from '@playwright/test';
-import { readdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 
 const SITE = process.env.VB_SITE ?? 'https://vb.aionxxxi.uk';
@@ -127,9 +127,56 @@ note('');
 // production is not involved. VB_DEPLOY_URL overrides it; without one, this
 // step is SKIPPED rather than silently falling back to the dangerous check.
 // ---------------------------------------------------------------------------
-const deployUrl = process.env.VB_DEPLOY_URL ?? null;
-note(deployUrl ? `assets (on ${deployUrl}, not production):` : 'assets: SKIPPED (set VB_DEPLOY_URL to the per-deployment Pages URL)');
-for (const file of deployUrl ? readdirSync('dist/assets') : []) {
+// VB_DEPLOY_URL if given; otherwise ask Cloudflare which URL this deployment
+// got. The commit is NOT derivable -- <commit>.<project>.pages.dev 404s,
+// only the deployment id resolves -- so without the API there is nothing to
+// compute and the step skips rather than falling back to the check that
+// causes outages. Account and project come from wrangler.toml so this file
+// holds no second copy of them to drift.
+async function resolveDeployUrl() {
+  if (process.env.VB_DEPLOY_URL) return process.env.VB_DEPLOY_URL;
+  const token = process.env.CLOUDFLARE_API_TOKEN;
+  if (!token) return null;
+  const toml = readFileSync('wrangler.toml', 'utf8');
+  const account = toml.match(/CLOUDFLARE_ACCOUNT_ID\s*=\s*"([^"]+)"/)?.[1];
+  const project = toml.match(/CLOUDFLARE_PAGES_PROJECT\s*=\s*"([^"]+)"/)?.[1];
+  if (!account || !project) return null;
+  const res = await fetch(
+    `https://api.cloudflare.com/client/v4/accounts/${account}/pages/projects/${project}/deployments?per_page=1`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  ).catch(() => null);
+  const body = res ? await res.json().catch(() => null) : null;
+  const dep = body?.result?.[0];
+  // Only trust it if Cloudflare says this is the commit under test, so a
+  // still-building or superseded deployment is never checked as if it were.
+  const sha = dep?.deployment_trigger?.metadata?.commit_hash;
+  return sha === headSha && typeof dep?.url === 'string' ? dep.url : null;
+}
+const deployUrl = await resolveDeployUrl();
+// The asset list comes from the DEPLOYMENT, never from local dist/.
+//
+// It used to read `dist/assets`, and that broke the moment filenames started
+// carrying the commit (vite.config.ts): a working tree built at a different
+// commit produces different names, so the check reported six missing assets
+// for a deployment that was completely healthy. Reading what the deployed
+// HTML actually references removes the local build from the question
+// entirely, and has the better property anyway -- it checks the files this
+// deployment really asks a browser for, including lazily-imported chunks the
+// HTML never names.
+async function deployedAssets(base) {
+  const html = await (await fetch(`${base}/`)).text();
+  const fromHtml = [...html.matchAll(/\/assets\/([A-Za-z0-9_.-]+\.(?:js|css))/g)].map((m) => m[1]);
+  const entry = fromHtml.find((f) => f.startsWith('index-') && f.endsWith('.js'));
+  let fromEntry = [];
+  if (entry) {
+    const js = await (await fetch(`${base}/assets/${entry}`)).text();
+    fromEntry = [...js.matchAll(/["'`]\.\/([A-Za-z0-9_.-]+\.js)["'`]/g)].map((m) => m[1]);
+  }
+  return [...new Set([...fromHtml, ...fromEntry])];
+}
+
+note(deployUrl ? `assets (on ${deployUrl}, not production):` : 'assets: SKIPPED (no VB_DEPLOY_URL and no CLOUDFLARE_API_TOKEN to resolve one)');
+for (const file of deployUrl ? await deployedAssets(deployUrl) : []) {
   const expected = EXPECTED_TYPE[file.slice(file.lastIndexOf('.'))];
   if (!expected) continue;
   const res = await fetch(`${deployUrl}/assets/${file}`, { headers: { Origin: deployUrl } });
