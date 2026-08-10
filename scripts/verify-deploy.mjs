@@ -107,13 +107,33 @@ await new Promise((resolve) => setTimeout(resolve, SETTLE_MS));
 note('');
 
 // ---------------------------------------------------------------------------
-// 2. Every built asset, fetched the way a browser fetches it.
+// 2. Every built asset -- checked on the PER-DEPLOYMENT Pages URL, never on
+//    the production hostname.
+//
+// This script twice CAUSED the outage it exists to detect, and this is the
+// fix. Fetching a freshly-deployed asset through the production zone is the
+// poisoning mechanism itself: if that edge node does not have the file yet,
+// the request falls through the SPA catch-all, is answered with index.html at
+// 200, and the edge stores that HTML under a content-hashed URL that never
+// revalidates. The tool checking for a blank site was the request that made
+// the site blank, twice, with `age` equal to the seconds since it started.
+//
+// A settle delay was the first attempt and was not enough -- propagation is
+// not a fixed interval, so no constant is correct.
+//
+// The per-deployment URL (<id>.<project>.pages.dev) serves one specific
+// deployment directly. It is the same bytes, so a wrong Content-Type there is
+// still a real failure, but a miss cannot poison the production cache because
+// production is not involved. VB_DEPLOY_URL overrides it; without one, this
+// step is SKIPPED rather than silently falling back to the dangerous check.
 // ---------------------------------------------------------------------------
-note("assets (sent with the site's own Origin):");
-for (const file of readdirSync('dist/assets')) {
+const deployUrl = process.env.VB_DEPLOY_URL ?? null;
+note(deployUrl ? `assets (on ${deployUrl}, not production):` : 'assets: SKIPPED (set VB_DEPLOY_URL to the per-deployment Pages URL)');
+for (const file of deployUrl ? readdirSync('dist/assets') : []) {
   const expected = EXPECTED_TYPE[file.slice(file.lastIndexOf('.'))];
   if (!expected) continue;
-  const res = await get(`/assets/${file}`);
+  const res = await fetch(`${deployUrl}/assets/${file}`, { headers: { Origin: deployUrl } });
+  await res.arrayBuffer().catch(() => {});
   const type = res.headers.get('content-type') ?? '';
   const ok = res.status === 200 && expected.test(type);
   note(`  ${ok ? 'ok  ' : 'FAIL'}  ${file}  ${res.status} ${type} ${ok ? '' : `(${res.headers.get('cf-cache-status')}, age ${res.headers.get('age') ?? '0'})`}`);
@@ -192,7 +212,17 @@ note(
 // ---------------------------------------------------------------------------
 // 4. A real browser, because 1-3 can all pass on a site that renders nothing.
 // ---------------------------------------------------------------------------
-note('\nroutes in a real browser:');
+// Loaded from the per-deployment URL when one is given, for the same reason
+// the asset check moved: a browser hitting production during the propagation
+// window pulls every asset through it, which is fifteen more chances to cache
+// a fallthrough under a content-hashed URL. The deployment URL serves the
+// same bytes, so "does this build actually render" is answered either way.
+//
+// Checking that PRODUCTION renders is still worth doing, and is deliberately
+// left to a separate, later run once the window has closed -- rather than
+// done here, immediately after deploy, which is precisely when it is unsafe.
+const BROWSE = deployUrl ?? SITE;
+note(`\nroutes in a real browser (${BROWSE}):`);
 const browser = await chromium.launch();
 try {
   for (const route of ROUTES) {
@@ -205,7 +235,7 @@ try {
       }
     });
     try {
-      await page.goto(`${SITE}${route}`, { waitUntil: 'domcontentloaded', timeout: 60_000 });
+      await page.goto(`${BROWSE}${route}`, { waitUntil: 'domcontentloaded', timeout: 60_000 });
       await page.waitForTimeout(2500);
       // The fallback in index.html is removed by src/main.tsx as its first
       // act, so its absence is positive evidence that module ran. Counting
