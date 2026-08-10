@@ -98,8 +98,29 @@
           stale the first time either changed -- silently, since this markup
           is invisible unless the site is already broken.
         -->
+        <!--
+          "Refreshing usually fixes it" was wrong for the one failure this
+          message exists to cover, and wrong in the way that wastes the most
+          of someone's time: they refresh, see the same screen, and conclude
+          the site is dead.
+
+          A poisoned asset is served with `max-age=31536000, immutable`
+          (public/_headers), so a browser that received one has cached it for
+          a YEAR and an ordinary reload will not re-request it. Only a
+          cache-bypassing reload will, which is why the shortcut is spelled
+          out rather than implied.
+
+          The second sentence is the honest floor: `s-maxage` bounds the edge
+          copy to an hour, and asset filenames now carry the commit
+          (vite.config.ts), so the next deploy retires the bad URL outright.
+          Someone who does nothing does get it back.
+        -->
         <p>
-          This page did not finish loading. Refreshing usually fixes it.
+          This page did not finish loading. Hold Shift and click reload, or
+          press Cmd-Shift-R on a Mac, Ctrl-Shift-R elsewhere.
+        </p>
+        <p>
+          If that does not do it, this clears itself within the hour.
         </p>
       </div>
     </div>
