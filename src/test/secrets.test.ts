@@ -63,8 +63,20 @@ const HASH_PATTERN = new RegExp(
 //
 // Assembled by fragment for the same reason as the two patterns above: a
 // literal prefix here would make this file match itself.
+// `cfat_` was missing until a real one turned up. Cloudflare issues two kinds
+// and they differ by prefix: `cfut_` for a USER token, `cfat_` for an
+// ACCOUNT-OWNED one. This project's own analytics token is the account kind,
+// so the scanner covered every shape except the one actually in use, and
+// would have let exactly that token be committed.
+//
+// Worth writing down alongside it, because it costs an hour otherwise: the
+// two verify at DIFFERENT endpoints. A `cfat_` token checked against
+// /user/tokens/verify comes back "Invalid API Token", which reads as a dead
+// token rather than the wrong endpoint. Account tokens verify at
+// /accounts/{account_id}/tokens/verify.
 const CF_TOKEN_PREFIXES = [
   ['cf', 'ut_'].join(''),
+  ['cf', 'at_'].join(''),
   ['v1.0-', ''].join(''),
 ];
 const CF_TOKEN_PATTERN = new RegExp(`(${CF_TOKEN_PREFIXES.join('|')})[A-Za-z0-9_-]{20,}`);

@@ -861,3 +861,24 @@ npm run verify:deploy
 Worker and survive every deploy, which is why the dry-run output lists only
 the plain vars and the KV binding. If a deploy goes wrong, `npx wrangler
 rollback` returns to the previous version.
+
+### 9a. Two kinds of API token, two verify endpoints
+
+Cloudflare issues user tokens and account-owned tokens, and they differ by
+prefix:
+
+| Prefix | Kind | Verify at |
+| --- | --- | --- |
+| `cfut_` | user | `/client/v4/user/tokens/verify` |
+| `cfat_` | account-owned | `/client/v4/accounts/{account_id}/tokens/verify` |
+
+Check a `cfat_` token against the user endpoint and Cloudflare answers
+**"Invalid API Token"**. The token is fine. The endpoint is wrong. That cost
+an hour once; do not spend it again.
+
+`src/test/secrets.test.ts` blocks both prefixes from being committed. It
+matches on prefix only, deliberately: Cloudflare's older tokens are a bare
+40-character `[A-Za-z0-9_-]` run with no marker, and a pattern for that shape
+would flag base64 fixtures, content hashes and much of the binary content the
+scanner reads. A check that cries wolf gets switched off, so the bare form is
+a documented blind spot rather than a noisy rule.
