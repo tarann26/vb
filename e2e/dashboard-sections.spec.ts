@@ -471,8 +471,24 @@ test.describe('the phone shell at 390x844', () => {
     await page.goto('/edit');
 
     // Tap one.
+    //
+    // The longer timeout is about WHAT this asserts, not about papering over a
+    // flake. /edit/manage/* is a React.lazy route, so this tap triggers a
+    // network fetch of the AdminApp chunk before anything can render. On a
+    // developer's warm machine that is imperceptible; on a cold CI runner it
+    // exceeded the 5s default and failed here while every other spec in this
+    // file passed.
+    //
+    // The claim worth pinning is "two taps reach a real editing screen", not
+    // "a lazily-loaded chunk downloads within five seconds on whatever hardware
+    // happens to be running". The second is a performance assertion wearing a
+    // functional one's clothes, and it fails on the machine rather than on the
+    // code. Timing that chunk deliberately would be a different test, with its
+    // own budget and its own reason.
     await page.locator('a[href="/edit/manage"]').click();
-    await expect(page.getByRole('heading', { name: /What would you like to change/ })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /What would you like to change/ })).toBeVisible({
+      timeout: 20_000,
+    });
 
     // Tap two.
     await page.locator('nav[data-variant="list"]').getByRole('link', { name: /^Menu/ }).click();
