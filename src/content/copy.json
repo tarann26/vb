@@ -3,11 +3,6 @@
     "wordmark": "Via Bianca",
     "links": [
       {
-        "href": "#our-story",
-        "label": "Our Story",
-        "section": "ourStory"
-      },
-      {
         "href": "#gallery",
         "label": "Gallery",
         "section": "atmosphere"
@@ -16,6 +11,11 @@
         "href": "#menu",
         "label": "Menu",
         "section": "food"
+      },
+      {
+        "href": "#our-story",
+        "label": "About",
+        "section": "ourStory"
       },
       {
         "href": "#blogs",

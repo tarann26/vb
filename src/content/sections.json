@@ -6,11 +6,6 @@
   },
   {
     "kind": "bespoke",
-    "id": "ourStory",
-    "enabled": true
-  },
-  {
-    "kind": "bespoke",
     "id": "atmosphere",
     "enabled": true
   },
@@ -27,6 +22,11 @@
   {
     "kind": "bespoke",
     "id": "press",
+    "enabled": true
+  },
+  {
+    "kind": "bespoke",
+    "id": "ourStory",
     "enabled": true
   },
   {

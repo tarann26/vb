@@ -34,7 +34,7 @@ describe('SectionList: human names, not SectionIds', () => {
 
   it('every section gets a human name, and every id is covered', () => {
     renderList();
-    ['Hero', 'Our Story', 'Atmosfera', 'Menu', 'Drinks', 'Stories', 'Visit Us'].forEach((name) => {
+    ['Hero', 'About', 'Atmosfera', 'Menu', 'Drinks', 'Stories', 'Visit Us'].forEach((name) => {
       expect(screen.getByText(name)).toBeInTheDocument();
     });
   });
@@ -125,7 +125,7 @@ describe('SectionList: no Remove button anywhere, and no Add button either -- D6
   it('reordering never changes WHICH ids are present, only their order', async () => {
     const user = userEvent.setup();
     const { onReorder } = renderList();
-    await user.click(screen.getByRole('button', { name: 'Move Our Story up' }));
+    await user.click(screen.getByRole('button', { name: 'Move About up' }));
     const newOrder = onReorder.mock.calls[0][0] as SectionId[];
     expect(new Set(newOrder)).toEqual(new Set(ALL_SEVEN.map((s) => s.id)));
     expect(newOrder).toHaveLength(7);

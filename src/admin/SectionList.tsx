@@ -64,7 +64,7 @@ export interface SectionListProps {
 // `NavLink` notes neither has a nav entry.
 const SECTION_NAMES: Record<SectionId, { name: string; anchor: string | null }> = {
   hero: { name: 'Hero', anchor: null },
-  ourStory: { name: 'Our Story', anchor: '#our-story' },
+  ourStory: { name: 'About', anchor: '#our-story' },
   atmosphere: { name: 'Atmosfera', anchor: '#gallery' },
   food: { name: 'Menu', anchor: '#menu' },
   drinks: { name: 'Drinks', anchor: null },

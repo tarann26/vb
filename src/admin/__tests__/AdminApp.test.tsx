@@ -316,7 +316,7 @@ describe('AdminApp: the real "Homepage sections" screen', () => {
     stubFetch();
     renderDashboard('/edit/manage/pages');
     const section = await sectionByHeading('What shows on the homepage');
-    expect(within(section).getAllByText(/^(Hero|Our Story|Atmosfera|Menu|Drinks|Stories|Visit Us)$/)).toHaveLength(7);
+    expect(within(section).getAllByText(/^(Hero|About|Atmosfera|Menu|Drinks|Stories|Visit Us)$/)).toHaveLength(7);
   });
 
   it('reordering the real screen calls through to a genuine onReorder, visible in the rendered order', async () => {
@@ -328,11 +328,11 @@ describe('AdminApp: the real "Homepage sections" screen', () => {
 
     await user.click(within(section).getByRole('button', { name: 'Move Hero down' }));
 
-    const HUMAN_NAMES = ['Hero', 'Our Story', 'Atmosfera', 'Menu', 'Drinks', 'Stories', 'Visit Us'];
+    const HUMAN_NAMES = ['Hero', 'About', 'Atmosfera', 'Menu', 'Drinks', 'Stories', 'Visit Us'];
     const namesInOrder = within(section)
       .getAllByRole('listitem')
       .map((li) => HUMAN_NAMES.find((name) => li.textContent?.startsWith(name)));
-    expect(namesInOrder.slice(0, 2)).toEqual(['Our Story', 'Hero']);
+    expect(namesInOrder.slice(0, 2)).toEqual(['About', 'Hero']);
   });
 
   it('hero cannot be unchecked from the real, mounted screen', async () => {

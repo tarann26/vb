@@ -2485,7 +2485,7 @@ exports[`the ten panels, as they render today > Our Story (story) 1`] = `
           class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
           id="story-heading"
           type="text"
-          value="Our Story"
+          value="About"
         />
       </div>
       <ul>
@@ -3225,7 +3225,7 @@ exports[`the ten panels, as they render today > What shows on the homepage (sect
               <span
                 class="font-['Montserrat'] text-base text-[#222]"
               >
-                Our Story
+                About
               </span>
               <span
                 class="ml-2 text-xs text-gray-500"
@@ -3237,14 +3237,14 @@ exports[`the ten panels, as they render today > What shows on the homepage (sect
               class="flex gap-2"
             >
               <button
-                aria-label="Move Our Story up"
+                aria-label="Move About up"
                 class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                 type="button"
               >
                 Up
               </button>
               <button
-                aria-label="Move Our Story down"
+                aria-label="Move About down"
                 class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                 type="button"
               >

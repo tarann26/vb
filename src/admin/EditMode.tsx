@@ -97,7 +97,7 @@ const SECTION_COMPONENTS: Record<SectionId, () => React.ReactNode> = {
 
 const SECTION_LABELS: Record<SectionId, string> = {
   hero: 'Hero',
-  ourStory: 'Our Story',
+  ourStory: 'About',
   atmosphere: 'Atmosphere gallery',
   food: 'Menu',
   drinks: 'Drinks',
