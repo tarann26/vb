@@ -26,27 +26,46 @@ import type { CollageNode, ContentBundle } from '../content/types';
 function renderCollageNode(content: ContentBundle, node: CollageNode, style: React.CSSProperties): React.ReactNode {
   const path = collageNodePath(node);
   if (node.kind === 'photo') {
+    // Not inlined into the `renderImage` call below: `data-collage-photo` is
+    // not a member of `ImgHTMLAttributes`, so passing it inside a fresh
+    // object literal there trips TS's excess-property check. Built as an
+    // untyped local instead, so the argument at the call site is a plain
+    // value being checked structurally (extra keys allowed) rather than a
+    // literal being checked exactly.
+    //
+    // e2e test hook (e2e/hero-collage-after-farfalle.spec.ts): the one
+    // attribute that selects exactly the collage photos and nothing else. It
+    // lands here, in the props handed to `content.renderImage` -- which by
+    // default is `createElement('img', props)`, one <img> per photo leaf --
+    // rather than on `box` below, which is the WRAPPING element
+    // `renderCollagePhoto` draws around this image. Both are real DOM
+    // elements per photo, so putting it on both would make the count 22, not
+    // 11. Deliberately not on the brick background at line 108 below: that
+    // image is outside the collage tree entirely and counting it would make
+    // the assertion of 11 wrong by one.
+    const imageProps = {
+      src: node.src,
+      alt: node.alt,
+      className: 'w-full h-full object-cover opacity-90 hover:opacity-100 transition-opacity duration-500',
+      'data-collage-photo': '',
+      // I-A review finding (repair of Plan 6, Task 4, Step 1): native
+      // HTML5 image drag hijacks the pointer sequence a real drag needs on
+      // desktop, but a `draggable={false}` HERE is not the fix -- it ships
+      // an explicit `draggable="false"` attribute (React never omits it for
+      // a literal `false`) on every collage <img> to every PUBLIC visitor,
+      // +288 bytes for a requirement that only exists at `/edit`.
+      // `dragstart` bubbles, so an /edit-only handler on the wrapper
+      // cancels the child's native drag without this component -- or its
+      // rendered output -- knowing anything is editable at all. The same
+      // conclusion applies unchanged to Task 4's drag-to-swap; it is
+      // recorded here because this is the call site that would otherwise
+      // add the prop back again.
+    };
     return content.renderCollagePhoto(
       path,
       node,
       { className: COLLAGE_PHOTO_CLASSNAME, style },
-      content.renderImage(path, {
-        src: node.src,
-        alt: node.alt,
-        className: 'w-full h-full object-cover opacity-90 hover:opacity-100 transition-opacity duration-500',
-        // I-A review finding (repair of Plan 6, Task 4, Step 1): native
-        // HTML5 image drag hijacks the pointer sequence a real drag needs on
-        // desktop, but a `draggable={false}` HERE is not the fix -- it ships
-        // an explicit `draggable="false"` attribute (React never omits it for
-        // a literal `false`) on every collage <img> to every PUBLIC visitor,
-        // +288 bytes for a requirement that only exists at `/edit`.
-        // `dragstart` bubbles, so an /edit-only handler on the wrapper
-        // cancels the child's native drag without this component -- or its
-        // rendered output -- knowing anything is editable at all. The same
-        // conclusion applies unchanged to Task 4's drag-to-swap; it is
-        // recorded here because this is the call site that would otherwise
-        // add the prop back again.
-      }),
+      content.renderImage(path, imageProps),
     );
   }
   return content.renderCollageSplit(

@@ -768,7 +768,10 @@ describe('collage: minting an id', () => {
   it('takes the first number no node already carries, for that prefix', () => {
     expect(nextCollageId(sampleTree(), 'photo')).toBe('photo-1');
     expect(nextCollageId(split('root', 'row', [photo('photo-1'), photo('photo-3')]), 'photo')).toBe('photo-2');
-    expect(nextCollageId(galleries.heroCollage as CollageNode, 'photo')).toBe('photo-17');
+    // The committed tree has gaps now (Task 6 removed photo-4, photo-5,
+    // photo-9, photo-14 and photo-16), so the first free number is the first
+    // gap, not one past the highest id.
+    expect(nextCollageId(galleries.heroCollage as CollageNode, 'photo')).toBe('photo-4');
   });
 });
 
@@ -871,11 +874,15 @@ describe('collage: removing a photo', () => {
   });
 
   it('never leaves a split holding a split of its own direction', () => {
-    // The exact shape a gate review found: removing photo-5 folds
-    // `right-top-left` away and would drop a ROW split straight into a ROW
-    // split, so the line she sees between two boxes would move three.
+    // The exact shape a gate review found, re-anchored after Task 6 removed
+    // the photo (photo-5) the original case used: removing photo-12 folds
+    // `right-middle` (row, [right-middle-column, photo-12]) down to its one
+    // remaining child, `right-middle-column` (column) -- which then shares
+    // its own parent `right`'s direction (column), so canonicalising has to
+    // splice `right-middle-column`'s two photos straight into `right` rather
+    // than leave a column split holding a column split.
     const tree = galleries.heroCollage as CollageNode;
-    const after = removeCollagePhoto(tree, 'photo-5');
+    const after = removeCollagePhoto(tree, 'photo-12');
     expect(after).not.toBe(tree);
     expect(isCanonical(after)).toBe(true);
     expect(collageTreeProblems(after)).toEqual([]);
@@ -912,10 +919,10 @@ describe('collage: repeated editing does not deepen the tree', () => {
     for (let cycle = 0; cycle < 5; cycle += 1) {
       const id = nextCollageId(tree, 'photo');
       tree = addCollagePhoto(tree, 'photo-8', cycle % 2 === 0 ? 'column' : 'row', newPhoto(id));
-      expect(countCollagePhotos(tree)).toBe(17);
+      expect(countCollagePhotos(tree)).toBe(12);
       expect(isCanonical(tree)).toBe(true);
       tree = removeCollagePhoto(tree, id);
-      expect(countCollagePhotos(tree)).toBe(16);
+      expect(countCollagePhotos(tree)).toBe(11);
       expect(isCanonical(tree)).toBe(true);
       expect(collageTreeProblems(tree)).toEqual([]);
     }

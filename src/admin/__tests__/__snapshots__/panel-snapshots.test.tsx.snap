@@ -1882,56 +1882,6 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
             >
               <label
                 class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="gallery-heroCollage-photo-4-src"
-              >
-                Photo
-              </label>
-              <img
-                alt=""
-                class="mb-2 h-24 w-24 rounded border border-gray-300 object-cover"
-                src="/hero/farfalle3.webp"
-              />
-              <input
-                accept="image/*"
-                class="block w-full text-sm text-ink file:mr-3 file:rounded file:border-0 file:bg-brand file:px-3 file:py-1.5 file:font-['Montserrat'] file:text-xs file:uppercase file:tracking-wide file:text-ink hover:file:bg-brand-dark"
-                id="gallery-heroCollage-photo-4-src"
-                type="file"
-              />
-            </div>
-          </li>
-          <li
-            class="mb-6 rounded border border-gray-200 p-4"
-          >
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="gallery-heroCollage-photo-5-src"
-              >
-                Photo
-              </label>
-              <img
-                alt=""
-                class="mb-2 h-24 w-24 rounded border border-gray-300 object-cover"
-                src="/hero/farfalle4.webp"
-              />
-              <input
-                accept="image/*"
-                class="block w-full text-sm text-ink file:mr-3 file:rounded file:border-0 file:bg-brand file:px-3 file:py-1.5 file:font-['Montserrat'] file:text-xs file:uppercase file:tracking-wide file:text-ink hover:file:bg-brand-dark"
-                id="gallery-heroCollage-photo-5-src"
-                type="file"
-              />
-            </div>
-          </li>
-          <li
-            class="mb-6 rounded border border-gray-200 p-4"
-          >
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="gallery-heroCollage-photo-6-src"
               >
                 Photo
@@ -1995,31 +1945,6 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
                 accept="image/*"
                 class="block w-full text-sm text-ink file:mr-3 file:rounded file:border-0 file:bg-brand file:px-3 file:py-1.5 file:font-['Montserrat'] file:text-xs file:uppercase file:tracking-wide file:text-ink hover:file:bg-brand-dark"
                 id="gallery-heroCollage-photo-8-src"
-                type="file"
-              />
-            </div>
-          </li>
-          <li
-            class="mb-6 rounded border border-gray-200 p-4"
-          >
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="gallery-heroCollage-photo-9-src"
-              >
-                Photo
-              </label>
-              <img
-                alt=""
-                class="mb-2 h-24 w-24 rounded border border-gray-300 object-cover"
-                src="/hero/farfalle2.webp"
-              />
-              <input
-                accept="image/*"
-                class="block w-full text-sm text-ink file:mr-3 file:rounded file:border-0 file:bg-brand file:px-3 file:py-1.5 file:font-['Montserrat'] file:text-xs file:uppercase file:tracking-wide file:text-ink hover:file:bg-brand-dark"
-                id="gallery-heroCollage-photo-9-src"
                 type="file"
               />
             </div>
@@ -2132,31 +2057,6 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
             >
               <label
                 class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="gallery-heroCollage-photo-14-src"
-              >
-                Photo
-              </label>
-              <img
-                alt=""
-                class="mb-2 h-24 w-24 rounded border border-gray-300 object-cover"
-                src="/hero/farfalle.webp"
-              />
-              <input
-                accept="image/*"
-                class="block w-full text-sm text-ink file:mr-3 file:rounded file:border-0 file:bg-brand file:px-3 file:py-1.5 file:font-['Montserrat'] file:text-xs file:uppercase file:tracking-wide file:text-ink hover:file:bg-brand-dark"
-                id="gallery-heroCollage-photo-14-src"
-                type="file"
-              />
-            </div>
-          </li>
-          <li
-            class="mb-6 rounded border border-gray-200 p-4"
-          >
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="gallery-heroCollage-photo-15-src"
               >
                 Photo
@@ -2170,31 +2070,6 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
                 accept="image/*"
                 class="block w-full text-sm text-ink file:mr-3 file:rounded file:border-0 file:bg-brand file:px-3 file:py-1.5 file:font-['Montserrat'] file:text-xs file:uppercase file:tracking-wide file:text-ink hover:file:bg-brand-dark"
                 id="gallery-heroCollage-photo-15-src"
-                type="file"
-              />
-            </div>
-          </li>
-          <li
-            class="mb-6 rounded border border-gray-200 p-4"
-          >
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="gallery-heroCollage-photo-16-src"
-              >
-                Photo
-              </label>
-              <img
-                alt=""
-                class="mb-2 h-24 w-24 rounded border border-gray-300 object-cover"
-                src="/hero/farfalle1.webp"
-              />
-              <input
-                accept="image/*"
-                class="block w-full text-sm text-ink file:mr-3 file:rounded file:border-0 file:bg-brand file:px-3 file:py-1.5 file:font-['Montserrat'] file:text-xs file:uppercase file:tracking-wide file:text-ink hover:file:bg-brand-dark"
-                id="gallery-heroCollage-photo-16-src"
                 type="file"
               />
             </div>

@@ -2031,7 +2031,7 @@ describe('EditMode: the hero collage is rearrangeable at /edit', () => {
   // PUBLIC renderers -- a collage that still draws perfectly and cannot be
   // touched, which is exactly the failure mode that would otherwise ship
   // unnoticed.
-  it('every one of the sixteen photos is a box the editor owns, named by its own id', async () => {
+  it('every one of the eleven photos is a box the editor owns, named by its own id', async () => {
     await renderEdit();
     const ids = [...document.querySelectorAll('[data-collage-photo-id]')].map((el) =>
       el.getAttribute('data-collage-photo-id'),
@@ -2062,7 +2062,7 @@ describe('EditMode: the hero collage is rearrangeable at /edit', () => {
     fireEvent.focusIn(document.querySelector('[data-collage-photo-id]') as HTMLElement);
     fireEvent.click(screen.getByRole('button', { name: 'Swap this photo with another photo' }));
     const targets = screen.getAllByRole('button', { name: 'Swap the selected photo into this box' });
-    expect(targets).toHaveLength(15);
+    expect(targets).toHaveLength(10);
     expect(targets[0].closest('[data-collage-photo-id]')).not.toBeNull();
     const event = new MouseEvent('click', { bubbles: true, cancelable: true });
     targets[0].dispatchEvent(event);

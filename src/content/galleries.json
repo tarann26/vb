@@ -1,21 +1,63 @@
 {
   "atmosphere": [
-    { "src": "/atmosphere/dining.webp", "alt": "The dining room laid for service" },
-    { "src": "/atmosphere/outsideLOGO.webp", "alt": "Via Bianca's signage on N-Block Market" },
-    { "src": "/atmosphere/ambience.webp", "alt": "Warm evening light across the restaurant" },
-    { "src": "/atmosphere/ceiling decor.webp", "alt": "Hand-painted ceiling detail" },
-    { "src": "/atmosphere/front mirror.webp", "alt": "The antique mirror by the entrance" },
-    { "src": "/atmosphere/painting board.webp", "alt": "Painted board on the dining room wall" },
-    { "src": "/atmosphere/room.webp", "alt": "The main room seen from the doorway" },
-    { "src": "/atmosphere/table.webp", "alt": "A set table with linen and glassware" }
+    {
+      "src": "/atmosphere/dining.webp",
+      "alt": "The dining room laid for service"
+    },
+    {
+      "src": "/atmosphere/outsideLOGO.webp",
+      "alt": "Via Bianca's signage on N-Block Market"
+    },
+    {
+      "src": "/atmosphere/ambience.webp",
+      "alt": "Warm evening light across the restaurant"
+    },
+    {
+      "src": "/atmosphere/ceiling decor.webp",
+      "alt": "Hand-painted ceiling detail"
+    },
+    {
+      "src": "/atmosphere/front mirror.webp",
+      "alt": "The antique mirror by the entrance"
+    },
+    {
+      "src": "/atmosphere/painting board.webp",
+      "alt": "Painted board on the dining room wall"
+    },
+    {
+      "src": "/atmosphere/room.webp",
+      "alt": "The main room seen from the doorway"
+    },
+    {
+      "src": "/atmosphere/table.webp",
+      "alt": "A set table with linen and glassware"
+    }
   ],
   "ourStory": [
-    { "src": "/our_story/cut.webp", "alt": "Cutting fresh pasta by hand" },
-    { "src": "/our_story/dinner.webp", "alt": "A finished plate at the pass" },
-    { "src": "/our_story/handmaking.webp", "alt": "Working dough by hand" },
-    { "src": "/our_story/oven.webp", "alt": "The wood-fired oven at full heat" },
-    { "src": "/our_story/shape.webp", "alt": "Shaping pasta in the pastificio" },
-    { "src": "/our_story/stuff.webp", "alt": "Filling fresh pasta" }
+    {
+      "src": "/our_story/cut.webp",
+      "alt": "Cutting fresh pasta by hand"
+    },
+    {
+      "src": "/our_story/dinner.webp",
+      "alt": "A finished plate at the pass"
+    },
+    {
+      "src": "/our_story/handmaking.webp",
+      "alt": "Working dough by hand"
+    },
+    {
+      "src": "/our_story/oven.webp",
+      "alt": "The wood-fired oven at full heat"
+    },
+    {
+      "src": "/our_story/shape.webp",
+      "alt": "Shaping pasta in the pastificio"
+    },
+    {
+      "src": "/our_story/stuff.webp",
+      "alt": "Filling fresh pasta"
+    }
   ],
   "heroCollage": {
     "kind": "split",
@@ -23,32 +65,33 @@
     "direction": "row",
     "children": [
       {
+        "kind": "photo",
+        "id": "photo-1",
+        "src": "/atmosphere/ambience.webp",
+        "alt": ""
+      },
+      {
         "kind": "split",
-        "id": "left",
+        "id": "left-upper-column",
         "direction": "column",
         "children": [
           {
-            "kind": "split",
-            "id": "left-upper",
-            "direction": "row",
-            "children": [
-              { "kind": "photo", "id": "photo-1", "src": "/atmosphere/ambience.webp", "alt": "" },
-              {
-                "kind": "split",
-                "id": "left-upper-column",
-                "direction": "column",
-                "children": [
-                  { "kind": "photo", "id": "photo-2", "src": "/atmosphere/front mirror.webp", "alt": "" },
-                  { "kind": "photo", "id": "photo-3", "src": "/our_story/stuff.webp", "alt": "" }
-                ],
-                "sizes": [1, 1]
-              }
-            ],
-            "sizes": [1, 1]
+            "kind": "photo",
+            "id": "photo-2",
+            "src": "/atmosphere/front mirror.webp",
+            "alt": ""
           },
-          { "kind": "photo", "id": "photo-4", "src": "/hero/farfalle3.webp", "alt": "" }
+          {
+            "kind": "photo",
+            "id": "photo-3",
+            "src": "/our_story/stuff.webp",
+            "alt": ""
+          }
         ],
-        "sizes": [1.333333, 0.666667]
+        "sizes": [
+          1,
+          1
+        ]
       },
       {
         "kind": "split",
@@ -61,80 +104,95 @@
             "direction": "row",
             "children": [
               {
-                "kind": "split",
-                "id": "right-top-left",
-                "direction": "column",
-                "children": [
-                  { "kind": "photo", "id": "photo-5", "src": "/hero/farfalle4.webp", "alt": "" },
-                  {
-                    "kind": "split",
-                    "id": "right-top-pair",
-                    "direction": "row",
-                    "children": [
-                      { "kind": "photo", "id": "photo-6", "src": "/atmosphere/ceiling decor.webp", "alt": "" },
-                      { "kind": "photo", "id": "photo-7", "src": "/our_story/oven.webp", "alt": "" }
-                    ],
-                    "sizes": [1, 1]
-                  }
-                ],
-                "sizes": [1, 1]
+                "kind": "photo",
+                "id": "photo-6",
+                "src": "/atmosphere/ceiling decor.webp",
+                "alt": ""
               },
-              { "kind": "photo", "id": "photo-8", "src": "/hero/scene.webp", "alt": "" }
+              {
+                "kind": "photo",
+                "id": "photo-7",
+                "src": "/our_story/oven.webp",
+                "alt": ""
+              },
+              {
+                "kind": "photo",
+                "id": "photo-8",
+                "src": "/hero/scene.webp",
+                "alt": ""
+              }
             ],
-            "sizes": [1, 1]
+            "sizes": [
+              0.75,
+              0.75,
+              1.5
+            ]
           },
           {
             "kind": "split",
             "id": "right-middle",
             "direction": "row",
             "children": [
-              { "kind": "photo", "id": "photo-9", "src": "/hero/farfalle2.webp", "alt": "" },
               {
                 "kind": "split",
                 "id": "right-middle-column",
                 "direction": "column",
                 "children": [
-                  { "kind": "photo", "id": "photo-10", "src": "/hero/building.webp", "alt": "" },
-                  { "kind": "photo", "id": "photo-11", "src": "/atmosphere/room.webp", "alt": "" }
+                  {
+                    "kind": "photo",
+                    "id": "photo-10",
+                    "src": "/hero/building.webp",
+                    "alt": ""
+                  },
+                  {
+                    "kind": "photo",
+                    "id": "photo-11",
+                    "src": "/atmosphere/room.webp",
+                    "alt": ""
+                  }
                 ],
-                "sizes": [1, 1]
+                "sizes": [
+                  1,
+                  1
+                ]
               },
-              { "kind": "photo", "id": "photo-12", "src": "/hero/bus.webp", "alt": "" }
+              {
+                "kind": "photo",
+                "id": "photo-12",
+                "src": "/hero/bus.webp",
+                "alt": ""
+              }
             ],
-            "sizes": [1.5, 0.75, 0.75]
+            "sizes": [
+              1,
+              1
+            ]
           },
           {
-            "kind": "split",
-            "id": "right-bottom",
-            "direction": "row",
-            "children": [
-              {
-                "kind": "split",
-                "id": "right-bottom-left",
-                "direction": "column",
-                "children": [
-                  {
-                    "kind": "split",
-                    "id": "right-bottom-pair",
-                    "direction": "row",
-                    "children": [
-                      { "kind": "photo", "id": "photo-13", "src": "/our_story/cut.webp", "alt": "" },
-                      { "kind": "photo", "id": "photo-14", "src": "/hero/farfalle.webp", "alt": "" }
-                    ],
-                    "sizes": [1, 1]
-                  },
-                  { "kind": "photo", "id": "photo-15", "src": "/atmosphere/dining.webp", "alt": "" }
-                ],
-                "sizes": [1, 1]
-              },
-              { "kind": "photo", "id": "photo-16", "src": "/hero/farfalle1.webp", "alt": "" }
-            ],
-            "sizes": [1, 1]
+            "kind": "photo",
+            "id": "photo-13",
+            "src": "/our_story/cut.webp",
+            "alt": ""
+          },
+          {
+            "kind": "photo",
+            "id": "photo-15",
+            "src": "/atmosphere/dining.webp",
+            "alt": ""
           }
         ],
-        "sizes": [1, 1, 1]
+        "sizes": [
+          1.333333,
+          1.333333,
+          0.666667,
+          0.666667
+        ]
       }
     ],
-    "sizes": [0.666667, 1.333333]
+    "sizes": [
+      0.5,
+      0.5,
+      2
+    ]
   }
 }

@@ -107,11 +107,12 @@ describe('no route renders a list without a real React key on every item', () =>
       );
       await waitFor(
         () => {
-          // Sixteen collage photos, each rendered through the editable-image
-          // seam -- non-vacuous in the way that matters: if the collage
-          // never mounted, this count is zero and the test fails rather
-          // than passing with no arrays ever built.
-          expect(container.querySelectorAll('[data-editable-image-path^="galleries.heroCollage."]').length).toBe(16);
+          // Eleven collage photos (Task 6 dropped the five Farfalle ones),
+          // each rendered through the editable-image seam -- non-vacuous in
+          // the way that matters: if the collage never mounted, this count
+          // is zero and the test fails rather than passing with no arrays
+          // ever built.
+          expect(container.querySelectorAll('[data-editable-image-path^="galleries.heroCollage."]').length).toBe(11);
         },
         { timeout: 5000 },
       );

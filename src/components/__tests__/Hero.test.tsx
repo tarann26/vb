@@ -99,12 +99,14 @@ describe('Hero', () => {
     });
 
     // Pinned against the REAL committed content, so this fails the moment the
-    // arrangement and this file drift apart in either direction.
-    it('the committed collage holds sixteen photos, within the cap and the depth limit', () => {
+    // arrangement and this file drift apart in either direction. Task 6
+    // dropped the five Farfalle photos (sixteen down to eleven), which also
+    // shed one level of nesting off the deepest branch.
+    it('the committed collage holds eleven photos, within the cap and the depth limit', () => {
       const tree = galleries.heroCollage!;
-      expect(countCollagePhotos(tree)).toBe(16);
+      expect(countCollagePhotos(tree)).toBe(11);
       expect(countCollagePhotos(tree)).toBeLessThanOrEqual(MAX_COLLAGE_PHOTOS);
-      expect(collageDepth(tree)).toBe(6);
+      expect(collageDepth(tree)).toBe(5);
       expect(collageDepth(tree)).toBeLessThanOrEqual(MAX_COLLAGE_DEPTH);
     });
   });
