@@ -1,0 +1,63 @@
+#!/bin/bash
+# The gate that runs before anything reaches main, because hosted CI cannot be
+# relied on here.
+#
+# WHY THIS EXISTS. GitHub Actions on this repository has been blocked at the
+# billing layer since 2026-08-10: every run fails in about four seconds without
+# starting. Before that it was running and RED, and the dashboard redesign
+# merged with five genuinely failing e2e specs that nobody saw for days. They
+# were fixed by luck rather than by process. This hook is the process.
+#
+# WHAT IT DOES NOT NEED TO COVER. Content published from /edit never passes
+# through here -- it becomes a commit via the GitHub API, from Bani's browser.
+# That path is already gated twice: validateContent refuses a bad write inside
+# the Worker before the commit exists, and the Cloudflare Pages build runs
+# `npm run test:deploy` (the whole vitest suite) before the site goes live. So
+# the only changes this hook has to catch are CODE pushes, and every one of
+# those originates on a machine that can run this.
+#
+# Skip in a genuine emergency with: git push --no-verify
+# If you do that, say so out loud to someone. That is the entire safety net.
+set -uo pipefail
+cd "$(git rev-parse --show-toplevel)"
+
+RED=$'\033[31m'; GREEN=$'\033[32m'; DIM=$'\033[2m'; OFF=$'\033[0m'
+fail() { echo "${RED}✗ $1${OFF}"; echo "${DIM}  push aborted. fix, or re-run with --no-verify if you truly must.${OFF}"; exit 1; }
+step() { echo "${DIM}→ $1${OFF}"; }
+
+# Which files are actually being pushed. Used only to decide whether the slow
+# browser suite is worth running -- never to skip the fast checks, which always
+# run because they cost seconds.
+RANGE="origin/$(git rev-parse --abbrev-ref HEAD)..HEAD"
+CHANGED=$(git diff --name-only $RANGE 2>/dev/null || git diff --name-only HEAD~1..HEAD 2>/dev/null || echo "")
+
+step "typecheck (tsc -b, the only form that checks anything here)"
+npx tsc -b --noEmit || fail "typecheck failed"
+
+step "lint"
+npx eslint . || fail "eslint failed"
+
+step "unit + integration tests"
+npm test -- --run || fail "tests failed"
+
+# The browser suite is ~2 minutes, so it runs only when something it can
+# actually observe has changed. Docs-only and content-only pushes skip it;
+# anything touching src/, e2e/, index.html, the headers or the build config
+# runs it. When in doubt the pattern errs toward running.
+if echo "$CHANGED" | grep -qE '^(src/|e2e/|index\.html|public/_headers|public/_redirects|vite\.config|playwright\.config|package(-lock)?\.json)'; then
+  if [ -d "$HOME/Library/Caches/ms-playwright" ] || [ -d "$HOME/.cache/ms-playwright" ]; then
+    step "browser tests (e2e, both breakpoints)"
+    npm run test:e2e || fail "e2e failed"
+    step "content-security-policy against the production bundle"
+    npm run test:csp || fail "csp check failed"
+  else
+    echo "${RED}! Playwright browsers are not installed, so the browser suite was SKIPPED.${OFF}"
+    echo "${DIM}  Install with: npx playwright install chromium${OFF}"
+    echo "${DIM}  Refusing to pretend this was a full gate.${OFF}"
+    exit 1
+  fi
+else
+  step "browser tests skipped (nothing changed that they can observe)"
+fi
+
+echo "${GREEN}✓ gate passed${OFF}"
