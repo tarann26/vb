@@ -57,3 +57,6 @@ New Menu/
 *.sln
 *.sw?
 .env
+
+# Artifacts written by the Playwright MCP server during interactive debugging.
+.playwright-mcp
