@@ -93,17 +93,39 @@ redoing it twice.
 
 **Homepage order.** Phase 1 can only reorder sections that already exist, so
 `sections.json` becomes: hero, atmosphere (Gallery), food, drinks, press,
-about, visit. `ourStory` is renamed to `about` and keeps its six paragraphs;
-Kamalika's personal introduction arrives in Phase 4.
+ourStory, visit. Kamalika's personal introduction arrives in Phase 4.
+
+**The `ourStory` section id does not change.** Only its display name does, to
+"About". The id is load-bearing in three places beyond the section list: it is
+also the `galleries.ourStory` photo-list key, the `our_story` upload category
+mapping in `EditMode.tsx`, and the `galleries.ourStory.N` editable-path regex.
+Renaming the type key without migrating the live published `galleries.json`
+would break the site. The codebase already separates these three concerns
+deliberately, and says so in `types.ts`: `atmosphere` displays as "Gallery" and
+anchors at `#gallery`. "About" over `ourStory` at `#our-story` is the same
+established pattern, not a compromise. The anchor also stays because it is a
+live, possibly bookmarked URL.
+
+Renaming the display name touches four places: `story.json`'s `heading`,
+`copy.json`'s nav link label, `SectionList.tsx`, and `EditMode.tsx`.
 
 The final order, reached across later phases, is: hero, atmosphere, food,
 drinks, experiences, blog, awards, about, visit. Phase 3 inserts experiences
 after drinks. Phase 4 inserts awards. Phase 5 replaces press with blog.
 
-**Hero.** Remove the five Farfalle photos from `galleries.json`'s `heroCollage`.
-The collage is a split tree, so removing five of sixteen tiles changes the
-layout shape. The remaining eleven need their splits rebalanced by hand, not
-just deleted.
+**Hero.** Remove the five Farfalle photos (`photo-4`, `photo-5`, `photo-9`,
+`photo-14`, `photo-16`) from `galleries.json`'s `heroCollage`, leaving eleven.
+
+Not by hand-editing the JSON. `src/content/collage.ts` already exports
+`removeCollagePhoto(node, photoId)`, which handles the two cases correctly: a
+split left with one child collapses into that child, and a split left with two
+or more redistributes the removed photo's share across its siblings. It is
+already tested and it is what the dashboard's own remove button calls. Phase 1
+runs it from a one-off script and commits the result.
+
+Four of the five removals collapse a split. Expect the left column to lose its
+bottom third and stretch, so the mechanical result still needs a look in a real
+browser at both breakpoints before it ships.
 
 **Cleanup.** Delete the two empty page stubs (`breads-and-dips`,
 `who-we-supply`) that produce the "this section needs at least one item"
