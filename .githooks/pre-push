@@ -31,6 +31,13 @@ step() { echo "${DIM}→ $1${OFF}"; }
 RANGE="origin/$(git rev-parse --abbrev-ref HEAD)..HEAD"
 CHANGED=$(git diff --name-only $RANGE 2>/dev/null || git diff --name-only HEAD~1..HEAD 2>/dev/null || echo "")
 
+# Before anything else, for the same reason .github/workflows/e2e.yml runs it
+# first: the public/ derivatives are gitignored, so a fresh clone has none and
+# 48 asset specs fail on a checkout that did nothing wrong. Cheap on a machine
+# that already has them, since it only generates what is missing.
+step "image derivatives (gitignored, so a fresh clone has none)"
+npm run images >/dev/null 2>&1 || fail "image generation failed"
+
 step "typecheck (tsc -b, the only form that checks anything here)"
 npx tsc -b --noEmit || fail "typecheck failed"
 

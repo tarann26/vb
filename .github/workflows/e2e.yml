@@ -54,6 +54,20 @@ jobs:
           cache: npm
       - run: npm ci
 
+      # BEFORE any test, and this ordering is load-bearing rather than
+      # stylistic. The public/ image derivatives are gitignored, so a fresh
+      # clone -- which is exactly what a runner has -- does not contain them
+      # until this generates them. Run the tests first and 48 specs in
+      # src/content/__tests__/assets.test.ts fail on a checkout that did
+      # nothing wrong, plus head.test.ts on a missing public/og-image.jpg.
+      #
+      # docs/cloudflare-cutover.md already documents this ordering for the
+      # Pages build command (`npm run images && npm run test:deploy && npm run
+      # build`) and src/test/hosting.test.ts asserts the documented command
+      # keeps it. This workflow was written without it and failed on its first
+      # real run for precisely the reason both of those exist to prevent.
+      - run: npm run images
+
       # Cheap checks first, so an obvious break fails in seconds rather than
       # after a browser download.
       - run: npx tsc -b --noEmit
