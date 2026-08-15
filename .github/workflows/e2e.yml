@@ -72,7 +72,32 @@ jobs:
       # after a browser download.
       - run: npx tsc -b --noEmit
       - run: npx eslint .
-      - run: npm test -- --run
+
+      # `test:deploy`, NOT `npm test`, and the difference is the whole reason
+      # this line has a comment.
+      #
+      # `npm test` includes src/test/homepage-bytes.test.tsx, which asserts the
+      # rendered homepage is a byte-exact 47758. That is a useful tripwire for a
+      # DEVELOPER changing markup, and an outright bug for the restaurant owner:
+      # every word she edits moves the number. Commit be69fb5 already established
+      # this split after the failure happened for real -- a dashboard edit broke
+      # the Cloudflare deploy, and because the bad commit sat on `main`, every
+      # subsequent publish of any other file failed the same assertion. She had
+      # no way out either, since worker/github.ts's isContentPath restricts
+      # publishing to src/content/*.json, so the dashboard physically cannot
+      # touch the file holding the number.
+      #
+      # This workflow now runs on content publishes too, so it reintroduced that
+      # exact trap at a new layer, and proved it by failing on a two-character
+      # dish edit: "expected 47756 to be 47758". Running the same suite the
+      # Cloudflare build runs keeps CI answering the question that matters here
+      # -- would this deploy succeed -- rather than failing the owner for using
+      # the product as intended.
+      #
+      # The byte tripwire is not lost: .githooks/pre-push runs the full `npm
+      # test`, so a developer changing the homepage still has to account for it,
+      # on the machine where they can actually edit the number.
+      - run: npm run test:deploy
 
       # Keyed on the resolved Playwright version, so a dependency bump misses
       # the cache and reinstalls rather than running against a stale browser.
