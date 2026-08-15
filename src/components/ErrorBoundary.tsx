@@ -23,14 +23,14 @@ class ErrorBoundary extends Component<Props, State> {
     // an ErrorBoundary that itself imported content would fail to load
     // right along with it, losing the one fallback meant to survive that.
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-[#F9F9F9] px-6 text-center">
-        <h1 className="font-['Parisienne'] text-5xl text-[#222] mb-2">Via Bianca</h1>
+      <div className="min-h-screen flex flex-col items-center justify-center bg-cream-alt px-6 text-center">
+        <h1 className="font-['Parisienne'] text-5xl text-ink mb-2">Via Bianca</h1>
         <p className="font-['Open_Sans'] text-gray-700 mb-6">
           Something went wrong loading this page.
         </p>
         <a
           href="/"
-          className="bg-[#6B8B59] hover:bg-[#5a7349] text-white px-8 py-4 rounded-lg font-['Montserrat'] font-semibold uppercase tracking-wide"
+          className="bg-brand hover:bg-brand-dark text-ink px-8 py-4 rounded-lg font-['Montserrat'] font-semibold uppercase tracking-wide"
         >
           Reload
         </a>

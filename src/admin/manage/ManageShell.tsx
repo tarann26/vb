@@ -276,7 +276,7 @@ const ManageShell: React.FC<ManageShellProps> = ({
             change fails silently. The e2e spec pins exactly one h1 with a
             non-empty name at both widths. */}
         <h1 className="mb-4 leading-tight">
-          <span className="block font-['Parisienne'] text-4xl text-[#6B8B59]">{BRAND_NAME}</span>
+          <span className="block font-['Parisienne'] text-4xl text-brand">{BRAND_NAME}</span>
           <span className="block font-['Montserrat'] text-xs uppercase tracking-[0.2em] text-gray-500">
             {BRAND_TAGLINE}
           </span>
@@ -333,7 +333,7 @@ const ManageShell: React.FC<ManageShellProps> = ({
                 {showBackControl && (
                   <Link
                     to={MANAGE_BASE}
-                    className="mb-4 inline-block font-['Montserrat'] text-sm text-[#6B8B59] underline"
+                    className="mb-4 inline-block font-['Montserrat'] text-sm text-brand underline"
                   >
                     ← All areas
                   </Link>

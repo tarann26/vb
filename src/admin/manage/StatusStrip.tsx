@@ -183,14 +183,14 @@ const StatusStrip: React.FC<StatusStripProps> = ({
       // So the two-column arrangement is applied only from the small
       // breakpoint up, where the vertical budget is not contested, and the
       // phone stack keeps exactly the spacing it had.
-      className="mb-4 rounded border border-[#6B8B59]/40 bg-white px-4 py-3 font-['Montserrat'] text-sm shadow-sm sm:flex sm:items-start sm:justify-between sm:gap-8"
+      className="mb-4 rounded border border-brand/40 bg-white px-4 py-3 font-['Montserrat'] text-sm shadow-sm sm:flex sm:items-start sm:justify-between sm:gap-8"
     >
       <div>
         {/* The live region is SCOPED to the two things whose change is worth
             announcing. Wrapping the whole strip would re-announce it every 60
             seconds, when "2 hours ago" becomes "3 hours ago". */}
         <div role="status" aria-live="polite">
-          {liveness !== null && <p className="font-semibold text-[#222]">{liveness}</p>}
+          {liveness !== null && <p className="font-semibold text-ink">{liveness}</p>}
           {/* Never blank: a blank strip is indistinguishable from a broken
               one, which is the complaint this header exists to answer. */}
           <p className="text-gray-600">{unsavedSentence}</p>
@@ -208,7 +208,7 @@ const StatusStrip: React.FC<StatusStripProps> = ({
             to remember to change -- and it does not make the strip wait on a
             content file that a different panel happens to own. */}
         <p className="mt-1">
-          <a href="/" target="_blank" rel="noopener" className="text-[#6B8B59] underline">
+          <a href="/" target="_blank" rel="noopener" className="text-brand underline">
             {viewSiteLabel(hasUnsaved)}
           </a>
         </p>

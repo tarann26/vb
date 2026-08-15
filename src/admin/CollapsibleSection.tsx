@@ -63,7 +63,7 @@ export interface CollapsibleSectionProps {
 // bodiless headings in a row turns the whole point of folding them -- a
 // short list she can read at a glance -- back into something she has to
 // scroll.
-const HEADING_CLASSNAME = "font-['Montserrat'] text-lg uppercase tracking-wide text-[#222]";
+const HEADING_CLASSNAME = "font-['Montserrat'] text-lg uppercase tracking-wide text-ink";
 
 const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({ id, heading, locked, children }) => {
   // Lazy initializer: read once, on the very first render, so the section
@@ -136,7 +136,7 @@ const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({ id, heading, lo
           aria-expanded={open}
           aria-controls={panelId}
           onClick={toggle}
-          className="flex w-full items-center justify-between gap-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#6B8B59]"
+          className="flex w-full items-center justify-between gap-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand"
         >
           <span>{heading}</span>
           <ChevronDown

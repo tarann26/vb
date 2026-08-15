@@ -77,17 +77,17 @@ const Login: React.FC<LoginProps> = ({ onLogin, notice }) => {
         className="w-full max-w-sm rounded-lg bg-white p-8 shadow-md"
         aria-label="Admin login"
       >
-        <h1 className="mb-6 font-['Parisienne'] text-3xl text-[#222]">Via Bianca</h1>
+        <h1 className="mb-6 font-['Parisienne'] text-3xl text-ink">Via Bianca</h1>
 
         {notice && (
-          <p role="status" className="mb-4 rounded border border-amber-300 bg-amber-50 p-3 text-sm text-[#222]">
+          <p role="status" className="mb-4 rounded border border-amber-300 bg-amber-50 p-3 text-sm text-ink">
             {notice}
           </p>
         )}
 
         <label
           htmlFor="admin-password"
-          className="mb-2 block font-['Montserrat'] text-sm uppercase tracking-wide text-[#6B8B59]"
+          className="mb-2 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
         >
           Password
         </label>
@@ -98,7 +98,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, notice }) => {
           value={password}
           onChange={(event) => setPassword(event.target.value)}
           required
-          className="w-full rounded border border-gray-300 px-3 py-2 text-[#222] focus:border-[#6B8B59] focus:outline-none"
+          className="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none"
         />
 
         {error && (
@@ -110,7 +110,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, notice }) => {
         <button
           type="submit"
           disabled={submitting}
-          className="mt-6 w-full rounded bg-[#6B8B59] py-2 font-['Montserrat'] uppercase tracking-wide text-white transition hover:bg-[#5a7349] disabled:opacity-60"
+          className="mt-6 w-full rounded bg-brand py-2 font-['Montserrat'] uppercase tracking-wide text-ink transition hover:bg-brand-dark disabled:opacity-60"
         >
           {submitting ? 'Logging in…' : 'Log in'}
         </button>

@@ -34,13 +34,13 @@ const ChefGallery: React.FC = () => {
                   <img 
                     src={chef.image}
                     alt={`${chef.name} - ${chef.role}`}
-                    className="w-full h-full object-cover rounded-full shadow-2xl group-hover:scale-110 transition-transform duration-500 border-4 border-[#6B8B59]"
+                    className="w-full h-full object-cover rounded-full shadow-2xl group-hover:scale-110 transition-transform duration-500 border-4 border-brand"
                     loading="lazy"
                   />
-                  <div className="absolute inset-0 rounded-full bg-[#6B8B59]/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                  <div className="absolute inset-0 rounded-full bg-brand/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
                 </div>
                 <h3 className="font-['Montserrat'] font-semibold text-lg text-white mb-2">{chef.name}</h3>
-                <p className="font-['Open_Sans'] text-[#6B8B59] text-sm uppercase tracking-wide">{chef.role}</p>
+                <p className="font-['Open_Sans'] text-brand text-sm uppercase tracking-wide">{chef.role}</p>
               </div>
             ))}
           </div>

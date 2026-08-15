@@ -15,7 +15,7 @@ const BlogTeaser: React.FC = () => {
     <section id="blogs" className="py-20 bg-slate-50">
       <div className="max-w-7xl mx-auto px-4">
         <div className="text-center mb-16">
-          <h2 className="font-['Montserrat'] text-4xl md:text-5xl font-bold text-[#222] mb-6">
+          <h2 className="font-['Montserrat'] text-4xl md:text-5xl font-bold text-ink mb-6">
             {content.renderText('press.heading', copy.press.heading)}
           </h2>
           <p className="font-['Open_Sans'] text-gray-700 max-w-2xl mx-auto leading-relaxed">
@@ -42,7 +42,7 @@ const BlogTeaser: React.FC = () => {
                 
                 {/* Publication Badge */}
                 <div className="absolute top-4 left-4">
-                  <span className="bg-[#6B8B59] text-white px-3 py-1 rounded-full text-xs font-['Montserrat'] font-semibold uppercase tracking-wide">
+                  <span className="bg-brand text-ink px-3 py-1 rounded-full text-xs font-['Montserrat'] font-semibold uppercase tracking-wide">
                     {article.publication}
                   </span>
                 </div>
@@ -51,13 +51,13 @@ const BlogTeaser: React.FC = () => {
               {/* Article Content */}
               <div className="p-6">
                 <div className="flex items-center space-x-2 mb-3">
-                  <Calendar className="w-4 h-4 text-[#6B8B59]" />
+                  <Calendar className="w-4 h-4 text-brand" />
                   <span className="font-['Open_Sans'] text-sm text-gray-500">
                     {formatArticleDate(article.date)}
                   </span>
                 </div>
                 
-                <h3 className="font-['Montserrat'] font-bold text-lg text-[#222] mb-3 leading-tight group-hover:text-[#6B8B59] transition-colors duration-300">
+                <h3 className="font-['Montserrat'] font-bold text-lg text-ink mb-3 leading-tight group-hover:text-brand transition-colors duration-300">
                   {article.title}
                 </h3>
                 
@@ -70,7 +70,7 @@ const BlogTeaser: React.FC = () => {
                     href={article.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center space-x-2 text-[#6B8B59] hover:text-[#5a7349] font-['Montserrat'] font-semibold text-sm uppercase tracking-wide transition-colors duration-300"
+                    className="inline-flex items-center space-x-2 text-brand hover:text-brand-dark font-['Montserrat'] font-semibold text-sm uppercase tracking-wide transition-colors duration-300"
                     aria-label={`Read full article: ${article.title}`}
                   >
                     <span>{content.renderText('press.readArticle', copy.press.readArticle)}</span>
@@ -86,7 +86,7 @@ const BlogTeaser: React.FC = () => {
         <div className="text-center">
           <button 
             onClick={() => navigate('/blogs')}
-            className="inline-flex items-center space-x-2 bg-[#6B8B59] hover:bg-[#5a7349] text-white font-['Montserrat'] font-semibold px-8 py-4 rounded-lg transform hover:scale-105 hover:shadow-xl transition-all duration-300 uppercase tracking-wide"
+            className="inline-flex items-center space-x-2 bg-brand hover:bg-brand-dark text-ink font-['Montserrat'] font-semibold px-8 py-4 rounded-lg transform hover:scale-105 hover:shadow-xl transition-all duration-300 uppercase tracking-wide"
           >
             <span>{content.renderText('press.viewAll', copy.press.viewAll)}</span>
             <ArrowRight className="w-5 h-5" />

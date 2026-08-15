@@ -49,15 +49,15 @@ export interface AreaNavProps {
 // a list that changes length depending on where you are is a list you cannot
 // learn, and a disabled current item is a control that looks broken.
 const SIDEBAR_ITEM = 'block border-l-2 py-2 pl-3 pr-2 transition';
-const SIDEBAR_CURRENT = 'border-[#6B8B59] bg-[#6B8B59]/10';
-const SIDEBAR_IDLE = 'border-transparent hover:border-[#6B8B59]/40 hover:bg-[#6B8B59]/5';
+const SIDEBAR_CURRENT = 'border-brand bg-brand/10';
+const SIDEBAR_IDLE = 'border-transparent hover:border-brand/40 hover:bg-brand/5';
 
 // A full-width tap target on the phone home. Generous vertical padding is
 // not decoration here: the whole claim this screen has to keep is that all
 // five rows fit one 390x844 viewport without scrolling AND that each row's
 // own centre pixel hit-tests to itself.
 const LIST_ITEM =
-  'flex items-center justify-between gap-3 rounded border border-[#6B8B59]/30 bg-white px-4 py-4 transition hover:border-[#6B8B59]';
+  'flex items-center justify-between gap-3 rounded border border-brand/30 bg-white px-4 py-4 transition hover:border-brand';
 
 const AreaNav: React.FC<AreaNavProps> = ({ variant, activeSlug, problemSlugs = [], unsavedSlugs = [] }) => {
   const sidebar = variant === 'sidebar';
@@ -81,7 +81,7 @@ const AreaNav: React.FC<AreaNavProps> = ({ variant, activeSlug, problemSlugs = [
                 }
               >
                 <span className="block">
-                  <span className="block font-['Montserrat'] text-sm uppercase tracking-wide text-[#222]">
+                  <span className="block font-['Montserrat'] text-sm uppercase tracking-wide text-ink">
                     {area.label}
                   </span>
                   {/* The same one-line description at both variants, from
@@ -109,11 +109,11 @@ const AreaNav: React.FC<AreaNavProps> = ({ variant, activeSlug, problemSlugs = [
                     <span
                       role="img"
                       aria-label={`${area.label} has unpublished changes`}
-                      className="h-2 w-2 rounded-full bg-[#6B8B59]"
+                      className="h-2 w-2 rounded-full bg-brand"
                     />
                   )}
                   {!sidebar && (
-                    <span aria-hidden="true" className="font-['Montserrat'] text-lg text-[#6B8B59]">
+                    <span aria-hidden="true" className="font-['Montserrat'] text-lg text-brand">
                       ›
                     </span>
                   )}

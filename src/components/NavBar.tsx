@@ -65,8 +65,8 @@ const GROUP_PAGES_FROM = 2;
 // it by a pixel, which reads as a flinch. `origin-left` is what makes it
 // extend out of the word rather than unfurl from its centre.
 const LINK_BASE =
-  'relative inline-block py-1 transition-colors duration-300 hover:text-[#222] focus-visible:text-[#222] ' +
-  'after:absolute after:left-0 after:-bottom-0.5 after:h-px after:w-full after:bg-[#6B8B59] ' +
+  'relative inline-block py-1 transition-colors duration-300 hover:text-ink focus-visible:text-ink ' +
+  'after:absolute after:left-0 after:-bottom-0.5 after:h-px after:w-full after:bg-brand ' +
   'after:origin-left after:scale-x-0 after:transition-transform after:duration-300 ' +
   'hover:after:scale-x-100 focus-visible:after:scale-x-100';
 
@@ -161,12 +161,12 @@ const Navbar: React.FC<NavbarProps> = ({ offHomePage = false }) => {
         // that is either fully on or fully off -- the bar reads as a layer
         // over the photography rather than a slab dropped on top of it.
         scrolled || isMenuOpen
-          ? 'bg-white/90 backdrop-blur-md border-b border-[#6B8B59]/15'
+          ? 'bg-white/90 backdrop-blur-md border-b border-brand/15'
           : 'bg-white border-b border-transparent'
       } py-3 px-6 flex justify-between items-center`}
     >
       {/* Logo */}
-      <div className="text-3xl font-['Parisienne'] text-[#222]">
+      <div className="text-3xl font-['Parisienne'] text-ink">
         {content.renderText('nav.wordmark', copy.nav.wordmark)}
       </div>
 
@@ -175,7 +175,7 @@ const Navbar: React.FC<NavbarProps> = ({ offHomePage = false }) => {
         <div className="hidden md:flex">
           <div
             data-testid="desktop-nav-links"
-            className="flex items-center space-x-6 text-sm font-['Montserrat'] tracking-wider text-[#6B8B59] uppercase"
+            className="flex items-center space-x-6 text-sm font-['Montserrat'] tracking-wider text-brand uppercase"
           >
             {flatEntries.map((link) => renderEntry(link, LINK_BASE))}
 
@@ -265,7 +265,7 @@ const Navbar: React.FC<NavbarProps> = ({ offHomePage = false }) => {
                     data-testid="desktop-nav-group"
                     className="absolute right-0 top-full pt-3"
                   >
-                    <div className="min-w-[13rem] rounded-md border-t-2 border-[#6B8B59] bg-[#FFFDF8] py-2 shadow-xl shadow-black/5 ring-1 ring-black/5">
+                    <div className="min-w-[13rem] rounded-md border-t-2 border-brand bg-cream py-2 shadow-xl shadow-black/5 ring-1 ring-black/5">
                       {groupEntries.map((link, index) => (
                         // Staggered by inline style rather than a Tailwind
                         // arbitrary value per index: the delay is data, not a
@@ -281,8 +281,8 @@ const Navbar: React.FC<NavbarProps> = ({ offHomePage = false }) => {
                         >
                           {renderEntry(
                             link,
-                            'block px-4 py-2.5 normal-case tracking-normal font-["Open_Sans"] text-[#222]/80 ' +
-                              'transition-colors duration-200 hover:bg-[#6B8B59]/8 hover:text-[#6B8B59]',
+                            'block px-4 py-2.5 normal-case tracking-normal font-["Open_Sans"] text-ink/80 ' +
+                              'transition-colors duration-200 hover:bg-brand/8 hover:text-brand',
                             closeAll,
                           )}
                         </div>
@@ -300,7 +300,7 @@ const Navbar: React.FC<NavbarProps> = ({ offHomePage = false }) => {
             target="_blank"
             rel="noopener noreferrer"
             aria-label={copy.nav.instagramLabel}
-            className="text-[#6B8B59] transition-colors duration-300 hover:text-[#222]"
+            className="text-brand transition-colors duration-300 hover:text-ink"
           >
             <Instagram className="h-5 w-5" />
           </a>
@@ -310,7 +310,7 @@ const Navbar: React.FC<NavbarProps> = ({ offHomePage = false }) => {
           aria-label={copy.nav.menuLabel}
           aria-expanded={isMenuOpen}
           onClick={() => setIsMenuOpen((open) => !open)}
-          className="md:hidden text-[#6B8B59] transition-colors duration-300 hover:text-[#222]"
+          className="md:hidden text-brand transition-colors duration-300 hover:text-ink"
         >
           {isMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
         </button>
@@ -324,15 +324,15 @@ const Navbar: React.FC<NavbarProps> = ({ offHomePage = false }) => {
         <div
           data-testid="mobile-nav-panel"
           className="absolute right-4 top-full mt-2 w-[15rem] max-w-[calc(100vw-2rem)] md:hidden
-                     overflow-hidden rounded-lg border-t-2 border-[#6B8B59] bg-[#FFFDF8]
+                     overflow-hidden rounded-lg border-t-2 border-brand bg-cream
                      shadow-xl shadow-black/10 ring-1 ring-black/5 animate-nav-in"
         >
-          <div className="flex flex-col py-2 text-sm font-['Montserrat'] tracking-wider text-[#6B8B59] uppercase">
+          <div className="flex flex-col py-2 text-sm font-['Montserrat'] tracking-wider text-brand uppercase">
             {flatEntries.map((link, index) => (
               <div key={link.href} style={{ animationDelay: `${index * 35}ms` }} className="animate-nav-in">
                 {renderEntry(
                   link,
-                  'block px-5 py-2.5 transition-colors duration-200 hover:bg-[#6B8B59]/8 hover:text-[#222]',
+                  'block px-5 py-2.5 transition-colors duration-200 hover:bg-brand/8 hover:text-ink',
                   closeMenu,
                 )}
               </div>
@@ -340,7 +340,7 @@ const Navbar: React.FC<NavbarProps> = ({ offHomePage = false }) => {
 
             {groupEntries.length > 0 && (
               <>
-                <div className="mx-5 my-2 border-t border-[#6B8B59]/20" />
+                <div className="mx-5 my-2 border-t border-brand/20" />
                 {groupEntries.map((link, index) => (
                   <div
                     key={link.href}
@@ -349,8 +349,8 @@ const Navbar: React.FC<NavbarProps> = ({ offHomePage = false }) => {
                   >
                     {renderEntry(
                       link,
-                      'block px-5 py-2.5 normal-case tracking-normal font-["Open_Sans"] text-[#222]/80 ' +
-                        'transition-colors duration-200 hover:bg-[#6B8B59]/8 hover:text-[#6B8B59]',
+                      'block px-5 py-2.5 normal-case tracking-normal font-["Open_Sans"] text-ink/80 ' +
+                        'transition-colors duration-200 hover:bg-brand/8 hover:text-brand',
                       closeAll,
                     )}
                   </div>

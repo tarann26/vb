@@ -131,34 +131,34 @@ const Hero: React.FC = () => {
      {/* ===== Main content ===== */}
      <div className="relative z-10 text-center px-6">
        {/* circular logo */}
-       <div aria-hidden="true" className="w-40 h-40 mx-auto mb-8 flex items-center justify-center rounded-full border-4 border-[#6B8B59] bg-white shadow-lg">
+       <div aria-hidden="true" className="w-40 h-40 mx-auto mb-8 flex items-center justify-center rounded-full border-4 border-brand bg-white shadow-lg">
          <div className="select-none">
-           <p className="font-['Parisienne'] text-3xl text-[#222]">{content.renderText('hero.logoName', copy.hero.logoName)}</p>
-           <p className="font-['Montserrat'] text-xs uppercase tracking-wider text-[#6B8B59]">
+           <p className="font-['Parisienne'] text-3xl text-ink">{content.renderText('hero.logoName', copy.hero.logoName)}</p>
+           <p className="font-['Montserrat'] text-xs uppercase tracking-wider text-brand">
              {content.renderText('hero.logoTagline', copy.hero.logoTagline)}
            </p>
          </div>
        </div>
 
 
-       <h1 className="font-['Parisienne'] text-6xl md:text-7xl text-[#222] mb-4">{site.name}</h1>
-       <p className="font-['Montserrat'] text-lg md:text-xl uppercase tracking-wide text-[#6B8B59] mb-6">
+       <h1 className="font-['Parisienne'] text-6xl md:text-7xl text-ink mb-4">{site.name}</h1>
+       <p className="font-['Montserrat'] text-lg md:text-xl uppercase tracking-wide text-brand mb-6">
          {site.tagline}
        </p>
        {/* site.strapline, with every space swapped for a non-breaking one so
            the phrase never wraps mid-sentence -- the only reason it isn't
            rendered as-is. Editing the sentence in src/content/site.json is
            now enough to change what a visitor actually reads here. */}
-       <p className="font-['Parisienne'] text-2xl md:text-3xl text-[#222] mb-8">
+       <p className="font-['Parisienne'] text-2xl md:text-3xl text-ink mb-8">
          {site.strapline.replace(/ /g, '\u00A0')}
        </p>
 
 
        {/* reservation numbers */}
        <div className="mb-8">
-          <p className="font-['Montserrat'] text-xl font-bold tracking-wide uppercase text-[#6B8B59]">{content.renderText('hero.reservationsLabel', copy.hero.reservationsLabel)}</p>
+          <p className="font-['Montserrat'] text-xl font-bold tracking-wide uppercase text-brand">{content.renderText('hero.reservationsLabel', copy.hero.reservationsLabel)}</p>
           {site.phones.map((phone, i) => (
-            <p key={i} className="font-['Open_Sans'] text-lg font-semibold text-[#222] whitespace-nowrap">{phone}</p>
+            <p key={i} className="font-['Open_Sans'] text-lg font-semibold text-ink whitespace-nowrap">{phone}</p>
           ))}
         </div>
 
@@ -166,7 +166,7 @@ const Hero: React.FC = () => {
 
        <button
   onClick={openReservationWhatsApp}
-  className="bg-[#6B8B59] hover:bg-[#5a7349] text-white px-8 py-4 rounded-lg font-semibold uppercase tracking-wide shadow-lg hover:shadow-xl transition-all duration-300"
+  className="bg-brand hover:bg-brand-dark text-ink px-8 py-4 rounded-lg font-semibold uppercase tracking-wide shadow-lg hover:shadow-xl transition-all duration-300"
 >
   {content.renderText('hero.reserveButton', copy.hero.reserveButton)}
 </button>
@@ -176,7 +176,7 @@ const Hero: React.FC = () => {
 
      {/* scroll cue */}
      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 animate-bounce">
-       <ChefHat className="w-6 h-6 text-[#6B8B59]" />
+       <ChefHat className="w-6 h-6 text-brand" />
      </div>
    </section>
  );

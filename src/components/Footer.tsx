@@ -7,14 +7,14 @@ const Footer: React.FC = () => {
   const content = useContent();
   const { site, copy } = content;
   return (
-    <footer className="bg-[#222] text-white py-16">
+    <footer className="bg-ink text-white py-16">
       <div className="mx-auto max-w-7xl px-4">
         <div className="grid gap-12 md:grid-cols-2">
           {/* ---------- Left Section ---------- */}
           <div className="space-y-6">
             <div className="flex items-center space-x-3">
               <div>
-                <h3 className="font-['Parisienne'] text-2xl text-[#6B8B59]">{site.name}</h3>
+                <h3 className="font-['Parisienne'] text-2xl text-brand">{site.name}</h3>
                 <p className="font-['Montserrat'] text-sm uppercase tracking-wide text-gray-400">
                   {site.tagline}
                 </p>
@@ -23,7 +23,7 @@ const Footer: React.FC = () => {
 
             <div className="space-y-3 font-['Open_Sans']">
               <div className="flex items-start space-x-3">
-                <MapPin className="mt-0.5 h-5 w-5 flex-shrink-0 text-[#6B8B59]" />
+                <MapPin className="mt-0.5 h-5 w-5 flex-shrink-0 text-brand" />
                 <p className="text-gray-300">
                   {site.address.street}
                   <br />
@@ -33,7 +33,7 @@ const Footer: React.FC = () => {
 
               <div className="space-y-2">
                 <div className="flex items-center space-x-3">
-                  <Phone className="h-5 w-5 text-[#6B8B59]" />
+                  <Phone className="h-5 w-5 text-brand" />
                   <p className="font-semibold text-gray-300">{content.renderText('footer.reservationsLabel', copy.footer.reservationsLabel)}</p>
                 </div>
                 <div className="ml-8 space-y-1">
@@ -49,7 +49,7 @@ const Footer: React.FC = () => {
           <div className="space-y-6">
             <div>
               <h4 className="mb-4 flex items-center space-x-2 font-['Montserrat'] text-lg font-semibold">
-                <Clock className="h-5 w-5 text-[#6B8B59]" />
+                <Clock className="h-5 w-5 text-brand" />
                 <span>{content.renderText('footer.hoursHeading', copy.footer.hoursHeading)}</span>
               </h4>
 
@@ -72,7 +72,7 @@ const Footer: React.FC = () => {
                 href={site.socials.instagram}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="rounded-full bg-[#6B8B59] p-3 transition-all duration-300 transform hover:scale-110 hover:bg-[#5a7349]"
+                className="rounded-full bg-brand text-ink p-3 transition-all duration-300 transform hover:scale-110 hover:bg-brand-dark"
                 aria-label={copy.footer.instagramLabel}
               >
                 <Instagram className="h-5 w-5" />
@@ -84,7 +84,7 @@ const Footer: React.FC = () => {
                   href={site.socials.linkedin}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="rounded-full bg-[#6B8B59] p-3 transition-all duration-300 transform hover:scale-110 hover:bg-[#5a7349]"
+                  className="rounded-full bg-brand text-ink p-3 transition-all duration-300 transform hover:scale-110 hover:bg-brand-dark"
                   aria-label={copy.footer.linkedinLabel}
                 >
                   <Linkedin className="h-5 w-5" />

@@ -17,12 +17,12 @@ const OurStory: React.FC = () => {
   }, [reduceMotion, galleries.ourStory.length]);
 
   return (
-    <section id = "our-story" className="py-20 bg-[#F9F9F9]">
+    <section id = "our-story" className="py-20 bg-cream-alt">
       <div className="max-w-7xl mx-auto px-4">
         <div className="grid lg:grid-cols-2 gap-12 items-center">
           {/* Story Text */}
           <div className="space-y-6">
-            <h2 className="font-['Montserrat'] text-4xl md:text-5xl font-bold text-[#222] mb-8">
+            <h2 className="font-['Montserrat'] text-4xl md:text-5xl font-bold text-ink mb-8">
               {story.heading}
             </h2>
             <div className="space-y-4 font-['Open_Sans'] text-gray-700 leading-relaxed">
@@ -51,7 +51,7 @@ const OurStory: React.FC = () => {
             {/* Torn paper effect */}
             <div className="absolute inset-0 bg-gradient-to-br from-transparent via-transparent to-white/10 pointer-events-none"></div>
             {/* Decorative circle */}
-            <div className="absolute -bottom-4 -right-4 w-24 h-24 bg-[#6B8B59] rounded-full opacity-20 pointer-events-none"></div>
+            <div className="absolute -bottom-4 -right-4 w-24 h-24 bg-brand rounded-full opacity-20 pointer-events-none"></div>
           </div>
         </div>
       </div>

@@ -8,7 +8,7 @@ export interface WhatsAppButtonProps {
 }
 
 const DEFAULT_CLASSNAME =
-  "inline-block bg-[#6B8B59] hover:bg-[#5a7349] text-white px-8 py-4 rounded-lg font-['Montserrat'] font-semibold uppercase tracking-wide shadow-lg hover:shadow-xl transition-all duration-300";
+  "inline-block bg-brand hover:bg-brand-dark text-ink px-8 py-4 rounded-lg font-['Montserrat'] font-semibold uppercase tracking-wide shadow-lg hover:shadow-xl transition-all duration-300";
 
 // Plan 7, Task 2, Step 2: the one WhatsApp button every template section may
 // carry (D8: "every call to action is a WhatsApp deep link"), built once

@@ -98,7 +98,16 @@ const BADGE_BASE: CSSProperties = {
 };
 
 const BADGE_STYLE: CSSProperties = { ...BADGE_BASE, backgroundColor: 'rgba(0,0,0,0.6)' };
-const SELECTED_BADGE_STYLE: CSSProperties = { ...BADGE_BASE, backgroundColor: '#6B8B59', border: '1px solid #fff' };
+// Background swaps green -> brand blue, and BADGE_BASE's white glyph colour
+// (#fff) has to be overridden to ink here: #C8D8E8 is 1.45:1 against white,
+// so the un-selected badge's white move-glyph would go invisible the moment
+// a box is selected if this pairing weren't fixed alongside the background.
+const SELECTED_BADGE_STYLE: CSSProperties = {
+  ...BADGE_BASE,
+  backgroundColor: '#C8D8E8',
+  border: '1px solid #fff',
+  color: '#222222',
+};
 
 export interface CollageSelectBadgeProps {
   // The whole sentence, not two words: what fits on a 32px badge is a glyph,

@@ -119,11 +119,13 @@ const OVERLAY_BASE: CSSProperties = {
 type OverlayKind = 'selected' | 'dragging' | 'target' | 'refused';
 
 const OVERLAY_STYLE: Record<OverlayKind, CSSProperties> = {
-  selected: { ...OVERLAY_BASE, boxShadow: 'inset 0 0 0 3px #6B8B59' },
+  selected: { ...OVERLAY_BASE, boxShadow: 'inset 0 0 0 3px #C8D8E8' },
   // The photo currently being carried: paled, so the one under the pointer
   // reads as the destination rather than as a second selection.
-  dragging: { ...OVERLAY_BASE, backgroundColor: 'rgba(255,255,255,0.55)', boxShadow: 'inset 0 0 0 3px #6B8B59' },
-  target: { ...OVERLAY_BASE, backgroundColor: 'rgba(107,139,89,0.35)', boxShadow: 'inset 0 0 0 4px #6B8B59' },
+  dragging: { ...OVERLAY_BASE, backgroundColor: 'rgba(255,255,255,0.55)', boxShadow: 'inset 0 0 0 3px #C8D8E8' },
+  // rgba(107,139,89,...) was the old green's own RGB triple (0x6B,0x8B,0x59);
+  // rgba(200,216,232,...) is #C8D8E8's, so the tint matches the ring exactly.
+  target: { ...OVERLAY_BASE, backgroundColor: 'rgba(200,216,232,0.35)', boxShadow: 'inset 0 0 0 4px #C8D8E8' },
   // A drop that could not be completed. Amber, held for as long as the
   // sentence in the panel is -- the two are one message, and this is the half
   // that says WHICH photo stayed put.
@@ -140,8 +142,13 @@ const SWAP_TARGET_STYLE: CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
-  backgroundColor: 'rgba(107,139,89,0.45)',
-  color: '#fff',
+  // Background swaps green -> brand blue (rgba(200,216,232,...) is
+  // #C8D8E8's own RGB triple), and the "Swap here" label's colour flips
+  // white -> ink alongside it: #C8D8E8 is 1.45:1 against white, so a white
+  // label over this tint would be the same invisible-button mistake the
+  // public buttons were fixed for.
+  backgroundColor: 'rgba(200,216,232,0.45)',
+  color: '#222222',
   cursor: 'pointer',
 };
 
@@ -542,7 +549,7 @@ export function useCollageEditor({
     const shared: CSSProperties = {
       position: 'absolute',
       zIndex: 30,
-      backgroundColor: 'rgba(107,139,89,0.35)',
+      backgroundColor: 'rgba(200,216,232,0.35)',
       touchAction: 'none',
     };
     return split.direction === 'row'
@@ -947,7 +954,7 @@ export function useCollageEditor({
                 style={THUMBNAIL_STYLE}
               />
               <div className="flex-1">
-                <p className="font-['Montserrat'] text-sm text-[#222]">{`Photo ${selectedIndex + 1} of ${photos.length}`}</p>
+                <p className="font-['Montserrat'] text-sm text-ink">{`Photo ${selectedIndex + 1} of ${photos.length}`}</p>
                 <p className="font-['Montserrat'] text-xs text-gray-500">{instruction}</p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
@@ -960,7 +967,7 @@ export function useCollageEditor({
                   }
                   disabled={locked || !canBeBigger}
                   onClick={() => changeSelectedSize(RESIZE_STEP_SHARE)}
-                  className="rounded border border-gray-300 bg-white px-3 py-2 font-['Montserrat'] text-sm text-[#222] disabled:cursor-not-allowed disabled:opacity-50"
+                  className="rounded border border-gray-300 bg-white px-3 py-2 font-['Montserrat'] text-sm text-ink disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {horizontal ? 'Wider' : 'Taller'}
                 </button>
@@ -973,7 +980,7 @@ export function useCollageEditor({
                   }
                   disabled={locked || !canBeSmaller}
                   onClick={() => changeSelectedSize(-RESIZE_STEP_SHARE)}
-                  className="rounded border border-gray-300 bg-white px-3 py-2 font-['Montserrat'] text-sm text-[#222] disabled:cursor-not-allowed disabled:opacity-50"
+                  className="rounded border border-gray-300 bg-white px-3 py-2 font-['Montserrat'] text-sm text-ink disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {horizontal ? 'Narrower' : 'Shorter'}
                 </button>
@@ -990,7 +997,7 @@ export function useCollageEditor({
                   aria-label={swapArmed ? 'Cancel the swap' : 'Swap this photo with another photo'}
                   disabled={locked || photos.length < 2}
                   onClick={() => setSwapArmed((armed) => !armed)}
-                  className="rounded border border-gray-300 bg-white px-3 py-2 font-['Montserrat'] text-sm text-[#222] disabled:cursor-not-allowed disabled:opacity-50"
+                  className="rounded border border-gray-300 bg-white px-3 py-2 font-['Montserrat'] text-sm text-ink disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {swapArmed ? 'Cancel' : 'Swap with another photo'}
                 </button>
@@ -999,7 +1006,7 @@ export function useCollageEditor({
                   aria-label="Add another photo beside this one, sharing its box"
                   disabled={locked || adding || addBesideRefusal !== null}
                   onClick={() => openPicker('row')}
-                  className="rounded border border-gray-300 bg-white px-3 py-2 font-['Montserrat'] text-sm text-[#222] disabled:cursor-not-allowed disabled:opacity-50"
+                  className="rounded border border-gray-300 bg-white px-3 py-2 font-['Montserrat'] text-sm text-ink disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Add beside
                 </button>
@@ -1008,7 +1015,7 @@ export function useCollageEditor({
                   aria-label="Add another photo below this one, sharing its box"
                   disabled={locked || adding || addBelowRefusal !== null}
                   onClick={() => openPicker('column')}
-                  className="rounded border border-gray-300 bg-white px-3 py-2 font-['Montserrat'] text-sm text-[#222] disabled:cursor-not-allowed disabled:opacity-50"
+                  className="rounded border border-gray-300 bg-white px-3 py-2 font-['Montserrat'] text-sm text-ink disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Add below
                 </button>
@@ -1028,7 +1035,7 @@ export function useCollageEditor({
                     setSelectedId(null);
                     setSwapArmed(false);
                   }}
-                  className="rounded border border-gray-300 bg-white px-3 py-2 font-['Montserrat'] text-sm text-[#222]"
+                  className="rounded border border-gray-300 bg-white px-3 py-2 font-['Montserrat'] text-sm text-ink"
                 >
                   Done
                 </button>
@@ -1076,7 +1083,7 @@ export function useCollageEditor({
           )}
           {notice !== null && (
             <div className="mt-2 flex flex-wrap items-center gap-3">
-              <p role="status" className="font-['Montserrat'] text-sm text-[#222]">
+              <p role="status" className="font-['Montserrat'] text-sm text-ink">
                 {notice.text}
               </p>
               {/* Drawn only while the tree is still the exact one this undo
@@ -1090,7 +1097,7 @@ export function useCollageEditor({
                   aria-label="Put the removed photo back"
                   disabled={locked}
                   onClick={notice.undo}
-                  className="rounded border border-gray-300 bg-white px-3 py-2 font-['Montserrat'] text-sm text-[#222] disabled:cursor-not-allowed disabled:opacity-50"
+                  className="rounded border border-gray-300 bg-white px-3 py-2 font-['Montserrat'] text-sm text-ink disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Undo
                 </button>

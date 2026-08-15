@@ -1126,7 +1126,7 @@ const EditMode: React.FC = () => {
               the whole sentence as one anchor wrapped onto two lines, and a
               two-line inline link on a phone is both a worse tap target and
               a worse read than a short one with its explanation after it. */}
-          <a href="/edit/manage" className="text-[#6B8B59] underline transition-colors duration-300 hover:text-[#222]">
+          <a href="/edit/manage" className="text-brand underline transition-colors duration-300 hover:text-ink">
             Open the dashboard
           </a>
           {' — menus, opening hours, page text and everything else.'}
@@ -1183,7 +1183,7 @@ const EditMode: React.FC = () => {
           {stillLoading && (
             <p
               role="status"
-              className="mb-4 rounded border border-amber-300 bg-amber-50 p-3 font-['Montserrat'] text-sm text-[#222]"
+              className="mb-4 rounded border border-amber-300 bg-amber-50 p-3 font-['Montserrat'] text-sm text-ink"
             >
               Loading live content…
             </p>

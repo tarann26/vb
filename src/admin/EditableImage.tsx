@@ -296,10 +296,10 @@ function wrapperClassName(imgClassName: string | undefined): string {
 // as a split tree; CollageSelectBadge.tsx is its replacement and records the
 // same z-index reasoning now.
 const CONTROL_LABEL_CLASSNAME =
-  'absolute bottom-1 right-1 z-20 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border border-white/70 bg-black/60 text-white shadow focus-within:ring-2 focus-within:ring-[#6B8B59]';
+  'absolute bottom-1 right-1 z-20 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border border-white/70 bg-black/60 text-white shadow focus-within:ring-2 focus-within:ring-brand';
 
 const ERROR_CONTROL_LABEL_CLASSNAME =
-  'absolute bottom-1 right-1 z-20 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border border-white/70 bg-red-600/90 text-white shadow focus-within:ring-2 focus-within:ring-[#6B8B59]';
+  'absolute bottom-1 right-1 z-20 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border border-white/70 bg-red-600/90 text-white shadow focus-within:ring-2 focus-within:ring-brand';
 
 // A camera glyph built from plain characters, not an icon font or an SVG
 // asset -- nothing new to fetch, nothing that could itself go missing from

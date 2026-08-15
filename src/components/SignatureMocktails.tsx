@@ -36,18 +36,18 @@ const SignatureMocktails: React.FC = () => {
   ];
 
   return (
-    <section className="py-20 bg-[#FFFDF8] relative overflow-hidden">
+    <section className="py-20 bg-cream relative overflow-hidden">
       {/* Sparkling bubble background */}
       <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute top-1/4 left-1/4 w-3 h-3 bg-[#6B8B59]/20 rounded-full animate-ping"></div>
-        <div className="absolute top-1/3 right-1/4 w-2 h-2 bg-[#6B8B59]/30 rounded-full animate-ping animation-delay-300"></div>
-        <div className="absolute bottom-1/3 left-1/3 w-4 h-4 bg-[#6B8B59]/15 rounded-full animate-ping animation-delay-700"></div>
-        <div className="absolute top-1/2 right-1/6 w-2 h-2 bg-[#6B8B59]/25 rounded-full animate-ping animation-delay-1000"></div>
+        <div className="absolute top-1/4 left-1/4 w-3 h-3 bg-brand/20 rounded-full animate-ping"></div>
+        <div className="absolute top-1/3 right-1/4 w-2 h-2 bg-brand/30 rounded-full animate-ping animation-delay-300"></div>
+        <div className="absolute bottom-1/3 left-1/3 w-4 h-4 bg-brand/15 rounded-full animate-ping animation-delay-700"></div>
+        <div className="absolute top-1/2 right-1/6 w-2 h-2 bg-brand/25 rounded-full animate-ping animation-delay-1000"></div>
       </div>
 
       <div className="max-w-7xl mx-auto px-4 relative">
         <div className="text-center mb-16">
-          <h2 className="font-['Montserrat'] text-4xl md:text-5xl font-bold text-[#222] mb-6">
+          <h2 className="font-['Montserrat'] text-4xl md:text-5xl font-bold text-ink mb-6">
           Crafted Mocktails
           </h2>
           <p className="font-['Open_Sans'] text-gray-700 max-w-2xl mx-auto leading-relaxed">
@@ -75,7 +75,7 @@ const SignatureMocktails: React.FC = () => {
                   <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent"></div>
                 </div>
                 <div className="p-6 text-center">
-                  <h3 className="font-['Parisienne'] text-2xl text-[#6B8B59] mb-2">{mocktail.name}</h3>
+                  <h3 className="font-['Parisienne'] text-2xl text-brand mb-2">{mocktail.name}</h3>
                   <p className="font-['Montserrat'] text-sm uppercase tracking-wider text-gray-600">
                     {mocktail.flavor}
                   </p>
@@ -88,7 +88,7 @@ const SignatureMocktails: React.FC = () => {
         {/* Download Full Menu Button */}
         <div className="text-center">
         <a href="/menus/food-menu.pdf" download>
-            <button className="inline-flex items-center space-x-2 bg-[#6B8B59] hover:bg-[#5a7349] text-white font-['Montserrat'] font-semibold px-8 py-4 rounded-lg transform hover:scale-105 hover:shadow-xl transition-all duration-300 uppercase tracking-wide">
+            <button className="inline-flex items-center space-x-2 bg-brand hover:bg-brand-dark text-ink font-['Montserrat'] font-semibold px-8 py-4 rounded-lg transform hover:scale-105 hover:shadow-xl transition-all duration-300 uppercase tracking-wide">
               <Download className="w-5 h-5" />
               <span>Open Full Menu</span>
             </button>

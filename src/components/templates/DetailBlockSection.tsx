@@ -18,7 +18,7 @@ const DetailBlockSection: React.FC<DetailBlockSectionProps> = ({ id, content }) 
   return (
     <section className="py-20 bg-white">
       <div className="max-w-4xl mx-auto px-4 text-center">
-        <h2 className="font-['Montserrat'] text-4xl md:text-5xl font-bold text-[#222] mb-8">
+        <h2 className="font-['Montserrat'] text-4xl md:text-5xl font-bold text-ink mb-8">
           {contentApi.renderText(`${base}.heading`, content.heading)}
         </h2>
         <p className="font-['Open_Sans'] text-gray-700 leading-relaxed mb-10">
@@ -27,11 +27,11 @@ const DetailBlockSection: React.FC<DetailBlockSectionProps> = ({ id, content }) 
         {content.facts.length > 0 && (
           <dl className="mx-auto mb-10 grid max-w-xl grid-cols-1 gap-6 text-left sm:grid-cols-2">
             {content.facts.map((fact, index) => (
-              <div key={index} className="border-l-4 border-[#6B8B59] pl-4">
-                <dt className="font-['Montserrat'] text-xs uppercase tracking-wide text-[#6B8B59]">
+              <div key={index} className="border-l-4 border-brand pl-4">
+                <dt className="font-['Montserrat'] text-xs uppercase tracking-wide text-brand">
                   {contentApi.renderText(`${base}.facts.${index}.label`, fact.label)}
                 </dt>
-                <dd className="font-['Open_Sans'] text-[#222]">
+                <dd className="font-['Open_Sans'] text-ink">
                   {contentApi.renderText(`${base}.facts.${index}.value`, fact.value)}
                 </dd>
               </div>

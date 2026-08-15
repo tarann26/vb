@@ -46,11 +46,11 @@ export interface ThumbnailProps {
 // that preview whether or not this component was ever mounted -- a row test
 // written without this attribute could not fail. It is also what the e2e
 // spec measures the 48px box with.
-const BOX = 'h-12 w-12 shrink-0 rounded border border-[#6B8B59]/40 object-cover';
+const BOX = 'h-12 w-12 shrink-0 rounded border border-brand/40 object-cover';
 // Cream fill, sage border, no icon. Not a browser broken-image glyph, and
 // not nothing: collapsing the box makes the rows ragged, which reads as
 // broken.
-const PLACEHOLDER = 'h-12 w-12 shrink-0 rounded border border-[#6B8B59]/40 bg-[#f7f5f0]';
+const PLACEHOLDER = 'h-12 w-12 shrink-0 rounded border border-brand/40 bg-[#f7f5f0]';
 
 const Thumbnail: React.FC<ThumbnailProps> = ({ path, previewKey, previews = NO_IMAGE_PREVIEWS }) => {
   // Which src has already failed, rather than a bare boolean. A boolean

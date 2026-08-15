@@ -68,9 +68,9 @@ export function DraftBanner({ draft, staleStagedCount, onRestore, onDiscard }: D
   const relative = savedAt === null ? 'a little while ago' : formatRelativeTime(savedAt);
   return (
     <div role="alert" className="mx-auto mb-8 max-w-3xl rounded border border-amber-300 bg-amber-50 p-4">
-      <p className="mb-3 font-['Montserrat'] text-sm text-[#222]">{`You have unsaved changes from ${relative}.`}</p>
+      <p className="mb-3 font-['Montserrat'] text-sm text-ink">{`You have unsaved changes from ${relative}.`}</p>
       {staleStagedCount > 0 && (
-        <p className="mb-3 font-['Montserrat'] text-sm text-[#222]">
+        <p className="mb-3 font-['Montserrat'] text-sm text-ink">
           {staleStagedCount === 1
             ? "A photo or PDF you picked in that session wasn't saved and will need to be picked again."
             : `${staleStagedCount} photos or PDFs you picked in that session weren't saved and will need to be picked again.`}
@@ -80,14 +80,14 @@ export function DraftBanner({ draft, staleStagedCount, onRestore, onDiscard }: D
         <button
           type="button"
           onClick={onRestore}
-          className={`${BANNER_BUTTON_CLASSNAME} bg-[#6B8B59] text-white hover:bg-[#5a7349]`}
+          className={`${BANNER_BUTTON_CLASSNAME} bg-brand text-ink hover:bg-brand-dark`}
         >
           Restore
         </button>
         <button
           type="button"
           onClick={onDiscard}
-          className={`${BANNER_BUTTON_CLASSNAME} border border-gray-300 text-[#222] hover:bg-gray-100`}
+          className={`${BANNER_BUTTON_CLASSNAME} border border-gray-300 text-ink hover:bg-gray-100`}
         >
           Discard
         </button>
@@ -257,7 +257,7 @@ function validationHeading(count: number): string {
 // test suite passing with no edits.
 
 const PUBLISH_BUTTON_CLASSNAME =
-  "rounded bg-[#6B8B59] px-6 py-2 font-['Montserrat'] uppercase tracking-wide text-white transition hover:bg-[#5a7349] disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500";
+  "rounded bg-brand px-6 py-2 font-['Montserrat'] uppercase tracking-wide text-ink transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500";
 
 export interface PublishBarProps {
   registry: ContentRegistry;
@@ -865,14 +865,14 @@ const PublishBar: React.FC<PublishBarProps> = ({
             <button
               type="button"
               onClick={() => setState({ phase: 'undo-armed', record: undoRecord })}
-              className={`${BANNER_BUTTON_CLASSNAME} border border-gray-300 text-[#222] hover:bg-gray-100`}
+              className={`${BANNER_BUTTON_CLASSNAME} border border-gray-300 text-ink hover:bg-gray-100`}
             >
               Undo my last publish
             </button>
           </p>
         )}
         {state.phase === 'undo-armed' && (
-          <div role="alert" className="mt-3 font-['Montserrat'] text-sm text-[#222]">
+          <div role="alert" className="mt-3 font-['Montserrat'] text-sm text-ink">
             <p className="mb-3">
               {`Undo the change you published ${formatRelativeTime(state.record.at)}? This puts ${describePaths(
                 state.record.paths,
@@ -895,14 +895,14 @@ const PublishBar: React.FC<PublishBarProps> = ({
               <button
                 type="button"
                 onClick={() => void performUndo(state.record)}
-                className={`${BANNER_BUTTON_CLASSNAME} bg-[#6B8B59] text-white hover:bg-[#5a7349]`}
+                className={`${BANNER_BUTTON_CLASSNAME} bg-brand text-ink hover:bg-brand-dark`}
               >
                 Yes, undo it
               </button>
               <button
                 type="button"
                 onClick={() => setState({ phase: 'idle' })}
-                className={`${BANNER_BUTTON_CLASSNAME} border border-gray-300 text-[#222] hover:bg-gray-100`}
+                className={`${BANNER_BUTTON_CLASSNAME} border border-gray-300 text-ink hover:bg-gray-100`}
               >
                 Keep it
               </button>
@@ -999,8 +999,8 @@ const PublishBar: React.FC<PublishBarProps> = ({
 // root, which this component does not own on /edit (it receives the whole
 // homepage as opaque `children`). The keyboard path is trapped, and the
 // keyboard path is the one the accidental-Enter hazard runs through.
-const SECONDARY_BUTTON_CLASSNAME = 'border border-gray-300 text-[#222] hover:bg-gray-100';
-const PRIMARY_BUTTON_CLASSNAME = 'bg-[#6B8B59] text-white hover:bg-[#5a7349] disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500';
+const SECONDARY_BUTTON_CLASSNAME = 'border border-gray-300 text-ink hover:bg-gray-100';
+const PRIMARY_BUTTON_CLASSNAME = 'bg-brand text-ink hover:bg-brand-dark disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500';
 
 function ConfirmPanel({
   dirtyFiles,
@@ -1065,7 +1065,7 @@ function ConfirmPanel({
       className="fixed inset-x-0 bottom-0 z-50 border-t border-gray-200 bg-white px-4 py-3 shadow-[0_-4px_12px_rgba(0,0,0,0.15)]"
     >
       <div className="mx-auto max-w-3xl">
-        <p id="vb-publish-confirm-heading" className="mb-3 font-['Montserrat'] text-sm font-semibold text-[#222]">
+        <p id="vb-publish-confirm-heading" className="mb-3 font-['Montserrat'] text-sm font-semibold text-ink">
           Publish these changes to the live site?
         </p>
         {/* WHAT. Derived live from the same `dirtyFiles`/`stagedCount` the
@@ -1073,9 +1073,9 @@ function ConfirmPanel({
             taken when this opened, which would go stale the moment a photo
             upload that was in flight when she clicked Publish finishes and
             stages itself. */}
-        <p className="mb-3 font-['Montserrat'] text-sm text-[#222]">{barSummary(dirtyFiles.length, stagedCount)}</p>
+        <p className="mb-3 font-['Montserrat'] text-sm text-ink">{barSummary(dirtyFiles.length, stagedCount)}</p>
         {dirtyFiles.length > 0 && (
-          <p className="mb-3 font-['Montserrat'] text-sm text-[#222]">
+          <p className="mb-3 font-['Montserrat'] text-sm text-ink">
             {`Changing: ${dirtyFiles.map((file) => CONTENT_FILE_LABELS[file]).join(', ')}.`}
           </p>
         )}
@@ -1096,10 +1096,10 @@ function ConfirmPanel({
             server refuses it outright once anything else has moved the
             branch. "For a little while" is the honest shape of all three
             without teaching her three rules she cannot act on. */}
-        <p className="mb-3 font-['Montserrat'] text-sm text-[#222]">
+        <p className="mb-3 font-['Montserrat'] text-sm text-ink">
           This puts your changes on the public website, where anyone visiting can see them.
         </p>
-        <p className="mb-3 font-['Montserrat'] text-sm text-[#222]">
+        <p className="mb-3 font-['Montserrat'] text-sm text-ink">
           Afterwards you&apos;ll be offered one undo, for a little while. Once that has gone, changing something back
           means editing it again and publishing again.
         </p>
@@ -1108,7 +1108,7 @@ function ConfirmPanel({
             copy says "This is taking longer than it should" -- a firm
             number here followed by that sentence is a contradiction she
             would read. */}
-        <p className="mb-3 font-['Montserrat'] text-sm text-[#222]">
+        <p className="mb-3 font-['Montserrat'] text-sm text-ink">
           It usually takes about 2-3 minutes for the site to show the change.
         </p>
         {problems.length > 0 && (
@@ -1273,7 +1273,7 @@ function PublishStatus({
               <button
                 type="button"
                 onClick={onKeepEditing}
-                className={`${BANNER_BUTTON_CLASSNAME} border border-gray-300 text-[#222] hover:bg-gray-100`}
+                className={`${BANNER_BUTTON_CLASSNAME} border border-gray-300 text-ink hover:bg-gray-100`}
               >
                 Keep editing
               </button>

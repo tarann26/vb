@@ -10,18 +10,18 @@ const Drinks: React.FC = () => {
   const { drinks, menus, copy } = content;
 
   return (
-    <section id="drinks" className="py-20 bg-[#FFFDF8] relative overflow-hidden">
+    <section id="drinks" className="py-20 bg-cream relative overflow-hidden">
       {/* Sparkling bubble background */}
       <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute top-1/4 left-1/4 w-3 h-3 bg-[#6B8B59]/20 rounded-full animate-ping"></div>
-        <div className="absolute top-1/3 right-1/4 w-2 h-2 bg-[#6B8B59]/30 rounded-full animate-ping animation-delay-300"></div>
-        <div className="absolute bottom-1/3 left-1/3 w-4 h-4 bg-[#6B8B59]/15 rounded-full animate-ping animation-delay-700"></div>
-        <div className="absolute top-1/2 right-1/6 w-2 h-2 bg-[#6B8B59]/25 rounded-full animate-ping animation-delay-1000"></div>
+        <div className="absolute top-1/4 left-1/4 w-3 h-3 bg-brand/20 rounded-full animate-ping"></div>
+        <div className="absolute top-1/3 right-1/4 w-2 h-2 bg-brand/30 rounded-full animate-ping animation-delay-300"></div>
+        <div className="absolute bottom-1/3 left-1/3 w-4 h-4 bg-brand/15 rounded-full animate-ping animation-delay-700"></div>
+        <div className="absolute top-1/2 right-1/6 w-2 h-2 bg-brand/25 rounded-full animate-ping animation-delay-1000"></div>
       </div>
 
       <div className="max-w-7xl mx-auto px-4 relative">
         <div className="text-center mb-16">
-          <h2 className="font-['Montserrat'] text-4xl md:text-5xl font-bold text-[#222] mb-6">
+          <h2 className="font-['Montserrat'] text-4xl md:text-5xl font-bold text-ink mb-6">
             {content.renderText('drinks.heading', copy.drinks.heading)}
           </h2>
           <p className="font-['Open_Sans'] text-gray-700 max-w-2xl mx-auto leading-relaxed">
@@ -60,14 +60,14 @@ const Drinks: React.FC = () => {
               ))}
             </div>
           </div>
-          <div className="pointer-events-none absolute inset-y-0 right-0 w-16 bg-gradient-to-l from-[#FFFDF8] to-transparent" />
+          <div className="pointer-events-none absolute inset-y-0 right-0 w-16 bg-gradient-to-l from-cream to-transparent" />
         </div>
 
         {/* Download Full Menu Buttons */}
         <div className="text-center flex flex-wrap justify-center gap-4">
           {menus.map((menu) => (
             <a key={menu.id} href={menu.file} download>
-              <button className="inline-flex items-center space-x-2 bg-[#6B8B59] hover:bg-[#5a7349] text-white font-['Montserrat'] font-semibold px-8 py-4 rounded-lg transform hover:scale-105 hover:shadow-xl transition-all duration-300 uppercase tracking-wide">
+              <button className="inline-flex items-center space-x-2 bg-brand hover:bg-brand-dark text-ink font-['Montserrat'] font-semibold px-8 py-4 rounded-lg transform hover:scale-105 hover:shadow-xl transition-all duration-300 uppercase tracking-wide">
                 <Download className="w-5 h-5" />
                 <span>{menu.label}</span>
               </button>

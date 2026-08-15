@@ -125,8 +125,8 @@ function pagesFromRegistry(registry: ContentRegistry): PageNaming[] {
     .map((page) => ({ slug: page.slug, name: page.name }));
 }
 
-const CARD = "mb-4 rounded border border-[#6B8B59]/30 bg-white p-4 font-['Montserrat']";
-const CARD_TITLE = "mb-2 font-['Montserrat'] text-sm uppercase tracking-wide text-[#6B8B59]";
+const CARD = "mb-4 rounded border border-brand/30 bg-white p-4 font-['Montserrat']";
+const CARD_TITLE = "mb-2 font-['Montserrat'] text-sm uppercase tracking-wide text-brand";
 
 const NumbersArea: React.FC<NumbersAreaProps> = ({ active, registry, fetchImpl }) => {
   const [outcome, setOutcome] = useState<Outcome>({ kind: 'idle' });
@@ -170,7 +170,7 @@ const NumbersArea: React.FC<NumbersAreaProps> = ({ active, registry, fetchImpl }
 
   return (
     <section className="mb-10">
-      <h2 className="mb-2 font-['Montserrat'] text-lg uppercase tracking-wide text-[#222]">Numbers</h2>
+      <h2 className="mb-2 font-['Montserrat'] text-lg uppercase tracking-wide text-ink">Numbers</h2>
       {/* Said once, quietly. Her own editing sessions are tracked pageloads
           -- the beacon is on index.html and the SPA rewrite serves it for
           /edit and every /edit/manage route -- so they are excluded at the
@@ -182,7 +182,7 @@ const NumbersArea: React.FC<NumbersAreaProps> = ({ active, registry, fetchImpl }
 
       {outcome.kind === 'error' ? (
         <div className={CARD} role="alert">
-          <p className="text-sm text-[#222]">{errorSentence(outcome.reason)}</p>
+          <p className="text-sm text-ink">{errorSentence(outcome.reason)}</p>
           {outcome.reason === 'unreachable' && (
             // `type="button"`, and that is not cosmetic: this renders inside
             // the single <form> PublishBar's own button submits, where a
@@ -191,7 +191,7 @@ const NumbersArea: React.FC<NumbersAreaProps> = ({ active, registry, fetchImpl }
             <button
               type="button"
               onClick={retry}
-              className="mt-2 rounded border border-[#6B8B59] px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-[#6B8B59] transition hover:bg-[#6B8B59] hover:text-white"
+              className="mt-2 rounded border border-brand px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-brand transition hover:bg-brand hover:text-ink"
             >
               Retry
             </button>
@@ -200,7 +200,7 @@ const NumbersArea: React.FC<NumbersAreaProps> = ({ active, registry, fetchImpl }
       ) : (
         <>
           {outcome.kind === 'ok' && outcome.payload.visits === 0 && (
-            <div className="mb-4 rounded border border-[#6B8B59]/30 bg-[#f7f5f0] p-4 font-['Montserrat'] text-sm text-[#222]">
+            <div className="mb-4 rounded border border-brand/30 bg-[#f7f5f0] p-4 font-['Montserrat'] text-sm text-ink">
               <p className="font-semibold">Visitor counting started on {formatCountingStartedOn()}.</p>
               <p className="mt-1 text-gray-600">
                 There isn&rsquo;t enough data yet — this fills in over the next week or two. Nothing is wrong with your
@@ -237,15 +237,15 @@ const CardA: React.FC<{ outcome: Outcome }> = ({ outcome }) => (
       // the honest render is a real number beside a zero inside a layout
       // built for comparing them -- which is the definition of "this screen
       // is broken".
-      <p className="text-sm text-[#222]">{noVisitsYetSentence(outcome.payload.bookingTaps.total)}</p>
+      <p className="text-sm text-ink">{noVisitsYetSentence(outcome.payload.bookingTaps.total)}</p>
     ) : (
       <>
         <div className="flex flex-wrap gap-6">
-          <p className="text-sm text-[#222]">{visitsSentence(outcome.payload.visits)}</p>
-          <p className="text-sm text-[#222]">{tapsSentence(outcome.payload.bookingTaps.total)}</p>
+          <p className="text-sm text-ink">{visitsSentence(outcome.payload.visits)}</p>
+          <p className="text-sm text-ink">{tapsSentence(outcome.payload.bookingTaps.total)}</p>
         </div>
         {ratioSentence(outcome.payload) !== null && (
-          <p className="mt-2 text-sm text-[#222]">{ratioSentence(outcome.payload)}</p>
+          <p className="mt-2 text-sm text-ink">{ratioSentence(outcome.payload)}</p>
         )}
         <p className="mt-2 text-xs text-gray-500">
           Taps are a lower bound, not a count — some are never recorded. Visits are an estimate.
@@ -263,7 +263,7 @@ const CardB: React.FC<{ outcome: Outcome; pages: PageNaming[] }> = ({ outcome, p
     ) : outcome.payload.byPath.length === 0 ? (
       <p className="text-sm text-gray-600">Nothing to rank yet — this fills in once people start visiting.</p>
     ) : (
-      <ol className="text-sm text-[#222]">
+      <ol className="text-sm text-ink">
         {outcome.payload.byPath.map((row) => (
           <li key={row.path} className="flex justify-between gap-4 border-b border-gray-100 py-1 last:border-0">
             <span>{labelForPath(row.path, pages)}</span>
@@ -286,7 +286,7 @@ const CardC: React.FC<{ outcome: Outcome }> = ({ outcome }) => (
         Nothing yet — this will show whether people found you through Instagram, Google, or by typing your address in.
       </p>
     ) : (
-      <ul className="text-sm text-[#222]">
+      <ul className="text-sm text-ink">
         {outcome.payload.byReferer.map((bucket) => (
           <li
             key={`${bucket.kind}:${bucket.host ?? ''}`}
@@ -310,7 +310,7 @@ const CardD: React.FC<{ outcome: Outcome }> = ({ outcome }) => (
     {outcome.kind !== 'ok' ? (
       <Skeleton />
     ) : (
-      <p className="text-sm text-[#222]">
+      <p className="text-sm text-ink">
         {weekSentence(outcome.payload.thisWeekVisits, outcome.payload.priorWeekVisits)}
       </p>
     )}

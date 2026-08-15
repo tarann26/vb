@@ -40,8 +40,8 @@ export interface FieldProps<V> {
 // for -- this project has shipped unused/duplicate CSS from exactly this
 // kind of drift seven times before (see this repo's own commit history).
 export const INPUT_CLASSNAME =
-  "w-full rounded border border-gray-300 px-3 py-2 text-[#222] focus:border-[#6B8B59] focus:outline-none disabled:bg-gray-100 disabled:text-gray-500";
-export const LABEL_CLASSNAME = "mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-[#6B8B59]";
+  "w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500";
+export const LABEL_CLASSNAME = "mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand";
 
 // A comma-separated text field, not a chip editor with its own per-item
 // add/remove buttons -- that interaction belongs to Tasks 5/6 (RecordList's
