@@ -1,5 +1,9 @@
 import { expect, test, type Page } from '@playwright/test';
-import { collageBoxes as boxes, grabPoint, openCollage, waitForStableLayout } from './collage-page';
+import { collageBoxes as boxes, grabPoint, heroCollagePhotoCount, openCollage, waitForStableLayout } from './collage-page';
+
+// Derived, not hardcoded -- see collage-page.ts's own comment on
+// heroCollagePhotoCount.
+const PHOTO_COUNT = heroCollagePhotoCount();
 
 // Plan 9, Task 4: dragging one collage photo onto another exchanges the two,
 // and changes no box.
@@ -65,13 +69,16 @@ async function dragBetween(page: Page, from: { x: number; y: number }, to: { x: 
 test.describe('dragging one collage photo onto another, at 1440px', () => {
   test.use({ viewport: { width: 1440, height: 900 } });
 
-  test('the two photos exchange places and not one of the sixteen boxes moves', async ({ page }) => {
+  test('the two photos exchange places and no other box moves', async ({ page }) => {
     await openCollage(page, '/edit');
     const before = await boxes(page);
     // Two photos in different branches of the tree, so a swap that merely
-    // reordered siblings could not produce this.
+    // reordered siblings could not produce this. photo-16 (the original
+    // target) was one of the five Farfalle photos Task 6 removed; photo-15
+    // keeps the same property -- a leaf several levels down inside `right`,
+    // nowhere near photo-1's own branch off root.
     const fromId = 'photo-1';
-    const toId = 'photo-16';
+    const toId = 'photo-15';
     const fromIndex = before.findIndex((b) => b.id === fromId);
     const toIndex = before.findIndex((b) => b.id === toId);
     expect(fromIndex).toBeGreaterThanOrEqual(0);
@@ -106,14 +113,14 @@ test.describe('dragging one collage photo onto another, at 1440px', () => {
   test('mid-drag, the box under the pointer is marked as the destination', async ({ page }) => {
     await openCollage(page, '/edit');
     const from = await grabPoint(page, 'photo-1');
-    const to = await grabPoint(page, 'photo-16');
+    const to = await grabPoint(page, 'photo-15');
 
     await page.mouse.move(from.x, from.y);
     await page.mouse.down();
     await page.mouse.move(from.x + 12, from.y + 12, { steps: 4 });
     await page.mouse.move(to.x, to.y, { steps: 12 });
 
-    await expect(page.locator('[data-collage-photo-id="photo-16"] [data-collage-overlay="target"]')).toHaveCount(1);
+    await expect(page.locator('[data-collage-photo-id="photo-15"] [data-collage-overlay="target"]')).toHaveCount(1);
     await expect(page.locator('[data-collage-photo-id="photo-1"] [data-collage-overlay="dragging"]')).toHaveCount(1);
     // Exactly one destination is ever marked -- a highlight on two boxes at
     // once would be worse than none.
@@ -165,7 +172,7 @@ test.describe('dragging one collage photo onto another, at 1440px', () => {
     // measure once that has settled rather than during it.
     await waitForStableLayout(page);
 
-    await dragBetween(page, await grabPoint(page, 'photo-1'), await grabPoint(page, 'photo-16'));
+    await dragBetween(page, await grabPoint(page, 'photo-1'), await grabPoint(page, 'photo-15'));
     await expect(panelStatus(page)).toContainText('Swapped.');
 
     // The preview followed the PHOTO, not the box it left.
@@ -200,10 +207,16 @@ test.describe('rearranging the collage by tapping, at 390px', () => {
     });
     await openCollage(page, '/edit');
     const before = await boxes(page);
-    const fromIndex = before.findIndex((b) => b.id === 'photo-1');
-    const toIndex = before.findIndex((b) => b.id === 'photo-16');
+    // photo-8 and photo-15, not photo-1 and photo-16: photo-16 was one of the
+    // five Farfalle photos Task 6 removed, and photo-1 -- while still a
+    // surviving tile -- is now too narrow a sliver at 390px width (Task 6's
+    // own rebalance widened it a lot at desktop, far less at a phone's total
+    // width) for grabPoint's scan to land a tap on it at all. photo-8 and
+    // photo-15 are both confirmed reachable at this viewport.
+    const fromIndex = before.findIndex((b) => b.id === 'photo-8');
+    const toIndex = before.findIndex((b) => b.id === 'photo-15');
 
-    const start = await grabPoint(page, 'photo-1');
+    const start = await grabPoint(page, 'photo-8');
     await page.touchscreen.tap(start.x, start.y);
 
     // Real touch, not a synthesised mouse click -- the whole point of this
@@ -212,26 +225,26 @@ test.describe('rearranging the collage by tapping, at 390px', () => {
       'touch',
     );
 
-    await expect(page.getByText(`Photo ${fromIndex + 1} of 16`)).toBeVisible();
+    await expect(page.getByText(`Photo ${fromIndex + 1} of ${PHOTO_COUNT}`)).toBeVisible();
     await page.getByRole('button', { name: 'Swap this photo with another photo' }).tap();
     await page
-      .locator('[data-collage-photo-id="photo-16"]')
+      .locator('[data-collage-photo-id="photo-15"]')
       .getByRole('button', { name: 'Swap the selected photo into this box' })
       .tap();
 
     const after = await boxes(page);
-    expect(after[fromIndex].id).toBe('photo-16');
-    expect(after[toIndex].id).toBe('photo-1');
+    expect(after[fromIndex].id).toBe('photo-15');
+    expect(after[toIndex].id).toBe('photo-8');
     expect(after.map((b) => [b.width, b.height])).toEqual(before.map((b) => [b.width, b.height]));
   });
 
   // The other half of the touch decision, and the reason a finger drag is NOT
   // a swap gesture: the collage is `absolute inset-0` over the whole hero, so
-  // sixteen boxes cover the top screenful of a 4800px page. If a press on one
-  // of them armed a drag, every attempt to scroll past the hero would travel
-  // far enough to become one, the browser's own scroll would then fire
-  // `pointercancel`, and she would get "that drag was interrupted" for simply
-  // reading her own page.
+  // every one of its boxes covers the top screenful of a 4800px page. If a
+  // press on one of them armed a drag, every attempt to scroll past the hero
+  // would travel far enough to become one, the browser's own scroll would
+  // then fire `pointercancel`, and she would get "that drag was interrupted"
+  // for simply reading her own page.
   //
   // Driven through the browser's real touch pipeline (CDP
   // `Input.dispatchTouchEvent`), not `dispatchEvent` -- a synthesised DOM
@@ -239,7 +252,8 @@ test.describe('rearranging the collage by tapping, at 390px', () => {
   // even arise.
   test('a finger sliding across the collage scrolls the page, and starts nothing', async ({ page }) => {
     await openCollage(page, '/edit');
-    const start = await grabPoint(page, 'photo-1');
+    // photo-8, not photo-1: see the comment on the tap-swap test above.
+    const start = await grabPoint(page, 'photo-8');
     const cdp = await page.context().newCDPSession(page);
     const touch = (type: 'touchStart' | 'touchMove' | 'touchEnd', y: number) =>
       cdp.send('Input.dispatchTouchEvent', {

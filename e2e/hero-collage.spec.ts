@@ -17,7 +17,7 @@ import { fileURLToPath } from 'node:url';
 //   2. A 1:1 split renders two equal boxes whatever is inside them -- the
 //      `flexBasis: 0` half of Hero.tsx's sizing, without which an image's
 //      intrinsic width leaks into the ratio.
-//   3. Every one of the sixteen photos has a real box on screen.
+//   3. Every photo in the tree has a real box on screen.
 
 interface CollageNode {
   kind: 'photo' | 'split';
@@ -33,6 +33,18 @@ interface CollageNode {
 // both simpler and unambiguous about which bytes are being checked.
 const GALLERIES_PATH = fileURLToPath(new URL('../src/content/galleries.json', import.meta.url));
 const TREE = (JSON.parse(readFileSync(GALLERIES_PATH, 'utf8')) as { heroCollage: CollageNode }).heroCollage;
+
+// Derived from TREE, not hardcoded: the owner can add or remove a collage
+// photo from /edit, which changes both of these, and a literal count here is
+// exactly the kind of number Task 6 (dropping five Farfalle photos) broke.
+function photoCount(node: CollageNode): number {
+  return node.kind === 'photo' ? 1 : (node.children ?? []).reduce((sum, child) => sum + photoCount(child), 0);
+}
+function splitCount(node: CollageNode): number {
+  return node.kind === 'photo' ? 0 : 1 + (node.children ?? []).reduce((sum, child) => sum + splitCount(child), 0);
+}
+const PHOTO_COUNT = photoCount(TREE);
+const SPLIT_COUNT = splitCount(TREE);
 
 const VIEWPORTS = [
   { label: '390px (phone)', width: 390, height: 844 },
@@ -116,10 +128,11 @@ for (const viewport of VIEWPORTS) {
       await settle(page);
 
       const splits = await measureSplits(page, TREE);
-      // Non-vacuous: the committed arrangement has thirteen splits. A walk
-      // that silently found none would otherwise pass with no assertions run
-      // at all, which is the exact shape of test this repo counts as a defect.
-      expect(splits.length).toBe(13);
+      // Non-vacuous: SPLIT_COUNT is derived from the same TREE this walk just
+      // measured, so a walk that silently found none would still fail here
+      // rather than passing with no assertions run at all -- the exact shape
+      // of test this repo counts as a defect.
+      expect(splits.length).toBe(SPLIT_COUNT);
 
       for (const split of splits) {
         expect(split.extents.length, `${split.id}: rendered a different number of boxes than the tree has`).toBe(
@@ -144,12 +157,20 @@ for (const viewport of VIEWPORTS) {
     });
 
     // The property `flexBasis: 0` exists for, stated as the case that breaks
-    // without it. `right-bottom-pair` is a 1:1 row split holding
-    // /our_story/cut.webp (1000px wide natively) and /hero/farfalle.webp
-    // (500px) -- a 2:1 difference in intrinsic width, which is what leaks into
-    // the layout the moment a flex item's base size comes from its content
+    // without it.
+    //
+    // `right-middle-column`, not `right-bottom-pair`: the latter was a 1:1
+    // ROW split holding /our_story/cut.webp and /hero/farfalle.webp, and
+    // farfalle.webp does not exist any more -- Task 6 removed it along with
+    // four other photos. `right-middle-column` is the surviving 1:1 split
+    // with the same property this test needs: two photos whose intrinsic
+    // sizes differ substantially along the split's own axis. It is a COLUMN
+    // split, so that axis is height, not width -- /hero/building.webp is
+    // 500x548 natively and /atmosphere/room.webp is 1000x1088, exactly a 2:1
+    // difference in intrinsic HEIGHT, which is what would leak into the
+    // layout the moment a flex item's base size comes from its content
     // instead of from zero.
-    test('a 1:1 split renders two equal boxes even when the two photos differ in intrinsic width', async ({ page }) => {
+    test('a 1:1 split renders two equal boxes even when the two photos differ in intrinsic height', async ({ page }) => {
       await page.goto('/');
       await settle(page);
 
@@ -159,20 +180,20 @@ for (const viewport of VIEWPORTS) {
           if (!img) throw new Error(`no collage image for ${src}`);
           const el = img.closest('div');
           if (!el) throw new Error(`no box around ${src}`);
-          return { width: el.getBoundingClientRect().width, natural: img.naturalWidth };
+          return { height: el.getBoundingClientRect().height, natural: img.naturalHeight };
         };
-        return { wide: box('/our_story/cut.webp'), narrow: box('/hero/farfalle.webp') };
+        return { tall: box('/atmosphere/room.webp'), short: box('/hero/building.webp') };
       });
 
       // The precondition, asserted rather than assumed: if these two photos
       // ever became the same size, the test below would still pass and would
       // no longer be checking anything.
-      expect(measured.wide.natural).toBeGreaterThan(measured.narrow.natural);
-      expect(measured.wide.width).toBeGreaterThan(0);
-      expect(Math.abs(measured.wide.width - measured.narrow.width)).toBeLessThanOrEqual(1);
+      expect(measured.tall.natural).toBeGreaterThan(measured.short.natural);
+      expect(measured.tall.height).toBeGreaterThan(0);
+      expect(Math.abs(measured.tall.height - measured.short.height)).toBeLessThanOrEqual(1);
     });
 
-    test('all sixteen photos have a real box on screen, none collapsed to nothing', async ({ page }) => {
+    test('every photo has a real box on screen, none collapsed to nothing', async ({ page }) => {
       await page.goto('/');
       await settle(page);
 
@@ -185,7 +206,7 @@ for (const viewport of VIEWPORTS) {
         });
       });
 
-      expect(boxes.length).toBe(16);
+      expect(boxes.length).toBe(PHOTO_COUNT);
       for (const box of boxes) {
         expect(box.width, `${box.src} has no width`).toBeGreaterThan(0);
         expect(box.height, `${box.src} has no height`).toBeGreaterThan(0);

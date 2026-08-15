@@ -1,9 +1,15 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { mockEditBackend } from './edit-backend';
+import { heroCollagePhotoCount } from './collage-page';
+
+// Derived, not hardcoded: the owner can add or remove a collage photo from
+// /edit, and Task 6 (dropping the five Farfalle photos) is exactly the
+// content edit that made a hardcoded photo count in this file wrong.
+const PHOTO_COUNT = heroCollagePhotoCount();
 
 // The committed, re-runnable version of a proof that was once a one-shot
-// manual run recorded in prose: "the camera badge is reachable on 16/16
-// collage photos at both 390px and 1440px". It exists to catch a REGRESSION
+// manual run recorded in prose: "the camera badge is reachable on every
+// collage photo at both 390px and 1440px". It exists to catch a REGRESSION
 // of the z-index fix EditableImage.tsx carries (`CONTROL_LABEL_CLASSNAME`/
 // `ERROR_CONTROL_LABEL_CLASSNAME` are `z-20`, not `z-10`) -- the bug that made
 // every one of the sixteen camera badges unreachable by a real click for the
@@ -106,7 +112,7 @@ for (const viewport of VIEWPORTS) {
   test.describe(`hero collage badges are hit-testable at ${viewport.label}`, () => {
     test.use({ viewport: { width: viewport.width, height: viewport.height } });
 
-    test('all sixteen photos: both badges resolve to themselves under document.elementFromPoint', async ({ page }) => {
+    test('every collage photo: both badges resolve to themselves under document.elementFromPoint', async ({ page }) => {
       await mockEditBackend(page);
       await page.goto('/edit');
 
@@ -114,15 +120,15 @@ for (const viewport of VIEWPORTS) {
       // `galleries.heroCollage.<photo id>` -- an id, not a position, so this
       // selector keeps naming the same photographs after a swap.
       const photos = page.locator('[data-editable-image-path^="galleries.heroCollage."]');
-      // Non-vacuous: sixteen real photos, not a smaller stand-in fixture.
-      await expect(photos).toHaveCount(16);
+      // Non-vacuous: PHOTO_COUNT real photos, not a smaller stand-in fixture.
+      await expect(photos).toHaveCount(PHOTO_COUNT);
       const boxes = page.locator('[data-collage-photo-id]');
-      await expect(boxes).toHaveCount(16);
+      await expect(boxes).toHaveCount(PHOTO_COUNT);
       await settleLayout(page);
 
       const count = await photos.count();
       for (let i = 0; i < count; i++) {
-        // EditableImage's own <label>. All sixteen share the literal
+        // EditableImage's own <label>. Every photo shares the literal
         // aria-label "Replace this photo" -- every collage photo's `alt` is
         // empty (they are decorative background behind the hero's own
         // heading), and EditableImage falls back to that generic label
@@ -143,13 +149,13 @@ for (const viewport of VIEWPORTS) {
         // CollageSelectBadge and by nothing else, so this is addressed by the
         // same marker the editor's own pointer handler carves out -- one
         // spelling, not two that can drift. Its label names the position, so
-        // this also proves the badge she presses and the "Photo N of 16" she
-        // then reads are talking about the same photograph.
+        // this also proves the badge she presses and the "Photo N of
+        // PHOTO_COUNT" she then reads are talking about the same photograph.
         const selectBadge = boxes.nth(i).locator('[data-collage-select]');
         await expect(selectBadge).toBeVisible();
         const selectHit = await hitTestLabel(selectBadge);
         expect(selectHit, `photo ${i}: select badge is occluded -- this photo cannot be chosen at all`).toBe(
-          `Choose photo ${i + 1} of 16`,
+          `Choose photo ${i + 1} of ${PHOTO_COUNT}`,
         );
       }
     });

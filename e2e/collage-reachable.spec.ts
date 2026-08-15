@@ -1,5 +1,9 @@
 import { expect, test, type Page } from '@playwright/test';
-import { collageBoxes, openCollage } from './collage-page';
+import { collageBoxes, heroCollagePhotoCount, openCollage } from './collage-page';
+
+// Derived, not hardcoded -- see collage-page.ts's own comment on
+// heroCollagePhotoCount.
+const PHOTO_COUNT = heroCollagePhotoCount();
 
 // Review finding (Critical), and the only kind of test that could have caught
 // it: every gesture the collage editor offers -- Wider/Narrower, Swap, Add
@@ -53,10 +57,10 @@ for (const viewport of VIEWPORTS) {
       isMobile: viewport.touch,
     });
 
-    test('all sixteen: press its badge and the panel says which photo it is', async ({ page }) => {
+    test('every photo: press its badge and the panel says which photo it is', async ({ page }) => {
       await openCollage(page, '/edit');
       const ids = (await collageBoxes(page)).map((box) => box.id);
-      expect(ids).toHaveLength(16);
+      expect(ids).toHaveLength(PHOTO_COUNT);
 
       for (let i = 0; i < ids.length; i++) {
         const badge = selectBadge(page, ids[i]);
@@ -69,7 +73,7 @@ for (const viewport of VIEWPORTS) {
         else await badge.click();
 
         await expect(
-          panel(page).getByText(`Photo ${i + 1} of 16`),
+          panel(page).getByText(`Photo ${i + 1} of ${PHOTO_COUNT}`),
           `${ids[i]} could not be chosen -- every gesture on this collage is gated on this`,
         ).toBeVisible();
 
@@ -131,13 +135,13 @@ test.describe('choosing a photo the panel will then cover, at 390px', () => {
     await selectBadge(page, victim!.id).tap();
 
     // It IS chosen -- the tap did its own job...
-    await expect(panel(page).getByText(`Photo ${index + 1} of 16`)).toBeVisible();
+    await expect(panel(page).getByText(`Photo ${index + 1} of ${PHOTO_COUNT}`)).toBeVisible();
     // ...and it did nothing else. Every box is the rectangle it was (the
     // button under her finger was "Make this photo shorter", which took 13px
-    // off this one) and all sixteen photos are still here (in a longer sweep
+    // off this one) and every photo is still here (in a longer sweep
     // the button under the finger was "Remove").
     const after = await collageBoxes(page);
-    expect(after).toHaveLength(16);
+    expect(after).toHaveLength(PHOTO_COUNT);
     expect(after.map((b) => [b.id, b.x, b.y, b.width, b.height])).toEqual(
       before.map((b) => [b.id, b.x, b.y, b.width, b.height]),
     );
@@ -177,25 +181,45 @@ test.describe('the box the hero’s own content column covers, at 1440px', () =>
     await page.mouse.up();
   }
 
-  // Nothing inside photo-9's rectangle is pressable, so its select badge is
-  // also the only place a drag from it can START -- which is why a press on
-  // that badge, alone among the controls inside a box, is let through to the
-  // drag handler (CollageEditor's pointerdown carve-out on
-  // `data-collage-select`).
+  // photo-3, not photo-9: photo-9 was one of the five Farfalle photos Task 6
+  // removed. The property this describe block needs -- a box whose CENTRE
+  // resolves to the content column rather than to itself, so a naive
+  // single-point `elementFromPoint` drag or drop fails on it -- is confirmed
+  // directly against the rebalanced tree: photo-3's own centre sits under the
+  // reservation phone numbers, not under its own <img>. (photo-9 used to fail
+  // EVERYWHERE inside its box, not just at the centre; Task 6's own rebalance
+  // -- the owner's "whitespace can be squashed" -- widened every surviving
+  // tile enough that none is fully swallowed by the column any more at this
+  // width. The centre is still covered, which is the case
+  // CollageSelectBadge.tsx's own comment names and the one a naive
+  // drag-start would fail on.)
+  //
+  // photo-2, front mirror.webp, is ALSO centre-covered and was the first
+  // choice here, but its badge sits in the collage's TOP ROW (`top: 4`
+  // relative to a box starting at y=0) -- exactly where NavBar.tsx's `fixed`
+  // header briefly still overlaps while its own hide-on-scroll transition
+  // (`transition-all duration-500`) is still in flight after the page loads.
+  // `openCollage`'s `waitForStableLayout` only waits for the COLLAGE to stop
+  // moving, not for the nav's own animation, so a raw `page.mouse.down()`
+  // (no actionability wait, unlike `.click()`) landed on the nav instead of
+  // the badge roughly one run in three -- confirmed directly: 6/6 failures
+  // driving this test alone against photo-2, all with the nav's own
+  // bounding rect still overlapping y=4..36 mid-transition. photo-3's box
+  // starts at y=362, well clear of that window.
   test('a drag begun on its badge carries the photo, and the two trade places', async ({ page }) => {
     await openCollage(page, '/edit');
     const before = await collageBoxes(page);
-    const fromIndex = before.findIndex((box) => box.id === 'photo-9');
+    const fromIndex = before.findIndex((box) => box.id === 'photo-3');
     const toIndex = before.findIndex((box) => box.id === 'photo-1');
     expect(fromIndex).toBeGreaterThanOrEqual(0);
     expect(toIndex).toBeGreaterThanOrEqual(0);
 
-    await dragBetween(page, await badgeCentre(page, 'photo-9'), await centreOf(page, 'photo-1'));
+    await dragBetween(page, await badgeCentre(page, 'photo-3'), await centreOf(page, 'photo-1'));
 
     await expect(panel(page).getByRole('status')).toContainText('Swapped.');
     const after = await collageBoxes(page);
     expect(after[fromIndex].id).toBe('photo-1');
-    expect(after[toIndex].id).toBe('photo-9');
+    expect(after[toIndex].id).toBe('photo-3');
     expect(after[fromIndex].src).toBe(before[toIndex].src);
     expect(after[toIndex].src).toBe(before[fromIndex].src);
     // The owner's own rule -- "The boxes keep their shape" -- still holds for
@@ -204,17 +228,17 @@ test.describe('the box the hero’s own content column covers, at 1440px', () =>
   });
 
   // The other half, and the one a user hits first: dropping ONTO the covered
-  // box. `document.elementFromPoint` answers "the heading" for every pixel of
-  // photo-9, so this used to be refused with "Nothing to swap with there" and
-  // was never even marked as a destination mid-drag.
+  // box. `document.elementFromPoint` answers "the reservation phone numbers"
+  // for photo-3's own centre pixel, so this used to be refused with "Nothing
+  // to swap with there" and was never even marked as a destination mid-drag.
   test('a drop onto its centre is marked before the drop, and accepted', async ({ page }) => {
     await openCollage(page, '/edit');
     const before = await collageBoxes(page);
     const fromIndex = before.findIndex((box) => box.id === 'photo-1');
-    const toIndex = before.findIndex((box) => box.id === 'photo-9');
+    const toIndex = before.findIndex((box) => box.id === 'photo-3');
 
     const from = await centreOf(page, 'photo-1');
-    const to = await centreOf(page, 'photo-9');
+    const to = await centreOf(page, 'photo-3');
     await page.mouse.move(from.x, from.y);
     await page.mouse.down();
     await page.mouse.move(from.x + 12, from.y + 12, { steps: 4 });
@@ -222,13 +246,13 @@ test.describe('the box the hero’s own content column covers, at 1440px', () =>
 
     // Marked as the destination while the pointer is still down -- the plan's
     // "show the target before the drop", for a box that could never show it.
-    await expect(page.locator('[data-collage-photo-id="photo-9"] [data-collage-overlay="target"]')).toHaveCount(1);
+    await expect(page.locator('[data-collage-photo-id="photo-3"] [data-collage-overlay="target"]')).toHaveCount(1);
     await expect(page.locator('[data-collage-overlay="target"]')).toHaveCount(1);
 
     await page.mouse.up();
     await expect(panel(page).getByRole('status')).toContainText('Swapped.');
     const after = await collageBoxes(page);
-    expect(after[fromIndex].id).toBe('photo-9');
+    expect(after[fromIndex].id).toBe('photo-3');
     expect(after[toIndex].id).toBe('photo-1');
   });
 });

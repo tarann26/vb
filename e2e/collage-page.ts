@@ -7,10 +7,49 @@
 // Not a `.spec.ts`: playwright.config.ts's `testDir: './e2e'` reports a file
 // with no `test()` in it as an empty suite.
 import { expect, type Page } from '@playwright/test';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { mockEditBackend } from './edit-backend';
+import { countCollagePhotos } from '../src/content/collage';
+import type { CollageNode } from '../src/content/types';
 
 // The collage's own container -- Hero.tsx's `absolute inset-0 flex`.
 export const COLLAGE_CONTAINER = 'section .absolute.inset-0.flex';
+
+// Read at run time rather than imported as JSON, for the same reason
+// e2e/hero-collage.spec.ts's own TREE constant is: this spec runs as ESM,
+// where a JSON import needs an import attribute, and reading the committed
+// file directly is both simpler and unambiguous about which bytes are being
+// checked.
+const GALLERIES_PATH = fileURLToPath(new URL('../src/content/galleries.json', import.meta.url));
+
+// The single place every collage spec in this directory gets "how many
+// photos does the hero collage hold right now" from. Task 6 (dropping five
+// Farfalle photos) is what made a HARDCODED count in this suite a trap: the
+// owner can add or remove a collage photo from her own /edit dashboard, and a
+// literal `16` sprinkled across six spec files is exactly the kind of number
+// that breaks on the next legitimate content edit rather than on a real bug.
+// Read fresh on every call, not cached at import time, so a spec that mutates
+// `galleries.json` mid-run (none do today) could not silently see a stale
+// answer.
+export function heroCollageTree(): CollageNode {
+  return (JSON.parse(readFileSync(GALLERIES_PATH, 'utf8')) as { heroCollage: CollageNode }).heroCollage;
+}
+
+export function heroCollagePhotoCount(): number {
+  return countCollagePhotos(heroCollageTree());
+}
+
+// Every divider handle the committed tree renders -- one per gap, and a split
+// with N children leaves N-1 gaps between them. Derived the same way the
+// photo count above is, and for the same reason: e2e/collage-divider.spec.ts
+// used to assert a literal `15`, which was only ever true of the pre-Task-6,
+// sixteen-photo tree.
+export function heroCollageGapCount(): number {
+  const walk = (node: CollageNode): number =>
+    node.kind === 'photo' ? 0 : node.children.length - 1 + node.children.reduce((sum, child) => sum + walk(child), 0);
+  return walk(heroCollageTree());
+}
 
 export interface CollageBoxRect {
   id: string;
@@ -161,7 +200,7 @@ export async function waitForStableLayout(page: Page): Promise<void> {
 export async function openCollage(page: Page, path: '/' | '/edit'): Promise<void> {
   if (path === '/edit') await mockEditBackend(page);
   await page.goto(path);
-  await expect(page.locator(`${COLLAGE_CONTAINER} img`)).toHaveCount(16);
+  await expect(page.locator(`${COLLAGE_CONTAINER} img`)).toHaveCount(heroCollagePhotoCount());
   await settle(page);
   await focusCollage(page);
   await waitForStableLayout(page);

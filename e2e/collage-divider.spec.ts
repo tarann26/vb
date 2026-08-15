@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { collageBoxes, grabPoint, openCollage } from './collage-page';
+import { collageBoxes, grabPoint, heroCollageGapCount, heroCollagePhotoCount, openCollage } from './collage-page';
 
 // Plan 9, Task 5: dragging the line between two boxes moves size from one to
 // the other, and their total is unchanged.
@@ -13,12 +13,19 @@ import { collageBoxes, grabPoint, openCollage } from './collage-page';
 // browser actually lays out.
 //
 // Four properties:
-//   1. Fifteen handles, one per gap, each reachable by a real click.
+//   1. One handle per gap, each reachable by a real click -- derived from the
+//      committed tree (heroCollageGapCount, collage-page.ts) rather than
+//      hardcoded, because the owner can add or remove a collage photo from
+//      /edit and every add/remove changes how many splits, and therefore how
+//      many gaps, exist.
 //   2. Each handle's centre really sits on the gap between its own two boxes.
 //   3. A drag moves the boundary to the pointer, and the pair's total is
 //      unchanged -- so one box widening IS the other narrowing.
-//   4. The handles cost the collage nothing: /edit lays the sixteen photos out
-//      at exactly the rectangles the public page does.
+//   4. The handles cost the collage nothing: /edit lays the photos out at
+//      exactly the rectangles the public page does.
+
+const GAP_COUNT = heroCollageGapCount();
+const PHOTO_COUNT = heroCollagePhotoCount();
 
 // The two boxes a divider sits between: children `gapIndex` and
 // `gapIndex + 1` of the split it belongs to. The split's own element holds its
@@ -62,14 +69,15 @@ async function dividerIds(page: Page): Promise<string[]> {
 test.describe('the collage’s dividers at 1440px', () => {
   test.use({ viewport: { width: 1440, height: 900 } });
 
-  // The count is the committed arrangement's own: thirteen splits, eleven of
-  // them with two children and two with three, so 11 + 2*2 = 15 gaps. Stated
-  // as a number so a walk that silently found none would not pass with no
-  // assertions run.
-  test('all fifteen handles resolve to themselves under document.elementFromPoint', async ({ page }) => {
+  // GAP_COUNT is derived (heroCollageGapCount, collage-page.ts): one gap per
+  // split below its own children count minus one, summed over the whole
+  // committed tree, so it stays right however many splits an add or a remove
+  // leaves behind. Asserted as a number, not just "not empty", so a walk that
+  // silently found none would not pass with no assertions run.
+  test('every handle resolves to itself under document.elementFromPoint', async ({ page }) => {
     await openCollage(page, '/edit');
     const ids = await dividerIds(page);
-    expect(ids).toHaveLength(15);
+    expect(ids).toHaveLength(GAP_COUNT);
 
     for (const id of ids) {
       const { handleX, handleY } = await pairAround(page, id);
@@ -124,11 +132,26 @@ test.describe('the collage’s dividers at 1440px', () => {
     expect(boxesAfter.map((b) => b.id)).toEqual(boxesBefore.map((b) => b.id));
     const grew = boxesAfter.filter((b, i) => b.width > boxesBefore[i].width);
     const narrowed = boxesAfter.filter((b, i) => b.width < boxesBefore[i].width);
-    // Four photos live in the left branch and twelve in the right -- every one
-    // of the sixteen moves, because those two branches are what this divider
-    // divides, and none moves the other way.
-    expect(grew.map((b) => b.id)).toEqual(['photo-1', 'photo-2', 'photo-3', 'photo-4']);
-    expect(narrowed).toHaveLength(12);
+    // root's own children are photo-1, left-upper-column and right (in that
+    // order), and `root:0` is the gap between the first two -- so only THOSE
+    // two children's own share of root's width moves; `right` is the third
+    // child, sizes[2] untouched, so its pixel width is exactly conserved
+    // (same total sizes-sum, same sizes[2]) regardless of what root:0 does.
+    // photo-1 is a bare leaf, so it alone grows; left-upper-column is a
+    // column split whose two photos (photo-2, photo-3) both stretch to its
+    // full width, so both narrow together. Everything inside `right` -- eight
+    // of the eleven photos -- is untouched.
+    //
+    // This is a different claim than the pre-Task-6 tree made here ("four
+    // photos live in the left branch and twelve in the right"): Farfalle's
+    // removal collapsed root from a clean two-branch split into the current
+    // three-child one, so root:0 no longer divides "left branch" from "right
+    // branch" -- it divides photo-1 from left-upper-column, full stop, with
+    // `right` sitting outside the pair entirely.
+    expect(grew.map((b) => b.id)).toEqual(['photo-1']);
+    expect(narrowed.map((b) => b.id)).toEqual(['photo-2', 'photo-3']);
+    expect(grew.length + narrowed.length).toBe(3);
+    expect(boxesAfter).toHaveLength(PHOTO_COUNT);
   });
 
   test('a divider dragged far past the end stops, leaving the other box on screen', async ({ page }) => {
@@ -157,7 +180,7 @@ test.describe('the collage’s dividers at 1440px', () => {
 
   // The handles are absolutely positioned, so they are out of flow and take no
   // space from any flex line. Measured rather than reasoned about: the same
-  // sixteen rectangles, from the same tree, with and without the editor.
+  // same rectangles, from the same tree, with and without the editor.
   test('the editor’s handles cost the layout nothing -- /edit lays out exactly as / does', async ({ page }) => {
     await openCollage(page, '/');
     const publicBoxes = (await collageBoxes(page)).map((b) => [b.x, b.y, b.width, b.height]);
@@ -176,19 +199,23 @@ test.describe('changing a box’s size by tapping, at 390px', () => {
   // stubbed media query.
   test('tap a photo, tap Taller, and the box below it gives up exactly that much', async ({ page }) => {
     await openCollage(page, '/edit');
-    // photo-5's own parent -- the column split it shares with the pair below
-    // it -- is the divider its buttons move. `right:0` (a level up) is a
-    // different divider entirely, and picking it here would have been a test
-    // that measured the wrong pair.
-    const before = await pairAround(page, 'right-top-left:0');
+    // photo-2's own parent -- left-upper-column, the column split it shares
+    // with photo-3 below it -- is the divider its buttons move.
+    // `right-top-left`, the column split the original version of this test
+    // used, no longer exists: Farfalle's removal (Task 6) collapsed it away.
+    // left-upper-column is the surviving split with the same property this
+    // test needs -- a column-direction parent holding exactly one photo
+    // pair -- so tapping Taller on its first child exercises the identical
+    // gap.
+    const before = await pairAround(page, 'left-upper-column:0');
     expect(before.horizontal).toBe(false);
     const pairTotal = before.first.extent + before.second.extent;
 
-    const start = await grabPoint(page, 'photo-5');
+    const start = await grabPoint(page, 'photo-2');
     await page.touchscreen.tap(start.x, start.y);
     await page.getByRole('button', { name: 'Make this photo taller, and the one beside it shorter' }).tap();
 
-    const after = await pairAround(page, 'right-top-left:0');
+    const after = await pairAround(page, 'left-upper-column:0');
     expect(after.first.extent).toBeGreaterThan(before.first.extent);
     expect(after.second.extent).toBeLessThan(before.second.extent);
     expect(after.first.extent + after.second.extent).toBeCloseTo(pairTotal, 0);

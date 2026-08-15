@@ -1,5 +1,11 @@
 import { expect, test, type Page } from '@playwright/test';
-import { collageBoxes, grabPoint, openCollage } from './collage-page';
+import { collageBoxes, grabPoint, heroCollagePhotoCount, openCollage } from './collage-page';
+
+// Derived, not hardcoded -- see collage-page.ts's own comment on
+// heroCollagePhotoCount for why a literal count is a trap in this suite
+// specifically: the owner can add or remove a collage photo from /edit, which
+// is exactly the gesture every test below drives.
+const PHOTO_COUNT = heroCollagePhotoCount();
 
 // Plan 9, Task 6: the collage can grow and shed photos from her own screen.
 //
@@ -60,7 +66,7 @@ test.describe('adding and removing collage photos at 1440px', () => {
     await panel(page).getByRole('button', { name: 'Add another photo below this one, sharing its box' }).click();
     await panel(page).locator('input[type="file"]').setInputFiles(PICKED);
 
-    await expect(page.locator('[data-collage-photo-id]')).toHaveCount(17);
+    await expect(page.locator('[data-collage-photo-id]')).toHaveCount(PHOTO_COUNT + 1);
     const after = await collageBoxes(page);
     const added = after.find((b) => !before.some((old) => old.id === b.id));
     expect(added).toBeDefined();
@@ -98,13 +104,20 @@ test.describe('adding and removing collage photos at 1440px', () => {
 
   // Review finding (Minor): the sentence she reads after adding used to end
   // "nothing else moved", which is an absolute claim and false in exactly this
-  // case. photo-16's parent (`right-bottom`) already runs as a row, so adding
+  // case. photo-6's parent (`right-top`) already runs as a row, so adding
   // BESIDE it splices the new pair into that parent rather than nesting -- and
   // one more child along a row means one more 4px gap to subtract before the
-  // proportions are applied, so its sibling subtree (photo-13, photo-14,
-  // photo-15) gives up a pixel or two. The test above adds BELOW a photo whose
+  // proportions are applied, so its sibling subtree (photo-7, the new photo,
+  // photo-8) gives up a pixel or two. The test above adds BELOW a photo whose
   // parent runs the other way, which nests instead and genuinely moves nothing
   // -- which is why it stayed green while the sentence was wrong.
+  //
+  // photo-6, not photo-16: the Farfalle removal (Task 6) collapsed
+  // `right-bottom`, the row split photo-16 used to share with its own pair,
+  // out of the tree entirely. `right-top` is the surviving split with the
+  // same property this test needs -- a row-direction parent with more than
+  // one child already -- so adding beside one of ITS children exercises the
+  // identical "splices in, does not nest" branch.
   test('adding into a parent that already runs the same way keeps every other photo’s share, and says only that', async ({
     page,
   }) => {
@@ -112,10 +125,10 @@ test.describe('adding and removing collage photos at 1440px', () => {
     await openCollage(page, '/edit');
     const before = await collageBoxes(page);
 
-    await selectPhoto(page, 'photo-16');
+    await selectPhoto(page, 'photo-6');
     await panel(page).getByRole('button', { name: 'Add another photo beside this one, sharing its box' }).click();
     await panel(page).locator('input[type="file"]').setInputFiles(PICKED);
-    await expect(page.locator('[data-collage-photo-id]')).toHaveCount(17);
+    await expect(page.locator('[data-collage-photo-id]')).toHaveCount(PHOTO_COUNT + 1);
 
     const status = panel(page).getByRole('status');
     await expect(status).toContainText('every other photo keeps the share of the collage it had');
@@ -123,17 +136,19 @@ test.describe('adding and removing collage photos at 1440px', () => {
 
     // ...and the pixels back that up: the divided box is the only one that
     // really changes. Everything else is within the gap arithmetic above --
-    // measured at 1-2px on this arrangement, bounded here at 2 -- rather than
-    // pinned at zero, which is the claim the sentence no longer makes.
+    // measured at 1-3px on this arrangement (photo-6's own row gained a
+    // fourth child, so one more 4px gap is subtracted before proportions are
+    // applied), bounded here at 4 -- rather than pinned at zero, which is the
+    // claim the sentence no longer makes.
     const after = await collageBoxes(page);
     const added = after.find((box) => !before.some((old) => old.id === box.id));
     expect(added).toBeDefined();
     before.forEach((box) => {
-      if (box.id === 'photo-16') return;
+      if (box.id === 'photo-6') return;
       const now = after.find((candidate) => candidate.id === box.id);
       expect(now, `${box.id} left the collage`).toBeDefined();
       (['x', 'y', 'width', 'height'] as const).forEach((side) => {
-        expect(Math.abs(now![side] - box[side]), `${box.id} ${side} moved more than the gap arithmetic`).toBeLessThanOrEqual(2);
+        expect(Math.abs(now![side] - box[side]), `${box.id} ${side} moved more than the gap arithmetic`).toBeLessThanOrEqual(4);
       });
     });
   });
@@ -153,7 +168,7 @@ test.describe('adding and removing collage photos at 1440px', () => {
     await selectPhoto(page, 'photo-10');
     await panel(page).getByRole('button', { name: 'Remove this photo from the collage' }).click();
 
-    await expect(page.locator('[data-collage-photo-id]')).toHaveCount(15);
+    await expect(page.locator('[data-collage-photo-id]')).toHaveCount(PHOTO_COUNT - 1);
     const after = await collageBoxes(page);
     expect(after.some((b) => b.id === 'photo-10')).toBe(false);
     const grown = after.find((b) => b.id === 'photo-11');
@@ -184,11 +199,11 @@ test.describe('adding and removing collage photos at 1440px', () => {
     await selectPhoto(page, 'photo-12');
     await panel(page).getByRole('button', { name: 'Add another photo beside this one, sharing its box' }).click();
     await panel(page).locator('input[type="file"]').setInputFiles(PICKED);
-    await expect(page.locator('[data-collage-photo-id]')).toHaveCount(17);
+    await expect(page.locator('[data-collage-photo-id]')).toHaveCount(PHOTO_COUNT + 1);
 
     await selectPhoto(page, 'photo-1');
     await panel(page).getByRole('button', { name: 'Remove this photo from the collage' }).click();
-    await expect(page.locator('[data-collage-photo-id]')).toHaveCount(16);
+    await expect(page.locator('[data-collage-photo-id]')).toHaveCount(PHOTO_COUNT);
 
     const after = await collageBoxes(page);
     // The union of the boxes still reaches every edge of the hero: an edit
@@ -215,7 +230,7 @@ test.describe('adding and removing by tapping, at 390px', () => {
     await panel(page).getByRole('button', { name: 'Add another photo below this one, sharing its box' }).tap();
     await panel(page).locator('input[type="file"]').setInputFiles(PICKED);
 
-    await expect(page.locator('[data-collage-photo-id]')).toHaveCount(17);
+    await expect(page.locator('[data-collage-photo-id]')).toHaveCount(PHOTO_COUNT + 1);
     const after = await collageBoxes(page);
     const added = after.find((b) => !before.some((old) => old.id === b.id));
     expect(added?.src).toMatch(/^blob:/);
@@ -223,12 +238,19 @@ test.describe('adding and removing by tapping, at 390px', () => {
     expect(added?.height).toBeGreaterThan(0);
   });
 
+  // photo-15, not photo-1: photo-1 is the full-height leftmost column, and
+  // Task 6's rebalance (the owner's own "whitespace can be squashed" request)
+  // widened it enough that it no longer disappears under the content column
+  // at desktop -- but at a 390px phone width it is still a sliver too narrow
+  // for grabPoint's scan (e2e/collage-page.ts) to land a tap on it anywhere.
+  // photo-15 sits at the bottom of the `right` branch, clear of both the
+  // content column and the panel, and grabPoint finds it easily.
   test('tap a photo, tap Remove, and it is gone', async ({ page }) => {
     await openCollage(page, '/edit');
-    const start = await grabPoint(page, 'photo-1');
+    const start = await grabPoint(page, 'photo-15');
     await page.touchscreen.tap(start.x, start.y);
     await panel(page).getByRole('button', { name: 'Remove this photo from the collage' }).tap();
-    await expect(page.locator('[data-collage-photo-id]')).toHaveCount(15);
-    await expect(page.locator('[data-collage-photo-id="photo-1"]')).toHaveCount(0);
+    await expect(page.locator('[data-collage-photo-id]')).toHaveCount(PHOTO_COUNT - 1);
+    await expect(page.locator('[data-collage-photo-id="photo-15"]')).toHaveCount(0);
   });
 });
