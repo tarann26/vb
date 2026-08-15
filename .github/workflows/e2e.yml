@@ -15,22 +15,75 @@ name: e2e
 # instead. No untrusted event input (issue/PR titles or bodies, commit
 # messages) is interpolated into any step below -- every step here is a
 # fixed command with no `${{ github.event.* }}` expansion at all.
+# `pull_request` is scoped to main rather than left open. On a PUBLIC
+# repository anyone may open a pull request from a fork, and an unscoped
+# trigger runs this workflow for every one of them against every branch. The
+# run itself is safe -- `pull_request` (not `pull_request_target`) checks out
+# the fork's code with a read-only token and no access to secrets -- but there
+# is no reason to run a browser suite for a branch nobody merges to.
+#
+# `paths-ignore` covers documentation only. Content is deliberately NOT
+# ignored: e2e/hero-collage.spec.ts measures the real collage out of
+# galleries.json, so a content edit genuinely can break a browser test, and on
+# a public repository the minutes are free. The cost argument for skipping
+# content runs disappeared the moment this stopped being metered.
 on:
   push:
     branches: [main]
+    paths-ignore: ['docs/**', '**/*.md']
   pull_request:
+    branches: [main]
+    paths-ignore: ['docs/**', '**/*.md']
 
 jobs:
-  e2e:
+  # Renamed from `e2e` because it is no longer only e2e. While this repository
+  # was private and metered, the workflow ran the browser suite alone and
+  # everything else rode on the Cloudflare Pages build (which runs `npm run
+  # test:deploy`). That left eslint running in no automated place at all.
+  # Public repositories get unlimited standard-runner minutes, so the full
+  # gate now runs here, matching .githooks/pre-push exactly.
+  gate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
           node-version-file: .nvmrc
+          # Caches ~/.npm keyed on package-lock.json. `npm ci` was a large
+          # part of the six minutes these runs used to take.
+          cache: npm
       - run: npm ci
+
+      # Cheap checks first, so an obvious break fails in seconds rather than
+      # after a browser download.
+      - run: npx tsc -b --noEmit
+      - run: npx eslint .
+      - run: npm test -- --run
+
+      # Keyed on the resolved Playwright version, so a dependency bump misses
+      # the cache and reinstalls rather than running against a stale browser.
+      - id: pw
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        id: pw-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
+      # --with-deps installs system libraries that live outside the cached
+      # directory, so it still runs on a cache hit; only the browser download
+      # is skipped.
       - run: npx playwright install --with-deps chromium
+        if: steps.pw-cache.outputs.cache-hit != 'true'
+      - run: npx playwright install-deps chromium
+        if: steps.pw-cache.outputs.cache-hit == 'true'
+
       - run: npm run test:e2e
+      - run: npm run test:csp
+
+      # playwright.config.ts now emits an html report alongside the list
+      # reporter. Before that it produced none, so this step logged "No files
+      # were found with the provided path" on every single failing run and
+      # uploaded nothing -- a diagnostic that had never once worked.
       - uses: actions/upload-artifact@v5
         if: failure()
         with:
