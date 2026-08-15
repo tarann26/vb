@@ -126,7 +126,7 @@ function pagesFromRegistry(registry: ContentRegistry): PageNaming[] {
 }
 
 const CARD = "mb-4 rounded border border-brand/30 bg-white p-4 font-['Montserrat']";
-const CARD_TITLE = "mb-2 font-['Montserrat'] text-sm uppercase tracking-wide text-brand";
+const CARD_TITLE = "mb-2 font-['Montserrat'] text-sm uppercase tracking-wide text-accent";
 
 const NumbersArea: React.FC<NumbersAreaProps> = ({ active, registry, fetchImpl }) => {
   const [outcome, setOutcome] = useState<Outcome>({ kind: 'idle' });
@@ -191,7 +191,7 @@ const NumbersArea: React.FC<NumbersAreaProps> = ({ active, registry, fetchImpl }
             <button
               type="button"
               onClick={retry}
-              className="mt-2 rounded border border-brand px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-brand transition hover:bg-brand hover:text-ink"
+              className="mt-2 rounded border border-brand px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
             >
               Retry
             </button>

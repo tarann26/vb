@@ -28,7 +28,7 @@ const DetailBlockSection: React.FC<DetailBlockSectionProps> = ({ id, content }) 
           <dl className="mx-auto mb-10 grid max-w-xl grid-cols-1 gap-6 text-left sm:grid-cols-2">
             {content.facts.map((fact, index) => (
               <div key={index} className="border-l-4 border-brand pl-4">
-                <dt className="font-['Montserrat'] text-xs uppercase tracking-wide text-brand">
+                <dt className="font-['Montserrat'] text-xs uppercase tracking-wide text-accent">
                   {contentApi.renderText(`${base}.facts.${index}.label`, fact.label)}
                 </dt>
                 <dd className="font-['Open_Sans'] text-ink">

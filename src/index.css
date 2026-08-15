@@ -52,18 +52,23 @@ html {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #6B8B59;
+  background: #C8D8E8;
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #5a7349;
+  background: #A6B3C1;
 }
 
-/* Focus styles for accessibility */
+/* Focus styles for accessibility. This is a non-text UI indicator (WCAG
+   1.4.11 Non-text Contrast), which needs 3:1 against what it sits behind --
+   a lower bar than body text's 4.5:1, but #C8D8E8 (the brand surface
+   colour) is only 1.45:1 against white and fails it outright, so the focus
+   ring uses the accent colour (#9D4949, 6.03:1 against white) instead of
+   the brand tokens used everywhere else in this file. */
 button:focus-visible,
 a:focus-visible {
-  outline: 2px solid #6B8B59;
+  outline: 2px solid #9D4949;
   outline-offset: 2px;
 }
 
@@ -135,10 +140,15 @@ img[loading="lazy"]:not([src]) {
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
 }
 
-/* Better focus indicators */
+/* Better focus indicators. Unused today (no className references
+   `focus-ring` anywhere in src/), but the retired green's own decimal RGB
+   triple doesn't match the palette guard's hex-text search, so it would
+   otherwise sit here indefinitely as dead, stale CSS. Updated to the brand
+   surface colour's own decimal triple for consistency with the rest of
+   this file, in case the class is ever wired up. */
 .focus-ring:focus {
   outline: none;
-  box-shadow: 0 0 0 3px rgba(107, 139, 89, 0.5);
+  box-shadow: 0 0 0 3px rgba(200, 216, 232, 0.5);
 }
 
 /* Accessibility improvements */

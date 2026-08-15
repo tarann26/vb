@@ -41,7 +41,7 @@ export interface FieldProps<V> {
 // kind of drift seven times before (see this repo's own commit history).
 export const INPUT_CLASSNAME =
   "w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500";
-export const LABEL_CLASSNAME = "mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand";
+export const LABEL_CLASSNAME = "mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent";
 
 // A comma-separated text field, not a chip editor with its own per-item
 // add/remove buttons -- that interaction belongs to Tasks 5/6 (RecordList's

@@ -40,7 +40,7 @@ const ChefGallery: React.FC = () => {
                   <div className="absolute inset-0 rounded-full bg-brand/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
                 </div>
                 <h3 className="font-['Montserrat'] font-semibold text-lg text-white mb-2">{chef.name}</h3>
-                <p className="font-['Open_Sans'] text-brand text-sm uppercase tracking-wide">{chef.role}</p>
+                <p className="font-['Open_Sans'] text-accent text-sm uppercase tracking-wide">{chef.role}</p>
               </div>
             ))}
           </div>

@@ -75,7 +75,7 @@ const SignatureMocktails: React.FC = () => {
                   <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent"></div>
                 </div>
                 <div className="p-6 text-center">
-                  <h3 className="font-['Parisienne'] text-2xl text-brand mb-2">{mocktail.name}</h3>
+                  <h3 className="font-['Parisienne'] text-2xl text-accent mb-2">{mocktail.name}</h3>
                   <p className="font-['Montserrat'] text-sm uppercase tracking-wider text-gray-600">
                     {mocktail.flavor}
                   </p>

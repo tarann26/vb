@@ -208,7 +208,7 @@ const StatusStrip: React.FC<StatusStripProps> = ({
             to remember to change -- and it does not make the strip wait on a
             content file that a different panel happens to own. */}
         <p className="mt-1">
-          <a href="/" target="_blank" rel="noopener" className="text-brand underline">
+          <a href="/" target="_blank" rel="noopener" className="text-accent underline">
             {viewSiteLabel(hasUnsaved)}
           </a>
         </p>

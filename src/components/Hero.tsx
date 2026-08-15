@@ -134,7 +134,7 @@ const Hero: React.FC = () => {
        <div aria-hidden="true" className="w-40 h-40 mx-auto mb-8 flex items-center justify-center rounded-full border-4 border-brand bg-white shadow-lg">
          <div className="select-none">
            <p className="font-['Parisienne'] text-3xl text-ink">{content.renderText('hero.logoName', copy.hero.logoName)}</p>
-           <p className="font-['Montserrat'] text-xs uppercase tracking-wider text-brand">
+           <p className="font-['Montserrat'] text-xs uppercase tracking-wider text-accent">
              {content.renderText('hero.logoTagline', copy.hero.logoTagline)}
            </p>
          </div>
@@ -142,7 +142,7 @@ const Hero: React.FC = () => {
 
 
        <h1 className="font-['Parisienne'] text-6xl md:text-7xl text-ink mb-4">{site.name}</h1>
-       <p className="font-['Montserrat'] text-lg md:text-xl uppercase tracking-wide text-brand mb-6">
+       <p className="font-['Montserrat'] text-lg md:text-xl uppercase tracking-wide text-accent mb-6">
          {site.tagline}
        </p>
        {/* site.strapline, with every space swapped for a non-breaking one so
@@ -156,7 +156,7 @@ const Hero: React.FC = () => {
 
        {/* reservation numbers */}
        <div className="mb-8">
-          <p className="font-['Montserrat'] text-xl font-bold tracking-wide uppercase text-brand">{content.renderText('hero.reservationsLabel', copy.hero.reservationsLabel)}</p>
+          <p className="font-['Montserrat'] text-xl font-bold tracking-wide uppercase text-accent">{content.renderText('hero.reservationsLabel', copy.hero.reservationsLabel)}</p>
           {site.phones.map((phone, i) => (
             <p key={i} className="font-['Open_Sans'] text-lg font-semibold text-ink whitespace-nowrap">{phone}</p>
           ))}
@@ -176,7 +176,7 @@ const Hero: React.FC = () => {
 
      {/* scroll cue */}
      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 animate-bounce">
-       <ChefHat className="w-6 h-6 text-brand" />
+       <ChefHat className="w-6 h-6 text-accent" />
      </div>
    </section>
  );

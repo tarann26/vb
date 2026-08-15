@@ -52,6 +52,7 @@ export default {
         brand: '#C8D8E8',
         'brand-dark': '#A6B3C1',
         accent: '#9D4949',
+        'accent-dark': '#823C3C',
         ink: '#222222',
         cream: '#FFFDF8',
         'cream-alt': '#F9F9F9',

@@ -113,7 +113,7 @@ const AreaNav: React.FC<AreaNavProps> = ({ variant, activeSlug, problemSlugs = [
                     />
                   )}
                   {!sidebar && (
-                    <span aria-hidden="true" className="font-['Montserrat'] text-lg text-brand">
+                    <span aria-hidden="true" className="font-['Montserrat'] text-lg text-accent">
                       ›
                     </span>
                   )}

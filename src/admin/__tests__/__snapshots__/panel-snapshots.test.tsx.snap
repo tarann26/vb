@@ -28,7 +28,7 @@ exports[`the ten panels, as they render today > Dishes (dishes) 1`] = `
               />
               <button
                 aria-label="Move Dish A down"
-                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-brand transition hover:bg-brand hover:text-ink"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                 type="button"
               >
                 Down
@@ -47,7 +47,7 @@ exports[`the ten panels, as they render today > Dishes (dishes) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="dishes-field-id-0"
               >
                 ID
@@ -70,7 +70,7 @@ exports[`the ten panels, as they render today > Dishes (dishes) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="dishes-field-name-0"
               >
                 Name
@@ -86,7 +86,7 @@ exports[`the ten panels, as they render today > Dishes (dishes) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="dishes-field-description-0"
               >
                 Description
@@ -102,7 +102,7 @@ exports[`the ten panels, as they render today > Dishes (dishes) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="dishes-field-image-0"
               >
                 Photo
@@ -123,7 +123,7 @@ exports[`the ten panels, as they render today > Dishes (dishes) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="dishes-field-tags-0"
               >
                 Dietary tags
@@ -162,7 +162,7 @@ exports[`the ten panels, as they render today > Dishes (dishes) 1`] = `
               />
               <button
                 aria-label="Move Dish B up"
-                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-brand transition hover:bg-brand hover:text-ink"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                 type="button"
               >
                 Up
@@ -181,7 +181,7 @@ exports[`the ten panels, as they render today > Dishes (dishes) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="dishes-field-id-1"
               >
                 ID
@@ -204,7 +204,7 @@ exports[`the ten panels, as they render today > Dishes (dishes) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="dishes-field-name-1"
               >
                 Name
@@ -220,7 +220,7 @@ exports[`the ten panels, as they render today > Dishes (dishes) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="dishes-field-description-1"
               >
                 Description
@@ -236,7 +236,7 @@ exports[`the ten panels, as they render today > Dishes (dishes) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="dishes-field-image-1"
               >
                 Photo
@@ -257,7 +257,7 @@ exports[`the ten panels, as they render today > Dishes (dishes) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="dishes-field-tags-1"
               >
                 Dietary tags
@@ -280,7 +280,7 @@ exports[`the ten panels, as they render today > Dishes (dishes) 1`] = `
         </li>
       </ul>
       <button
-        class="mt-2 w-full rounded border-2 border-dashed border-brand py-2 font-['Montserrat'] text-sm uppercase tracking-wide text-brand transition hover:bg-brand/10"
+        class="mt-2 w-full rounded border-2 border-dashed border-brand py-2 font-['Montserrat'] text-sm uppercase tracking-wide text-accent transition hover:bg-brand/10"
         type="button"
       >
         Add a dish
@@ -316,7 +316,7 @@ exports[`the ten panels, as they render today > Drinks (drinks) 1`] = `
               />
               <button
                 aria-label="Move Drink X down"
-                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-brand transition hover:bg-brand hover:text-ink"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                 type="button"
               >
                 Down
@@ -335,7 +335,7 @@ exports[`the ten panels, as they render today > Drinks (drinks) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="drinks-field-id-0"
               >
                 ID
@@ -358,7 +358,7 @@ exports[`the ten panels, as they render today > Drinks (drinks) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="drinks-field-name-0"
               >
                 Name
@@ -374,7 +374,7 @@ exports[`the ten panels, as they render today > Drinks (drinks) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="drinks-field-description-0"
               >
                 Description
@@ -390,7 +390,7 @@ exports[`the ten panels, as they render today > Drinks (drinks) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="drinks-field-category-0"
               >
                 Category
@@ -420,7 +420,7 @@ exports[`the ten panels, as they render today > Drinks (drinks) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="drinks-field-image-0"
               >
                 Photo
@@ -457,7 +457,7 @@ exports[`the ten panels, as they render today > Drinks (drinks) 1`] = `
               />
               <button
                 aria-label="Move Drink Y up"
-                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-brand transition hover:bg-brand hover:text-ink"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                 type="button"
               >
                 Up
@@ -476,7 +476,7 @@ exports[`the ten panels, as they render today > Drinks (drinks) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="drinks-field-id-1"
               >
                 ID
@@ -499,7 +499,7 @@ exports[`the ten panels, as they render today > Drinks (drinks) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="drinks-field-name-1"
               >
                 Name
@@ -515,7 +515,7 @@ exports[`the ten panels, as they render today > Drinks (drinks) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="drinks-field-description-1"
               >
                 Description
@@ -531,7 +531,7 @@ exports[`the ten panels, as they render today > Drinks (drinks) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="drinks-field-category-1"
               >
                 Category
@@ -561,7 +561,7 @@ exports[`the ten panels, as they render today > Drinks (drinks) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="drinks-field-image-1"
               >
                 Photo
@@ -584,7 +584,7 @@ exports[`the ten panels, as they render today > Drinks (drinks) 1`] = `
         </li>
       </ul>
       <button
-        class="mt-2 w-full rounded border-2 border-dashed border-brand py-2 font-['Montserrat'] text-sm uppercase tracking-wide text-brand transition hover:bg-brand/10"
+        class="mt-2 w-full rounded border-2 border-dashed border-brand py-2 font-['Montserrat'] text-sm uppercase tracking-wide text-accent transition hover:bg-brand/10"
         type="button"
       >
         Add a drink
@@ -630,7 +630,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
                 />
                 <button
                   aria-label="Move Atmosphere photo 1 down"
-                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-brand transition hover:bg-brand hover:text-ink"
+                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                   type="button"
                 >
                   Down
@@ -648,7 +648,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="gallery-atmosphere-0-src"
               >
                 Photo
@@ -669,7 +669,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="gallery-atmosphere-0-alt"
               >
                 Alt text
@@ -707,14 +707,14 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
                 />
                 <button
                   aria-label="Move Atmosphere photo 2 up"
-                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-brand transition hover:bg-brand hover:text-ink"
+                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                   type="button"
                 >
                   Up
                 </button>
                 <button
                   aria-label="Move Atmosphere photo 2 down"
-                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-brand transition hover:bg-brand hover:text-ink"
+                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                   type="button"
                 >
                   Down
@@ -732,7 +732,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="gallery-atmosphere-1-src"
               >
                 Photo
@@ -753,7 +753,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="gallery-atmosphere-1-alt"
               >
                 Alt text
@@ -791,14 +791,14 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
                 />
                 <button
                   aria-label="Move Atmosphere photo 3 up"
-                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-brand transition hover:bg-brand hover:text-ink"
+                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                   type="button"
                 >
                   Up
                 </button>
                 <button
                   aria-label="Move Atmosphere photo 3 down"
-                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-brand transition hover:bg-brand hover:text-ink"
+                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                   type="button"
                 >
                   Down
@@ -816,7 +816,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="gallery-atmosphere-2-src"
               >
                 Photo
@@ -837,7 +837,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="gallery-atmosphere-2-alt"
               >
                 Alt text
@@ -875,14 +875,14 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
                 />
                 <button
                   aria-label="Move Atmosphere photo 4 up"
-                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-brand transition hover:bg-brand hover:text-ink"
+                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                   type="button"
                 >
                   Up
                 </button>
                 <button
                   aria-label="Move Atmosphere photo 4 down"
-                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-brand transition hover:bg-brand hover:text-ink"
+                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                   type="button"
                 >
                   Down
@@ -900,7 +900,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="gallery-atmosphere-3-src"
               >
                 Photo
@@ -921,7 +921,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="gallery-atmosphere-3-alt"
               >
                 Alt text
@@ -959,14 +959,14 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
                 />
                 <button
                   aria-label="Move Atmosphere photo 5 up"
-                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-brand transition hover:bg-brand hover:text-ink"
+                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                   type="button"
                 >
                   Up
                 </button>
                 <button
                   aria-label="Move Atmosphere photo 5 down"
-                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-brand transition hover:bg-brand hover:text-ink"
+                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                   type="button"
                 >
                   Down
@@ -984,7 +984,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="gallery-atmosphere-4-src"
               >
                 Photo
@@ -1005,7 +1005,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="gallery-atmosphere-4-alt"
               >
                 Alt text
@@ -1043,14 +1043,14 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
                 />
                 <button
                   aria-label="Move Atmosphere photo 6 up"
-                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-brand transition hover:bg-brand hover:text-ink"
+                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                   type="button"
                 >
                   Up
                 </button>
                 <button
                   aria-label="Move Atmosphere photo 6 down"
-                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-brand transition hover:bg-brand hover:text-ink"
+                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                   type="button"
                 >
                   Down
@@ -1068,7 +1068,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="gallery-atmosphere-5-src"
               >
                 Photo
@@ -1089,7 +1089,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="gallery-atmosphere-5-alt"
               >
                 Alt text
@@ -1127,14 +1127,14 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
                 />
                 <button
                   aria-label="Move Atmosphere photo 7 up"
-                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-brand transition hover:bg-brand hover:text-ink"
+                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                   type="button"
                 >
                   Up
                 </button>
                 <button
                   aria-label="Move Atmosphere photo 7 down"
-                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-brand transition hover:bg-brand hover:text-ink"
+                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                   type="button"
                 >
                   Down
@@ -1152,7 +1152,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="gallery-atmosphere-6-src"
               >
                 Photo
@@ -1173,7 +1173,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="gallery-atmosphere-6-alt"
               >
                 Alt text
@@ -1211,7 +1211,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
                 />
                 <button
                   aria-label="Move Atmosphere photo 8 up"
-                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-brand transition hover:bg-brand hover:text-ink"
+                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                   type="button"
                 >
                   Up
@@ -1229,7 +1229,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="gallery-atmosphere-7-src"
               >
                 Photo
@@ -1250,7 +1250,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="gallery-atmosphere-7-alt"
               >
                 Alt text
@@ -1272,7 +1272,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
           </li>
         </ul>
         <button
-          class="mt-2 w-full rounded border-2 border-dashed border-brand py-2 font-['Montserrat'] text-sm uppercase tracking-wide text-brand transition hover:bg-brand/10"
+          class="mt-2 w-full rounded border-2 border-dashed border-brand py-2 font-['Montserrat'] text-sm uppercase tracking-wide text-accent transition hover:bg-brand/10"
           type="button"
         >
           Add an atmosphere photo
@@ -1305,7 +1305,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
                 />
                 <button
                   aria-label="Move Our Story photo 1 down"
-                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-brand transition hover:bg-brand hover:text-ink"
+                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                   type="button"
                 >
                   Down
@@ -1323,7 +1323,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="gallery-ourStory-0-src"
               >
                 Photo
@@ -1344,7 +1344,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="gallery-ourStory-0-alt"
               >
                 Alt text
@@ -1382,14 +1382,14 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
                 />
                 <button
                   aria-label="Move Our Story photo 2 up"
-                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-brand transition hover:bg-brand hover:text-ink"
+                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                   type="button"
                 >
                   Up
                 </button>
                 <button
                   aria-label="Move Our Story photo 2 down"
-                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-brand transition hover:bg-brand hover:text-ink"
+                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                   type="button"
                 >
                   Down
@@ -1407,7 +1407,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="gallery-ourStory-1-src"
               >
                 Photo
@@ -1428,7 +1428,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="gallery-ourStory-1-alt"
               >
                 Alt text
@@ -1466,14 +1466,14 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
                 />
                 <button
                   aria-label="Move Our Story photo 3 up"
-                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-brand transition hover:bg-brand hover:text-ink"
+                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                   type="button"
                 >
                   Up
                 </button>
                 <button
                   aria-label="Move Our Story photo 3 down"
-                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-brand transition hover:bg-brand hover:text-ink"
+                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                   type="button"
                 >
                   Down
@@ -1491,7 +1491,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="gallery-ourStory-2-src"
               >
                 Photo
@@ -1512,7 +1512,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="gallery-ourStory-2-alt"
               >
                 Alt text
@@ -1550,14 +1550,14 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
                 />
                 <button
                   aria-label="Move Our Story photo 4 up"
-                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-brand transition hover:bg-brand hover:text-ink"
+                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                   type="button"
                 >
                   Up
                 </button>
                 <button
                   aria-label="Move Our Story photo 4 down"
-                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-brand transition hover:bg-brand hover:text-ink"
+                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                   type="button"
                 >
                   Down
@@ -1575,7 +1575,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="gallery-ourStory-3-src"
               >
                 Photo
@@ -1596,7 +1596,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="gallery-ourStory-3-alt"
               >
                 Alt text
@@ -1634,14 +1634,14 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
                 />
                 <button
                   aria-label="Move Our Story photo 5 up"
-                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-brand transition hover:bg-brand hover:text-ink"
+                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                   type="button"
                 >
                   Up
                 </button>
                 <button
                   aria-label="Move Our Story photo 5 down"
-                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-brand transition hover:bg-brand hover:text-ink"
+                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                   type="button"
                 >
                   Down
@@ -1659,7 +1659,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="gallery-ourStory-4-src"
               >
                 Photo
@@ -1680,7 +1680,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="gallery-ourStory-4-alt"
               >
                 Alt text
@@ -1718,7 +1718,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
                 />
                 <button
                   aria-label="Move Our Story photo 6 up"
-                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-brand transition hover:bg-brand hover:text-ink"
+                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                   type="button"
                 >
                   Up
@@ -1736,7 +1736,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="gallery-ourStory-5-src"
               >
                 Photo
@@ -1757,7 +1757,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="gallery-ourStory-5-alt"
               >
                 Alt text
@@ -1779,7 +1779,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
           </li>
         </ul>
         <button
-          class="mt-2 w-full rounded border-2 border-dashed border-brand py-2 font-['Montserrat'] text-sm uppercase tracking-wide text-brand transition hover:bg-brand/10"
+          class="mt-2 w-full rounded border-2 border-dashed border-brand py-2 font-['Montserrat'] text-sm uppercase tracking-wide text-accent transition hover:bg-brand/10"
           type="button"
         >
           Add an Our Story photo
@@ -1806,7 +1806,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="gallery-heroCollage-photo-1-src"
               >
                 Photo
@@ -1831,7 +1831,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="gallery-heroCollage-photo-2-src"
               >
                 Photo
@@ -1856,7 +1856,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="gallery-heroCollage-photo-3-src"
               >
                 Photo
@@ -1881,7 +1881,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="gallery-heroCollage-photo-4-src"
               >
                 Photo
@@ -1906,7 +1906,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="gallery-heroCollage-photo-5-src"
               >
                 Photo
@@ -1931,7 +1931,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="gallery-heroCollage-photo-6-src"
               >
                 Photo
@@ -1956,7 +1956,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="gallery-heroCollage-photo-7-src"
               >
                 Photo
@@ -1981,7 +1981,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="gallery-heroCollage-photo-8-src"
               >
                 Photo
@@ -2006,7 +2006,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="gallery-heroCollage-photo-9-src"
               >
                 Photo
@@ -2031,7 +2031,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="gallery-heroCollage-photo-10-src"
               >
                 Photo
@@ -2056,7 +2056,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="gallery-heroCollage-photo-11-src"
               >
                 Photo
@@ -2081,7 +2081,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="gallery-heroCollage-photo-12-src"
               >
                 Photo
@@ -2106,7 +2106,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="gallery-heroCollage-photo-13-src"
               >
                 Photo
@@ -2131,7 +2131,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="gallery-heroCollage-photo-14-src"
               >
                 Photo
@@ -2156,7 +2156,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="gallery-heroCollage-photo-15-src"
               >
                 Photo
@@ -2181,7 +2181,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="gallery-heroCollage-photo-16-src"
               >
                 Photo
@@ -2222,7 +2222,7 @@ exports[`the ten panels, as they render today > Menu PDFs (menus) 1`] = `
           class="mb-4"
         >
           <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
             for="menu-0-id"
           >
             ID
@@ -2245,7 +2245,7 @@ exports[`the ten panels, as they render today > Menu PDFs (menus) 1`] = `
           class="mb-4"
         >
           <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
             for="menu-0-label"
           >
             Label
@@ -2261,7 +2261,7 @@ exports[`the ten panels, as they render today > Menu PDFs (menus) 1`] = `
           class="mb-4"
         >
           <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
             for="menu-0-file"
           >
             PDF file
@@ -2288,7 +2288,7 @@ exports[`the ten panels, as they render today > Menu PDFs (menus) 1`] = `
           class="mb-4"
         >
           <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
             for="menu-1-id"
           >
             ID
@@ -2311,7 +2311,7 @@ exports[`the ten panels, as they render today > Menu PDFs (menus) 1`] = `
           class="mb-4"
         >
           <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
             for="menu-1-label"
           >
             Label
@@ -2327,7 +2327,7 @@ exports[`the ten panels, as they render today > Menu PDFs (menus) 1`] = `
           class="mb-4"
         >
           <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
             for="menu-1-file"
           >
             PDF file
@@ -2384,7 +2384,7 @@ exports[`the ten panels, as they render today > Opening hours (hours) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="field-days-0"
               >
                 Days
@@ -2407,7 +2407,7 @@ exports[`the ten panels, as they render today > Opening hours (hours) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="field-opens-0"
               >
                 Opens
@@ -2430,7 +2430,7 @@ exports[`the ten panels, as they render today > Opening hours (hours) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="field-closes-0"
               >
                 Closes
@@ -2453,7 +2453,7 @@ exports[`the ten panels, as they render today > Opening hours (hours) 1`] = `
         </li>
       </ul>
       <button
-        class="mt-2 w-full rounded border-2 border-dashed border-brand py-2 font-['Montserrat'] text-sm uppercase tracking-wide text-brand transition hover:bg-brand/10"
+        class="mt-2 w-full rounded border-2 border-dashed border-brand py-2 font-['Montserrat'] text-sm uppercase tracking-wide text-accent transition hover:bg-brand/10"
         type="button"
       >
         Add an opening-hours row
@@ -2476,7 +2476,7 @@ exports[`the ten panels, as they render today > Our Story (story) 1`] = `
         class="mb-4"
       >
         <label
-          class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+          class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
           for="story-heading"
         >
           Heading
@@ -2500,7 +2500,7 @@ exports[`the ten panels, as they render today > Our Story (story) 1`] = `
             >
               <button
                 aria-label="Move paragraph 1 down"
-                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-brand transition hover:bg-brand hover:text-ink"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                 type="button"
               >
                 Down
@@ -2518,7 +2518,7 @@ exports[`the ten panels, as they render today > Our Story (story) 1`] = `
             class="mb-4"
           >
             <label
-              class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+              class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
               for="story-paragraph-0"
             >
               Paragraph 1
@@ -2542,14 +2542,14 @@ exports[`the ten panels, as they render today > Our Story (story) 1`] = `
             >
               <button
                 aria-label="Move paragraph 2 up"
-                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-brand transition hover:bg-brand hover:text-ink"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                 type="button"
               >
                 Up
               </button>
               <button
                 aria-label="Move paragraph 2 down"
-                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-brand transition hover:bg-brand hover:text-ink"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                 type="button"
               >
                 Down
@@ -2567,7 +2567,7 @@ exports[`the ten panels, as they render today > Our Story (story) 1`] = `
             class="mb-4"
           >
             <label
-              class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+              class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
               for="story-paragraph-1"
             >
               Paragraph 2
@@ -2591,14 +2591,14 @@ exports[`the ten panels, as they render today > Our Story (story) 1`] = `
             >
               <button
                 aria-label="Move paragraph 3 up"
-                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-brand transition hover:bg-brand hover:text-ink"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                 type="button"
               >
                 Up
               </button>
               <button
                 aria-label="Move paragraph 3 down"
-                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-brand transition hover:bg-brand hover:text-ink"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                 type="button"
               >
                 Down
@@ -2616,7 +2616,7 @@ exports[`the ten panels, as they render today > Our Story (story) 1`] = `
             class="mb-4"
           >
             <label
-              class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+              class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
               for="story-paragraph-2"
             >
               Paragraph 3
@@ -2640,14 +2640,14 @@ exports[`the ten panels, as they render today > Our Story (story) 1`] = `
             >
               <button
                 aria-label="Move paragraph 4 up"
-                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-brand transition hover:bg-brand hover:text-ink"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                 type="button"
               >
                 Up
               </button>
               <button
                 aria-label="Move paragraph 4 down"
-                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-brand transition hover:bg-brand hover:text-ink"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                 type="button"
               >
                 Down
@@ -2665,7 +2665,7 @@ exports[`the ten panels, as they render today > Our Story (story) 1`] = `
             class="mb-4"
           >
             <label
-              class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+              class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
               for="story-paragraph-3"
             >
               Paragraph 4
@@ -2689,14 +2689,14 @@ exports[`the ten panels, as they render today > Our Story (story) 1`] = `
             >
               <button
                 aria-label="Move paragraph 5 up"
-                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-brand transition hover:bg-brand hover:text-ink"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                 type="button"
               >
                 Up
               </button>
               <button
                 aria-label="Move paragraph 5 down"
-                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-brand transition hover:bg-brand hover:text-ink"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                 type="button"
               >
                 Down
@@ -2714,7 +2714,7 @@ exports[`the ten panels, as they render today > Our Story (story) 1`] = `
             class="mb-4"
           >
             <label
-              class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+              class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
               for="story-paragraph-4"
             >
               Paragraph 5
@@ -2738,7 +2738,7 @@ exports[`the ten panels, as they render today > Our Story (story) 1`] = `
             >
               <button
                 aria-label="Move paragraph 6 up"
-                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-brand transition hover:bg-brand hover:text-ink"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                 type="button"
               >
                 Up
@@ -2756,7 +2756,7 @@ exports[`the ten panels, as they render today > Our Story (story) 1`] = `
             class="mb-4"
           >
             <label
-              class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+              class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
               for="story-paragraph-5"
             >
               Paragraph 6
@@ -2771,7 +2771,7 @@ exports[`the ten panels, as they render today > Our Story (story) 1`] = `
         </li>
       </ul>
       <button
-        class="mt-2 w-full rounded border-2 border-dashed border-brand py-2 font-['Montserrat'] text-sm uppercase tracking-wide text-brand transition hover:bg-brand/10"
+        class="mt-2 w-full rounded border-2 border-dashed border-brand py-2 font-['Montserrat'] text-sm uppercase tracking-wide text-accent transition hover:bg-brand/10"
         type="button"
       >
         Add a paragraph
@@ -2792,7 +2792,7 @@ exports[`the ten panels, as they render today > Pages (pages) 1`] = `
     <div>
       <ul />
       <button
-        class="mt-2 w-full rounded border-2 border-dashed border-brand py-2 font-['Montserrat'] text-sm uppercase tracking-wide text-brand transition hover:bg-brand/10"
+        class="mt-2 w-full rounded border-2 border-dashed border-brand py-2 font-['Montserrat'] text-sm uppercase tracking-wide text-accent transition hover:bg-brand/10"
         type="button"
       >
         Add a page
@@ -2830,7 +2830,7 @@ exports[`the ten panels, as they render today > Press (press) 1`] = `
               />
               <button
                 aria-label="Move Article P down"
-                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-brand transition hover:bg-brand hover:text-ink"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                 type="button"
               >
                 Down
@@ -2849,7 +2849,7 @@ exports[`the ten panels, as they render today > Press (press) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="press-field-id-0"
               >
                 ID
@@ -2872,7 +2872,7 @@ exports[`the ten panels, as they render today > Press (press) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="press-field-title-0"
               >
                 Title
@@ -2888,7 +2888,7 @@ exports[`the ten panels, as they render today > Press (press) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="press-field-publication-0"
               >
                 Publication
@@ -2904,7 +2904,7 @@ exports[`the ten panels, as they render today > Press (press) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="press-field-date-0"
               >
                 Published on
@@ -2920,7 +2920,7 @@ exports[`the ten panels, as they render today > Press (press) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="press-field-excerpt-0"
               >
                 Excerpt
@@ -2936,7 +2936,7 @@ exports[`the ten panels, as they render today > Press (press) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="press-field-url-0"
               >
                 Link
@@ -2959,7 +2959,7 @@ exports[`the ten panels, as they render today > Press (press) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="press-field-image-0"
               >
                 Photo
@@ -2996,7 +2996,7 @@ exports[`the ten panels, as they render today > Press (press) 1`] = `
               />
               <button
                 aria-label="Move Article Q up"
-                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-brand transition hover:bg-brand hover:text-ink"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                 type="button"
               >
                 Up
@@ -3015,7 +3015,7 @@ exports[`the ten panels, as they render today > Press (press) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="press-field-id-1"
               >
                 ID
@@ -3038,7 +3038,7 @@ exports[`the ten panels, as they render today > Press (press) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="press-field-title-1"
               >
                 Title
@@ -3054,7 +3054,7 @@ exports[`the ten panels, as they render today > Press (press) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="press-field-publication-1"
               >
                 Publication
@@ -3070,7 +3070,7 @@ exports[`the ten panels, as they render today > Press (press) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="press-field-date-1"
               >
                 Published on
@@ -3086,7 +3086,7 @@ exports[`the ten panels, as they render today > Press (press) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="press-field-excerpt-1"
               >
                 Excerpt
@@ -3102,7 +3102,7 @@ exports[`the ten panels, as they render today > Press (press) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="press-field-url-1"
               >
                 Link
@@ -3125,7 +3125,7 @@ exports[`the ten panels, as they render today > Press (press) 1`] = `
               class="mb-4"
             >
               <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
                 for="press-field-image-1"
               >
                 Photo
@@ -3146,7 +3146,7 @@ exports[`the ten panels, as they render today > Press (press) 1`] = `
         </li>
       </ul>
       <button
-        class="mt-2 w-full rounded border-2 border-dashed border-brand py-2 font-['Montserrat'] text-sm uppercase tracking-wide text-brand transition hover:bg-brand/10"
+        class="mt-2 w-full rounded border-2 border-dashed border-brand py-2 font-['Montserrat'] text-sm uppercase tracking-wide text-accent transition hover:bg-brand/10"
         type="button"
       >
         Add a article
@@ -3189,7 +3189,7 @@ exports[`the ten panels, as they render today > What shows on the homepage (sect
             >
               <button
                 aria-label="Move Hero down"
-                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-brand transition hover:bg-brand hover:text-ink"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                 type="button"
               >
                 Down
@@ -3238,14 +3238,14 @@ exports[`the ten panels, as they render today > What shows on the homepage (sect
             >
               <button
                 aria-label="Move Our Story up"
-                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-brand transition hover:bg-brand hover:text-ink"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                 type="button"
               >
                 Up
               </button>
               <button
                 aria-label="Move Our Story down"
-                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-brand transition hover:bg-brand hover:text-ink"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                 type="button"
               >
                 Down
@@ -3288,14 +3288,14 @@ exports[`the ten panels, as they render today > What shows on the homepage (sect
             >
               <button
                 aria-label="Move Atmosfera up"
-                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-brand transition hover:bg-brand hover:text-ink"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                 type="button"
               >
                 Up
               </button>
               <button
                 aria-label="Move Atmosfera down"
-                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-brand transition hover:bg-brand hover:text-ink"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                 type="button"
               >
                 Down
@@ -3338,14 +3338,14 @@ exports[`the ten panels, as they render today > What shows on the homepage (sect
             >
               <button
                 aria-label="Move Menu up"
-                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-brand transition hover:bg-brand hover:text-ink"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                 type="button"
               >
                 Up
               </button>
               <button
                 aria-label="Move Menu down"
-                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-brand transition hover:bg-brand hover:text-ink"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                 type="button"
               >
                 Down
@@ -3388,14 +3388,14 @@ exports[`the ten panels, as they render today > What shows on the homepage (sect
             >
               <button
                 aria-label="Move Drinks up"
-                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-brand transition hover:bg-brand hover:text-ink"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                 type="button"
               >
                 Up
               </button>
               <button
                 aria-label="Move Drinks down"
-                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-brand transition hover:bg-brand hover:text-ink"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                 type="button"
               >
                 Down
@@ -3438,14 +3438,14 @@ exports[`the ten panels, as they render today > What shows on the homepage (sect
             >
               <button
                 aria-label="Move Stories up"
-                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-brand transition hover:bg-brand hover:text-ink"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                 type="button"
               >
                 Up
               </button>
               <button
                 aria-label="Move Stories down"
-                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-brand transition hover:bg-brand hover:text-ink"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                 type="button"
               >
                 Down
@@ -3488,7 +3488,7 @@ exports[`the ten panels, as they render today > What shows on the homepage (sect
             >
               <button
                 aria-label="Move Visit Us up"
-                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-brand transition hover:bg-brand hover:text-ink"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                 type="button"
               >
                 Up
@@ -3521,25 +3521,25 @@ exports[`the ten panels, as they render today > What shows on the homepage (sect
         class="mt-4 flex flex-wrap gap-2"
       >
         <button
-          class="mt-2 w-full rounded border-2 border-dashed border-brand py-2 font-['Montserrat'] text-sm uppercase tracking-wide text-brand transition hover:bg-brand/10"
+          class="mt-2 w-full rounded border-2 border-dashed border-brand py-2 font-['Montserrat'] text-sm uppercase tracking-wide text-accent transition hover:bg-brand/10"
           type="button"
         >
           Add a text section
         </button>
         <button
-          class="mt-2 w-full rounded border-2 border-dashed border-brand py-2 font-['Montserrat'] text-sm uppercase tracking-wide text-brand transition hover:bg-brand/10"
+          class="mt-2 w-full rounded border-2 border-dashed border-brand py-2 font-['Montserrat'] text-sm uppercase tracking-wide text-accent transition hover:bg-brand/10"
           type="button"
         >
           Add an item list section
         </button>
         <button
-          class="mt-2 w-full rounded border-2 border-dashed border-brand py-2 font-['Montserrat'] text-sm uppercase tracking-wide text-brand transition hover:bg-brand/10"
+          class="mt-2 w-full rounded border-2 border-dashed border-brand py-2 font-['Montserrat'] text-sm uppercase tracking-wide text-accent transition hover:bg-brand/10"
           type="button"
         >
           Add a gallery section
         </button>
         <button
-          class="mt-2 w-full rounded border-2 border-dashed border-brand py-2 font-['Montserrat'] text-sm uppercase tracking-wide text-brand transition hover:bg-brand/10"
+          class="mt-2 w-full rounded border-2 border-dashed border-brand py-2 font-['Montserrat'] text-sm uppercase tracking-wide text-accent transition hover:bg-brand/10"
           type="button"
         >
           Add a detail block section
@@ -3571,7 +3571,7 @@ exports[`the ten panels, as they render today > Words on the site (copy) 1`] = `
           class="mb-4"
         >
           <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
             for="copy-nav.wordmark"
           >
             Wordmark
@@ -3589,7 +3589,7 @@ exports[`the ten panels, as they render today > Words on the site (copy) 1`] = `
           class="mb-4"
         >
           <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
             for="copy-nav.instagramLabel"
           >
             Instagram link label
@@ -3607,7 +3607,7 @@ exports[`the ten panels, as they render today > Words on the site (copy) 1`] = `
           class="mb-4"
         >
           <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
             for="copy-nav.menuLabel"
           >
             Menu button label
@@ -3625,7 +3625,7 @@ exports[`the ten panels, as they render today > Words on the site (copy) 1`] = `
           class="mb-4"
         >
           <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
             for="copy-nav.pagesLabel"
           >
             Pages menu label
@@ -3659,7 +3659,7 @@ exports[`the ten panels, as they render today > Words on the site (copy) 1`] = `
           class="mb-4"
         >
           <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
             for="copy-hero.logoName"
           >
             Hero logo name
@@ -3677,7 +3677,7 @@ exports[`the ten panels, as they render today > Words on the site (copy) 1`] = `
           class="mb-4"
         >
           <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
             for="copy-hero.logoTagline"
           >
             Hero logo tagline
@@ -3695,7 +3695,7 @@ exports[`the ten panels, as they render today > Words on the site (copy) 1`] = `
           class="mb-4"
         >
           <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
             for="copy-hero.reservationsLabel"
           >
             Reservations label
@@ -3713,7 +3713,7 @@ exports[`the ten panels, as they render today > Words on the site (copy) 1`] = `
           class="mb-4"
         >
           <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
             for="copy-hero.reserveButton"
           >
             Reserve button
@@ -3740,7 +3740,7 @@ exports[`the ten panels, as they render today > Words on the site (copy) 1`] = `
           class="mb-4"
         >
           <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
             for="copy-atmosphere.heading"
           >
             Gallery heading
@@ -3767,7 +3767,7 @@ exports[`the ten panels, as they render today > Words on the site (copy) 1`] = `
           class="mb-4"
         >
           <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
             for="copy-food.heading"
           >
             Menu heading
@@ -3794,7 +3794,7 @@ exports[`the ten panels, as they render today > Words on the site (copy) 1`] = `
           class="mb-4"
         >
           <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
             for="copy-drinks.heading"
           >
             Drinks heading
@@ -3812,7 +3812,7 @@ exports[`the ten panels, as they render today > Words on the site (copy) 1`] = `
           class="mb-4"
         >
           <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
             for="copy-drinks.intro"
           >
             Drinks intro
@@ -3839,7 +3839,7 @@ exports[`the ten panels, as they render today > Words on the site (copy) 1`] = `
           class="mb-4"
         >
           <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
             for="copy-press.heading"
           >
             Stories heading
@@ -3857,7 +3857,7 @@ exports[`the ten panels, as they render today > Words on the site (copy) 1`] = `
           class="mb-4"
         >
           <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
             for="copy-press.intro"
           >
             Stories intro
@@ -3875,7 +3875,7 @@ exports[`the ten panels, as they render today > Words on the site (copy) 1`] = `
           class="mb-4"
         >
           <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
             for="copy-press.readArticle"
           >
             Read-article button
@@ -3900,7 +3900,7 @@ exports[`the ten panels, as they render today > Words on the site (copy) 1`] = `
           class="mb-4"
         >
           <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
             for="copy-press.viewAll"
           >
             View-all button
@@ -3927,7 +3927,7 @@ exports[`the ten panels, as they render today > Words on the site (copy) 1`] = `
           class="mb-4"
         >
           <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
             for="copy-visit.heading"
           >
             Visit heading
@@ -3945,7 +3945,7 @@ exports[`the ten panels, as they render today > Words on the site (copy) 1`] = `
           class="mb-4"
         >
           <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
             for="copy-visit.navigateButton"
           >
             Navigate button
@@ -3963,7 +3963,7 @@ exports[`the ten panels, as they render today > Words on the site (copy) 1`] = `
           class="mb-4"
         >
           <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
             for="copy-visit.mapTitle"
           >
             Map title
@@ -3990,7 +3990,7 @@ exports[`the ten panels, as they render today > Words on the site (copy) 1`] = `
           class="mb-4"
         >
           <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
             for="copy-footer.hoursHeading"
           >
             Footer hours heading
@@ -4008,7 +4008,7 @@ exports[`the ten panels, as they render today > Words on the site (copy) 1`] = `
           class="mb-4"
         >
           <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
             for="copy-footer.followLabel"
           >
             Follow-us label
@@ -4038,7 +4038,7 @@ exports[`the ten panels, as they render today > Words on the site (copy) 1`] = `
           class="mb-4"
         >
           <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
             for="copy-footer.reservationsLabel"
           >
             Footer reservations label
@@ -4056,7 +4056,7 @@ exports[`the ten panels, as they render today > Words on the site (copy) 1`] = `
           class="mb-4"
         >
           <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
             for="copy-footer.rightsSuffix"
           >
             Copyright suffix
@@ -4074,7 +4074,7 @@ exports[`the ten panels, as they render today > Words on the site (copy) 1`] = `
           class="mb-4"
         >
           <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
             for="copy-footer.instagramLabel"
           >
             Footer Instagram label
@@ -4092,7 +4092,7 @@ exports[`the ten panels, as they render today > Words on the site (copy) 1`] = `
           class="mb-4"
         >
           <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
             for="copy-footer.linkedinLabel"
           >
             Footer LinkedIn label
@@ -4119,7 +4119,7 @@ exports[`the ten panels, as they render today > Words on the site (copy) 1`] = `
           class="mb-4"
         >
           <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
             for="copy-blogsPage.title"
           >
             Stories page title
@@ -4137,7 +4137,7 @@ exports[`the ten panels, as they render today > Words on the site (copy) 1`] = `
           class="mb-4"
         >
           <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
             for="copy-blogsPage.subtitle"
           >
             Stories page subtitle
@@ -4155,7 +4155,7 @@ exports[`the ten panels, as they render today > Words on the site (copy) 1`] = `
           class="mb-4"
         >
           <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
             for="copy-blogsPage.heading"
           >
             Stories page heading
@@ -4173,7 +4173,7 @@ exports[`the ten panels, as they render today > Words on the site (copy) 1`] = `
           class="mb-4"
         >
           <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
             for="copy-blogsPage.intro"
           >
             Stories page intro
@@ -4191,7 +4191,7 @@ exports[`the ten panels, as they render today > Words on the site (copy) 1`] = `
           class="mb-4"
         >
           <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
             for="copy-blogsPage.back"
           >
             Back link
@@ -4209,7 +4209,7 @@ exports[`the ten panels, as they render today > Words on the site (copy) 1`] = `
           class="mb-4"
         >
           <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
             for="copy-blogsPage.previous"
           >
             Previous button
@@ -4227,7 +4227,7 @@ exports[`the ten panels, as they render today > Words on the site (copy) 1`] = `
           class="mb-4"
         >
           <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
             for="copy-blogsPage.next"
           >
             Next button
@@ -4254,7 +4254,7 @@ exports[`the ten panels, as they render today > Words on the site (copy) 1`] = `
           class="mb-4"
         >
           <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
             for="copy-notFound.heading"
           >
             404 heading
@@ -4272,7 +4272,7 @@ exports[`the ten panels, as they render today > Words on the site (copy) 1`] = `
           class="mb-4"
         >
           <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
             for="copy-notFound.back"
           >
             404 back link

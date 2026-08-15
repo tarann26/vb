@@ -87,7 +87,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, notice }) => {
 
         <label
           htmlFor="admin-password"
-          className="mb-2 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand"
+          className="mb-2 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
         >
           Password
         </label>

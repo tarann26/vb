@@ -21,13 +21,13 @@ const ReservationPage: React.FC = () => {
           <div className="flex items-center justify-between">
             <div className="text-center flex-1">
               <h1 className="font-['Parisienne'] text-4xl text-ink mb-2">Via Bianca</h1>
-              <p className="font-['Montserrat'] text-brand text-sm uppercase tracking-wider">
+              <p className="font-['Montserrat'] text-accent text-sm uppercase tracking-wider">
                 Pastificio & Ristorante
               </p>
             </div>
             <button 
               onClick={() => window.location.href = '/'}
-              className="text-brand hover:text-ink font-['Montserrat'] text-sm uppercase tracking-wide"
+              className="text-accent hover:text-ink font-['Montserrat'] text-sm uppercase tracking-wide"
             >
               ← Back to Home
             </button>

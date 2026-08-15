@@ -7,7 +7,7 @@ const NotFound: React.FC = () => {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-cream-alt px-6 text-center">
       <h1 className="font-['Parisienne'] text-5xl text-ink mb-2">{site.name}</h1>
-      <h2 className="font-['Montserrat'] text-lg uppercase tracking-wide text-brand mb-6">
+      <h2 className="font-['Montserrat'] text-lg uppercase tracking-wide text-accent mb-6">
         {content.renderText('notFound.heading', copy.notFound.heading)}
       </h2>
       <Link

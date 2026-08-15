@@ -109,11 +109,11 @@ function unclaimedProblems(problems: ValidationProblem[], itemCount: number): Va
 // Field.tsx's own INPUT_CLASSNAME/LABEL_CLASSNAME export for the identical
 // reasoning.
 export const MOVE_BUTTON_CLASSNAME =
-  "rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-brand transition hover:bg-brand hover:text-ink";
+  "rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink";
 export const REMOVE_BUTTON_CLASSNAME =
   "rounded border border-red-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-red-600 transition hover:bg-red-600 hover:text-white";
 export const ADD_BUTTON_CLASSNAME =
-  "mt-2 w-full rounded border-2 border-dashed border-brand py-2 font-['Montserrat'] text-sm uppercase tracking-wide text-brand transition hover:bg-brand/10";
+  "mt-2 w-full rounded border-2 border-dashed border-brand py-2 font-['Montserrat'] text-sm uppercase tracking-wide text-accent transition hover:bg-brand/10";
 
 function RecordList<T extends { id: string }>({
   fields,

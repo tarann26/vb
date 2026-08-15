@@ -333,7 +333,10 @@ describe('dist/assets/ keeps admin code out of the entry chunk', () => {
 // tracing all nine added rules to EditableText.tsx's own persistent,
 // non-hover edit affordance (`cursor-text`, `rounded-sm`, `outline-dashed`,
 // `outline-1`, `outline-offset-2`, `outline-brand/50`,
-// `focus:bg-brand/10`, `focus:outline-2`, `focus:outline-brand`) --
+// `focus:bg-brand/10`, `focus:outline-2`, `focus:outline-brand`; the three
+// colour utilities are named here by their CURRENT token for legibility --
+// this palette's named tokens did not exist at measurement time, so what
+// actually shipped in this commit was an arbitrary-hex value, not a token) --
 // nothing removed, nothing from any other file. (Confirmed the hard way: an
 // early draft of that component's own source, plus an early draft of THIS
 // very paragraph, each spelled a few ordinary English words in bare prose
@@ -359,8 +362,11 @@ describe('dist/assets/ keeps admin code out of the entry chunk', () => {
 // own two control-label classNames and its screen-reader-only status/error
 // text (`bottom-1`, `right-1`, `h-8`, `w-8`, `bg-black/60`, `bg-red-600/90`,
 // `border-white/70`, `focus-within:ring-2`, `focus-within:ring-brand`,
-// `leading-none`, `sr-only`) -- nothing removed, nothing from any other
-// file. 32300 keeps roughly the same ~200-250-byte margin over today's real
+// `leading-none`, `sr-only`; `ring-brand` is this commit's own rule named by
+// its current token -- the palette rename came later, so what this commit
+// actually shipped was an arbitrary-hex ring colour, not the token) --
+// nothing removed, nothing from any other file. 32300 keeps roughly the
+// same ~200-250-byte margin over today's real
 // number that every earlier ceiling in this lineage kept over ITS own real
 // number -- a real budget, not a rounded-up snapshot, so the very next
 // admin-only class landing without a matching removal still trips it.
@@ -526,7 +532,11 @@ describe('dist/assets/ keeps admin code out of the entry chunk', () => {
 // `.focus-visible:text-ink`), and the bar's scrolled/unscrolled border
 // swap (`.border-b`, `.border-t-2`, `.border-brand/15`,
 // `.border-brand/20`, `.border-transparent`, replacing
-// `.bg-transparent` and `.shadow-none`), with `.font-["Open_Sans"]`,
+// `.bg-transparent` and `.shadow-none`; `.hover:text-brand`,
+// `.border-brand/15` and `.border-brand/20` are this commit's own rules
+// named by their current tokens -- the palette rename came later, so what
+// 68a70ec actually shipped for these three was arbitrary-hex utilities, not
+// the tokens), with `.font-["Open_Sans"]`,
 // `.normal-case`, `.tracking-normal` and `.text-ink/80` from the new
 // link typography. No comment-scan leak among them. Confirmed by building
 // 68a70ec itself in the same worktree: byte-identical to the tree today,

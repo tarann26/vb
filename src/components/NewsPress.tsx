@@ -52,11 +52,11 @@ const NewsPress: React.FC = () => {
               {/* Article Content */}
               <div className="p-6">
                 <div className="flex items-center space-x-2 mb-3">
-                  <Calendar className="w-4 h-4 text-brand" />
+                  <Calendar className="w-4 h-4 text-accent" />
                   <span className="font-['Open_Sans'] text-sm text-gray-500">{article.date}</span>
                 </div>
                 
-                <h3 className="font-['Montserrat'] font-bold text-lg text-ink mb-3 leading-tight group-hover:text-brand transition-colors duration-300">
+                <h3 className="font-['Montserrat'] font-bold text-lg text-ink mb-3 leading-tight group-hover:text-accent transition-colors duration-300">
                   {article.title}
                 </h3>
                 
@@ -69,7 +69,7 @@ const NewsPress: React.FC = () => {
                     href={article.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center space-x-2 text-brand hover:text-brand-dark font-['Montserrat'] font-semibold text-sm uppercase tracking-wide transition-colors duration-300"
+                    className="inline-flex items-center space-x-2 text-accent hover:text-accent-dark font-['Montserrat'] font-semibold text-sm uppercase tracking-wide transition-colors duration-300"
                     aria-label={`Read full article: ${article.title}`}
                   >
                     <span>Read Article</span>

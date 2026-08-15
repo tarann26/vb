@@ -175,7 +175,7 @@ const Navbar: React.FC<NavbarProps> = ({ offHomePage = false }) => {
         <div className="hidden md:flex">
           <div
             data-testid="desktop-nav-links"
-            className="flex items-center space-x-6 text-sm font-['Montserrat'] tracking-wider text-brand uppercase"
+            className="flex items-center space-x-6 text-sm font-['Montserrat'] tracking-wider text-accent uppercase"
           >
             {flatEntries.map((link) => renderEntry(link, LINK_BASE))}
 
@@ -282,7 +282,7 @@ const Navbar: React.FC<NavbarProps> = ({ offHomePage = false }) => {
                           {renderEntry(
                             link,
                             'block px-4 py-2.5 normal-case tracking-normal font-["Open_Sans"] text-ink/80 ' +
-                              'transition-colors duration-200 hover:bg-brand/8 hover:text-brand',
+                              'transition-colors duration-200 hover:bg-brand/8 hover:text-ink',
                             closeAll,
                           )}
                         </div>
@@ -300,7 +300,7 @@ const Navbar: React.FC<NavbarProps> = ({ offHomePage = false }) => {
             target="_blank"
             rel="noopener noreferrer"
             aria-label={copy.nav.instagramLabel}
-            className="text-brand transition-colors duration-300 hover:text-ink"
+            className="text-accent transition-colors duration-300 hover:text-ink"
           >
             <Instagram className="h-5 w-5" />
           </a>
@@ -310,7 +310,7 @@ const Navbar: React.FC<NavbarProps> = ({ offHomePage = false }) => {
           aria-label={copy.nav.menuLabel}
           aria-expanded={isMenuOpen}
           onClick={() => setIsMenuOpen((open) => !open)}
-          className="md:hidden text-brand transition-colors duration-300 hover:text-ink"
+          className="md:hidden text-accent transition-colors duration-300 hover:text-ink"
         >
           {isMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
         </button>
@@ -327,7 +327,7 @@ const Navbar: React.FC<NavbarProps> = ({ offHomePage = false }) => {
                      overflow-hidden rounded-lg border-t-2 border-brand bg-cream
                      shadow-xl shadow-black/10 ring-1 ring-black/5 animate-nav-in"
         >
-          <div className="flex flex-col py-2 text-sm font-['Montserrat'] tracking-wider text-brand uppercase">
+          <div className="flex flex-col py-2 text-sm font-['Montserrat'] tracking-wider text-accent uppercase">
             {flatEntries.map((link, index) => (
               <div key={link.href} style={{ animationDelay: `${index * 35}ms` }} className="animate-nav-in">
                 {renderEntry(
@@ -350,7 +350,7 @@ const Navbar: React.FC<NavbarProps> = ({ offHomePage = false }) => {
                     {renderEntry(
                       link,
                       'block px-5 py-2.5 normal-case tracking-normal font-["Open_Sans"] text-ink/80 ' +
-                        'transition-colors duration-200 hover:bg-brand/8 hover:text-brand',
+                        'transition-colors duration-200 hover:bg-brand/8 hover:text-ink',
                       closeAll,
                     )}
                   </div>

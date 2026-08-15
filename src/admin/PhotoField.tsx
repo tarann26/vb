@@ -100,7 +100,7 @@ function statusMessage(status: Status): string | null {
 }
 
 const INPUT_CLASSNAME = 'block w-full text-sm text-ink file:mr-3 file:rounded file:border-0 file:bg-brand file:px-3 file:py-1.5 file:font-[\'Montserrat\'] file:text-xs file:uppercase file:tracking-wide file:text-ink hover:file:bg-brand-dark';
-const LABEL_CLASSNAME = "mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-brand";
+const LABEL_CLASSNAME = "mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent";
 const RETRY_BUTTON_CLASSNAME =
   "mt-2 rounded border border-red-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-red-600 transition hover:bg-red-600 hover:text-white";
 

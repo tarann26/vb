@@ -42,13 +42,13 @@ const BlogsPage: React.FC = () => {
           <div className="flex items-center justify-between">
             <div className="text-center flex-1">
               <h1 className="font-['Parisienne'] text-4xl text-ink mb-2">{content.renderText('blogsPage.title', copy.blogsPage.title)}</h1>
-              <p className="font-['Montserrat'] text-brand text-sm uppercase tracking-wider">
+              <p className="font-['Montserrat'] text-accent text-sm uppercase tracking-wider">
                 {content.renderText('blogsPage.subtitle', copy.blogsPage.subtitle)}
               </p>
             </div>
             <button
               onClick={() => navigate('/')}
-              className="text-brand hover:text-ink font-['Montserrat'] text-sm uppercase tracking-wide transition-colors duration-300"
+              className="text-accent hover:text-ink font-['Montserrat'] text-sm uppercase tracking-wide transition-colors duration-300"
             >
               {content.renderText('blogsPage.back', copy.blogsPage.back)}
             </button>
@@ -96,13 +96,13 @@ const BlogsPage: React.FC = () => {
                 {/* Article Content */}
                 <div className="p-6">
                   <div className="flex items-center space-x-2 mb-3">
-                    <Calendar className="w-4 h-4 text-brand" />
+                    <Calendar className="w-4 h-4 text-accent" />
                     <span className="font-['Open_Sans'] text-sm text-gray-500">
                       {formatArticleDate(article.date)}
                     </span>
                   </div>
                   
-                  <h3 className="font-['Montserrat'] font-bold text-lg text-ink mb-3 leading-tight group-hover:text-brand transition-colors duration-300">
+                  <h3 className="font-['Montserrat'] font-bold text-lg text-ink mb-3 leading-tight group-hover:text-accent transition-colors duration-300">
                     {article.title}
                   </h3>
                   
@@ -115,7 +115,7 @@ const BlogsPage: React.FC = () => {
                       href={article.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center space-x-2 text-brand hover:text-brand-dark font-['Montserrat'] font-semibold text-sm uppercase tracking-wide transition-colors duration-300"
+                      className="inline-flex items-center space-x-2 text-accent hover:text-accent-dark font-['Montserrat'] font-semibold text-sm uppercase tracking-wide transition-colors duration-300"
                       aria-label={`Read full article: ${article.title}`}
                     >
                       <span>{content.renderText('press.readArticle', copy.press.readArticle)}</span>
