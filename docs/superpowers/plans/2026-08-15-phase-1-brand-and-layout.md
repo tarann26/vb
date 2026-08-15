@@ -480,7 +480,9 @@ live URL."
 
 ### Task 5: Prove no unreadable text shipped
 
-A browser test, because computed colour needs a layout engine and jsdom has none. This is the assertion that catches a blue button with white text anywhere in the app, including places Task 3 did not think to look.
+A browser test, because computed colour needs a layout engine and jsdom has none.
+
+Scope widened after Tasks 2 and 3 shipped: the original version of this task only inspected elements whose own BACKGROUND was brand blue, so it could not have caught the failure that actually occurred, which was brand blue used as TEXT on white at 1.45:1 across the whole navigation. This version measures every text-bearing element against its effective background, in both directions.
 
 **Files:**
 - Create: `e2e/brand-contrast.spec.ts`
@@ -503,36 +505,70 @@ function toHex(rgb: string): string | null {
   return '#' + [m[1], m[2], m[3]].map((v) => Number(v).toString(16).padStart(2, '0')).join('');
 }
 
-test('no text on a brand-blue surface is unreadable', async ({ page }) => {
+// Walks up for the nearest ancestor that actually paints a background.
+// An element with `background-color: rgba(0,0,0,0)` shows whatever is
+// behind it, so comparing text against its OWN transparent background is
+// how a contrast check passes while the text is invisible on screen.
+function effectiveBackground(el: HTMLElement): string {
+  let node: HTMLElement | null = el;
+  while (node) {
+    const bg = getComputedStyle(node).backgroundColor;
+    if (bg && bg !== 'transparent' && !/rgba\([^)]*,\s*0\)$/.test(bg)) return bg;
+    node = node.parentElement;
+  }
+  return 'rgb(255, 255, 255)';
+}
+
+test('every text node on the homepage meets AA against what it sits on', async ({ page }) => {
   await page.goto('/');
   await page.waitForLoadState('networkidle');
 
-  // Every element that paints the brand blue as its own background AND has
-  // its own text. Walking computed style rather than class names is the
-  // whole point: a Tailwind token, an arbitrary value, and an inline style
-  // are indistinguishable here, so this cannot be fooled by spelling.
-  const failures = await page.evaluate(() => {
-    const out: { text: string; bg: string; fg: string }[] = [];
+  // Both directions, deliberately. An earlier version of this test only
+  // looked at elements whose own background was brand blue, which made it
+  // structurally incapable of catching the far more common failure: brand
+  // blue as TEXT on a white background, at 1.45:1. That shipped the entire
+  // navigation bar invisible and the test stayed green.
+  //
+  // Walking computed style rather than class names is the other half: a
+  // Tailwind token, an arbitrary value, and an inline style are
+  // indistinguishable here, so this cannot be fooled by spelling.
+  const measured = await page.evaluate(() => {
+    function effectiveBg(el: HTMLElement): string {
+      let node: HTMLElement | null = el;
+      while (node) {
+        const bg = getComputedStyle(node).backgroundColor;
+        if (bg && bg !== 'transparent' && !/rgba\([^)]*,\s*0\)$/.test(bg)) return bg;
+        node = node.parentElement;
+      }
+      return 'rgb(255, 255, 255)';
+    }
+    const out: { text: string; bg: string; fg: string; where: string }[] = [];
     for (const el of Array.from(document.querySelectorAll<HTMLElement>('*'))) {
-      const style = getComputedStyle(el);
-      const bg = style.backgroundColor;
-      if (bg !== 'rgb(200, 216, 232)') continue;
-      const text = (el.textContent ?? '').trim();
-      if (!text) continue;
-      // Only elements whose own text node is direct, so a wrapper does not
-      // get blamed for a child's text on a different background.
-      const ownText = Array.from(el.childNodes).some(
-        (n) => n.nodeType === Node.TEXT_NODE && (n.textContent ?? '').trim().length > 0,
-      );
+      // Only elements holding their own text, so a wrapper is never blamed
+      // for a child rendered on a different background.
+      const ownText = Array.from(el.childNodes)
+        .filter((n) => n.nodeType === Node.TEXT_NODE)
+        .map((n) => (n.textContent ?? '').trim())
+        .join(' ')
+        .trim();
       if (!ownText) continue;
-      out.push({ text: text.slice(0, 40), bg, fg: style.color });
+      const style = getComputedStyle(el);
+      if (style.visibility === 'hidden' || style.display === 'none') continue;
+      if (Number(style.opacity) === 0) continue;
+      if (el.getBoundingClientRect().width === 0) continue;
+      out.push({
+        text: ownText.slice(0, 40),
+        bg: effectiveBg(el),
+        fg: style.color,
+        where: el.tagName.toLowerCase() + '.' + (el.className || '').toString().slice(0, 60),
+      });
     }
     return out;
   });
 
-  const unreadable = failures.filter((f) => {
-    const fg = toHex(f.fg);
-    const bg = toHex(f.bg);
+  const unreadable = measured.filter((m) => {
+    const fg = toHex(m.fg);
+    const bg = toHex(m.bg);
     return fg !== null && bg !== null && contrastRatio(fg, bg) < 4.5;
   });
 
@@ -540,18 +576,28 @@ test('no text on a brand-blue surface is unreadable', async ({ page }) => {
 });
 ```
 
+`effectiveBackground` is declared at module scope for readability and again inside `page.evaluate` because the evaluated function is serialised into the browser and cannot close over Node-side scope. Keep both; they are not a duplication mistake.
+
 - [ ] **Step 2: Run it**
 
 Run: `npx playwright test e2e/brand-contrast.spec.ts`
-Expected: PASS, assuming Task 3's button fixes are complete.
+Expected: PASS.
 
-If it fails, it is telling you about a real unreadable button. Fix the component, do not loosen the test.
+If it fails, it is naming real unreadable text. Fix the component, never the threshold.
 
-- [ ] **Step 3: Prove it can fail**
+Two failure classes are legitimate to argue about rather than fix blindly, and both need a judgement call recorded in the commit message rather than a silent exemption: text over a background IMAGE (where computed style cannot see what is actually behind it), and decorative text that is `aria-hidden`. If either appears, narrow the selector to exclude that specific case with a comment saying why. Do not raise or remove the 4.5 threshold.
 
-Change any one `bg-brand text-ink` button to `bg-brand text-white`. Re-run. Expected: FAIL, naming that button's text. Revert and confirm green.
+- [ ] **Step 3: Prove it can fail, twice**
 
-This step is not optional. A test that walks the DOM looking for a condition can silently match nothing and pass forever. Watching it go red is the only proof it is looking in the right place.
+Both directions, because the whole reason this test was rewritten is that the one-directional version passed while the site was broken.
+
+First: change any one `bg-brand text-ink` button to `bg-brand text-white`. Re-run. Expect FAIL naming that button.
+
+Second: change any one `text-accent` link on a white background to `text-brand`. Re-run. Expect FAIL naming that link.
+
+Revert both and confirm green.
+
+Neither step is optional. A test that walks the DOM looking for a condition can silently match nothing and pass forever.
 
 - [ ] **Step 4: Commit**
 
