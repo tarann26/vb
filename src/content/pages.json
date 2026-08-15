@@ -162,54 +162,5 @@
         }
       }
     ]
-  },
-  {
-    "slug": "breads-and-dips",
-    "name": "Breads & Dips",
-    "inNav": false,
-    "enabled": false,
-    "seo": {
-      "title": "Breads & Dips | Via Bianca",
-      "description": "Our retail line of breads and dips, baked in the Via Bianca kitchen."
-    },
-    "sections": [
-      {
-        "kind": "template",
-        "id": "breads-and-dips",
-        "template": "itemList",
-        "enabled": true,
-        "content": {
-          "heading": "Breads and dips",
-          "items": [],
-          "whatsapp": {
-            "label": "Ask what's available",
-            "message": "Hi, I'd like to know more about your breads and dips."
-          }
-        }
-      }
-    ]
-  },
-  {
-    "slug": "who-we-supply",
-    "name": "Who We Supply",
-    "inNav": false,
-    "enabled": false,
-    "seo": {
-      "title": "Who We Supply | Via Bianca",
-      "description": "The restaurants, cafes and kitchens across Delhi that Via Bianca supplies."
-    },
-    "sections": [
-      {
-        "kind": "template",
-        "id": "b2b-clients",
-        "template": "gallery",
-        "enabled": true,
-        "content": {
-          "heading": "Who we supply",
-          "layout": "grid",
-          "images": []
-        }
-      }
-    ]
   }
 ]
