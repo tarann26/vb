@@ -21,6 +21,13 @@ test('every text node on the homepage meets AA against what it sits on', async (
   // Tailwind token, an arbitrary value, and an inline style are
   // indistinguishable here, so this cannot be fooled by spelling.
   const measured = await page.evaluate(() => {
+    // "Is anything painted here at all" -- alpha exactly 0 (or the literal
+    // keyword `transparent`) is the only thing that disqualifies a layer
+    // from being the thing effectiveBg reports, because ANY paint, however
+    // faint, is still what a viewer's eye actually sees composited with
+    // whatever is behind it. Do not reuse this for "can this element's own
+    // background stand in for what's behind its container" -- that is a
+    // different, stricter question, answered by isOpaqueBackground below.
     function effectiveBg(el: HTMLElement): string {
       let node: HTMLElement | null = el;
       while (node) {
@@ -29,6 +36,24 @@ test('every text node on the homepage meets AA against what it sits on', async (
         node = node.parentElement;
       }
       return 'rgb(255, 255, 255)';
+    }
+    // "Is this layer opaque enough that nothing behind it can bleed
+    // through" -- the bar here is alpha === 1 exactly, not merely
+    // alpha !== 0. A semi-transparent background-color (e.g. Tailwind's
+    // `bg-brand/50`, `rgba(200, 216, 232, 0.5)`) fails effectiveBg's
+    // "fully transparent" test above (alpha isn't 0, so the walk would
+    // stop there and report it), but the colour actually rendered still
+    // depends on whatever is painted behind it -- exactly the thing
+    // sitsOverImageLayer exists to catch. Reusing effectiveBg's regex here
+    // was the bug: it answered "not fully invisible" when the caller
+    // needed "safe to measure on its own", so a 50%-alpha badge over a
+    // photo would have been declared measurable and skipped past the
+    // exclusion it should have triggered.
+    function isOpaqueBackground(bg: string): boolean {
+      const m = bg.match(/^rgba?\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*(?:,\s*([\d.]+)\s*)?\)$/);
+      if (!m) return false;
+      const alpha = m[1] === undefined ? 1 : Number(m[1]);
+      return alpha === 1;
     }
     // FoodGallery and Drinks caption cards: a photo (<img>) and a darkening
     // `bg-gradient-to-t from-black/NN` div are SIBLING layers absolutely
@@ -58,8 +83,7 @@ test('every text node on the homepage meets AA against what it sits on', async (
     // measurable no matter what sits further back in the stack.
     function sitsOverImageLayer(start: HTMLElement): boolean {
       function paintsOpaqueBackground(node: HTMLElement): boolean {
-        const bg = getComputedStyle(node).backgroundColor;
-        return bg !== '' && bg !== 'transparent' && !/rgba\([^)]*,\s*0\)$/.test(bg);
+        return isOpaqueBackground(getComputedStyle(node).backgroundColor);
       }
       if (paintsOpaqueBackground(start)) return false;
       let node: HTMLElement | null = start.parentElement;
