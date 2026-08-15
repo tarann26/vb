@@ -7,26 +7,6 @@ function toHex(rgb: string): string | null {
   return '#' + [m[1], m[2], m[3]].map((v) => Number(v).toString(16).padStart(2, '0')).join('');
 }
 
-// Walks up for the nearest ancestor that actually paints a background.
-// An element with `background-color: rgba(0,0,0,0)` shows whatever is
-// behind it, so comparing text against its OWN transparent background is
-// how a contrast check passes while the text is invisible on screen.
-//
-// Declared here for readability and again inside `page.evaluate` below,
-// deliberately: the evaluated function is serialised into the browser and
-// cannot close over this one, so it carries its own copy. Never called
-// from Node-side code, hence the disable below rather than deleting it.
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- module-scope copy kept for readability; the real, callable copy is the identical one inside page.evaluate
-function effectiveBackground(el: HTMLElement): string {
-  let node: HTMLElement | null = el;
-  while (node) {
-    const bg = getComputedStyle(node).backgroundColor;
-    if (bg && bg !== 'transparent' && !/rgba\([^)]*,\s*0\)$/.test(bg)) return bg;
-    node = node.parentElement;
-  }
-  return 'rgb(255, 255, 255)';
-}
-
 test('every text node on the homepage meets AA against what it sits on', async ({ page }) => {
   await page.goto('/');
   await page.waitForLoadState('networkidle');
@@ -50,23 +30,41 @@ test('every text node on the homepage meets AA against what it sits on', async (
       }
       return 'rgb(255, 255, 255)';
     }
-    // FoodGallery, Drinks and ItemListSection caption cards: a photo
-    // (<img>) and a darkening `bg-gradient-to-t from-black/NN` div are
-    // SIBLING layers absolutely positioned under the caption text, not a
-    // CSS background on any ancestor of the text. effectiveBg walks past
-    // both -- neither is a `background-color` -- straight to the section's
-    // own flat background, so the comparison would be against a colour the
-    // text is never actually rendered on. This is the "text over a
-    // background image" exclusion the task brief calls out: real contrast
-    // here depends on pixels (the photo, the gradient) that
-    // getComputedStyle cannot report, so it is out of reach for this test
-    // by construction, not by choice. Detected structurally -- an <img>
-    // plus a background-image sibling inside the nearest positioned
-    // ancestor -- rather than by naming the three components, so it keeps
-    // matching if the pattern is reused elsewhere.
+    // FoodGallery and Drinks caption cards: a photo (<img>) and a darkening
+    // `bg-gradient-to-t from-black/NN` div are SIBLING layers absolutely
+    // positioned under the caption text, not a CSS background on any
+    // ancestor of the text. effectiveBg walks past both -- neither is a
+    // `background-color` -- straight to the section's own flat background,
+    // so the comparison would be against a colour the text is never
+    // actually rendered on. This is the "text over a background image"
+    // exclusion the task brief calls out: real contrast here depends on
+    // pixels (the photo, the gradient) that getComputedStyle cannot report,
+    // so it is out of reach for this test by construction, not by choice.
+    // Detected structurally -- an <img> plus a background-image sibling
+    // inside the nearest positioned ancestor -- rather than by naming the
+    // two components, so it keeps matching if the pattern is reused
+    // elsewhere.
+    //
+    // Review finding: this over-matched BlogTeaser's `bg-brand text-ink`
+    // publication badge, which sits inside the same photo+gradient card
+    // (src/components/BlogTeaser.tsx:45) but paints its OWN opaque
+    // background-color. effectiveBg never reaches the photo for that badge
+    // at all -- it stops at the badge's own background, exactly like any
+    // other solid-background element -- so excluding it hid a real,
+    // measurable contrast bug behind an exemption meant for text that has
+    // no background of its own. Fixed by bailing out (not excluding)
+    // wherever the element itself, or any ancestor strictly beneath the
+    // image wrapper, paints an opaque background-color: that element is
+    // measurable no matter what sits further back in the stack.
     function sitsOverImageLayer(start: HTMLElement): boolean {
+      function paintsOpaqueBackground(node: HTMLElement): boolean {
+        const bg = getComputedStyle(node).backgroundColor;
+        return bg !== '' && bg !== 'transparent' && !/rgba\([^)]*,\s*0\)$/.test(bg);
+      }
+      if (paintsOpaqueBackground(start)) return false;
       let node: HTMLElement | null = start.parentElement;
       while (node) {
+        if (paintsOpaqueBackground(node)) return false;
         if (getComputedStyle(node).position !== 'static') {
           const children = Array.from(node.children) as HTMLElement[];
           const hasPhoto = children.some((c) => c.tagName === 'IMG');
