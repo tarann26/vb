@@ -43,6 +43,19 @@ export default {
         },
       },
       animation: { 'nav-in': 'nav-in 280ms cubic-bezier(0.22, 1, 0.36, 1) both' },
+      // Named tokens rather than hex literals scattered through components.
+      // Before this, the brand green was written out ~45 times across 12
+      // files with a separate hover partner, so a palette change meant a
+      // find-and-replace across the codebase and a guarantee of missing one.
+      // src/test/palette.test.ts asserts none of the old literals survive.
+      colors: {
+        brand: '#C8D8E8',
+        'brand-dark': '#A6B3C1',
+        accent: '#9D4949',
+        ink: '#222222',
+        cream: '#FFFDF8',
+        'cream-alt': '#F9F9F9',
+      },
     },
   },
   plugins: [],
