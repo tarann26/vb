@@ -32,10 +32,16 @@ suggested. Measured contrast against white: `#C8D8E8` is 1.45:1, `#9D4949` is
 `#222` text (10.9:1), not white (1.45:1, illegible). Where a button needs
 emphasis, it takes `#9D4949` with white text.
 
-**Type.** Sitka VF Italic replaces Parisienne for the wordmark, tagline, and
-strapline. Aquila and Lim are dropped. The font file is not on the build
-machine and must be supplied. Fonts are self-hosted, not loaded from Google,
-which also removes a third-party request from the critical path and lets the
+**Type. Deferred, not cancelled.** The intent is Sitka VF Italic replacing
+Parisienne for the wordmark, tagline, and strapline, with Aquila and Lim
+dropped. Blocked on a file nobody has: Sitka is proprietary to Microsoft, and
+webfont embedding requires an M-Product License bought from Tiro Typeworks or
+Monotype. The copy bundled with Windows does not carry those rights. No host
+solves this, because a host serves files rather than supplying them.
+
+Until the licence and file exist, Parisienne stays. Every other Phase 1 item
+proceeds. When the file arrives, fonts are self-hosted rather than loaded from
+Google, which removes a third-party request from the critical path and lets the
 CSP drop `fonts.googleapis.com` and `fonts.gstatic.com`.
 
 **About and Our Story merge.** They are the same content. One About section,
@@ -75,10 +81,15 @@ the literals with Tailwind theme tokens (`brand`, `brand-dark`, `accent`,
 `ink`, `cream`) so the next palette change is one file. This is the only
 refactor in the spec and it exists because the change itself demands it.
 
-**Type.** Self-host Sitka VF Italic as woff2. Swap Parisienne at the three
-sites in `Hero.tsx` and one in `Footer.tsx`. Regenerate favicons through the
-existing `scripts/favicons.mjs`, which draws the mark rather than loading a web
-font, so it needs the new glyph shapes supplied to it directly.
+**Type. Cut from Phase 1.** Deferred pending the licence and file. The work,
+when it lands: self-host Sitka VF Italic as woff2, swap Parisienne at the three
+sites in `Hero.tsx` and one in `Footer.tsx`, and regenerate favicons through
+`scripts/favicons.mjs`, which draws the mark rather than loading a web font and
+so needs the glyph shapes supplied to it directly.
+
+The favicon rework is coupled to this and defers with it. Changing the favicon
+to the new blue while it still carries the Parisienne letterform would mean
+redoing it twice.
 
 **Homepage order.** Phase 1 can only reorder sections that already exist, so
 `sections.json` becomes: hero, atmosphere (Gallery), food, drinks, press,
@@ -255,7 +266,9 @@ through 4 have shipped and the site is better regardless.
 
 ## Open items
 
-Blocking Phase 1: the Sitka VF Italic font file.
+Deferred, blocking nothing: the Sitka VF Italic webfont licence and file, and
+the favicon rework that depends on it. Both land as their own phase whenever
+the file exists. Phase 1 ships without them.
 
 Blocking nothing yet, needed before their phases: catering photographs, awards
 content, a portrait of Kamalika, and whether the Coming Soon header image the
