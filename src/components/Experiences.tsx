@@ -163,16 +163,46 @@ function ExperienceCardBody({ item }: { item: Experience }) {
         inside the content glob emits its rule for real and would put the
         bytes straight back.
 
-        Worth recording while the number exists, because nothing in this
-        build measures it: 4.22:1 is the caption's backdrop contrast, not
-        the caption's own. `brand-contrast` skips text over an image layer
-        by design, so this card has never been measured by anything, and at
-        `text-sm` it would not clear 4.5:1 either way. That is the review's
-        standing Minor 3, unchanged by this commit and not created by it.
+        MINOR 3, closed. 4.22:1 above was the caption's BACKDROP contrast
+        against a hypothetical pure-white glyph -- not what a reader's eye
+        actually sees, which is `text-white`/`text-white/80` composited with
+        that backdrop, per line. `brand-contrast` (e2e/brand-contrast.spec.ts)
+        cannot measure this: the backdrop is a photo plus this gradient, two
+        sibling layers with no `background-color` for `getComputedStyle` to
+        read, which is the exact case `sitsOverImageLayer` exists to skip.
+        Measured here the way that test measures everything else it CAN
+        reach -- WCAG relative luminance, the same `over()` alpha compositing
+        for a translucent foreground -- just against real pixels instead of
+        computed style: screenshot the card with the caption's own text
+        hidden (`opacity: 0`, layout untouched) so the sampled backdrop has
+        no glyph pixels in it, average the pixels directly behind each of
+        `h3`/`p`'s own box, then composite each line's actual rendered colour
+        (white for the title; white at the `/80` this file already ships,
+        for the description) onto that backdrop. On Cooking Class, the same
+        worst-of-six card as above:
+
+          stops as shipped (0.75 / 0.2)   title 5.14:1   description 5.69:1
+          stops darkened to  (0.82 / 0.3)  title 6.83:1   description 7.20:1
+
+        Both already clear 4.5:1 as shipped under this per-line method --
+        the 4.22:1 figure above turns out to have been pessimistic, an
+        artefact of averaging the WHOLE caption box (title, description, and
+        the bright glyph pixels themselves) into one backdrop sample, which
+        pulls the apparent backdrop toward white and understates the real
+        ratio. Darkened anyway, to (a) leave a real margin above 4.5 rather
+        than resting on a boundary a different sampling method reads as
+        already-passing, and (b) because these two rgba stops are still an
+        INLINE style, so widening them costs the same zero CSS bytes the
+        scrim itself already does -- `0.75`/`0.2` and `0.82`/`0.3` are the
+        identical string length, so this doesn't even move
+        homepage-bytes.test.tsx's pinned byte count. All six cards checked,
+        not just this one: Cooking Class stays the worst by a wide margin
+        (Retail, the next-lightest photo, sits at 7.76:1 title / 7.87:1
+        description at these same stops).
       */}
       <div
         className="absolute inset-0"
-        style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.75), rgba(0,0,0,0.2) 50%, transparent)' }}
+        style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.82), rgba(0,0,0,0.3) 50%, transparent)' }}
       />
       <div className="absolute bottom-4 left-4 right-4 text-white">
         <h3 className="font-['Montserrat'] font-semibold text-xl">{item.title}</h3>
