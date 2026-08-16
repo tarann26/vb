@@ -344,6 +344,56 @@ describe('the deploy gate excludes tests a content publish is meant to move', ()
   });
 });
 
+// ---------------------------------------------------------------------------
+// What the DEVELOPER gate must contain: the production build itself.
+//
+// Phase 3's final branch review found `npm run build` exiting 1 on a clean
+// checkout, eleven commits deep, on a branch about to deploy. The assertion
+// that failed -- src/test/bundle.post-build.test.ts's CSS byte ceiling --
+// had been present and correct the whole time. It is `it.skipIf(!existsSync(
+// 'dist/assets'))`, so with no dist/ on a developer machine it did not fail,
+// it SKIPPED, and it was the "1 skipped" in every green vitest line of the
+// phase. Eight tasks and five per-task reviews ran tsc + eslint + vitest +
+// playwright and not one ran the build.
+//
+// Both gates that a human actually invokes now end with it: `npm run gate`
+// here, and .githooks/pre-push as its own unconditional step. Asserted, not
+// left to the comment, because the whole failure was a gate that had gone
+// quiet without anyone noticing.
+// ---------------------------------------------------------------------------
+describe('the developer gate runs the production build', () => {
+  function scripts(): Record<string, string> {
+    return (JSON.parse(readFileSync('package.json', 'utf8')) as { scripts: Record<string, string> }).scripts;
+  }
+
+  it('`npm run gate` runs `npm run build`', () => {
+    expect(scripts().gate).toContain('npm run build');
+  });
+
+  // Ordering matters as much as presence. The build is the slowest step and
+  // the one whose failure is most expensive to discover, so the cheap checks
+  // run first -- but it must be IN the chain, not appended after something
+  // that would swallow its exit code.
+  it('runs the cheap checks before it, and chains on success', () => {
+    const gate = scripts().gate;
+    expect(gate.indexOf('tsc -b')).toBeLessThan(gate.indexOf('npm run build'));
+    expect(gate.indexOf('eslint')).toBeLessThan(gate.indexOf('npm run build'));
+    expect(gate).not.toMatch(/;\s*npm run build/);
+  });
+
+  // The build must run for EVERY code push, not only the ones that happen to
+  // touch the paths the browser suite watches and only on a machine with
+  // Playwright browsers installed. Before this, the hook's only path to a
+  // build was `npm run test:csp` inside that conditional block.
+  it('.githooks/pre-push runs it outside the conditional browser block', () => {
+    const hook = readFileSync('.githooks/pre-push', 'utf8');
+    const build = hook.indexOf('\nnpm run build');
+    expect(build).toBeGreaterThan(-1);
+    // `if echo "$CHANGED" | grep ...` opens the block that may be skipped.
+    expect(build).toBeLessThan(hook.indexOf('\nif echo "$CHANGED"'));
+  });
+});
+
 describe('documented cloudflare build command', () => {
   // Task 2 made public/ derivatives untracked, so a fresh clone (exactly what
   // Cloudflare builds from) has none until `npm run images` runs. `npm run

@@ -47,6 +47,24 @@ npx eslint . || fail "eslint failed"
 step "unit + integration tests"
 npm test -- --run || fail "tests failed"
 
+# The production build itself, unconditionally, and this step is here because
+# of a real escape. src/test/bundle.post-build.test.ts's CSS ceiling is
+# `it.skipIf(!existsSync('dist/assets'))`: with no dist/ on disk it does not
+# fail, it SKIPS, and a skip reads as green. Phase 3 ran tsc + eslint +
+# vitest + playwright on every one of eleven commits, never ran the build,
+# and shipped a branch whose `npm run build` exited 1 -- which is also the
+# documented Cloudflare Pages build command and CI's own test:csp step. There
+# was no path to production through it and nothing said so for eight tasks.
+#
+# It cannot ride on the browser-suite block below: that block is skipped for
+# any push that does not touch the paths it watches, and it is gated on
+# Playwright browsers being installed. Neither has anything to do with
+# whether the site can be built. `npm run build` also runs `npm run images`
+# and `tsc -b` again, which costs a few seconds on a machine that has both
+# already and buys back the entire class of failure above.
+step "production build (this is what Cloudflare Pages runs)"
+npm run build >/dev/null 2>&1 || fail "npm run build failed -- run it directly to see why. this is the deploy command."
+
 # The browser suite is ~2 minutes, so it runs only when something it can
 # actually observe has changed. Docs-only and content-only pushes skip it;
 # anything touching src/, e2e/, index.html, the headers or the build config

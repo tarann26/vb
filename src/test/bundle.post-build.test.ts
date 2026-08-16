@@ -567,6 +567,55 @@ describe('dist/assets/ keeps admin code out of the entry chunk', () => {
 // the constraint being designed for, not a coincidence to assume holds for
 // the next one: the margin is still 232 bytes, and four or five new
 // utilities would spend it.
+//
+// Phase 3, the Experiences carousel: four new utilities spent it, exactly as
+// the paragraph above predicted, and this assertion caught it. 38468 ->
+// 39032 against a 38700 ceiling -- `npm run build` exited 1, and with it the
+// documented Cloudflare Pages build command and CI's `test:csp` step. The
+// four rules were a default-cursor utility, a 75% black gradient stop, a 20%
+// black mid-stop and an 85% white text colour, all real class usages in
+// Experiences.tsx, none of them a comment leak.
+//
+// THE CEILING WAS NOT RAISED. It is still 38700, and the fix was to spend
+// nothing:
+//
+//   - The card scrim became an inline gradient. Same pixels, no rule. This
+//     is the escape hatch CollageTile.tsx has documented for this exact
+//     ceiling since Plan 6, used here for the reason it was written down:
+//     the two gradient stops were values nothing else in the codebase uses,
+//     so each one could only ever be a rule of its own. Reusing the shared
+//     class idiom (a 70% stop over a transparent midpoint, which
+//     FoodGallery.tsx, Drinks.tsx and ItemListSection.tsx already ship) was
+//     the tidier option and was measured and rejected: on the Cooking Class
+//     card, whose photo is a near-white pamphlet, it drops the caption's
+//     backdrop contrast from 4.22:1 to 3.45:1. Experiences.tsx carries that
+//     measurement. Cost: +198 bytes of HTML, recorded in
+//     src/test/homepage-bytes.test.tsx.
+//   - The caption's one-off 85% white became the 80% the rest of the site
+//     already uses. Zero bytes either way in HTML, one fewer rule in CSS.
+//   - The cursor utility was deleted outright. A <div> with no href and no
+//     handler already computes to `auto`; the utility bought one cosmetic
+//     difference over the caption text and cost a rule.
+//   - The `hero` gallery layout added in the same commit is built the same
+//     way, out of already-present utilities only.
+//
+// Measured the way this lineage requires -- a worktree checkout of `main`
+// (bad668c) built in place, never a stash. Result: 38555 bytes with content
+// hash wZZ_sICA on main, and 38555 bytes with content hash wZZ_sICA here.
+// BYTE-IDENTICAL, confirmed with `cmp`. Not merely "zero net": zero rules
+// added and zero removed by the entire branch. Margin back to 145 bytes.
+//
+// The finding worth more than the byte count, recorded here because this is
+// where the next person will look: this assertion is `skipIf`, and for the
+// whole of Phase 3 it silently skipped. `npm test -- --run` reported it as
+// the one skip in "2765 passed | 1 skipped", and eight tasks, five per-task
+// reviews and eleven commits all read that line as green. The check was
+// present, correct, and never once run, because no gate in this project
+// invoked the production build command. `npm run gate` (package.json) now
+// ends with `npm run build`, and .githooks/pre-push runs it as its own
+// unconditional step instead of only reaching it through the browser-suite
+// branch, which is skipped entirely for a docs- or content-shaped push. A
+// skipped assertion and an unfalsifiable one cost exactly the same.
 describe('dist/assets/ keeps the shared stylesheet under a byte ceiling', () => {
   it.skipIf(!REQUIRED && !existsSync(DIST_ASSETS))('the entry CSS file stays under 38700 bytes', () => {
     const cssFiles = readdirSync(DIST_ASSETS).filter((n) => /^index-.*\.css$/.test(n));

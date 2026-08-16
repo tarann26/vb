@@ -154,6 +154,36 @@ import { AppRoutes } from '../App';
 // Measured directly, both branches, via `container.querySelector('[data-
 // testid="desktop-nav-links"]').innerHTML` before and after this task's
 // content edit, to attribute the delta rather than assume it.
+//
+// Phase 3 critical fix: 51667 -> 51865 (+198 bytes). This is HTML going UP
+// so that CSS can come down, deliberately, and the trade is the whole point.
+// The Experiences carousel's card scrim was written as two Tailwind
+// gradient-stop utilities whose values appear nowhere else in this codebase;
+// each emitted a brand-new rule, and with the caption's one-off white and a
+// redundant cursor utility they added 477 bytes to a stylesheet with 145
+// bytes of headroom -- which is what made `npm run build` exit 1 on this
+// branch. The scrim is now an inline gradient producing the identical
+// pixels and no CSS rule at all (Experiences.tsx carries the contrast
+// measurement behind that choice). Stylesheet: 39032 -> 38555, byte-
+// identical to `main`. Three changes, netted, and this is arithmetic on the
+// real serialized markup rather than an assumption:
+//
+//   +228  the scrim element is 38 bytes longer -- a 95-byte <div> carrying
+//         four utility classes became a 133-byte <div> carrying one class
+//         and a style attribute (measured by serializing both) -- and all
+//         six cards carry it (6 x 38).
+//   -30   the redundant cursor utility is gone from the two coming-soon
+//         cards' class strings (2 x 15, counting the separating space).
+//   0     the caption's text colour moved from a one-off 85% white to the
+//         80% the rest of the site already uses. Same character count.
+//
+// Note what this number is and is not. It measures the rendered HTML, which
+// every visitor downloads once, uncompressed, and which gzip compresses well
+// because the same gradient string repeats six times. The stylesheet it
+// bought back is downloaded once too and is CACHED under a content hash that
+// a change would bust for every returning visitor. 198 bytes of repeated
+// HTML for 477 bytes of new CSS and a build that exits 0 is not a close
+// call, but it should be a recorded one.
 describe('homepage byte count', () => {
   it('the public homepage is unchanged', () => {
     const { container } = render(
@@ -161,6 +191,6 @@ describe('homepage byte count', () => {
         <AppRoutes />
       </MemoryRouter>,
     );
-    expect(new TextEncoder().encode(container.innerHTML).length).toBe(51667);
+    expect(new TextEncoder().encode(container.innerHTML).length).toBe(51865);
   });
 });
