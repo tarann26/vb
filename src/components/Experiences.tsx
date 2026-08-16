@@ -125,8 +125,10 @@ function ExperienceCardBody({ item }: { item: Experience }) {
         className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
       />
       {/*
-        AN INLINE GRADIENT, NOT TWO UTILITY CLASSES, AND THE PIXELS ARE
-        UNCHANGED. This scrim used to be written as a pair of Tailwind
+        AN INLINE GRADIENT, NOT TWO UTILITY CLASSES. (The pixels are NOT
+        unchanged -- the stops were darkened later in this same block; see
+        MINOR 3 below for why and by how much.) This scrim used to be written
+        as a pair of Tailwind
         gradient-stop utilities whose two values -- black at 75% at the
         bottom, black at 20% at the midpoint -- existed nowhere else in this
         codebase. Each emitted a brand-new rule, and together with the

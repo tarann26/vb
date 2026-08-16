@@ -94,12 +94,14 @@ async function measure(section: Locator, images: Locator): Promise<Measured[]> {
         visibleWidth,
         visibleHeight,
         // The defect that shipped, read from the browser rather than from
-        // the markup: the logo strip's wrapper carries an unconditional
-        // `grayscale`, which computes to `grayscale(1)` here. A photograph
-        // must compute to `none`. `filter` is inherited-through-compositing
-        // from the wrapper, so reading it on the <img> itself is what a
-        // visitor's eye actually sees.
-        filter: getComputedStyle(el).filter,
+        // the markup: the logo strip's wrapper div carries an unconditional
+        // `grayscale`, which computes to `grayscale(1)` there. A photograph's
+        // wrapper must compute to `none`. CSS `filter` is NOT an inherited
+        // property, and it is the wrapper `div` that carries the class, not
+        // the `<img>` -- reading it off the image itself would report `none`
+        // even while the wrapper ships grayscale, so this reads the nearest
+        // wrapper `div` instead.
+        filter: getComputedStyle(el.closest('div') ?? el).filter,
       };
     });
   }, await section.elementHandle());
