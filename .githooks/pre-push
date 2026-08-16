@@ -47,6 +47,26 @@ npx eslint . || fail "eslint failed"
 step "unit + integration tests"
 npm test -- --run || fail "tests failed"
 
+# The SAME suite again, under the exact command Cloudflare Pages runs, and
+# this step is here because of a real escape too.
+#
+# `npm run test:deploy` is `vitest run` minus two files. Dropping two files
+# does not only drop their assertions -- it repacks every REMAINING file
+# across Vitest's workers, so the same test lands on a differently-loaded
+# core. src/admin/__tests__/AdminApp.test.tsx's "Add a coming-soon item" case
+# passed `npm test` on every run and TIMED OUT at 5s under `test:deploy`,
+# deterministically, on the machine that pushed it. `npm test -- --run` was
+# green, the push was allowed, and Cloudflare refused the build.
+#
+# So this is not a duplicate of the step above and must not be collapsed into
+# it. `npm test` is the wider net (it alone runs homepage-bytes and the image
+# derivatives, deliberately excluded from the deploy gate -- see
+# src/test/hosting.test.ts for why). `test:deploy` is the FAITHFUL one: it is
+# literally what decides whether the site can deploy. Both, or neither is
+# enough.
+step "the same suite under the deploy's own command (different worker packing)"
+npm run test:deploy || fail "test:deploy failed -- this is what Cloudflare runs. npm test passing does not cover it."
+
 # The production build itself, unconditionally, and this step is here because
 # of a real escape. src/test/bundle.post-build.test.ts's CSS ceiling is
 # `it.skipIf(!existsSync('dist/assets'))`: with no dist/ on disk it does not

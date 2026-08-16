@@ -79,7 +79,8 @@ Each dish in `dishes.json` also carries a `tags` field (e.g. `"vegan"`, `"gluten
 ## Tests
 
 - `npm test` runs the full test suite — checks that every image path used in `src/content/`, in a component, in the stylesheet, or in `index.html` resolves to a real file, that required fields aren't left blank, and more (see "Where the content lives" above).
-- `npm run test:deploy` runs the same suite and is what the hosting platform runs before every deploy, as part of the build command.
+- `npm run test:deploy` is what the hosting platform runs before every deploy, as part of the build command. It runs the same suite minus two files, and that difference is not cosmetic: dropping two files also changes how Vitest spreads the rest across workers, so a slow test can pass under `npm test` and time out here. One did, and it refused a deploy. Run both.
+- `npm run gate` runs everything a push needs: images, typecheck, lint, `npm test`, `npm run test:deploy`, and the production build. `.githooks/pre-push` runs the same list, plus the browser suite when a push touches anything it can observe.
 
 ## Components kept but not shown on the site
 

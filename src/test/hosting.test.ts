@@ -394,6 +394,100 @@ describe('the developer gate runs the production build', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// What the DEVELOPER gate must contain: EVERY command the deploy runs.
+//
+// The block above fixed one instance of this (the build). This block fixes
+// the class, because a second instance shipped anyway.
+//
+// The local gate ran `npm test -- --run`. Cloudflare runs `npm run
+// test:deploy`. Those are two different commands: `test:deploy` is the same
+// `vitest run` minus two files, and dropping two files repacks every
+// REMAINING file across Vitest's workers, so the same test runs against
+// different concurrency. src/admin/__tests__/AdminApp.test.tsx's "Add a
+// coming-soon item" case passed `npm test` on every run and timed out at 5s
+// under `test:deploy`, deterministically. The gate was green, the push was
+// allowed, and the production build was refused. Nothing a developer could
+// type locally would have shown it, because nothing local ran that command.
+//
+// Rather than pin `test:deploy` by name and wait for the third instance,
+// this reads the documented Cloudflare build command out of
+// docs/cloudflare-cutover.md -- the same source the ordering tests below
+// already trust -- splits it on `&&`, and requires BOTH human-invoked gates
+// to run every piece of it. A future step added to the deploy command turns
+// this red until the local gates catch up, which is the property that was
+// missing both times.
+//
+// What this deliberately does NOT assert: that the local gate runs ONLY
+// those commands. `npm test -- --run` is a superset of `test:deploy` (it
+// alone runs homepage-bytes and the image derivatives, excluded from the
+// deploy gate for the reason the block further up records) and dropping it
+// would be a real loss of coverage. Superset good, subset fatal.
+// ---------------------------------------------------------------------------
+describe('the developer gate runs every command the deploy runs', () => {
+  // The three commands Cloudflare's build is documented to run, in order.
+  function deployCommands(): string[] {
+    const doc = readFileSync('docs/cloudflare-cutover.md', 'utf8');
+    const match = doc.match(/\*\*Build command:\*\*\s*`([^`]+)`/);
+    expect(match).not.toBeNull();
+    return match![1].split('&&').map((part) => part.trim());
+  }
+
+  function gateScript(): string {
+    return (JSON.parse(readFileSync('package.json', 'utf8')) as { scripts: Record<string, string> }).scripts.gate;
+  }
+
+  // Guards the guard: if the regex above ever stopped matching, or the
+  // documented command lost its steps, every assertion below would pass
+  // vacuously against an empty list.
+  it('finds the real, multi-step deploy command to compare against', () => {
+    const commands = deployCommands();
+    expect(commands.length).toBeGreaterThanOrEqual(3);
+    expect(commands).toContain('npm run test:deploy');
+  });
+
+  it('`npm run gate` runs every one of them', () => {
+    const gate = gateScript();
+    for (const command of deployCommands()) {
+      expect(gate).toContain(command);
+    }
+  });
+
+  // Chained with `&&`, not `;`: a `;` would run the next step regardless and
+  // hand back only the LAST exit code, which is a gate that cannot fail --
+  // the same defect as not running the command at all.
+  it('chains them on success, cheap checks first', () => {
+    const gate = gateScript();
+    expect(gate).not.toMatch(/;/);
+    expect(gate.indexOf('npx tsc -b')).toBeLessThan(gate.indexOf('npm run test:deploy'));
+    expect(gate.indexOf('npm run test:deploy')).toBeLessThan(gate.indexOf('npm run build'));
+  });
+
+  // The hook is the gate that actually runs unattended, so it carries the
+  // same requirement -- and, as with the build, outside the conditional
+  // browser block, which is skipped for any push that does not touch the
+  // paths it watches.
+  it('.githooks/pre-push runs every one of them, outside the conditional browser block', () => {
+    const hook = readFileSync('.githooks/pre-push', 'utf8');
+    const conditional = hook.indexOf('\nif echo "$CHANGED"');
+    expect(conditional).toBeGreaterThan(-1);
+    for (const command of deployCommands()) {
+      // Anchored to the start of a line so a mention inside one of this
+      // hook's own long comments cannot satisfy it.
+      const at = hook.indexOf(`\n${command}`);
+      expect(at, `pre-push never runs "${command}"`).toBeGreaterThan(-1);
+      expect(at, `pre-push runs "${command}" only inside the skippable block`).toBeLessThan(conditional);
+    }
+  });
+
+  // And it must abort on failure rather than logging and carrying on -- the
+  // hook's own convention for every other step.
+  it('.githooks/pre-push aborts when the deploy suite fails', () => {
+    const hook = readFileSync('.githooks/pre-push', 'utf8');
+    expect(hook).toMatch(/\nnpm run test:deploy \|\| fail /);
+  });
+});
+
 describe('documented cloudflare build command', () => {
   // Task 2 made public/ derivatives untracked, so a fresh clone (exactly what
   // Cloudflare builds from) has none until `npm run images` runs. `npm run
