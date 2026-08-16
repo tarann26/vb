@@ -493,11 +493,12 @@ describe('nav.pagesLabel renders with no edit affordance, even under a real edit
     },
   ];
 
-  // `pages` defaults to the real, committed list -- the second test below
-  // (routes over every real page) relies on that default unchanged. Only the
-  // first test, which needs the disclosure actually on screen, passes the
-  // fixture explicitly.
-  function renderEditing(route: string, pages: Page[] = defaultBundle.pages) {
+  // `pages` is a required argument, not a default falling back to the real,
+  // committed list: both tests below need the disclosure actually on
+  // screen to make their assertion non-vacuous (see this describe block's
+  // own header comment and the round-1 review fix noted on the second
+  // test), and the real, committed `pages.json` no longer produces one.
+  function renderEditing(route: string, pages: Page[]) {
     const bundle: ContentBundle = {
       ...defaultBundle,
       pages,
@@ -533,10 +534,26 @@ describe('nav.pagesLabel renders with no edit affordance, even under a real edit
     expect(disclosure.closest('[contenteditable="true"]')).toBeNull();
   });
 
+  // Round-1 review fix (Phase 3, Task 5): this used to iterate the real
+  // `defaultBundle.pages` slugs with `renderEditing`'s default (real) pages,
+  // which was fine while pages.json carried real `inNav` pages -- Navbar
+  // only ever renders on '/' (HomePage) or a resolved '/:slug' (PageRoute),
+  // so the four real page routes were where this assertion actually met a
+  // live disclosure. Once Task 5 set every real page's `inNav` to `false`,
+  // those same four routes stopped rendering a disclosure at all (`grouped`
+  // is false), so the assertion kept passing but had nothing left to check
+  // there -- confirmed directly: restoring
+  // `content.renderText('nav.pagesLabel', copy.nav.pagesLabel)` in
+  // NavBar.tsx left this test GREEN. '/blogs' and the unmatched route render
+  // no Navbar at all either way and stay in the list unchanged; what moved
+  // is the page routes, now the fixture's own two slugs with the fixture's
+  // own pages passed to `renderEditing`, so `PageRoute` actually resolves
+  // them to a page whose Navbar has a live disclosure to check, the same way
+  // the sibling test above already does.
   it('no route renders an edit affordance for it anywhere on the page', () => {
-    ['/', '/blogs', '/this-route-matches-nothing', ...defaultBundle.pages.filter((p) => p.enabled).map((p) => `/${p.slug}`)].forEach(
+    ['/', '/blogs', '/this-route-matches-nothing', ...fixturePages.map((p) => `/${p.slug}`)].forEach(
       (route) => {
-        const { container } = renderEditing(route);
+        const { container } = renderEditing(route, fixturePages);
         expect(container.querySelector('[data-editable-path="nav.pagesLabel"]')).toBeNull();
       },
     );
