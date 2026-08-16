@@ -185,11 +185,17 @@ import { AppRoutes } from '../App';
 // HTML for 477 bytes of new CSS and a build that exits 0 is not a close
 // call, but it should be a recorded one.
 //
-// Plan 4, Task 2: 51865 -> 52355 (+490 bytes). The About section's chef
-// byline -- a portrait `<img>` plus her name and role -- is new markup below
-// the six paragraphs, built entirely from utility classes already emitted
-// in the stylesheet (see OurStory.tsx's comment on the byline element), so
-// this delta is pure HTML with no accompanying CSS change: `dist/assets/
+// Plan 4, Task 2: 51865 -> 52355 (+490 bytes). Two sources, not one, netted:
+//
+//   +457  the About section's chef byline -- a portrait `<img>` plus her
+//         name and role -- is new markup below the six paragraphs, built
+//         entirely from utility classes already emitted in the stylesheet
+//         (see OurStory.tsx's comment on the byline element).
+//    +33  the carousel div beside it picked up `data-testid="our-story-
+//         carousel"` in the same commit, which renders into the DOM like
+//         any other attribute.
+//
+// Both are pure HTML with no accompanying CSS change: `dist/assets/
 // index-*.css` stays 38555 bytes, byte-identical to `main`.
 describe('homepage byte count', () => {
   it('the public homepage is unchanged', () => {
