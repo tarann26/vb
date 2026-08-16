@@ -2,22 +2,19 @@
   {
     "id": "award-1",
     "title": "Placeholder Award Title",
-    "awardingBody": "Placeholder Awarding Body",
-    "year": 2026,
-    "image": null
+    "awardedBy": "Placeholder Awarding Body",
+    "year": "2026"
   },
   {
     "id": "award-2",
     "title": "Placeholder Award Title",
-    "awardingBody": "Placeholder Awarding Body",
-    "year": 2025,
-    "image": null
+    "awardedBy": "Placeholder Awarding Body",
+    "year": "2025"
   },
   {
     "id": "award-3",
     "title": "Placeholder Award Title",
-    "awardingBody": "Placeholder Awarding Body",
-    "year": 2024,
-    "image": null
+    "awardedBy": "Placeholder Awarding Body",
+    "year": "2024"
   }
 ]

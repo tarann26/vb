@@ -26,6 +26,11 @@
   },
   {
     "kind": "bespoke",
+    "id": "awards",
+    "enabled": true
+  },
+  {
+    "kind": "bespoke",
     "id": "ourStory",
     "enabled": true
   },

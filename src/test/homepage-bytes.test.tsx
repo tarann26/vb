@@ -113,6 +113,16 @@ import { AppRoutes } from '../App';
 // The trade is deliberate and is bought back many times over in CSS -- the
 // same change removes 36 rules from the shipped stylesheet (adding one), a
 // net 1347 fewer CSS bytes, which every visitor downloads once per deploy.
+//
+// Phase 2, Task 9: 46028 -> 46443 (+415 bytes). The Awards section is new --
+// its entries are fetched from D1 at runtime (Awards.tsx), so at the first
+// paint this test renders in jsdom the fetch has not resolved yet (in fact
+// never resolves in this environment at all -- jsdom cannot parse a relative
+// URL, so the request rejects and Awards.tsx's own catch swallows it, per
+// that file's own comment). What this count picks up is only the section's
+// CHROME: `<section id="awards">`, the heading, the intro paragraph, and the
+// empty grid `<div>` the (zero-length) awards list maps into -- no cards,
+// because there is nothing loaded yet to render one from.
 describe('homepage byte count', () => {
   it('the public homepage is unchanged', () => {
     const { container } = render(
@@ -120,6 +130,6 @@ describe('homepage byte count', () => {
         <AppRoutes />
       </MemoryRouter>,
     );
-    expect(new TextEncoder().encode(container.innerHTML).length).toBe(46028);
+    expect(new TextEncoder().encode(container.innerHTML).length).toBe(46443);
   });
 });

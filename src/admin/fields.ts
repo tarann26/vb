@@ -299,6 +299,8 @@ interface CopyLeafShape {
   'press.intro': string;
   'press.readArticle': string;
   'press.viewAll': string;
+  'awards.heading': string;
+  'awards.intro': string;
   'visit.heading': string;
   'visit.navigateButton': string;
   'visit.mapTitle': string;
@@ -347,6 +349,13 @@ export const COPY_FIELDS: FieldsOf<CopyLeafShape> = {
     help: 'This one button label is used on both the homepage teaser and the /blogs page -- editing it changes both.',
   },
   'press.viewAll': { label: 'View-all button', kind: 'text' },
+  // Chrome only -- the Awards entries themselves are D1-backed and out of
+  // scope for /edit's inline editing this phase (Copy['awards']'s own
+  // comment, src/content/types.ts); heading and intro are plain copy.json
+  // text, so they get the ordinary field treatment every other section's
+  // chrome does.
+  'awards.heading': { label: 'Awards heading', kind: 'text' },
+  'awards.intro': { label: 'Awards intro', kind: 'textarea' },
   'visit.heading': { label: 'Visit heading', kind: 'text' },
   'visit.navigateButton': { label: 'Navigate button', kind: 'text' },
   'visit.mapTitle': { label: 'Map title', kind: 'text' },

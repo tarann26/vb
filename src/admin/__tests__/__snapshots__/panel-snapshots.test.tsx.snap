@@ -3350,6 +3350,56 @@ exports[`the ten panels, as they render today > What shows on the homepage (sect
               <span
                 class="font-['Montserrat'] text-base text-[#222]"
               >
+                Awards
+              </span>
+              <span
+                class="ml-2 text-xs text-gray-500"
+              >
+                #awards
+              </span>
+            </div>
+            <div
+              class="flex gap-2"
+            >
+              <button
+                aria-label="Move Awards up"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
+                type="button"
+              >
+                Up
+              </button>
+              <button
+                aria-label="Move Awards down"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
+                type="button"
+              >
+                Down
+              </button>
+            </div>
+          </div>
+          <label
+            class="flex items-center gap-2 font-['Montserrat'] text-sm text-[#222]"
+            for="section-enabled-awards"
+          >
+            <input
+              checked=""
+              class="h-5 w-5 rounded border-gray-300"
+              id="section-enabled-awards"
+              type="checkbox"
+            />
+            Shown on homepage
+          </label>
+        </li>
+        <li
+          class="mb-6 rounded border border-gray-200 p-4"
+        >
+          <div
+            class="mb-3 flex items-center justify-between gap-2"
+          >
+            <div>
+              <span
+                class="font-['Montserrat'] text-base text-[#222]"
+              >
                 Visit Us
               </span>
               <span
@@ -3786,6 +3836,51 @@ exports[`the ten panels, as they render today > Words on the site (copy) 1`] = `
             type="text"
             value="View All Stories"
           />
+        </div>
+      </div>
+    </div>
+    <div
+      class="mb-6"
+    >
+      <h3
+        class="mb-3 font-['Montserrat'] text-base text-[#222]"
+      >
+        awards
+      </h3>
+      <div>
+        <div
+          class="mb-4"
+        >
+          <label
+            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
+            for="copy-awards.heading"
+          >
+            Awards heading
+          </label>
+          <input
+            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+            id="copy-awards.heading"
+            type="text"
+            value="Awards"
+          />
+        </div>
+      </div>
+      <div>
+        <div
+          class="mb-4"
+        >
+          <label
+            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
+            for="copy-awards.intro"
+          >
+            Awards intro
+          </label>
+          <textarea
+            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+            id="copy-awards.intro"
+          >
+            Recognition the kitchen has picked up along the way.
+          </textarea>
         </div>
       </div>
     </div>

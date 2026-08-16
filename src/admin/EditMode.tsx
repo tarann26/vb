@@ -24,6 +24,7 @@ import PlaceGallery from '../components/PlaceGallery';
 import FoodGallery from '../components/FoodGallery';
 import Drinks from '../components/Drinks';
 import BlogTeaser from '../components/BlogTeaser';
+import Awards from '../components/Awards';
 import VisitUs from '../components/VisitUs';
 import Footer from '../components/Footer';
 import SeoHead from '../components/SeoHead';
@@ -85,6 +86,15 @@ import type {
   TemplateContent,
 } from '../content/types';
 
+// Task 9: `awards` renders the same read-only <Awards /> the public
+// homepage does -- inline editing of D1-backed content on /edit is
+// deliberately out of scope for this phase; the Manage panel a later task
+// adds is where Awards is actually edited. Recorded here rather than left
+// to be discovered. Kept OUTSIDE the object literal below, not as an inline
+// comment on its own entry: EditMode.test.tsx's own
+// "SECTION_COMPONENTS never diverges from App.tsx's" check compares the two
+// files' object-literal bodies verbatim, so a comment inside the braces
+// would itself be a divergence from App.tsx's copy.
 const SECTION_COMPONENTS: Record<SectionId, () => React.ReactNode> = {
   hero: () => <Hero />,
   ourStory: () => <OurStory />,
@@ -92,6 +102,7 @@ const SECTION_COMPONENTS: Record<SectionId, () => React.ReactNode> = {
   food: () => <FoodGallery />,
   drinks: () => <Drinks />,
   press: () => <BlogTeaser />,
+  awards: () => <Awards />,
   visit: () => <VisitUs />,
 };
 
@@ -102,6 +113,7 @@ const SECTION_LABELS: Record<SectionId, string> = {
   food: 'Menu',
   drinks: 'Drinks',
   press: 'Press',
+  awards: 'Awards',
   visit: 'Visit',
 };
 
@@ -223,6 +235,7 @@ const EMPTY_COPY: Copy = {
   food: { heading: '' },
   drinks: { heading: '', intro: '' },
   press: { heading: '', intro: '', readArticle: '', viewAll: '' },
+  awards: { heading: '', intro: '' },
   visit: { heading: '', navigateButton: '', mapTitle: '' },
   footer: {
     hoursHeading: '',

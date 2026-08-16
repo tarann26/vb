@@ -49,8 +49,16 @@ interface SnapshotEntry {
 }
 
 const SNAPSHOT: Record<string, SnapshotEntry> = {
+  // Task 9 review: the field names below used to be `awardingBody` and a
+  // numeric `year`, matching nothing -- Task 5 hand-wrote this placeholder
+  // before the Award shape (src/content/types.ts) existed at all. Now that
+  // Task 9 has designed and validated that shape (`awardedBy`, a four-digit
+  // `year` STRING, no `image` at all rather than an always-null one -- Award
+  // ['image'] is optional, never null), this placeholder is rewritten to
+  // match it exactly, the same way src/test/awards-seed.json is -- see this
+  // file's own header comment for why the two must stay identical.
   'awards.json': {
-    body: '[{"id":"award-1","title":"Placeholder Award Title","awardingBody":"Placeholder Awarding Body","year":2026,"image":null},{"id":"award-2","title":"Placeholder Award Title","awardingBody":"Placeholder Awarding Body","year":2025,"image":null},{"id":"award-3","title":"Placeholder Award Title","awardingBody":"Placeholder Awarding Body","year":2024,"image":null}]',
+    body: '[{"id":"award-1","title":"Placeholder Award Title","awardedBy":"Placeholder Awarding Body","year":"2026"},{"id":"award-2","title":"Placeholder Award Title","awardedBy":"Placeholder Awarding Body","year":"2025"},{"id":"award-3","title":"Placeholder Award Title","awardedBy":"Placeholder Awarding Body","year":"2024"}]',
     version: 1,
   },
 };

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { validateContent } from '../validate';
 import { MAX_COLLAGE_PHOTOS, MIN_SPLIT_CHILDREN, normalizeSizes } from '../collage';
 import type { CollageNode } from '../types';
-import type { Dish, Drink, Article, StoryContent, Copy, Section, SiteContent, Galleries, MenuFile } from '../types';
+import type { Dish, Drink, Article, StoryContent, Copy, Section, SiteContent, Galleries, MenuFile, Award } from '../types';
 
 // Every fixture in this file is hand-built against the real types, not read
 // from the repo's own content/*.json. A negative fixture built by cloning
@@ -88,6 +88,7 @@ const validCopy: Copy = {
     readArticle: 'Read Article',
     viewAll: 'View All Stories',
   },
+  awards: { heading: 'Awards', intro: 'Recognition the kitchen has picked up along the way.' },
   visit: { heading: 'Visit Us', navigateButton: 'Navigate', mapTitle: 'Via Bianca Location' },
   footer: {
     hoursHeading: 'Opening Hours',
@@ -116,6 +117,7 @@ const validSections: Section[] = [
   { kind: 'bespoke', id: 'food', enabled: true },
   { kind: 'bespoke', id: 'drinks', enabled: true },
   { kind: 'bespoke', id: 'press', enabled: true },
+  { kind: 'bespoke', id: 'awards', enabled: true },
   { kind: 'bespoke', id: 'visit', enabled: true },
 ];
 
@@ -146,6 +148,18 @@ const validGalleries: Galleries = {
 };
 
 const validMenus: MenuFile[] = [{ id: 'food', label: 'Food Menu', file: '/menus/food-menu.pdf' }];
+
+// Phase 2, Task 9: Award requires `image` to be either a real, on-site path
+// or absent entirely -- never `null` (unlike Drink['image']) -- so this
+// fixture deliberately omits the key rather than setting it to `null`, the
+// same way `validDish` above omits nothing optional because Dish has
+// nothing optional. See Award's own comment (src/content/types.ts).
+const validAward: Award = {
+  id: 'test-award',
+  title: 'Test Award',
+  awardedBy: 'Test Awarding Body',
+  year: '2025',
+};
 
 const messages = (problems: { message: string }[]) => problems.map((p) => p.message).join(' ');
 
@@ -219,6 +233,18 @@ describe('validateContent: accepts content that is fine', () => {
 
   it('accepts articles already sorted newest first', () => {
     expect(validateContent('press.json', [newerArticle, olderArticle])).toEqual([]);
+  });
+
+  it('accepts a valid award', () => {
+    expect(validateContent('awards.json', [validAward])).toEqual([]);
+  });
+
+  it('accepts an empty list of awards -- a brand new restaurant genuinely has none yet', () => {
+    expect(validateContent('awards.json', [])).toEqual([]);
+  });
+
+  it('accepts a valid award with a badge image', () => {
+    expect(validateContent('awards.json', [{ ...validAward, image: '/awards/badge.webp' }])).toEqual([]);
   });
 
   it('accepts valid copy', () => {
@@ -394,7 +420,7 @@ describe('validateContent: structural rules on the remaining files', () => {
       },
     ];
     const problems = validateContent('sections.json', bad);
-    expect(problems.some((p) => p.field === '[7].id' && /can only use letters a-z, numbers and hyphens/.test(p.message))).toBe(
+    expect(problems.some((p) => p.field === '[8].id' && /can only use letters a-z, numbers and hyphens/.test(p.message))).toBe(
       true,
     );
   });
@@ -424,6 +450,87 @@ describe('validateContent: structural rules on the remaining files', () => {
     const bad = { ...validCopy, atmosphere: { heading: '   ' } };
     const problems = validateContent('copy.json', bad);
     expect(messages(problems)).toMatch(/atmosphere/i);
+  });
+});
+
+// Phase 2, Task 9: the Awards pilot's real validator, replacing the no-op
+// Task 5 shipped. Each test below is written to be mutation-proof -- a
+// deleted rule turns its own assertion red, not merely "some problem or
+// other" -- following validateDish/validateArticle's own idiom in this
+// file, and covers, at minimum, every shape the task brief itself names: a
+// missing title, a non-string awarding body, an implausible year, and a
+// badge present but not a safe on-site path.
+describe('validateContent: awards.json (Phase 2, Task 9)', () => {
+  it('rejects an award with no id', () => {
+    const problems = validateContent('awards.json', [{ ...validAward, id: '' }]);
+    expect(problems.some((p) => p.field === '[0].id')).toBe(true);
+  });
+
+  it('rejects two awards sharing the same id', () => {
+    const problems = validateContent('awards.json', [validAward, { ...validAward, title: 'A Different Award' }]);
+    expect(problems.some((p) => p.field === '[1].id' && /already used by another award/.test(p.message))).toBe(true);
+  });
+
+  it('rejects an award with a missing title, naming the field', () => {
+    const problems = validateContent('awards.json', [{ ...validAward, title: '' }]);
+    expect(problems.some((p) => p.field === '[0].title')).toBe(true);
+  });
+
+  it('rejects an award with a blank awarding body, naming the field', () => {
+    const problems = validateContent('awards.json', [{ ...validAward, awardedBy: '' }]);
+    expect(problems.some((p) => p.field === '[0].awardedBy')).toBe(true);
+  });
+
+  // The brief's own case: a non-string awarding body (a JSON authoring
+  // mistake, e.g. a stray number) is refused the same way a blank one is --
+  // `isBlank`'s own `typeof value !== 'string'` branch, not a separate check.
+  it('rejects an award with a non-string awarding body', () => {
+    const problems = validateContent('awards.json', [{ ...validAward, awardedBy: 42 }]);
+    expect(problems.some((p) => p.field === '[0].awardedBy')).toBe(true);
+  });
+
+  // The brief's own mutation-proof case: names the `year` field specifically,
+  // not just "some problem". See this task's own report for the mutation
+  // that was run against this exact assertion (deleting the year rule) and
+  // confirmed red before being reverted.
+  it('rejects an award with a year that is not a plausible four-digit number, naming the field', () => {
+    const problems = validateContent('awards.json', [{ id: 'a', title: 'x', awardedBy: 'y', year: 'nineteen' }]);
+    expect(problems.some((p) => p.field === '[0].year')).toBe(true);
+  });
+
+  it('rejects an award with a numeric year (JSON authoring mistake, not a string)', () => {
+    const problems = validateContent('awards.json', [{ ...validAward, year: 2025 }]);
+    expect(problems.some((p) => p.field === '[0].year')).toBe(true);
+  });
+
+  it('rejects an award with a year that is the wrong number of digits', () => {
+    const problems = validateContent('awards.json', [{ ...validAward, year: '25' }]);
+    expect(problems.some((p) => p.field === '[0].year')).toBe(true);
+  });
+
+  // The brief's own case: a badge present but not a valid asset path.
+  it('rejects an award whose badge image is not a safe, on-site path', () => {
+    const problems = validateContent('awards.json', [{ ...validAward, image: 'javascript:alert(1)' }]);
+    expect(problems.some((p) => p.field === '[0].image')).toBe(true);
+  });
+
+  it('rejects an award whose badge image is present but blank', () => {
+    const problems = validateContent('awards.json', [{ ...validAward, image: '' }]);
+    expect(problems.some((p) => p.field === '[0].image')).toBe(true);
+  });
+
+  it('accepts an absent badge image -- Award["image"] is optional, not nullable', () => {
+    expect(validateContent('awards.json', [validAward])).toEqual([]);
+  });
+
+  it('rejects an unknown key, the same unknownKeys sweep every other record type gets', () => {
+    const problems = validateContent('awards.json', [{ ...validAward, publishAt: '2099-01-01' }]);
+    expect(problems.some((p) => p.field === '[0].publishAt')).toBe(true);
+  });
+
+  it('rejects awards.json that is not an array', () => {
+    const problems = validateContent('awards.json', { not: 'an array' });
+    expect(problems.length).toBeGreaterThan(0);
   });
 });
 
@@ -825,7 +932,7 @@ describe('validateContent: a key the type does not have is refused at the write 
       publishAt: '2099-01-01',
     };
     const homepage = validateContent('sections.json', [...validSections, templateSection]);
-    expect(homepage.some((p) => p.field === '[7].publishAt')).toBe(true);
+    expect(homepage.some((p) => p.field === '[8].publishAt')).toBe(true);
 
     const page = validateContent('pages.json', [
       {
@@ -873,6 +980,7 @@ describe('validateContent: a key the type does not have is refused at the write 
     expect(validateContent('drinks.json', [validDrink])).toEqual([]);
     expect(validateContent('press.json', [newerArticle, olderArticle])).toEqual([]);
     expect(validateContent('sections.json', validSections)).toEqual([]);
+    expect(validateContent('awards.json', [validAward])).toEqual([]);
   });
 
   // `Object.prototype`'s own keys are not "known" -- guards.ts's
@@ -921,6 +1029,7 @@ describe('validateContent: a value that reaches an href or src cannot carry a sc
         }),
     },
     { name: 'menus[].file', run: (v) => validateContent('menus.json', [{ ...validMenus[0], file: v }]) },
+    { name: 'awards[].image', run: (v) => validateContent('awards.json', [{ ...validAward, image: v }]) },
   ];
 
   for (const { name, run } of ASSET_FIELDS) {

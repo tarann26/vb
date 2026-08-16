@@ -312,11 +312,11 @@ describe("AdminApp: no duplicate DOM ids across sibling sections -- a label clic
 });
 
 describe('AdminApp: the real "Homepage sections" screen', () => {
-  it('fetches sections.json and renders all seven, in the order the file gave them', async () => {
+  it('fetches sections.json and renders all eight, in the order the file gave them', async () => {
     stubFetch();
     renderDashboard('/edit/manage/pages');
     const section = await sectionByHeading('What shows on the homepage');
-    expect(within(section).getAllByText(/^(Hero|About|Atmosfera|Menu|Drinks|Stories|Visit Us)$/)).toHaveLength(7);
+    expect(within(section).getAllByText(/^(Hero|About|Atmosfera|Menu|Drinks|Stories|Awards|Visit Us)$/)).toHaveLength(8);
   });
 
   it('reordering the real screen calls through to a genuine onReorder, visible in the rendered order', async () => {
@@ -328,7 +328,7 @@ describe('AdminApp: the real "Homepage sections" screen', () => {
 
     await user.click(within(section).getByRole('button', { name: 'Move Hero down' }));
 
-    const HUMAN_NAMES = ['Hero', 'About', 'Atmosfera', 'Menu', 'Drinks', 'Stories', 'Visit Us'];
+    const HUMAN_NAMES = ['Hero', 'About', 'Atmosfera', 'Menu', 'Drinks', 'Stories', 'Awards', 'Visit Us'];
     const namesInOrder = within(section)
       .getAllByRole('listitem')
       .map((li) => HUMAN_NAMES.find((name) => li.textContent?.startsWith(name)));
@@ -352,7 +352,7 @@ describe('AdminApp: the real "Homepage sections" screen', () => {
   // genuine AdminApp render, not TemplateSectionList.test.tsx's own
   // isolated harness. Proves the wiring itself (fetch, registry, commit,
   // re-render) works end to end, which an isolated component test cannot.
-  it('"Add a text section" on the real, mounted screen adds a template section beneath the seven bespoke ones', async () => {
+  it('"Add a text section" on the real, mounted screen adds a template section beneath the eight bespoke ones', async () => {
     stubFetch();
     const user = userEvent.setup();
     renderDashboard('/edit/manage/pages');
@@ -362,7 +362,7 @@ describe('AdminApp: the real "Homepage sections" screen', () => {
     await user.click(within(section).getByRole('button', { name: 'Add a text section' }));
 
     // A fresh template row appears, with its own "Edit" control -- absent
-    // before the click (only the seven bespoke rows -- none of which show
+    // before the click (only the eight bespoke rows -- none of which show
     // "Edit" -- existed then).
     expect(within(section).getAllByRole('button', { name: 'Edit' })).toHaveLength(1);
   });

@@ -186,8 +186,31 @@ export interface MenuFile {
 // 'atmosphere' vs '#gallery', 'press' vs '#blogs') -- both the SectionId and
 // the anchor are independently load-bearing (the anchor is a live, possibly
 // bookmarked URL) and neither may be renamed to line up with the other.
+//
+// Grows to eight here, Phase 2 Task 9 -- the first time since this union was
+// written. 'awards' is its own kind of member: every other SectionId names a
+// component whose CONTENT lives in a JSON file on GitHub; awards' entries
+// live in D1 instead (see the Award interface below), read at runtime rather
+// than compiled in. The id itself is still just a string in this union --
+// SECTION_ID_SET (guards.ts), SECTION_COMPONENTS (App.tsx, EditMode.tsx) and
+// every other `Record<SectionId, …>` literal had to grow a matching entry
+// before `tsc -b` went green again, which is the completeness guarantee
+// working, not incidental churn.
 export type SectionId =
-  | 'hero' | 'ourStory' | 'atmosphere' | 'food' | 'drinks' | 'press' | 'visit';
+  | 'hero' | 'ourStory' | 'atmosphere' | 'food' | 'drinks' | 'press' | 'awards' | 'visit';
+
+// Phase 2's pilot, pulled forward from Phase 4. Built on D1 from the start
+// rather than as a JSON file that would need migrating two months later --
+// the spec's own words. `image` is the optional badge; everything else is
+// required, because an award with no year or no awarding body is not an
+// award, it is a claim.
+export interface Award {
+  id: string;
+  title: string;
+  awardedBy: string;
+  year: string;
+  image?: string;
+}
 
 // Plan 7, Task 1: the homepage's section list stops being seven fixed ids
 // and becomes a list of two kinds -- bespoke sections rendered by name (the
@@ -198,8 +221,8 @@ export type SectionId =
 // closure guarantee `SectionId` already gets from `SECTION_ID_SET`
 // (guards.ts).
 //
-// `SectionId` itself stays closed at seven, on purpose (see this file's own
-// comment on it, above) -- nothing she does can add an eighth. A template
+// `SectionId` itself stays closed at eight, on purpose (see this file's own
+// comment on it, above) -- nothing she does can add a ninth. A template
 // section's `id`, by contrast, is a free string SHE creates, so it carries
 // no such closure and needs its own uniqueness rule instead (assertSections/
 // assertPages in guards.ts: a template id must be unique among every
@@ -381,6 +404,13 @@ export interface Copy {
   food: { heading: string };
   drinks: { heading: string; intro: string };
   press: { heading: string; intro: string; readArticle: string; viewAll: string };
+  // Chrome only -- the Awards entries themselves live in D1 (see the Award
+  // interface, above), not here. Kept in copy.json, on GitHub, deliberately:
+  // it is what lets this section's heading and intro render at first paint
+  // with no network, and what keeps sections.test.tsx's marker assertion and
+  // homepage-bytes.test.tsx's byte count deterministic regardless of D1's
+  // own availability -- a database outage costs the list, never the section.
+  awards: { heading: string; intro: string };
   visit: { heading: string; navigateButton: string; mapTitle: string };
   footer: {
     hoursHeading: string; followLabel: string; reservationsLabel: string;

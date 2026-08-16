@@ -1310,16 +1310,32 @@ describe('POST /api/undo', () => {
   // from either the publish or the undo would surface as a real, unstubbed
   // `fetch` throwing, which is exactly the failure a mistaken store routing
   // should produce.
+  //
+  // Task 9 gave awards.json a real validator (src/content/validate.ts's
+  // validateAwards) in place of the no-op Task 5 shipped -- these three
+  // tests are about undo's own D1/GitHub plumbing, not about content shape,
+  // but step 4 of handlePublish validates every file regardless, so the
+  // publish these tests build on must itself be a real, well-formed award
+  // now, not the bare `{"id":"a"}` that satisfied the old no-op.
+  const VALID_AWARDS_A = '[{"id":"a","title":"Award A","awardedBy":"Test Body","year":"2020"}]';
+  const VALID_AWARDS_B = '[{"id":"b","title":"Award B","awardedBy":"Test Body","year":"2021"}]';
+
   it('puts back a D1-only publish with no commit involved', async () => {
     const fake = new FakeD1();
     const d1env = { ...env, DB: asD1(fake) };
     const c = await cookie();
     await worker.fetch(
-      publishRequest([{ path: 'src/content/awards.json', content: '[{"id":"a"}]', encoding: 'utf-8' }], c),
+      publishRequest(
+        [{ path: 'src/content/awards.json', content: VALID_AWARDS_A, encoding: 'utf-8' }],
+        c,
+      ),
       d1env,
     );
     const second = await worker.fetch(
-      publishRequest([{ path: 'src/content/awards.json', content: '[{"id":"b"}]', encoding: 'utf-8' }], c),
+      publishRequest(
+        [{ path: 'src/content/awards.json', content: VALID_AWARDS_B, encoding: 'utf-8' }],
+        c,
+      ),
       d1env,
     );
     const { publishId } = (await second.json()) as { publishId: string };
@@ -1327,7 +1343,7 @@ describe('POST /api/undo', () => {
     const undone = await worker.fetch(undoRequest({ publishId }, c), d1env);
     expect(undone.status).toBe(200);
     expect(await undone.json()).toEqual({ sha: null, restored: ['src/content/awards.json'] });
-    expect(fake.content.get('src/content/awards.json')?.body).toBe('[{"id":"a"}]');
+    expect(fake.content.get('src/content/awards.json')?.body).toBe(VALID_AWARDS_A);
   });
 
   it('refuses a second undo of the same publish rather than reverting twice', async () => {
@@ -1335,11 +1351,17 @@ describe('POST /api/undo', () => {
     const d1env = { ...env, DB: asD1(fake) };
     const c = await cookie();
     await worker.fetch(
-      publishRequest([{ path: 'src/content/awards.json', content: '[{"id":"a"}]', encoding: 'utf-8' }], c),
+      publishRequest(
+        [{ path: 'src/content/awards.json', content: VALID_AWARDS_A, encoding: 'utf-8' }],
+        c,
+      ),
       d1env,
     );
     const second = await worker.fetch(
-      publishRequest([{ path: 'src/content/awards.json', content: '[{"id":"b"}]', encoding: 'utf-8' }], c),
+      publishRequest(
+        [{ path: 'src/content/awards.json', content: VALID_AWARDS_B, encoding: 'utf-8' }],
+        c,
+      ),
       d1env,
     );
     const { publishId } = (await second.json()) as { publishId: string };
@@ -1362,11 +1384,17 @@ describe('POST /api/undo', () => {
     const c = await cookie();
     stubWith();
     await worker.fetch(
-      publishRequest([{ path: 'src/content/awards.json', content: '[{"id":"a"}]', encoding: 'utf-8' }], c),
+      publishRequest(
+        [{ path: 'src/content/awards.json', content: VALID_AWARDS_A, encoding: 'utf-8' }],
+        c,
+      ),
       d1env,
     );
     const second = await worker.fetch(
-      publishRequest([{ path: 'src/content/awards.json', content: '[{"id":"b"}]', encoding: 'utf-8' }], c),
+      publishRequest(
+        [{ path: 'src/content/awards.json', content: VALID_AWARDS_B, encoding: 'utf-8' }],
+        c,
+      ),
       d1env,
     );
     const { publishId } = (await second.json()) as { publishId: string };
@@ -1377,6 +1405,6 @@ describe('POST /api/undo', () => {
     // roll it back (there is no cross-store transaction to do that with; see
     // handlePublish's own comment on the same limitation). Stated so the
     // next reader doesn't mistake the 409 for "nothing happened".
-    expect(fake.content.get('src/content/awards.json')?.body).toBe('[{"id":"a"}]');
+    expect(fake.content.get('src/content/awards.json')?.body).toBe(VALID_AWARDS_A);
   });
 });

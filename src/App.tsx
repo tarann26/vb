@@ -7,6 +7,7 @@ import PlaceGallery from './components/PlaceGallery';
 import FoodGallery from './components/FoodGallery';
 import Drinks from './components/Drinks';
 import BlogTeaser from './components/BlogTeaser';
+import Awards from './components/Awards';
 import VisitUs from './components/VisitUs';
 import Footer from './components/Footer';
 import BlogsPage from './components/BlogsPage';
@@ -48,6 +49,7 @@ const SECTION_COMPONENTS: Record<SectionId, () => ReactNode> = {
   food: () => <FoodGallery />,
   drinks: () => <Drinks />,
   press: () => <BlogTeaser />,
+  awards: () => <Awards />,
   visit: () => <VisitUs />,
 };
 

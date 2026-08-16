@@ -69,6 +69,7 @@ const SECTION_NAMES: Record<SectionId, { name: string; anchor: string | null }> 
   food: { name: 'Menu', anchor: '#menu' },
   drinks: { name: 'Drinks', anchor: null },
   press: { name: 'Stories', anchor: '#blogs' },
+  awards: { name: 'Awards', anchor: '#awards' },
   visit: { name: 'Visit Us', anchor: '#visit' },
 };
 

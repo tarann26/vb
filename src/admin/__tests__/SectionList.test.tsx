@@ -6,20 +6,21 @@ import { validateContent } from '../../content/validate';
 import type { BespokeSection, SectionId } from '../../content/types';
 import type { ValidationProblem } from '../../content/validate';
 
-const ALL_SEVEN: BespokeSection[] = [
+const ALL_EIGHT: BespokeSection[] = [
   { kind: 'bespoke', id: 'hero', enabled: true },
   { kind: 'bespoke', id: 'ourStory', enabled: true },
   { kind: 'bespoke', id: 'atmosphere', enabled: true },
   { kind: 'bespoke', id: 'food', enabled: true },
   { kind: 'bespoke', id: 'drinks', enabled: true },
   { kind: 'bespoke', id: 'press', enabled: true },
+  { kind: 'bespoke', id: 'awards', enabled: true },
   { kind: 'bespoke', id: 'visit', enabled: true },
 ];
 
 function renderList(overrides: Partial<Parameters<typeof SectionList>[0]> = {}) {
   const onChange = vi.fn();
   const onReorder = vi.fn();
-  render(<SectionList items={ALL_SEVEN} onChange={onChange} onReorder={onReorder} problems={[]} {...overrides} />);
+  render(<SectionList items={ALL_EIGHT} onChange={onChange} onReorder={onReorder} problems={[]} {...overrides} />);
   return { onChange, onReorder };
 }
 
@@ -34,7 +35,7 @@ describe('SectionList: human names, not SectionIds', () => {
 
   it('every section gets a human name, and every id is covered', () => {
     renderList();
-    ['Hero', 'About', 'Atmosfera', 'Menu', 'Drinks', 'Stories', 'Visit Us'].forEach((name) => {
+    ['Hero', 'About', 'Atmosfera', 'Menu', 'Drinks', 'Stories', 'Awards', 'Visit Us'].forEach((name) => {
       expect(screen.getByText(name)).toBeInTheDocument();
     });
   });
@@ -59,7 +60,7 @@ describe('SectionList: human names, not SectionIds', () => {
 describe('SectionList: an unrecognised section id does not crash the page', () => {
   it('renders the raw id as a fallback label instead of throwing', () => {
     const withBadId: BespokeSection[] = [
-      ...ALL_SEVEN,
+      ...ALL_EIGHT,
       // Cast, deliberately -- this is exactly what a widened, unvalidated
       // JSON.parse result can hand this component despite the SectionId
       // type claiming otherwise (see this describe block's own comment).
@@ -75,9 +76,9 @@ describe('SectionList: an unrecognised section id does not crash the page', () =
     expect(screen.getByText('not in the navigation menu')).toBeInTheDocument();
   });
 
-  it('a genuinely valid seven-section list never falls back -- no raw id is rendered anywhere', () => {
+  it('a genuinely valid eight-section list never falls back -- no raw id is rendered anywhere', () => {
     renderList();
-    ['hero', 'ourStory', 'atmosphere', 'food', 'drinks', 'press', 'visit'].forEach((id) => {
+    ['hero', 'ourStory', 'atmosphere', 'food', 'drinks', 'press', 'awards', 'visit'].forEach((id) => {
       expect(screen.queryByText(id)).not.toBeInTheDocument();
     });
   });
@@ -118,7 +119,7 @@ describe('SectionList: no Remove button anywhere, and no Add button either -- D6
 
   // Structural proof, not just an absent-button check: EVERY interaction
   // this component exposes (reorder, toggle) still leaves exactly the same
-  // seven SectionIds present, in some order, which is what actually makes
+  // eight SectionIds present, in some order, which is what actually makes
   // assertSections' "every id exactly once" rule unreachable. Simulates a
   // caller applying every onReorder/onChange call this component could ever
   // produce and checks the id SET never changes.
@@ -127,8 +128,8 @@ describe('SectionList: no Remove button anywhere, and no Add button either -- D6
     const { onReorder } = renderList();
     await user.click(screen.getByRole('button', { name: 'Move About up' }));
     const newOrder = onReorder.mock.calls[0][0] as SectionId[];
-    expect(new Set(newOrder)).toEqual(new Set(ALL_SEVEN.map((s) => s.id)));
-    expect(newOrder).toHaveLength(7);
+    expect(new Set(newOrder)).toEqual(new Set(ALL_EIGHT.map((s) => s.id)));
+    expect(newOrder).toHaveLength(8);
   });
 
   it('toggling a section never changes its id', async () => {
@@ -153,13 +154,13 @@ describe('SectionList: reordering', () => {
     const user = userEvent.setup();
     const { onReorder } = renderList();
     await user.click(screen.getByRole('button', { name: 'Move Hero down' }));
-    expect(onReorder).toHaveBeenCalledWith(['ourStory', 'hero', 'atmosphere', 'food', 'drinks', 'press', 'visit']);
+    expect(onReorder).toHaveBeenCalledWith(['ourStory', 'hero', 'atmosphere', 'food', 'drinks', 'press', 'awards', 'visit']);
   });
 });
 
 describe('SectionList: sections.json-level problems -- one banner, since assertSections gives no per-id shape', () => {
   it('shows the real validator\'s own message when hero is disabled', () => {
-    const bad = ALL_SEVEN.map((s) => (s.id === 'hero' ? { ...s, enabled: false } : s));
+    const bad = ALL_EIGHT.map((s) => (s.id === 'hero' ? { ...s, enabled: false } : s));
     const problems = validateContent('sections.json', bad);
     expect(problems).toEqual([{ field: '', message: expect.stringMatching(/hero/i) }]);
     render(<SectionList items={bad} onChange={vi.fn()} onReorder={vi.fn()} problems={problems} />);

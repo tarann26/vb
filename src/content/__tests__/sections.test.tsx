@@ -28,6 +28,7 @@ const MARKER: Record<SectionId, string> = {
   food: copy.food.heading,
   drinks: copy.drinks.heading,
   press: copy.press.heading,
+  awards: copy.awards.heading,
   visit: copy.visit.heading,
 };
 
@@ -69,6 +70,7 @@ const SECTION_SELECTOR: Record<SectionId, string> = {
   food: '#menu',
   drinks: '#drinks',
   press: '#blogs',
+  awards: '#awards',
   visit: '#visit',
 };
 

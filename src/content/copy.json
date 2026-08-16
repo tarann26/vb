@@ -54,6 +54,10 @@
     "readArticle": "Read Article",
     "viewAll": "View All Stories"
   },
+  "awards": {
+    "heading": "Awards",
+    "intro": "Recognition the kitchen has picked up along the way."
+  },
   "visit": {
     "heading": "Visit Us",
     "navigateButton": "Navigate",

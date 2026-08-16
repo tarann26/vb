@@ -28,6 +28,7 @@ import type {
   Dish,
   Drink,
   Article,
+  Award,
 } from './types';
 
 // ---------------------------------------------------------------------------
@@ -75,6 +76,20 @@ export const ARTICLE_KEYS: Record<keyof Article, true> = {
   date: true,
   excerpt: true,
   url: true,
+  image: true,
+};
+
+// Phase 2, Task 9: the Awards pilot's own key set, same idiom, same two
+// consumers (a build-time shape test and validate.ts's write-boundary
+// check) -- except there is no build-time shape test for this one file:
+// awards.json is never compiled into a bundle (it is D1_ONLY_PATHS,
+// worker/store.ts), so validate.ts's own validateAwards is the only place
+// this set is ever consulted at all.
+export const AWARD_KEYS: Record<keyof Award, true> = {
+  id: true,
+  title: true,
+  awardedBy: true,
+  year: true,
   image: true,
 };
 
@@ -205,6 +220,7 @@ const SECTION_ID_SET: Record<SectionId, true> = {
   food: true,
   drinks: true,
   press: true,
+  awards: true,
   visit: true,
 };
 const SECTION_IDS = Object.keys(SECTION_ID_SET) as SectionId[];

@@ -13,6 +13,7 @@
 // of "valid" that quietly drifts from what the build actually enforces).
 import {
   ARTICLE_KEYS,
+  AWARD_KEYS,
   BESPOKE_SECTION_KEYS,
   DISH_KEYS,
   DRINK_KEYS,
@@ -992,32 +993,110 @@ function validateSiteDeveloperOwnedFields(data: unknown, current: Record<string,
   return problems;
 }
 
-// Phase 2's D1 pilot file (worker/store.ts's D1_ONLY_PATHS). Deliberately a
-// no-op rather than an invented shape: without a RULES entry at all, this
-// function's own default-deny below refuses every awards.json publish
-// outright, regardless of content -- which would make the D1 write path
-// this task exists to route to permanently unreachable through
-// POST /api/publish. Awards' real shape (title, awarding body, year, an
-// optional badge image -- spec's Phase 4) is not designed yet; a check
-// invented here ahead of that design would only need reworking the moment
-// it lands, so this registers the file as publishable and defers the shape
-// check to the task that actually designs it.
+// ---------------------------------------------------------------------------
+// awards.json (Phase 2's D1 pilot file -- worker/store.ts's D1_ONLY_PATHS).
 //
-// Review finding, recorded rather than fixed here: this RULES table is keyed
-// by BASENAME (worker/index.ts's handlePublish calls `validateContent(
-// basename(f.path), parsed)`), not by the full repo-relative path -- so this
-// entry also waves through any OTHER path that happens to end in
-// "awards.json", e.g. `assets-source/food/awards.json`, where it previously
-// 422'd with "This file cannot be edited here". Narrow in practice: that
-// route is authenticated, and commitFiles' own allowlist still refuses to
-// WRITE it (assets-source/ requires a real asset filename shape, not
-// `.json`) -- so this can widen what a request is told is valid content, not
-// what a request can actually get committed. Worth Task 9's real awards
-// validator being written path-aware rather than basename-aware, so this gap
-// closes with it rather than surviving into the real rule unnoticed.
-function validateAwards(): ValidationProblem[] {
-  return [];
+// Task 5 left this as a deliberate no-op: without a RULES entry at all, the
+// default-deny below refuses every awards.json publish outright, regardless
+// of content, which would have made the D1 write path that task existed to
+// prove permanently unreachable through POST /api/publish, and awards' real
+// shape was not designed yet. Task 9 designs it (title, an awarding body, a
+// year, an optional badge image -- Award, src/content/types.ts) and this is
+// the write-boundary check for it, same posture and same idiom as every
+// sibling validator in this file: built on AWARD_KEYS (guards.ts) for the
+// unknown-key sweep the same way validateDish/validateArticle are built on
+// DISH_KEYS/ARTICLE_KEYS, and following validatePress most closely -- a list
+// of id-carrying records with a date-shaped field (year here, date there)
+// and an optional image.
+//
+// Unlike validateDishes/validateDrinks/validatePress, an EMPTY list is not
+// refused here: a brand new restaurant genuinely has zero awards on day one,
+// and nothing in the spec requires at least one before the section may be
+// published -- Awards.tsx's own chrome-only-when-empty rendering already
+// treats a zero-length list as a normal, expected state, not an error one.
+//
+// Also unlike its siblings, awards.json needs a duplicate-id check of its
+// own: dishes/drinks/press never gained one (nothing in this file threads a
+// `seenIds` Set through validateDish/validateDrink/validateArticle), but two
+// award records sharing an id would collide as React list keys in Awards.tsx
+// exactly the way two sections sharing an id would in App.tsx's own dispatch
+// -- so this reuses the seenIds-threaded-through-the-list shape
+// validateSectionEntry/validateSections already establish below, rather than
+// inventing a second one.
+const YEAR_PATTERN = /^\d{4}$/;
+
+function validateAward(raw: unknown, index: number, seenIds: Set<string>): ValidationProblem[] {
+  const award = asRecord(raw);
+  const problems: ValidationProblem[] = [];
+  if (isBlank(award.id)) {
+    problems.push(problem(`[${index}].id`, `award at position ${index} needs an id`));
+  } else if (seenIds.has(award.id as string)) {
+    problems.push(problem(`[${index}].id`, `"${award.id}" is already used by another award`));
+  } else {
+    seenIds.add(award.id as string);
+  }
+  if (isBlank(award.title)) {
+    problems.push(problem(`[${index}].title`, 'this award needs a title'));
+  }
+  // `isBlank` alone is what catches a non-string awarding body too (its own
+  // `typeof value !== 'string'` branch), the same way it already covers a
+  // non-string dish/drink/article name above -- no separate `typeof` check
+  // needed here.
+  if (isBlank(award.awardedBy)) {
+    problems.push(problem(`[${index}].awardedBy`, `"${String(award.title ?? 'this award')}" needs who awarded it`));
+  }
+  // Same reasoning: `isBlank` alone refuses a non-string year (a JSON
+  // authoring mistake, `"year": 2026` instead of `"year": "2026"`) before
+  // the pattern test ever runs, so a plausible-looking number is refused
+  // exactly like an implausible string ("nineteen") is.
+  if (isBlank(award.year) || !YEAR_PATTERN.test((award.year as string).trim())) {
+    problems.push(problem(`[${index}].year`, `"${String(award.title ?? 'this award')}" needs a four-digit year`));
+  }
+  // `image` is optional -- absent is fine (Award['image'] is `string |
+  // undefined`, never `null`, unlike Drink['image']) -- but a PRESENT value
+  // must be a real, safe, on-site asset path, the same `isUnsafeAssetPath`
+  // rule as every other image field in this file.
+  if (award.image !== undefined) {
+    if (isBlank(award.image)) {
+      problems.push(problem(`[${index}].image`, `"${String(award.title ?? 'this award')}" needs a badge image, or leave it blank`));
+    } else if (isUnsafeAssetPath(award.image)) {
+      problems.push(problem(`[${index}].image`, `"${String(award.title ?? 'this award')}" needs a badge image on this site, starting with /`));
+    }
+  }
+  problems.push(...validateKnownKeys(award, AWARD_KEYS, `[${index}]`, String(award.title ?? 'this award')));
+  return problems;
 }
+
+function validateAwards(data: unknown): ValidationProblem[] {
+  if (!Array.isArray(data)) return [problem('', 'expected a list of awards')];
+  const seenIds = new Set<string>();
+  return data.flatMap((award, i) => validateAward(award, i, seenIds));
+}
+
+// Review finding, carried forward from Task 5 rather than closed here: this
+// RULES table is keyed by BASENAME (worker/index.ts's handlePublish calls
+// `validateContent(basename(f.path), parsed)`), not by the full
+// repo-relative path -- so the entry below also waves through any OTHER
+// path that happens to end in "awards.json", e.g.
+// `assets-source/food/awards.json`, where it previously 422'd with "This
+// file cannot be edited here". Still narrow in practice for the same reason
+// Task 5 recorded: that route is authenticated, and commitFiles' own
+// allowlist still refuses to WRITE it (assets-source/ requires a real asset
+// filename shape, not `.json`) -- so this can widen what a request is TOLD
+// is valid content, not what a request can actually get COMMITTED.
+//
+// Not closed by this task: `validateContent`'s own signature
+// (`validateContent(file: string, data: unknown, current?: unknown)`) only
+// ever receives the basename -- validate.ts has no access to the full path
+// at all, because the one caller (worker/index.ts's handlePublish, step 4)
+// strips it before calling in. Making this validator path-aware would mean
+// changing that call site to pass `f.path` instead of `basename(f.path)`,
+// and either widening every RULES key to the full `src/content/*.json`
+// shape or adding a second, path-keyed table just for this one file --
+// worker/index.ts is not among this task's files, so that change is left
+// unmade rather than made unreviewed alongside nine unrelated call sites.
+// Recorded here, again, rather than silently carried: the fix, when someone
+// takes it, is exactly the one Task 5 already named.
 
 // ---------------------------------------------------------------------------
 

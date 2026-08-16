@@ -51,6 +51,7 @@ export const SECTIONS: Section[] = [
   { kind: 'bespoke', id: 'food', enabled: true },
   { kind: 'bespoke', id: 'drinks', enabled: true },
   { kind: 'bespoke', id: 'press', enabled: true },
+  { kind: 'bespoke', id: 'awards', enabled: true },
   { kind: 'bespoke', id: 'visit', enabled: true },
 ];
 export const SITE: SiteContent = {
