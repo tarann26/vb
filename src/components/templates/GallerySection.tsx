@@ -19,7 +19,7 @@ const GallerySection: React.FC<GallerySectionProps> = ({ id, content }) => {
   const contentApi = useContent();
   const base = `sections.${id}.content`;
   return (
-    <section className="py-20 bg-white">
+    <section className="py-20 bg-white" data-testid={`gallery-section-${id}`}>
       <div className="max-w-7xl mx-auto px-4">
         <h2 className="font-['Montserrat'] text-4xl md:text-5xl font-bold text-[#222] text-center mb-16">
           {contentApi.renderText(`${base}.heading`, content.heading)}
@@ -32,6 +32,7 @@ const GallerySection: React.FC<GallerySectionProps> = ({ id, content }) => {
                   <div
                     key={index}
                     className="flex-shrink-0 w-64 h-64 rounded-xl overflow-hidden shadow-md transition duration-300"
+                    data-testid={`gallery-image-${id}-${index}`}
                   >
                     <div className="w-full h-full transform hover:scale-105 transition duration-300">
                       {contentApi.renderImage(`${base}.images.${index}`, {
@@ -50,7 +51,11 @@ const GallerySection: React.FC<GallerySectionProps> = ({ id, content }) => {
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-8 items-center justify-items-center">
             {content.images.map((image, index) => (
-              <div key={index} className="flex h-24 w-full items-center justify-center grayscale transition duration-300 hover:grayscale-0">
+              <div
+                key={index}
+                className="flex h-24 w-full items-center justify-center grayscale transition duration-300 hover:grayscale-0"
+                data-testid={`gallery-image-${id}-${index}`}
+              >
                 {contentApi.renderImage(`${base}.images.${index}`, {
                   src: image.src,
                   alt: image.alt,

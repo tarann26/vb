@@ -99,6 +99,19 @@
     "sections": [
       {
         "kind": "template",
+        "id": "cooking-class-pamphlet",
+        "template": "gallery",
+        "enabled": true,
+        "content": {
+          "heading": "Sunday, 12pm",
+          "layout": "grid",
+          "images": [
+            { "src": "/experiences/pamphlet.webp", "alt": "The cooking class pamphlet: Sunday at 12pm, four children, four dishes" }
+          ]
+        }
+      },
+      {
+        "kind": "template",
         "id": "kids-class",
         "template": "detailBlock",
         "enabled": true,
