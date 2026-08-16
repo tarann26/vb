@@ -1,10 +1,14 @@
 import { expect, test } from '@playwright/test';
 import { contrastRatio } from '../src/test/contrast';
 
-function toHex(rgb: string): string | null {
-  const m = rgb.match(/^rgba?\((\d+),\s*(\d+),\s*(\d+)/);
-  if (!m) return null;
-  return '#' + [m[1], m[2], m[3]].map((v) => Number(v).toString(16).padStart(2, '0')).join('');
+// Formats an already-composited, already-opaque {r,g,b} triple. Composited
+// and hexified separately, not in one regex-into-hex step, because the
+// compositing (below, inside the page.evaluate callback -- it needs
+// getComputedStyle) is where a translucent colour's alpha actually gets
+// resolved into a real rendered colour; by the time a triple reaches this
+// function there is nothing left to drop.
+function toHex({ r, g, b }: { r: number; g: number; b: number }): string {
+  return '#' + [r, g, b].map((v) => Math.round(v).toString(16).padStart(2, '0')).join('');
 }
 
 test('every text node on the homepage meets AA against what it sits on', async ({ page }) => {
@@ -21,21 +25,60 @@ test('every text node on the homepage meets AA against what it sits on', async (
   // Tailwind token, an arbitrary value, and an inline style are
   // indistinguishable here, so this cannot be fooled by spelling.
   const measured = await page.evaluate(() => {
+    // Parses `rgb(r, g, b)` / `rgba(r, g, b, a)` -- alpha included. Every
+    // caller below composites through this, rather than reading the three
+    // colour channels and silently discarding the fourth: a translucent
+    // layer (`bg-brand/50`, or a text colour under a Tailwind opacity
+    // modifier like `text-ink/90`) is not the colour its own r/g/b says --
+    // it is that colour blended with whatever paints behind it, and a
+    // reader's eye only ever sees the blend.
+    function parseRGBA(rgb: string): { r: number; g: number; b: number; a: number } | null {
+      const m = rgb.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*([\d.]+)\s*)?\)$/);
+      if (!m) return null;
+      return { r: Number(m[1]), g: Number(m[2]), b: Number(m[3]), a: m[4] === undefined ? 1 : Number(m[4]) };
+    }
+    // The Porter-Duff "over" operator: `top` painted onto an already-opaque
+    // `bottom`, the same blend a browser performs when a translucent layer
+    // sits above a solid one. Always returns something opaque, so repeated
+    // calls (effectiveBg below, stacking several translucent ancestors) can
+    // fold left without tracking a running alpha of their own.
+    function over(
+      top: { r: number; g: number; b: number; a: number },
+      bottom: { r: number; g: number; b: number },
+    ): { r: number; g: number; b: number } {
+      return {
+        r: top.r * top.a + bottom.r * (1 - top.a),
+        g: top.g * top.a + bottom.g * (1 - top.a),
+        b: top.b * top.a + bottom.b * (1 - top.a),
+      };
+    }
     // "Is anything painted here at all" -- alpha exactly 0 (or the literal
     // keyword `transparent`) is the only thing that disqualifies a layer
-    // from being the thing effectiveBg reports, because ANY paint, however
-    // faint, is still what a viewer's eye actually sees composited with
-    // whatever is behind it. Do not reuse this for "can this element's own
-    // background stand in for what's behind its container" -- that is a
-    // different, stricter question, answered by isOpaqueBackground below.
-    function effectiveBg(el: HTMLElement): string {
+    // from being counted, because ANY paint, however faint, is still what a
+    // viewer's eye actually sees composited with whatever is behind it. A
+    // layer that IS translucent is not returned raw: the walk keeps going
+    // past it, collecting every further painted ancestor up to the first
+    // fully opaque one (or the page's own white backing, if none is found),
+    // then composites the whole stack back-to-front -- so a `bg-brand/50`
+    // panel over a cream section reports the actual blended colour, not
+    // brand blue at full strength. Do not reuse this for "can this
+    // element's own background stand in for what's behind its container"
+    // -- that is a different, stricter question, answered by
+    // isOpaqueBackground below.
+    function effectiveBg(el: HTMLElement): { r: number; g: number; b: number } {
+      const layers: { r: number; g: number; b: number; a: number }[] = [];
       let node: HTMLElement | null = el;
       while (node) {
-        const bg = getComputedStyle(node).backgroundColor;
-        if (bg && bg !== 'transparent' && !/rgba\([^)]*,\s*0\)$/.test(bg)) return bg;
+        const parsed = parseRGBA(getComputedStyle(node).backgroundColor);
+        if (parsed && parsed.a > 0) {
+          layers.push(parsed);
+          if (parsed.a === 1) break;
+        }
         node = node.parentElement;
       }
-      return 'rgb(255, 255, 255)';
+      let result = { r: 255, g: 255, b: 255 };
+      for (let i = layers.length - 1; i >= 0; i--) result = over(layers[i], result);
+      return result;
     }
     // "Is this layer opaque enough that nothing behind it can bleed
     // through" -- the bar here is alpha === 1 exactly, not merely
@@ -99,7 +142,12 @@ test('every text node on the homepage meets AA against what it sits on', async (
       }
       return false;
     }
-    const out: { text: string; bg: string; fg: string; where: string }[] = [];
+    const out: {
+      text: string;
+      bg: { r: number; g: number; b: number };
+      fg: { r: number; g: number; b: number };
+      where: string;
+    }[] = [];
     for (const el of Array.from(document.querySelectorAll<HTMLElement>('*'))) {
       // Only elements holding their own text, so a wrapper is never blamed
       // for a child rendered on a different background.
@@ -112,23 +160,53 @@ test('every text node on the homepage meets AA against what it sits on', async (
       const style = getComputedStyle(el);
       if (style.visibility === 'hidden' || style.display === 'none') continue;
       if (Number(style.opacity) === 0) continue;
-      if (el.getBoundingClientRect().width === 0) continue;
+      // Intersected with the document's own rect, not just checked for
+      // nonzero size -- the same fix hero-collage-after-farfalle.spec.ts
+      // applied to its own container rect, with the whole page as the
+      // container rather than one section: this test's job is "every text
+      // node on the homepage", scroll position included, so the viewport
+      // itself would be the wrong bound -- most of the page sits below the
+      // fold at page-load scroll position, and clipping to the viewport
+      // would silently stop checking it. `documentElement`'s rect instead
+      // spans the full scrollable page, so this still requires BOTH
+      // dimensions nonzero (the old check only gated on width, passing an
+      // element collapsed to zero height) AND catches an element sized and
+      // laid out but hidden by the classic `left: -9999px` off-page trick,
+      // which sets neither visibility nor opacity and would otherwise sail
+      // through every check above it.
+      const rect = el.getBoundingClientRect();
+      const docRect = document.documentElement.getBoundingClientRect();
+      const visibleWidth = Math.max(0, Math.min(rect.right, docRect.right) - Math.max(rect.left, docRect.left));
+      const visibleHeight = Math.max(0, Math.min(rect.bottom, docRect.bottom) - Math.max(rect.top, docRect.top));
+      if (visibleWidth === 0 || visibleHeight === 0) continue;
       if (sitsOverImageLayer(el)) continue;
+      const bgColor = effectiveBg(el);
+      // The text colour gets the same alpha treatment as the background:
+      // `text-ink/90`-style opacity modifiers report as an rgba() with
+      // alpha < 1, and what a reader sees is that colour blended with
+      // whatever sits behind it -- which, for text, is exactly the bg this
+      // element was just resolved against.
+      const fgParsed = parseRGBA(style.color);
+      if (!fgParsed) continue;
+      const fgColor = fgParsed.a < 1 ? over(fgParsed, bgColor) : { r: fgParsed.r, g: fgParsed.g, b: fgParsed.b };
       out.push({
         text: ownText.slice(0, 40),
-        bg: effectiveBg(el),
-        fg: style.color,
+        bg: bgColor,
+        fg: fgColor,
         where: el.tagName.toLowerCase() + '.' + (el.className || '').toString().slice(0, 60),
       });
     }
     return out;
   });
 
-  const unreadable = measured.filter((m) => {
-    const fg = toHex(m.fg);
-    const bg = toHex(m.bg);
-    return fg !== null && bg !== null && contrastRatio(fg, bg) < 4.5;
-  });
+  // Non-vacuous: a render crash, a bad baseURL, or a selector regression
+  // upstream would leave `measured` empty, and an empty array satisfies
+  // `toEqual([])` just as well as a page with nothing unreadable on it. The
+  // real homepage measures 62 text nodes; 50 is comfortably below that
+  // while still requiring a real page to have rendered.
+  expect(measured.length).toBeGreaterThan(50);
+
+  const unreadable = measured.filter((m) => contrastRatio(toHex(m.fg), toHex(m.bg)) < 4.5);
 
   expect(unreadable).toEqual([]);
 });
