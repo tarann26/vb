@@ -37,14 +37,15 @@ import type {
   Experience,
 } from '../content/types';
 
-// The nine real files under src/content/ -- the same set validateContent
-// (src/content/validate.ts) recognises and commitFiles (worker/github.ts)
-// allows; see worker/__tests__/github.test.ts's "still accepts the real
-// content file" block for that list's own authority. Kept as this module's
-// own copy rather than imported from either of those: the Worker and this
-// admin bundle are separate builds, and importing the JSON files themselves
-// (the only other place this list lives today) is exactly what this module
-// exists to avoid.
+// The eleven real files under src/content/, plus awards.json (D1-backed, not
+// a file on disk at all -- see its own entry below) -- twelve in total, the
+// same set validateContent (src/content/validate.ts) recognises and
+// commitFiles (worker/github.ts) allows; see worker/__tests__/github.test.ts's
+// "still accepts the real content file" block for that list's own authority.
+// Kept as this module's own copy rather than imported from either of those:
+// the Worker and this admin bundle are separate builds, and importing the
+// JSON files themselves (the only other place this list lives today) is
+// exactly what this module exists to avoid.
 export const CONTENT_FILES = [
   'site.json',
   'galleries.json',
