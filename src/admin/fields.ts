@@ -38,6 +38,12 @@ import type {
   Award,
   Experience,
 } from '../content/types';
+// The runtime list of gallery layouts, not a second copy of it. guards.ts
+// holds the one array (checked exhaustive against the union at compile
+// time) that assertTemplateContent and validateTemplateContentFields both
+// test against, so the select below cannot offer her a layout the server
+// then refuses -- or miss one it would have accepted.
+import { GALLERY_LAYOUTS } from '../content/guards';
 import type { UploadCategory } from '../shared/upload-categories';
 
 // `kind` is a function of the field's *value type*, not a fixed union
@@ -575,8 +581,13 @@ export const GALLERY_TEMPLATE_FIELDS: FieldsOf<Pick<GalleryTemplateContent, 'hea
 export const GALLERY_LAYOUT_FIELD: FieldSpec<GalleryTemplateContent['layout']> = {
   label: 'Layout',
   kind: 'select',
-  options: ['scroll', 'grid'],
-  help: '"Scroll" is a horizontal photo strip (Atmosfera\'s own layout). "Grid" arranges the same photos in rows -- built for logos (B2B clients, press mentions), but usable for any small photo set.',
+  options: GALLERY_LAYOUTS,
+  // "Grid" no longer claims to be "usable for any small photo set" -- it is
+  // not. It renders every image 96px tall and in black and white, which is
+  // what a press logo wants and what a photograph does not; the branch
+  // review found two live sections shipping as grey thumbnails because this
+  // help text said otherwise. Say what each one actually looks like.
+  help: '"Scroll" is a horizontal photo strip (Atmosfera\'s own layout) -- use it for a set of photos. "Hero" shows one large photo down the middle of the page, at its own shape -- use it when the picture IS the point. "Grid" is the logo row: small, black and white until you hover, for B2B clients and press mentions.',
 };
 
 export const DETAIL_BLOCK_TEMPLATE_FIELDS: FieldsOf<Pick<DetailBlockTemplateContent, 'heading' | 'body'>> = {

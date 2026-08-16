@@ -22,6 +22,7 @@ import type {
   TextTemplateContent,
   ItemListTemplateContent,
   GalleryTemplateContent,
+  GalleryLayout,
   DetailBlockTemplateContent,
   Page,
   SectionId,
@@ -267,6 +268,26 @@ export function isTemplateType(value: unknown): value is TemplateType {
   return typeof value === 'string' && (TEMPLATE_TYPES as readonly string[]).includes(value);
 }
 
+// The same idiom again, one layer down, for GalleryTemplateContent's own
+// `layout`. It exists as a runtime value rather than only a type because
+// three separate places have to agree on the list -- this guard,
+// validate.ts's owner-facing check, and GALLERY_LAYOUT_FIELD's select
+// options in src/admin/fields.ts -- and the branch review found the cost of
+// them disagreeing: a layout the owner can pick that renders nothing, or a
+// layout the renderer has no branch for. `Record<GalleryLayout, true>`
+// means adding a fourth member to the union fails to COMPILE until it is
+// listed here, so the list cannot fall behind the type.
+const GALLERY_LAYOUT_SET: Record<GalleryLayout, true> = {
+  scroll: true,
+  grid: true,
+  hero: true,
+};
+export const GALLERY_LAYOUTS = Object.keys(GALLERY_LAYOUT_SET) as GalleryLayout[];
+
+export function isGalleryLayout(value: unknown): value is GalleryLayout {
+  return typeof value === 'string' && (GALLERY_LAYOUTS as readonly string[]).includes(value);
+}
+
 function assertWhatsAppButton(raw: unknown, context: string): TemplateWhatsAppButton | undefined {
   if (raw === undefined) return undefined;
   if (!raw || typeof raw !== 'object') {
@@ -316,8 +337,8 @@ function assertTemplateContent(template: TemplateType, raw: unknown, context: st
   }
   if (template === 'gallery') {
     if (typeof content.heading !== 'string') throw new Error(`content: ${context} needs a "heading"`);
-    if (content.layout !== 'scroll' && content.layout !== 'grid') {
-      throw new Error(`content: ${context} "layout" must be "scroll" or "grid"`);
+    if (!isGalleryLayout(content.layout)) {
+      throw new Error(`content: ${context} "layout" must be one of ${GALLERY_LAYOUTS.join(', ')}`);
     }
     if (!Array.isArray(content.images)) throw new Error(`content: ${context} needs an "images" list`);
     const images = content.images.map((image, i) => {

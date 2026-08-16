@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import GallerySection from '../GallerySection';
+import { GALLERY_LAYOUTS } from '../../../content/guards';
 
 const IMAGES = [
   { src: '/press/logo-a.webp', alt: 'Partner A logo' },
@@ -33,6 +34,44 @@ describe('GallerySection', () => {
     );
     expect(container.querySelector('.grid')).not.toBeNull();
     expect(container.querySelector('.overflow-x-auto')).toBeNull();
+  });
+
+  // The layout that carries the cooking-class pamphlet. jsdom cannot say
+  // how big it renders -- e2e/page-galleries.spec.ts measures that -- but it
+  // CAN say the two properties that made the old rendering wrong are absent
+  // from the markup: the 96px logo cell and the desaturation filter. Both
+  // are class names on the wrapper in the grid branch, so their absence
+  // here is a real, checkable difference rather than a restatement.
+  it('layout: "hero" is neither the scroller nor the 96px grayscale logo cell', () => {
+    const { container } = render(
+      <GallerySection id="pamphlet" content={{ heading: 'Sunday, 12pm', layout: 'hero', images: [IMAGES[0]] }} />,
+    );
+    expect(container.querySelector('.overflow-x-auto')).toBeNull();
+    expect(container.querySelector('.grid')).toBeNull();
+    expect(container.querySelector('.h-24')).toBeNull();
+    expect(container.querySelector('.grayscale')).toBeNull();
+    // And it is still the same testid contract every layout honours, so the
+    // browser spec and the editor's own image list can find the image.
+    expect(screen.getByTestId('gallery-image-pamphlet-0')).toBeInTheDocument();
+  });
+
+  // Guards the accepted-layout list against the renderer. GALLERY_LAYOUTS is
+  // what guards.ts lets through and what GALLERY_LAYOUT_FIELD offers her in
+  // the dashboard; a layout with no branch in this component renders an
+  // empty section on her live site. Proven by markup, not by reading the
+  // union type -- and the three-branch `&&` chain here has no `else`, so a
+  // future fourth layout that nobody wires up fails this instead of
+  // shipping blank.
+  it('every layout guards.ts accepts renders its images', () => {
+    const options = GALLERY_LAYOUTS;
+    expect(options.length).toBe(3);
+    for (const layout of options) {
+      const { container, unmount } = render(
+        <GallerySection id="probe" content={{ heading: 'Probe', layout, images: IMAGES }} />,
+      );
+      expect(container.querySelectorAll('img'), `layout "${layout}" rendered no images`).toHaveLength(IMAGES.length);
+      unmount();
+    }
   });
 
   it('renders the WhatsApp button only when the section content includes one', () => {

@@ -24,6 +24,7 @@ import {
   assertDrinkCategory,
   assertHours,
   assertSections,
+  isGalleryLayout,
   isSectionId,
   isTemplateType,
   isUrlSafeSlug,
@@ -685,8 +686,8 @@ function validateTemplateContentFields(template: string, raw: unknown, path: str
       });
     }
   } else if (template === 'gallery') {
-    if (content.layout !== 'scroll' && content.layout !== 'grid') {
-      problems.push(problem(`${path}.layout`, 'this section needs a layout of either "scroll" or "grid"'));
+    if (!isGalleryLayout(content.layout)) {
+      problems.push(problem(`${path}.layout`, 'this section needs a layout of "scroll", "grid" or "hero"'));
     }
     if (!Array.isArray(content.images) || content.images.length === 0) {
       problems.push(problem(`${path}.images`, 'this section needs at least one image'));

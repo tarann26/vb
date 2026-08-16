@@ -311,13 +311,24 @@ export interface ItemListTemplateContent {
 
 // Gallery -- product or venue photos (a horizontal scroller, PlaceGallery's
 // own layout) OR the merged-in Logo grid use (B2B clients, press logos,
-// partners), told apart by `layout` alone; both are the same
-// `GalleryImage[]` list underneath. `GalleryImage` (declared above,
-// `{ src, alt }`) is reused rather than a second, identical shape invented
-// for this one field.
+// partners) OR a single full-width hero photograph, told apart by `layout`
+// alone; all three are the same `GalleryImage[]` list underneath.
+// `GalleryImage` (declared above, `{ src, alt }`) is reused rather than a
+// second, identical shape invented for this one field.
+//
+// 'hero' is the third member, added after the final branch review found the
+// cooking-class pamphlet rendering at 60x96 and desaturated. 'grid' is the
+// LOGO strip -- a fixed 96px-tall row of `object-contain`, `grayscale`
+// images -- which is correct for a press logo and wrong for any photograph
+// meant to be looked at. 'scroll' is right for a SET of photos but wrong for
+// one, since a lone card in a horizontal scroller is a 256px square that
+// crops a portrait document to nothing. A single image that is the point of
+// the page needs its own arrangement, so it has one.
+export type GalleryLayout = 'scroll' | 'grid' | 'hero';
+
 export interface GalleryTemplateContent {
   heading: string;
-  layout: 'scroll' | 'grid';
+  layout: GalleryLayout;
   images: GalleryImage[];
   whatsapp?: TemplateWhatsAppButton;
 }

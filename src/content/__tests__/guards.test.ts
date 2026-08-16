@@ -162,7 +162,7 @@ describe('template sections (Plan 7)', () => {
     ['text', { heading: 'Hi', paragraphs: 'not-an-array' }, /needs a "paragraphs" list/],
     ['itemList', { heading: 'Hi' }, /needs an "items" list/],
     ['itemList', { heading: 'Hi', items: [{ image: '/a.webp', name: 'A' }] }, /needs an "image", a "name" and a "description"/],
-    ['gallery', { heading: 'Hi', layout: 'diagonal', images: [] }, /"layout" must be "scroll" or "grid"/],
+    ['gallery', { heading: 'Hi', layout: 'diagonal', images: [] }, /"layout" must be one of scroll, grid, hero/],
     ['gallery', { heading: 'Hi', layout: 'grid' }, /needs an "images" list/],
     ['detailBlock', { heading: 'Hi', facts: [] }, /needs a "body"/],
     ['detailBlock', { heading: 'Hi', body: 'b', facts: 'not-an-array' }, /needs a "facts" list/],

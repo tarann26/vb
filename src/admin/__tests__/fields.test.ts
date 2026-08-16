@@ -80,12 +80,26 @@ describe('every descriptor has a non-empty label and a real kind', () => {
 // identical reason (a select whose options drift from what
 // assertTemplateContent/validateTemplateContentFields actually accept
 // would offer her a choice the server then refuses).
-describe('GALLERY_LAYOUT_FIELD lists the same two layouts guards.ts/validate.ts accept', () => {
-  it('options are exactly ["scroll", "grid"]', () => {
+describe('GALLERY_LAYOUT_FIELD lists the same three layouts guards.ts/validate.ts accept', () => {
+  it('options are exactly ["scroll", "grid", "hero"]', () => {
     expect(GALLERY_LAYOUT_FIELD.kind).toBe('select');
     if (GALLERY_LAYOUT_FIELD.kind === 'select') {
-      expect([...GALLERY_LAYOUT_FIELD.options].sort()).toEqual(['grid', 'scroll']);
+      expect([...GALLERY_LAYOUT_FIELD.options].sort()).toEqual(['grid', 'hero', 'scroll']);
     }
+  });
+
+  // The help text is what tells her which one to pick, and picking wrong is
+  // exactly how the catering gallery and the cooking-class pamphlet shipped
+  // as grey 96px thumbnails: the old text called the grid "usable for any
+  // small photo set", which it is not -- it renders logos, in black and
+  // white, 96px tall. A select whose options are right and whose
+  // description is misleading is the same defect one layer up, so the
+  // grid's two defining, surprising properties are asserted present here.
+  it('the help text warns that the grid is a small black-and-white logo row', () => {
+    const help = GALLERY_LAYOUT_FIELD.help ?? '';
+    expect(help.toLowerCase()).toContain('black and white');
+    expect(help.toLowerCase()).toContain('logo');
+    expect(help.toLowerCase()).not.toContain('usable for any small photo set');
   });
 });
 

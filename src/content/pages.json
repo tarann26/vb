@@ -44,7 +44,7 @@
         "enabled": true,
         "content": {
           "heading": "From recent events",
-          "layout": "grid",
+          "layout": "scroll",
           "images": [
             { "src": "/atmosphere/table.webp", "alt": "A laid table set for a private dinner" },
             { "src": "/food/pizza1.webp", "alt": "A wood-fired pizza fresh from the oven" },
@@ -104,7 +104,7 @@
         "enabled": true,
         "content": {
           "heading": "Sunday, 12pm",
-          "layout": "grid",
+          "layout": "hero",
           "images": [
             { "src": "/experiences/pamphlet.webp", "alt": "The cooking class pamphlet: Sunday at 12pm, four children, four dishes" }
           ]
