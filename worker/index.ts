@@ -409,6 +409,19 @@ function isCrossOriginWrite(request: Request): boolean {
 // exemption is a list somebody has to edit, the same posture
 // AUTHENTICATED_UNLIMITED takes: a second cacheable route added later is a
 // visible decision, not a condition that quietly grew an `||`.
+//
+// Scoped to the REQUEST's pathname, not to which handler actually answered
+// it or what that handler set. `withSecurityHeaders` only skips setting
+// Cache-Control for a matching pathname -- it never sets one on the
+// exempted route's behalf. That means `POST /api/published` (no such
+// method on this route, so it falls through to the catch-all 404) and
+// `GET /api/published?path=<not in PUBLIC_FILES>` (a 404 built directly by
+// handlePublished, before `body()` ever runs) both leave this Worker with
+// NO Cache-Control header at all, not a permissive one -- the exemption
+// fired, but nothing downstream of it happened to set the header it made
+// room for. Not a leak: every response reachable that way is the same
+// constant "Not found."/"Not allowed." body, carrying nothing that
+// caching or not caching could expose either way.
 export const CACHEABLE_PATHS = new Set(['/api/published']);
 
 function withSecurityHeaders(response: Response, pathname: string): Response {

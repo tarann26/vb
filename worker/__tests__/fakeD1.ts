@@ -32,7 +32,19 @@ export class FakeD1 {
   // prove the read()-specific fallback -- as opposed to the version-read one
   // -- needs version() to succeed and read() to fail in the same request.
   // Decremented on every call while positive; failWith takes effect once it
-  // reaches zero.
+  // reaches zero. TRAP: "every call" means every `execute` -- so a `batch`
+  // of N statements decrements N times via `execute`, PLUS once more of its
+  // own in `batch` itself, for N + 1 total. D1Store.write's batch always
+  // carries at least 2 statements per file (an INSERT INTO content and a
+  // pruning DELETE, plus an INSERT INTO revisions when overwriting an
+  // existing path), so `failAfter: 2` set before a write does NOT mean "let
+  // the first two statements through" -- it can be consumed entirely by
+  // `batch`'s own check plus the first statement inside it, failing before
+  // the write's second statement is ever reached. Set generously past a
+  // batch's true statement count, or avoid `failAfter` around `write`
+  // altogether and reach for it only around the single-statement
+  // `version`/`read` calls it was built for (see worker/published.ts's own
+  // comment on why those two need to fail independently).
   failAfter = 0;
   // Counts invocations of `batch`, including ones called with an empty
   // statement list. `statements` alone cannot tell a caller that skipped

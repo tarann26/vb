@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CONTENT_SOURCE_HEADER, handlePublished, type PublishedEnv } from '../published';
-import { D1Store } from '../d1';
+import { D1Store, sha256Hex } from '../d1';
 import { asD1, FakeD1 } from './fakeD1';
 
 // A Map keyed on the cache key's URL, in the same spirit as fakeD1.ts: real
@@ -55,6 +55,11 @@ describe('GET /api/published', () => {
     expect(response.status).toBe(200);
     expect(await response.text()).toBe('[{"id":"a"}]');
     expect(response.headers.get(CONTENT_SOURCE_HEADER)).toBe('d1');
+    // ETag is the D1 store's own sha (a SHA-256 of the body, not a made-up
+    // value) -- pinned here because nothing else in this suite checks it.
+    // The snapshot branch never sets one at all (its `sha` argument to
+    // `body()` is `null`); see hardening.test.ts's own comment on that.
+    expect(response.headers.get('ETag')).toBe(`"${await sha256Hex('[{"id":"a"}]')}"`);
   });
 
   it('serves from the cache on the second identical request', async () => {

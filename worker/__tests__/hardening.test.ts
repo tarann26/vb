@@ -172,9 +172,22 @@ describe('security headers on every response', () => {
   // The one exemption to the blanket no-store, pinned in BOTH directions:
   // the public read path is cacheable, and nothing else became cacheable
   // with it.
+  //
+  // Asserts the exact value published.ts's own `body()` sends, not merely
+  // "anything other than no-store" -- `not.toBe('no-store')` would also
+  // pass for a MISSING header, which proves nothing about what this route
+  // actually returns. `env.DB` here is the placeholder `{}` every other
+  // test in this file uses, so `store.version()` throws and this exercises
+  // the SNAPSHOT branch of handlePublished, not the d1 one -- which is why
+  // there is no ETag to assert here: `body()` only sets one when it is
+  // handed a sha, and the snapshot branch calls it with `null` (see
+  // published.ts's own `body()`). The d1-branch ETag, a real sha256 of
+  // seeded content, is pinned instead in published.test.ts, which already
+  // sets up a FakeD1 to reach that branch.
   it('leaves the public read path cacheable and everything else no-store', async () => {
     const cacheable = await worker.fetch(new Request(`${SITE_ORIGIN}/api/published?path=awards.json`), env);
-    expect(cacheable.headers.get('Cache-Control')).not.toBe('no-store');
+    expect(cacheable.headers.get('Cache-Control')).toBe('public, max-age=60');
+    expect(cacheable.headers.get('ETag')).toBeNull();
     expect(cacheable.headers.get('X-Content-Type-Options')).toBe('nosniff');
     expect([...CACHEABLE_PATHS]).toEqual(['/api/published']);
   });
