@@ -39,7 +39,10 @@ export type PanelId =
   // Phase 2, Task 11: the eleventh panel, and the first one whose file is
   // D1-backed rather than a file in this repository (content.ts's own
   // CONTENT_FILES comment on `awards.json`).
-  | 'awards';
+  | 'awards'
+  // Phase 3, Task 8: the twelfth panel, and back to a real committed file
+  // (content.ts's own CONTENT_FILES comment on `experiences.json`).
+  | 'experiences';
 
 export type AreaSlug = 'menu' | 'pages' | 'story' | 'details' | 'numbers';
 
@@ -70,6 +73,7 @@ export const PANELS: Record<PanelId, PanelDefinition> = {
   hours: { id: 'hours', heading: 'Opening hours', file: 'site.json' },
   copy: { id: 'copy', heading: 'Words on the site', file: 'copy.json' },
   awards: { id: 'awards', heading: 'Awards', file: 'awards.json' },
+  experiences: { id: 'experiences', heading: 'Experiences', file: 'experiences.json' },
 };
 
 export interface AreaDefinition {
@@ -106,12 +110,15 @@ export const AREAS: AreaDefinition[] = [
     slug: 'pages',
     label: 'Pages',
     description: 'Your six business pages, and what shows on the homepage',
-    // 'awards' after 'sections': Awards is a homepage section (SectionId
-    // 'awards', src/content/types.ts) the same way the bespoke and template
-    // ones 'sections' already covers are -- this area is already "what
-    // shows on the homepage" to her, so a new sixth area for one panel
-    // would split one idea into two doors.
-    panelIds: ['pages', 'sections', 'awards'],
+    // 'experiences' and 'awards' after 'sections': both are homepage
+    // sections (SectionId 'experiences'/'awards', src/content/types.ts) the
+    // same way the bespoke and template ones 'sections' already covers are
+    // -- this area is already "what shows on the homepage" to her, so a new
+    // sixth area for either panel would split one idea into two doors.
+    // 'experiences' before 'awards', mirroring the homepage's own section
+    // order (Copy's own experiences-then-awards chrome, and the carousel
+    // sitting above Awards on the page itself).
+    panelIds: ['pages', 'sections', 'experiences', 'awards'],
   },
   {
     slug: 'story',

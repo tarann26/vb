@@ -369,24 +369,34 @@ describe('AdminApp: the real "Homepage sections" screen', () => {
 });
 
 describe('AdminApp: the real "Pages" screen', () => {
-  it('fetches pages.json and offers "Add a page"', async () => {
+  // Phase 3, Task 8: "Add a page" was removed deliberately -- PageList.tsx's
+  // own comment where the button used to sit explains why. Proven on the
+  // real, mounted screen, not only in PageList.test.tsx's own isolated
+  // harness, so a regression that restores the button anywhere in the real
+  // render tree still fails here.
+  it('offers no "Add a page" control anywhere on the real, mounted screen', async () => {
     stubFetch();
     renderDashboard('/edit/manage/pages');
     const section = await sectionByHeading('Pages');
-    expect(within(section).getByRole('button', { name: 'Add a page' })).toBeInTheDocument();
+    await waitFor(() => expect(within(section).queryByText(/^Loading/)).not.toBeInTheDocument());
+    expect(within(section).queryByRole('button', { name: /add a page/i })).not.toBeInTheDocument();
   });
+});
 
-  it('"Add a page" on the real, mounted screen adds a page row she can then open and edit', async () => {
+describe('AdminApp: the real "Experiences" screen', () => {
+  it('"Add a coming-soon item" on the real, mounted screen adds an item she can then edit', async () => {
     stubFetch();
     const user = userEvent.setup();
     renderDashboard('/edit/manage/pages');
-    const section = await sectionByHeading('Pages');
+    const section = await sectionByHeading('Experiences');
+    await within(section).findByDisplayValue('Catering');
 
-    await user.click(within(section).getByRole('button', { name: 'Add a page' }));
-    await user.click(within(section).getByRole('button', { name: 'Edit' }));
+    const before = within(section).getAllByLabelText('Title').length;
+    await user.click(within(section).getByRole('button', { name: 'Add a coming-soon item' }));
 
-    expect(within(section).getByLabelText('Page name')).toBeInTheDocument();
-    expect(within(section).getByLabelText('Web address')).toBeInTheDocument();
+    const titles = within(section).getAllByLabelText('Title');
+    expect(titles).toHaveLength(before + 1);
+    expect((titles[titles.length - 1] as HTMLInputElement).value).toBe('');
   });
 });
 

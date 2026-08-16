@@ -20,7 +20,7 @@ import Field from './Field';
 import SectionList from './SectionList';
 import TemplateSectionList from './TemplateSectionList';
 import { PAGE_FIELDS, PAGE_SEO_FIELDS } from './fields';
-import { ADD_BUTTON_CLASSNAME, MOVE_BUTTON_CLASSNAME } from './RecordList';
+import { MOVE_BUTTON_CLASSNAME } from './RecordList';
 import type { BespokeSection, Page, TemplateSection } from '../content/types';
 import type { ValidationProblem } from '../content/validate';
 import type { StagedFile } from './staged';
@@ -40,24 +40,6 @@ export interface PageListProps {
   // image field, and a placeholder box on a row that can never hold a
   // picture is decoration.
   previews?: ImagePreviews;
-}
-
-// A blank starting point for "Add a page" -- name and SEO fields start
-// empty (the debounced validator explains what's still needed, the same
-// "renders immediately" contract every other Add already has), `inNav` and
-// `enabled` both start FALSE so a freshly-added, still-unfinished page
-// cannot appear on the live site or in its nav by accident -- unlike a
-// dish or a drink, a half-written PAGE is a URL a visitor (or a crawler)
-// could actually land on.
-function blankPage(): Page {
-  return {
-    slug: crypto.randomUUID(),
-    name: '',
-    inNav: false,
-    enabled: false,
-    seo: { title: '', description: '' },
-    sections: [],
-  };
 }
 
 function PageList({ items, onChange, problems, stage, previews }: PageListProps) {
@@ -240,9 +222,22 @@ function PageList({ items, onChange, problems, stage, previews }: PageListProps)
           );
         })}
       </ul>
-      <button type="button" onClick={() => onChange([...items, blankPage()])} className={ADD_BUTTON_CLASSNAME}>
-        Add a page
-      </button>
+      {/* "Add a page" was removed deliberately (Phase 3, and the spec's own
+          decision, not an implementation choice): a general page builder is
+          the thing that makes a dashboard frightening to a non-technical
+          owner. She still edits every word, price, fact and photo on the
+          four real pages above; what she cannot do is create a fifth. "Add
+          a coming-soon item" in the Experiences panel is what took its place
+          -- a carousel card with a photo, a title and a description and no
+          route behind it -- and Taran builds a real page when one is
+          genuinely needed.
+
+          Removing the BUTTON, not the capability underneath: PageList still
+          commits whatever array it is handed, so a page added by any other
+          means still renders, and validatePages still checks it. This is a
+          UI decision enforced at the UI, which is the right layer for it --
+          putting a "maximum four pages" rule in the validator would refuse a
+          page Taran added on purpose. */}
     </div>
   );
 }

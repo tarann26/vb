@@ -36,6 +36,7 @@ import type {
   Page,
   PageSeo,
   Award,
+  Experience,
 } from '../content/types';
 import type { UploadCategory } from '../shared/upload-categories';
 
@@ -186,6 +187,46 @@ export const AWARD_FIELDS: FieldsOf<Award> = {
     kind: 'image',
     category: 'press',
     help: 'Optional -- leave it empty if this award has no badge to show.',
+  },
+};
+
+// Phase 3, Task 8: experiences.json's own descriptor -- ExperiencesArea.tsx.
+export const EXPERIENCE_FIELDS: FieldsOf<Experience> = {
+  id: {
+    label: 'ID',
+    kind: 'text',
+    help: 'A short identifier used only to tell items apart -- changing it does not rename or relink anything else.',
+  },
+  title: { label: 'Title', kind: 'text' },
+  description: {
+    label: 'Short description',
+    kind: 'textarea',
+    help: 'One line, shown under the title on the card.',
+  },
+  image: {
+    label: 'Photo',
+    kind: 'image',
+    category: 'experiences',
+    help: 'Every card needs a photo -- the card is mostly photo.',
+  },
+  // The field she is NOT expected to fill in by hand, and the reason it is
+  // 'text' rather than a 'select' over page slugs: FieldSpec's select branch
+  // requires `options: readonly V[]`, a compile-time literal, and the set of
+  // page slugs is runtime content she can change. A select built from a
+  // stale literal would offer her a page that no longer exists, which is
+  // worse than a text box. The validator refuses anything that is not a
+  // site-relative slug path, and Experiences.tsx degrades an unresolvable
+  // one to a coming-soon card, so a wrong value here is caught before
+  // publish and harmless if it somehow lands.
+  link: {
+    label: 'Opens page',
+    kind: 'text',
+    help: 'Leave this blank for a coming-soon item. Otherwise a page on this site, like /catering.',
+  },
+  comingSoon: {
+    label: 'Coming soon',
+    kind: 'toggle',
+    help: 'A coming-soon item shows a stamp and does not open anything. Turn this off only once it has a page to open.',
   },
 };
 

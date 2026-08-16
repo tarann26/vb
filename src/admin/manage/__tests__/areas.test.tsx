@@ -7,9 +7,9 @@
 //  1. A panel silently DROPPED (or duplicated) while its implementation is
 //     carried into an area module. `AREAS` says which panels exist; the
 //     render below says which ones the dashboard actually mounts. Neither on
-//     its own is evidence. Eleven now, not ten -- Phase 2, Task 11 added
-//     `awards` to the `pages` area without touching the five-area shape this
-//     file's own title names.
+//     its own is evidence. Twelve now, not ten -- Phase 2, Task 11 added
+//     `awards` and Phase 3, Task 8 added `experiences` to the `pages` area,
+//     neither touching the five-area shape this file's own title names.
 //  2. A panel id silently RENAMED. `open-sections.ts` builds its
 //     localStorage key as `vb:section-open:v1:<id>`, and
 //     `CollapsibleSection` publishes that id as `aria-controls`
@@ -28,7 +28,7 @@ import { AREAS, PANELS, areaForFile, findArea, panelForFile, slugFromPathname } 
 import type { PanelId } from '../areas';
 import { CONTENT_FILES } from '../../content';
 
-// The eleven ids, spelled out as a literal rather than derived from `PANELS` --
+// The twelve ids, spelled out as a literal rather than derived from `PANELS` --
 // deriving both sides of an equality from the same constant asserts nothing.
 // This list is what the dashboard has rendered since folding landed, and the
 // stored fold state on every device she has ever used is keyed on it.
@@ -45,6 +45,8 @@ const EXPECTED_PANEL_IDS = [
   'copy',
   // Phase 2, Task 11: the eleventh panel.
   'awards',
+  // Phase 3, Task 8: the twelfth panel.
+  'experiences',
 ];
 
 // Every panel below renders its heading and its `aria-controls` panel id in
@@ -120,8 +122,8 @@ describe('slugFromPathname', () => {
   });
 });
 
-describe('the dashboard renders exactly the eleven frozen panel ids', () => {
-  it('every aria-controls value is section-panel-<id>, for those eleven ids and no others', async () => {
+describe('the dashboard renders exactly the twelve frozen panel ids', () => {
+  it('every aria-controls value is section-panel-<id>, for those twelve ids and no others', async () => {
     stubFetchFailingContent();
     const { container } = render(
       <MemoryRouter initialEntries={['/edit/manage']}>

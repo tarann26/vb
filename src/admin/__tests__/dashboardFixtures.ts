@@ -12,6 +12,7 @@ import type {
   Copy,
   Dish,
   Drink,
+  Experience,
   Galleries,
   MenuFile,
   Section,
@@ -30,6 +31,14 @@ import galleriesJson from '../../content/galleries.json';
 import menusJson from '../../content/menus.json';
 import storyJson from '../../content/story.json';
 import copyJson from '../../content/copy.json';
+// Phase 3, Task 8: the real, committed experiences.json, for the identical
+// reason galleries/menus/story/copy above are the real files rather than
+// hand-typed fixtures -- validateExperiences refuses an EMPTY list (unlike
+// awards.json's own empty-is-fine branch below), so a hand-typed `[]` here
+// would make every full-dashboard test that waits out the 400ms debounce see
+// a spurious "needs attention" on Experiences that has nothing to do with
+// whatever that test actually exercises.
+import experiencesJson from '../../content/experiences.json';
 
 export function dish(id: string, name: string): Dish {
   return { id, name, description: `${name}, described.`, image: `/food/${id}.webp`, tags: [] };
@@ -72,6 +81,7 @@ export const GALLERIES = galleriesJson as Galleries;
 export const MENUS = menusJson as MenuFile[];
 export const STORY = storyJson as StoryContent;
 export const COPY = copyJson as Copy;
+export const EXPERIENCES = experiencesJson as Experience[];
 
 export const WA_RESPONSE = () =>
   new Response(JSON.stringify({ lowerBound: true }), { status: 200, headers: { 'content-type': 'application/json' } });
@@ -115,6 +125,13 @@ export function stubFetch(dishesResponse: Promise<Response> | Response = content
       // "needs attention" marker for Awards, not present before this file
       // existed.
       if (url.includes('awards.json')) return contentResponse([], 'sha-awards');
+      // Phase 3, Task 8: experiences.json, the real committed file (see this
+      // module's own import comment above for why it cannot be `[]` the way
+      // pages.json/awards.json are) -- ExperiencesArea mounts unconditionally
+      // in the `pages` area (ManageShell.tsx's own "areas mount once and stay
+      // mounted"), so any test that renders the dashboard at all now reaches
+      // this branch, not only tests that visit the Pages area.
+      if (url.includes('experiences.json')) return contentResponse(EXPERIENCES, 'sha-experiences');
       throw new Error(`dashboardFixtures: unexpected fetch to ${url}`);
     }),
   );

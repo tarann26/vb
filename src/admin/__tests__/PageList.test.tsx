@@ -24,30 +24,52 @@ function renderList(items: Page[] = [], overrides: Partial<Parameters<typeof Pag
   return { onChange, stage };
 }
 
-describe('PageList: Add', () => {
-  it('offers an "Add a page" button', () => {
-    renderList();
-    expect(screen.getByRole('button', { name: 'Add a page' })).toBeInTheDocument();
+// Phase 3, Task 8: "Add a page" was removed deliberately -- PageList.tsx's
+// own comment where the button used to sit explains why. The inverse
+// assertion below is the one that keeps the button from quietly returning:
+// a regression that restores it renders a control this test would otherwise
+// never look for.
+describe('PageList: no "Add a page" control, and the four real pages stay editable', () => {
+  it('renders no control matching /add a page/i', () => {
+    renderList([makePage({ slug: 'a' }), makePage({ slug: 'b' }), makePage({ slug: 'c' }), makePage({ slug: 'd' })]);
+    expect(screen.queryByRole('button', { name: /add a page/i })).not.toBeInTheDocument();
   });
 
-  it('clicking it appends a blank, disabled, not-in-nav page', async () => {
+  it('the existing four pages are all still editable, one at a time (PageList only ever opens one row)', async () => {
     const user = userEvent.setup();
-    const { onChange } = renderList();
-    await user.click(screen.getByRole('button', { name: 'Add a page' }));
-    expect(onChange).toHaveBeenCalledTimes(1);
-    const [added] = onChange.mock.calls[0][0] as Page[];
-    expect(added.name).toBe('');
-    expect(added.enabled).toBe(false);
-    expect(added.inNav).toBe(false);
-    expect(added.sections).toEqual([]);
-    expect(typeof added.slug).toBe('string');
-    expect(added.slug.length).toBeGreaterThan(0);
+    const pages = [
+      makePage({ slug: 'a', name: 'Page A' }),
+      makePage({ slug: 'b', name: 'Page B' }),
+      makePage({ slug: 'c', name: 'Page C' }),
+      makePage({ slug: 'd', name: 'Page D' }),
+    ];
+    const { onChange } = renderList(pages);
+    expect(screen.getAllByRole('button', { name: 'Edit' })).toHaveLength(4);
+
+    async function editAndRename(index: number) {
+      await user.click(screen.getAllByRole('button', { name: 'Edit' })[index]);
+      const nameField = screen.getByLabelText('Page name');
+      expect(nameField).not.toBeDisabled();
+      expect((nameField as HTMLInputElement).value).toBe(pages[index].name);
+      fireEvent.change(nameField, { target: { value: `${pages[index].name}, Revised` } });
+      const calls = onChange.mock.calls as Array<[Page[]]>;
+      const [updated] = calls[calls.length - 1];
+      expect(updated).toHaveLength(4);
+      expect(updated[index].name).toBe(`${pages[index].name}, Revised`);
+      await user.click(screen.getByRole('button', { name: 'Close' }));
+    }
+
+    await editAndRename(0);
+    await editAndRename(1);
+    await editAndRename(2);
+    await editAndRename(3);
+    expect(onChange).toHaveBeenCalledTimes(4);
   });
 
-  it('two freshly-added pages never collide on slug -- proven through the real validator', () => {
+  it('two pages never collide on slug -- proven through the real validator', () => {
     const problems = validateContent('pages.json', [
-      { slug: 'a-freshly-minted-slug-1', name: '', inNav: false, enabled: false, seo: { title: '', description: '' }, sections: [] },
-      { slug: 'a-freshly-minted-slug-2', name: '', inNav: false, enabled: false, seo: { title: '', description: '' }, sections: [] },
+      { slug: 'a-slug-1', name: '', inNav: false, enabled: false, seo: { title: '', description: '' }, sections: [] },
+      { slug: 'a-slug-2', name: '', inNav: false, enabled: false, seo: { title: '', description: '' }, sections: [] },
     ]);
     expect(problems.some((p) => /already used by another page/.test(p.message))).toBe(false);
   });

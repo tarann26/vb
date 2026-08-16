@@ -91,6 +91,7 @@ import AreaNotFound from './AreaNotFound';
 import MenuArea from '../areas/MenuArea';
 import PagesArea from '../areas/PagesArea';
 import AwardsArea from '../areas/AwardsArea';
+import ExperiencesArea from '../areas/ExperiencesArea';
 import StoryPhotosArea from '../areas/StoryPhotosArea';
 import DetailsArea from '../areas/DetailsArea';
 import NumbersArea from '../areas/NumbersArea';
@@ -402,11 +403,13 @@ function renderArea(slug: AreaSlug, active: boolean, areaProps: AreaProps): Reac
       return (
         <>
           <PagesArea {...areaProps} />
-          {/* Phase 2, Task 11: Awards renders here, not as a sixth AreaSlug
-              -- manage/areas.ts's own `panelIds` already places the 'awards'
-              PanelId inside the 'pages' area, and this switch dispatches by
+          {/* Phase 2, Task 11 / Phase 3, Task 8: Awards and Experiences
+              render here, not as a sixth AreaSlug -- manage/areas.ts's own
+              `panelIds` already places the 'awards' and 'experiences'
+              PanelIds inside the 'pages' area, and this switch dispatches by
               AreaSlug, one level up. No new case, so the `never`
               exhaustiveness check below is untouched. */}
+          <ExperiencesArea {...areaProps} />
           <AwardsArea {...areaProps} />
         </>
       );
