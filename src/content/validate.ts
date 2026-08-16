@@ -992,6 +992,20 @@ function validateSiteDeveloperOwnedFields(data: unknown, current: Record<string,
   return problems;
 }
 
+// Phase 2's D1 pilot file (worker/store.ts's D1_ONLY_PATHS). Deliberately a
+// no-op rather than an invented shape: without a RULES entry at all, this
+// function's own default-deny below refuses every awards.json publish
+// outright, regardless of content -- which would make the D1 write path
+// this task exists to route to permanently unreachable through
+// POST /api/publish. Awards' real shape (title, awarding body, year, an
+// optional badge image -- spec's Phase 4) is not designed yet; a check
+// invented here ahead of that design would only need reworking the moment
+// it lands, so this registers the file as publishable and defers the shape
+// check to the task that actually designs it.
+function validateAwards(): ValidationProblem[] {
+  return [];
+}
+
 // ---------------------------------------------------------------------------
 
 const RULES: Record<string, (data: unknown) => ValidationProblem[]> = {
@@ -1005,6 +1019,7 @@ const RULES: Record<string, (data: unknown) => ValidationProblem[]> = {
   'galleries.json': validateGalleries,
   'menus.json': validateMenus,
   'pages.json': validatePages,
+  'awards.json': validateAwards,
 };
 
 // The single entry point a Worker's publish route calls before it ever

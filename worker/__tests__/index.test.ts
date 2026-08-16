@@ -11,6 +11,7 @@ import {
   PARENT_TREE_SHA,
   type GitHubStub,
 } from './githubStub';
+import { FakeD1, asD1 } from './fakeD1';
 
 // The session key is TOKEN_SECRET bound to the current password hash, so a
 // password change revokes every token already issued (worker/auth.ts).
@@ -539,12 +540,51 @@ describe('worker entry point', () => {
         env,
       );
       expect(response.status).toBe(200);
-      const body = (await response.json()) as { sha: string };
-      expect(body).toEqual({ sha: NEW_COMMIT_SHA });
+      const body = (await response.json()) as { sha: string; publishId: string; d1Paths: string[] };
+      // Task 5: the publish response grew `publishId` and `d1Paths` alongside
+      // `sha` -- a GitHub-only publish still returns the real commit sha and
+      // an empty `d1Paths`.
+      expect(body).toEqual({ sha: NEW_COMMIT_SHA, publishId: expect.any(String), d1Paths: [] });
       // The real GitHub mechanics (base_tree, parents, blob encoding) are
       // github.test.ts's job; this only proves the Worker actually reached
       // commitFiles on a fully valid publish.
       expect(stub.calls.some((c) => c.method === 'PATCH')).toBe(true);
+    });
+
+    // The claim this whole phase rests on, as an assertion. A publish of
+    // existing files makes exactly the GitHub calls it made before Phase 2 and
+    // touches D1 not at all.
+    it('publishes an existing content file through GitHub only, with no D1 traffic', async () => {
+      const fake = new FakeD1();
+      const cookie = await sessionCookie();
+      const goodDish = { id: 'x', name: 'X', description: 'd', image: '/food/x.webp', tags: [] };
+      const response = await worker.fetch(
+        publishRequest(
+          { files: [utf8('src/content/dishes.json', JSON.stringify([goodDish]))] },
+          cookie,
+        ),
+        { ...env, DB: asD1(fake) },
+      );
+      expect(response.status).toBe(200);
+      expect(fake.statements, 'a GitHub-backed publish issued a D1 statement').toEqual([]);
+      expect(await response.json()).toMatchObject({ sha: expect.any(String), d1Paths: [] });
+    });
+
+    it('publishes the pilot file through D1 only, with no commit and no build', async () => {
+      const fake = new FakeD1();
+      const cookie = await sessionCookie();
+      const response = await worker.fetch(
+        publishRequest(
+          { files: [{ path: 'src/content/awards.json', content: '[]', encoding: 'utf-8' }] },
+          cookie,
+        ),
+        { ...env, DB: asD1(fake) },
+      );
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as { sha: string | null; publishId: string; d1Paths: string[] };
+      expect(body.sha, 'a D1-only publish invented a commit sha').toBeNull();
+      expect(body.d1Paths).toEqual(['src/content/awards.json']);
+      expect(fake.content.get('src/content/awards.json')?.body).toBe('[]');
     });
 
     // Task 10, Step 2: a concurrent-edit ref update (GitHub's own 422 on the

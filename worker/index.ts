@@ -35,6 +35,8 @@ import { handleBuildStatus, type PagesEnv } from './status';
 import { handleAnalytics, type WebAnalyticsEnv } from './analytics';
 import { todayInKolkata } from './date';
 import { WA_COUNTS_KV_KEY, readWaCounts } from './wa';
+import { storeFor, partitionByStore } from './store';
+import { D1ConflictError } from './d1';
 
 // Grows as later tasks need more bindings -- only what this file actually
 // reads belongs here. GITHUB_OWNER/REPO/BRANCH/TOKEN come in via GitHubEnv
@@ -585,6 +587,12 @@ async function handlePublish(request: Request, env: Env): Promise<Response> {
   // Every mismatch is collected, not just the first: an early return here
   // used to mean she'd fix one conflict, republish, and immediately hit a
   // second one the first response never mentioned.
+  // Step 3's read now goes through storeFor, so a D1-backed file gets the
+  // same stale-edit refusal a GitHub-backed one does, from the same code.
+  // The D1 store ALSO re-checks baseSha inside its own write, before any
+  // mutation -- that is not redundant, it is the difference between checking
+  // and enforcing: this loop's read and the eventual write are separated by
+  // several awaits.
   const currentByPath = new Map<string, FileContent | null>();
   const conflicts: ValidationProblem[] = [];
   for (const f of files) {
@@ -594,7 +602,7 @@ async function handlePublish(request: Request, env: Env): Promise<Response> {
     }
     let current: FileContent | null;
     try {
-      current = await getFileContent(env, f.path);
+      current = await storeFor(env, f.path).read(f.path);
     } catch (error) {
       return json(502, { message: error instanceof Error ? error.message : 'Could not check for a conflicting edit.' });
     }
@@ -676,36 +684,77 @@ async function handlePublish(request: Request, env: Env): Promise<Response> {
     if (ownershipProblems.length) return json(422, { problems: ownershipProblems });
   }
 
-  // 6. Commit only if every file passed. commitFiles carries its own,
-  // independent path allowlist (worker/github.ts) -- so a request that
-  // somehow reached this point with a path outside src/content/ or
-  // assets-source/ still can't get anything WRITTEN to GitHub. That is no
-  // longer the whole story for a READ: a file carrying a `baseSha` already
-  // had its path checked against `isContentPath` in step 3, before this
-  // point, specifically because that read happens earlier than this write
-  // check does (see step 3's own comment).
+  // 6. Write. Partitioned by store, D1 FIRST, and the ordering is a real
+  // decision rather than an accident of how the code was typed.
+  //
+  // If the D1 leg succeeds and the GitHub leg then fails, every baseSha in
+  // the request is still current -- the GitHub blobs did not move -- so she
+  // presses Publish again and it succeeds. Reversed, a successful commit
+  // moves every blob sha in the request, the retry gets a 409 that means
+  // "someone else changed this" when the someone else was her own successful
+  // half-publish, and the only way out is a reload that discards her buffer.
+  //
+  // CROSS-STORE ATOMICITY IS GENUINELY LOST HERE, one file wide, for the
+  // length of the pilot. A publish touching both awards.json and any GitHub
+  // file can leave the first written and the second not. Nothing in this
+  // Worker can fix that -- there is no distributed transaction across a
+  // SQLite database and a git remote -- so it is stated rather than
+  // disguised. It closes when CONTENT_STORE flips to "d1" and the partition
+  // becomes one group again.
+  //
+  // Note: commitFiles is called directly here rather than through
+  // GitHubStore, because this route needs to distinguish DisallowedPathError
+  // from PublishConflictError and the store interface deliberately does not
+  // model either. GitHubStore.write exists for the CONTENT_STORE="d1"-era
+  // symmetry and is exercised by Task 3's tests; this route keeps its own
+  // error mapping until the switch flips.
+  const publishId = crypto.randomUUID();
+  const { d1, github } = partitionByStore(env, files);
+
   try {
-    const { sha } = await commitFiles(env, files, message);
-    return json(200, { sha });
+    if (d1.length) await storeFor(env, d1[0].path).write(d1, message, publishId);
   } catch (error) {
-    // A disallowed path is a client mistake, not a GitHub failure -- give it
-    // its own 400 rather than falling into the generic 502 below, which
-    // would misdirect diagnosis toward "GitHub is broken".
-    if (error instanceof DisallowedPathError) {
-      return json(400, { message: error.message });
-    }
-    // A non-fast-forward ref update: the branch moved between this
-    // request's own getBranchHeadSha read and its updateBranchHead write --
-    // a second publish landed in the gap. Same 409 step 3's baseSha
-    // mismatch above already answers with, so the dashboard can branch on
-    // STATUS alone for "someone else published", never on message text (see
-    // github.ts's own PublishConflictError comment for why that distinction
-    // matters).
-    if (error instanceof PublishConflictError) {
-      return json(409, { message: error.message });
-    }
+    if (error instanceof D1ConflictError) return json(409, { message: error.message });
     return json(502, { message: error instanceof Error ? error.message : 'Publish failed.' });
   }
+
+  let commitSha: string | null = null;
+  if (github.length) {
+    try {
+      const result = await commitFiles(env, github.map(({ path, content, encoding }) => ({ path, content, encoding })), message);
+      commitSha = result.sha;
+    } catch (error) {
+      // A disallowed path is a client mistake, not a GitHub failure -- give it
+      // its own 400 rather than falling into the generic 502 below, which
+      // would misdirect diagnosis toward "GitHub is broken".
+      if (error instanceof DisallowedPathError) {
+        return json(400, { message: error.message });
+      }
+      // A non-fast-forward ref update: the branch moved between this
+      // request's own getBranchHeadSha read and its updateBranchHead write --
+      // a second publish landed in the gap. Same 409 step 3's baseSha
+      // mismatch above already answers with, so the dashboard can branch on
+      // STATUS alone for "someone else published", never on message text (see
+      // github.ts's own PublishConflictError comment for why that distinction
+      // matters).
+      if (error instanceof PublishConflictError) {
+        return json(409, { message: error.message });
+      }
+      // The D1 leg above has already landed. Said out loud in the message
+      // rather than left for her to discover: telling her "publish failed"
+      // when half of it did not is the failure mode this sentence exists to
+      // prevent.
+      return json(502, {
+        message: error instanceof Error ? error.message : 'Publish failed.',
+        partial: d1.length > 0,
+      });
+    }
+  }
+
+  // `sha` is null when the publish produced no commit -- an awards-only
+  // publish. The client must not poll build-status for a build that will
+  // never exist (Task 10).
+  return json(200, { sha: commitSha, publishId, d1Paths: d1.map((f) => f.path) });
 }
 
 // ---------------------------------------------------------------------------
@@ -866,7 +915,13 @@ async function handleGetContent(request: Request, env: Env): Promise<Response> {
   }
 
   try {
-    const file = await getFileContent(env, path);
+    // Through storeFor rather than straight to GitHub, so the dashboard's
+    // one read route serves a D1-backed file with no client change at all --
+    // the `sha` it returns is whatever that store's opaque token is (a blob
+    // sha, or a SHA-256 of the body) and the dashboard round-trips it
+    // without inspecting it. `isContentPath` above still bounds this to
+    // src/content/<name>.json regardless of which store answers.
+    const file = await storeFor(env, path).read(path);
     if (!file) {
       return json(404, { message: 'That file does not exist yet.' });
     }
