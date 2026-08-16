@@ -408,7 +408,14 @@ test.describe('the laptop shell at 1440px', () => {
     await page.goto('/edit');
     await page.locator('a[href="/edit/manage"]').click();
 
-    await expect(page).toHaveURL(/\/edit\/manage\/menu$/);
+    // What this pins is that the redirect replaces history rather than the
+    // speed of the redirect itself. /edit/manage/* is the same React.lazy
+    // route as the phone-shell case above: the click above has to fetch the
+    // AdminApp chunk before there is anything to redirect FROM, and that
+    // fetch is what a cold CI runner is slow at, not the replace-vs-push
+    // decision this test exists to check. A slow chunk download failing this
+    // assertion would tell her nothing about whether Back stacks or replaces.
+    await expect(page).toHaveURL(/\/edit\/manage\/menu$/, { timeout: 20_000 });
     await page.goBack();
     // Not back onto the redirect, which is what a non-replacing <Navigate>
     // would give her -- an infinite bounce she cannot escape with Back.
