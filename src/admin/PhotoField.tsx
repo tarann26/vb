@@ -70,8 +70,21 @@ export interface PhotoFieldProps {
   // finishes.
   previews?: ImagePreviews;
   previewKey?: string;
+  // Review finding (Phase 4, Task 4): every other photo field on this
+  // dashboard is a rectangle on the live site (a dish card, a press logo, an
+  // award badge), so this component's own square preview was right for all
+  // of them -- until the chef byline, whose LIVE rendering
+  // (src/components/OurStory.tsx) is a circle. Left square in the
+  // dashboard, she would judge a photo crop against a shape the site never
+  // actually shows it in. Optional, defaulting to the existing square
+  // preview, so every other caller is unaffected; `rounded-full` is not new
+  // CSS -- OurStory.tsx's own byline already ships it, among many other
+  // circular UI elements across the site.
+  previewClassName?: string;
   problems: ValidationProblem[];
 }
+
+const DEFAULT_PREVIEW_CLASSNAME = 'mb-2 h-24 w-24 rounded border border-gray-300 object-cover';
 
 type Status =
   | { kind: 'idle' }
@@ -114,6 +127,7 @@ function PhotoField({
   onStaged,
   previews = NO_IMAGE_PREVIEWS,
   previewKey,
+  previewClassName = DEFAULT_PREVIEW_CLASSNAME,
   problems,
 }: PhotoFieldProps) {
   const [status, setStatus] = useState<Status>({ kind: 'idle' });
@@ -229,9 +243,7 @@ function PhotoField({
         {label}
       </label>
 
-      {previewSrc && (
-        <img src={previewSrc} alt="" className="mb-2 h-24 w-24 rounded border border-gray-300 object-cover" />
-      )}
+      {previewSrc && <img src={previewSrc} alt="" className={previewClassName} />}
 
       <input
         id={id}

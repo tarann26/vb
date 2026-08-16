@@ -5,7 +5,16 @@ import { usePrefersReducedMotion } from '../hooks/usePrefersReducedMotion';
 const OurStory: React.FC = () => {
   const content = useContent();
   const { story, galleries } = content;
-  const { chef } = story;
+  // Defensively, not `const { chef } = story` -- unreachable TODAY (
+  // EMPTY_STORY carries a blank `chef`, /edit drafts cannot hold
+  // `story.json`, and the worker validates before commit), but Task 7's D1
+  // swap changes exactly those preconditions: content will come from a
+  // fetch rather than a build-time, guard-checked import, and nothing
+  // upstream of this component will still guarantee `chef` is present.
+  // Mirrors StoryForm's own identical fallback (src/admin/StoryForm.tsx),
+  // and validateStory's own `asRecord()` fallback (src/content/validate.ts)
+  // -- the same defense at a third boundary, not a new rule.
+  const chef = story.chef ?? { name: '', role: '', portrait: '', portraitAlt: '' };
   const [currentIndex, setCurrentIndex] = useState(0);
   const reduceMotion = usePrefersReducedMotion();
 

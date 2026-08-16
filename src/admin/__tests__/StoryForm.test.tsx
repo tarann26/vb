@@ -8,11 +8,20 @@ import { validateContent } from '../../content/validate';
 import type { StoryContent } from '../../content/types';
 import type { ValidationProblem } from '../../content/validate';
 
+// `portrait`/`portraitAlt` are deliberately NOT the real, committed
+// story.json values ('/team/kamalika-anand.webp' / 'Chef Kamalika Anand').
+// Review finding: a fixture that happens to equal the real content cannot
+// tell a real `chef.portrait` binding apart from a hardcoded copy of that
+// same real value -- StoryForm.tsx could read the literal directly instead
+// of `chef.portrait` and this file's own `container.querySelector('img')`
+// assertion below would still pass, because a hardcoded real value and a
+// bound real value render identically. Using a value the real content does
+// NOT have is what makes the two distinguishable.
 const CHEF = {
   name: 'Kamalika Anand',
   role: 'Chef and owner',
-  portrait: '/team/kamalika-anand.webp',
-  portraitAlt: 'Chef Kamalika Anand',
+  portrait: '/team/fixture-only-portrait-not-the-real-photo.webp',
+  portraitAlt: 'Fixture-only alt text, never the real photo description',
 };
 
 const STORY: StoryContent = {
@@ -148,7 +157,7 @@ describe('StoryForm: an EMPTY paragraph list still surfaces the real validator\'
     const problems = validateContent('story.json', empty);
     expect(problems).toEqual([{ field: 'paragraphs', message: 'the About section needs at least one paragraph' }]);
     render(<StoryForm value={empty} onChange={vi.fn()} problems={problems} stage={vi.fn()} previews={NO_IMAGE_PREVIEWS} />);
-    expect(screen.getByRole('alert', { name: "Problems with the story's paragraphs" })).toHaveTextContent(
+    expect(screen.getByRole('alert', { name: "Problems with the About section's paragraphs" })).toHaveTextContent(
       'the About section needs at least one paragraph',
     );
   });
@@ -161,7 +170,7 @@ describe("StoryForm: a blank heading's own message attaches to the heading, not 
     expect(problems).toEqual([{ field: 'heading', message: 'the About section needs a heading' }]);
     render(<StoryForm value={blankHeading} onChange={vi.fn()} problems={problems} stage={vi.fn()} previews={NO_IMAGE_PREVIEWS} />);
     expect(screen.getByLabelText('Heading')).toHaveAccessibleDescription('the About section needs a heading');
-    expect(screen.queryByRole('alert', { name: "Problems with the story's paragraphs" })).not.toBeInTheDocument();
+    expect(screen.queryByRole('alert', { name: "Problems with the About section's paragraphs" })).not.toBeInTheDocument();
   });
 });
 
@@ -169,7 +178,7 @@ describe('StoryForm: a problem naming a paragraph index past the end of what is 
   it('surfaces a stale paragraphs[N] problem for an index no longer rendered', () => {
     const problems: ValidationProblem[] = [{ field: 'paragraphs[9]', message: 'a stale problem for a paragraph no longer here' }];
     renderForm({ problems });
-    expect(screen.getByRole('alert', { name: "Problems with the story's paragraphs" })).toHaveTextContent(
+    expect(screen.getByRole('alert', { name: "Problems with the About section's paragraphs" })).toHaveTextContent(
       'a stale problem for a paragraph no longer here',
     );
   });
@@ -187,15 +196,34 @@ describe('the chef byline fields', () => {
     // box holding the path -- see Field.tsx's own dispatch comment.
     expect(screen.getByLabelText('Your photo')).toBeInTheDocument();
     // Review finding: `getByLabelText('Your photo')` alone proves the FIELD
-    // is wired, not that the PREVIEW <img> actually reads `chef.portrait`
-    // rather than a hardcoded literal that happens to match STORY's own
-    // fixture value -- a hardcoded string is indistinguishable from a real
-    // binding unless the assertion checks the rendered src against a value
-    // this test does not also hand the component through some other channel.
-    // Proven directly: pinning `spec={CHEF_FIELDS.portrait}` `value=` to a
-    // literal (e.g. '/team/some-other-hardcoded-photo.webp') left every
-    // OTHER assertion in this file green -- only this line catches it.
+    // is wired, not that the PREVIEW <img> actually reads `chef.portrait`.
+    // The first version of this line asserted against STORY.chef.portrait
+    // while STORY.chef.portrait was still the REAL, committed story.json
+    // value ('/team/kamalika-anand.webp') -- which meant hardcoding
+    // StoryForm.tsx's `value=` to that same real literal instead of binding
+    // it left this assertion (and the whole suite) green, since a hardcoded
+    // copy of the real value and a real binding to it render identically.
+    // CHEF's own header comment is the actual fix: the fixture now holds a
+    // value the real content does NOT have, so a hardcoded copy of the REAL
+    // value is a visible mismatch here, not a coincidence. Proven directly:
+    // pinning `value=` to the real committed literal
+    // ('/team/kamalika-anand.webp') reddens only this line; the rest of this
+    // file, and the rest of the suite, stays green against that exact
+    // mutation.
     expect(container.querySelector('img')).toHaveAttribute('src', STORY.chef.portrait);
+  });
+
+  // Review finding (minor): the live site (OurStory.tsx) shows this photo
+  // as a circle; PhotoField's own default preview is a square, right for
+  // every OTHER photo field on this dashboard (a dish card, a press logo)
+  // but wrong for a face. `rounded-full` here is not new CSS -- OurStory.tsx
+  // already ships it for this exact byline.
+  it('previews her photo as a circle, matching how the live site shows it', () => {
+    const { container } = render(
+      <StoryForm value={STORY} onChange={vi.fn()} problems={[]} stage={vi.fn()} previews={NO_IMAGE_PREVIEWS} />,
+    );
+    expect(container.querySelector('img')).toHaveClass('rounded-full');
+    expect(container.querySelector('img')).not.toHaveClass('rounded');
   });
 
   it('edits her name without disturbing the paragraphs', async () => {

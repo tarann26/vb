@@ -29,6 +29,11 @@ export interface FieldProps<V> {
   // comment for why the key is composed on the way down rather than derived.
   previews?: ImagePreviews;
   previewKey?: string;
+  // Forwarded straight to PhotoField, untouched -- see that component's own
+  // comment on why a photo whose live rendering is a circle (the chef
+  // byline) needs a different preview shape than the dashboard's default
+  // square.
+  previewClassName?: string;
 }
 
 // Exported, not module-private: a sibling component that renders its own
@@ -113,7 +118,7 @@ function TagsInput({
 // Field.test.tsx asserts each of the nine actually renders an
 // accessible control, so a tenth kind reaching here without a case added
 // below fails a test, not silently.
-function Field<V>({ id, spec, value, onChange, problems, onStaged, previews, previewKey }: FieldProps<V>) {
+function Field<V>({ id, spec, value, onChange, problems, onStaged, previews, previewKey, previewClassName }: FieldProps<V>) {
   // Rendered directly, bypassing this function's own label/help/error shell
   // below entirely -- PhotoField already renders its own label, help text,
   // upload status and error region (it has to: a plain <input> can't show
@@ -141,6 +146,7 @@ function Field<V>({ id, spec, value, onChange, problems, onStaged, previews, pre
         onStaged={onStaged}
         previews={previews}
         previewKey={previewKey}
+        previewClassName={previewClassName}
         problems={problems}
       />
     );

@@ -62,7 +62,7 @@ exports[`the twelve panels, as they render today > About (story) 1`] = `
           </label>
           <img
             alt=""
-            class="mb-2 h-24 w-24 rounded border border-gray-300 object-cover"
+            class="mb-2 h-24 w-24 rounded-full border border-gray-300 object-cover"
             src="/team/kamalika-anand.webp"
           />
           <input

@@ -124,6 +124,12 @@ function StoryForm({ value, onChange, problems, stage, previews }: StoryFormProp
           onStaged={(staged) => stage('story.json:chef:portrait', fromStagedPhoto(staged))}
           previews={previews}
           previewKey="story.json:chef:portrait"
+          // Review finding: the live site (OurStory.tsx) shows this photo
+          // as a circle, not the dashboard's default square. She judges her
+          // own crop by what she sees while editing -- `rounded-full` is
+          // not new CSS, it is already shipped for OurStory.tsx's own
+          // byline and many other circular elements across the site.
+          previewClassName="mb-2 h-24 w-24 rounded-full border border-gray-300 object-cover"
           problems={chefProblems.filter((p) => p.field === 'chef.portrait')}
         />
         <Field
@@ -146,7 +152,7 @@ function StoryForm({ value, onChange, problems, stage, previews }: StoryFormProp
       {banner.length > 0 && (
         <div
           role="alert"
-          aria-label="Problems with the story's paragraphs"
+          aria-label="Problems with the About section's paragraphs"
           className="mb-4 rounded border border-red-300 bg-red-50 p-3 text-sm text-red-700"
         >
           <ul className="list-disc pl-5">
