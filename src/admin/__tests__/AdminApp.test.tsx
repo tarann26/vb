@@ -474,10 +474,10 @@ describe('AdminApp: the new prose, gallery, menus and copy screens all render, f
     expect(pickers.length).toBe(GALLERIES.atmosphere.length + GALLERIES.ourStory.length + photos.length);
   });
 
-  it('renders Our Story, prefilled with the real heading and first paragraph', async () => {
+  it('renders About, prefilled with the real heading and first paragraph', async () => {
     stubFetch();
     renderDashboard('/edit/manage/story');
-    const section = await sectionByHeading('Our Story');
+    const section = await sectionByHeading('About');
     expect(await within(section).findByDisplayValue(STORY.heading)).toBeInTheDocument();
     expect(within(section).getByDisplayValue(STORY.paragraphs[0])).toBeInTheDocument();
   });

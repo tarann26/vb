@@ -444,7 +444,7 @@ describe('GalleryList: a malformed row\'s own message attaches to that row only'
     expect(problems).toEqual([{ field: 'ourStory[0].alt', message: 'ourStory[0] needs alt text' }]);
 
     render(<GalleryList value={withBlankAlt} onChange={vi.fn()} problems={problems} stage={vi.fn()} />);
-    expect(screen.queryByRole('alert', { name: 'Problems with Our Story' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('alert', { name: 'Problems with About' })).not.toBeInTheDocument();
     const rows = screen.getAllByRole('listitem');
     // ourStory's own row is the third <li> (two atmosphere rows first).
     expect(within(rows[2]).getByText('ourStory[0] needs alt text')).toBeInTheDocument();

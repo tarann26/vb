@@ -61,7 +61,7 @@ export const PANELS: Record<PanelId, PanelDefinition> = {
   pages: { id: 'pages', heading: 'Pages', file: 'pages.json' },
   sections: { id: 'sections', heading: 'What shows on the homepage', file: 'sections.json' },
   galleries: { id: 'galleries', heading: 'Galleries', file: 'galleries.json' },
-  story: { id: 'story', heading: 'Our Story', file: 'story.json' },
+  story: { id: 'story', heading: 'About', file: 'story.json' },
   press: { id: 'press', heading: 'Press', file: 'press.json' },
   hours: { id: 'hours', heading: 'Opening hours', file: 'site.json' },
   copy: { id: 'copy', heading: 'Words on the site', file: 'copy.json' },

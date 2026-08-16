@@ -99,7 +99,7 @@ describe.each([
     renderDashboard('/edit/manage/story', { wide });
 
     await screen.findByRole('heading', { name: 'Galleries' });
-    expect(screen.getByRole('heading', { name: 'Our Story' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'About' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Press' })).toBeInTheDocument();
     // Menu's, Pages' and Hours & Wording's panels are mounted but hidden, so
     // a role query -- which is what a screen reader and the tab order both

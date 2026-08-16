@@ -1,5 +1,323 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
+exports[`the ten panels, as they render today > About (story) 1`] = `
+<div
+  id="section-panel-story"
+>
+  <fieldset
+    aria-busy="false"
+    style="border: 0px; padding: 0px; margin: 0px; min-inline-size: 0;"
+  >
+    <div>
+      <div
+        class="mb-4"
+      >
+        <label
+          class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
+          for="story-heading"
+        >
+          Heading
+        </label>
+        <input
+          class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+          id="story-heading"
+          type="text"
+          value="About"
+        />
+      </div>
+      <ul>
+        <li
+          class="mb-6 rounded border border-gray-200 p-4"
+        >
+          <div
+            class="mb-3 flex items-center justify-between gap-2"
+          >
+            <div
+              class="flex gap-2"
+            >
+              <button
+                aria-label="Move paragraph 1 down"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
+                type="button"
+              >
+                Down
+              </button>
+            </div>
+            <button
+              aria-label="Remove paragraph 1"
+              class="rounded border border-red-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-red-600 transition hover:bg-red-600 hover:text-white"
+              type="button"
+            >
+              Remove
+            </button>
+          </div>
+          <div
+            class="mb-4"
+          >
+            <label
+              class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
+              for="story-paragraph-0"
+            >
+              Paragraph 1
+            </label>
+            <textarea
+              class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+              id="story-paragraph-0"
+            >
+              Welcome to Via Bianca, a love letter to Italy. The interiors that are inspired by Puglia, its whitewashed streets, sunlit kitchens, and soulful food, we bring you more than a menu; we bring you a moment. One that's heartfelt, full of flavour, and kneaded with love.
+            </textarea>
+          </div>
+        </li>
+        <li
+          class="mb-6 rounded border border-gray-200 p-4"
+        >
+          <div
+            class="mb-3 flex items-center justify-between gap-2"
+          >
+            <div
+              class="flex gap-2"
+            >
+              <button
+                aria-label="Move paragraph 2 up"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
+                type="button"
+              >
+                Up
+              </button>
+              <button
+                aria-label="Move paragraph 2 down"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
+                type="button"
+              >
+                Down
+              </button>
+            </div>
+            <button
+              aria-label="Remove paragraph 2"
+              class="rounded border border-red-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-red-600 transition hover:bg-red-600 hover:text-white"
+              type="button"
+            >
+              Remove
+            </button>
+          </div>
+          <div
+            class="mb-4"
+          >
+            <label
+              class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
+              for="story-paragraph-1"
+            >
+              Paragraph 2
+            </label>
+            <textarea
+              class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+              id="story-paragraph-1"
+            >
+              Born from my journey through the homes and kitchens of Puglia, Le Marche, and Emilia-Romagna, Via Bianca is a tribute to the Italian way of life; slow, simple, and deeply satisfying. After years spent training in iconic kitchens across India and Italy, I didn't just return with recipes but with a dream of a place where people gather, stories simmer, and pasta is made with heart and a whole lot of love and attention.
+            </textarea>
+          </div>
+        </li>
+        <li
+          class="mb-6 rounded border border-gray-200 p-4"
+        >
+          <div
+            class="mb-3 flex items-center justify-between gap-2"
+          >
+            <div
+              class="flex gap-2"
+            >
+              <button
+                aria-label="Move paragraph 3 up"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
+                type="button"
+              >
+                Up
+              </button>
+              <button
+                aria-label="Move paragraph 3 down"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
+                type="button"
+              >
+                Down
+              </button>
+            </div>
+            <button
+              aria-label="Remove paragraph 3"
+              class="rounded border border-red-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-red-600 transition hover:bg-red-600 hover:text-white"
+              type="button"
+            >
+              Remove
+            </button>
+          </div>
+          <div
+            class="mb-4"
+          >
+            <label
+              class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
+              for="story-paragraph-2"
+            >
+              Paragraph 3
+            </label>
+            <textarea
+              class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+              id="story-paragraph-2"
+            >
+              At Via Bianca, we serve up age-old classics alongside rare regional dishes, and take pride in the little things- like a great cup of coffee or a perfectly blistered pizza crust. From Spaghetti all'Assassina to Corzetti, affogatos to aperitivos, you'll find seasonal plates inspired by the ingredients we love, and a menu that is a slow dance between tradition and surprise.
+            </textarea>
+          </div>
+        </li>
+        <li
+          class="mb-6 rounded border border-gray-200 p-4"
+        >
+          <div
+            class="mb-3 flex items-center justify-between gap-2"
+          >
+            <div
+              class="flex gap-2"
+            >
+              <button
+                aria-label="Move paragraph 4 up"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
+                type="button"
+              >
+                Up
+              </button>
+              <button
+                aria-label="Move paragraph 4 down"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
+                type="button"
+              >
+                Down
+              </button>
+            </div>
+            <button
+              aria-label="Remove paragraph 4"
+              class="rounded border border-red-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-red-600 transition hover:bg-red-600 hover:text-white"
+              type="button"
+            >
+              Remove
+            </button>
+          </div>
+          <div
+            class="mb-4"
+          >
+            <label
+              class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
+              for="story-paragraph-3"
+            >
+              Paragraph 4
+            </label>
+            <textarea
+              class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+              id="story-paragraph-3"
+            >
+              Here, we believe in good food, relaxed meals, shared bites, and memories made around the table. So slow down, stay awhile. Let Italy come to you, one plate at a time.
+            </textarea>
+          </div>
+        </li>
+        <li
+          class="mb-6 rounded border border-gray-200 p-4"
+        >
+          <div
+            class="mb-3 flex items-center justify-between gap-2"
+          >
+            <div
+              class="flex gap-2"
+            >
+              <button
+                aria-label="Move paragraph 5 up"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
+                type="button"
+              >
+                Up
+              </button>
+              <button
+                aria-label="Move paragraph 5 down"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
+                type="button"
+              >
+                Down
+              </button>
+            </div>
+            <button
+              aria-label="Remove paragraph 5"
+              class="rounded border border-red-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-red-600 transition hover:bg-red-600 hover:text-white"
+              type="button"
+            >
+              Remove
+            </button>
+          </div>
+          <div
+            class="mb-4"
+          >
+            <label
+              class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
+              for="story-paragraph-4"
+            >
+              Paragraph 5
+            </label>
+            <textarea
+              class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+              id="story-paragraph-4"
+            >
+              Created by emotion and travel, we hope that you fall in love with Italy, the same way I did.
+            </textarea>
+          </div>
+        </li>
+        <li
+          class="mb-6 rounded border border-gray-200 p-4"
+        >
+          <div
+            class="mb-3 flex items-center justify-between gap-2"
+          >
+            <div
+              class="flex gap-2"
+            >
+              <button
+                aria-label="Move paragraph 6 up"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
+                type="button"
+              >
+                Up
+              </button>
+            </div>
+            <button
+              aria-label="Remove paragraph 6"
+              class="rounded border border-red-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-red-600 transition hover:bg-red-600 hover:text-white"
+              type="button"
+            >
+              Remove
+            </button>
+          </div>
+          <div
+            class="mb-4"
+          >
+            <label
+              class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
+              for="story-paragraph-5"
+            >
+              Paragraph 6
+            </label>
+            <textarea
+              class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+              id="story-paragraph-5"
+            >
+              Buon appetito e divertiti, Chef Kamalika Anand
+            </textarea>
+          </div>
+        </li>
+      </ul>
+      <button
+        class="mt-2 w-full rounded border-2 border-dashed border-brand py-2 font-['Montserrat'] text-sm uppercase tracking-wide text-accent transition hover:bg-brand/10"
+        type="button"
+      >
+        Add a paragraph
+      </button>
+    </div>
+  </fieldset>
+</div>
+`;
+
 exports[`the ten panels, as they render today > Dishes (dishes) 1`] = `
 <div
   id="section-panel-dishes"
@@ -1284,7 +1602,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
         <h3
           class="mb-3 font-['Montserrat'] text-base text-[#222]"
         >
-          Our Story photos
+          About photos
         </h3>
         <ul>
           <li
@@ -1304,7 +1622,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
                   src="/our_story/cut.webp"
                 />
                 <button
-                  aria-label="Move Our Story photo 1 down"
+                  aria-label="Move About photo 1 down"
                   class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                   type="button"
                 >
@@ -1312,7 +1630,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
                 </button>
               </div>
               <button
-                aria-label="Remove Our Story photo 1"
+                aria-label="Remove About photo 1"
                 class="rounded border border-red-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-red-600 transition hover:bg-red-600 hover:text-white"
                 type="button"
               >
@@ -1381,14 +1699,14 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
                   src="/our_story/dinner.webp"
                 />
                 <button
-                  aria-label="Move Our Story photo 2 up"
+                  aria-label="Move About photo 2 up"
                   class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                   type="button"
                 >
                   Up
                 </button>
                 <button
-                  aria-label="Move Our Story photo 2 down"
+                  aria-label="Move About photo 2 down"
                   class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                   type="button"
                 >
@@ -1396,7 +1714,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
                 </button>
               </div>
               <button
-                aria-label="Remove Our Story photo 2"
+                aria-label="Remove About photo 2"
                 class="rounded border border-red-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-red-600 transition hover:bg-red-600 hover:text-white"
                 type="button"
               >
@@ -1465,14 +1783,14 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
                   src="/our_story/handmaking.webp"
                 />
                 <button
-                  aria-label="Move Our Story photo 3 up"
+                  aria-label="Move About photo 3 up"
                   class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                   type="button"
                 >
                   Up
                 </button>
                 <button
-                  aria-label="Move Our Story photo 3 down"
+                  aria-label="Move About photo 3 down"
                   class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                   type="button"
                 >
@@ -1480,7 +1798,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
                 </button>
               </div>
               <button
-                aria-label="Remove Our Story photo 3"
+                aria-label="Remove About photo 3"
                 class="rounded border border-red-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-red-600 transition hover:bg-red-600 hover:text-white"
                 type="button"
               >
@@ -1549,14 +1867,14 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
                   src="/our_story/oven.webp"
                 />
                 <button
-                  aria-label="Move Our Story photo 4 up"
+                  aria-label="Move About photo 4 up"
                   class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                   type="button"
                 >
                   Up
                 </button>
                 <button
-                  aria-label="Move Our Story photo 4 down"
+                  aria-label="Move About photo 4 down"
                   class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                   type="button"
                 >
@@ -1564,7 +1882,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
                 </button>
               </div>
               <button
-                aria-label="Remove Our Story photo 4"
+                aria-label="Remove About photo 4"
                 class="rounded border border-red-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-red-600 transition hover:bg-red-600 hover:text-white"
                 type="button"
               >
@@ -1633,14 +1951,14 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
                   src="/our_story/shape.webp"
                 />
                 <button
-                  aria-label="Move Our Story photo 5 up"
+                  aria-label="Move About photo 5 up"
                   class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                   type="button"
                 >
                   Up
                 </button>
                 <button
-                  aria-label="Move Our Story photo 5 down"
+                  aria-label="Move About photo 5 down"
                   class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                   type="button"
                 >
@@ -1648,7 +1966,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
                 </button>
               </div>
               <button
-                aria-label="Remove Our Story photo 5"
+                aria-label="Remove About photo 5"
                 class="rounded border border-red-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-red-600 transition hover:bg-red-600 hover:text-white"
                 type="button"
               >
@@ -1717,7 +2035,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
                   src="/our_story/stuff.webp"
                 />
                 <button
-                  aria-label="Move Our Story photo 6 up"
+                  aria-label="Move About photo 6 up"
                   class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                   type="button"
                 >
@@ -1725,7 +2043,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
                 </button>
               </div>
               <button
-                aria-label="Remove Our Story photo 6"
+                aria-label="Remove About photo 6"
                 class="rounded border border-red-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-red-600 transition hover:bg-red-600 hover:text-white"
                 type="button"
               >
@@ -1782,7 +2100,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
           class="mt-2 w-full rounded border-2 border-dashed border-brand py-2 font-['Montserrat'] text-sm uppercase tracking-wide text-accent transition hover:bg-brand/10"
           type="button"
         >
-          Add an Our Story photo
+          Add an About photo
         </button>
       </div>
       <div
@@ -2332,324 +2650,6 @@ exports[`the ten panels, as they render today > Opening hours (hours) 1`] = `
         type="button"
       >
         Add an opening-hours row
-      </button>
-    </div>
-  </fieldset>
-</div>
-`;
-
-exports[`the ten panels, as they render today > Our Story (story) 1`] = `
-<div
-  id="section-panel-story"
->
-  <fieldset
-    aria-busy="false"
-    style="border: 0px; padding: 0px; margin: 0px; min-inline-size: 0;"
-  >
-    <div>
-      <div
-        class="mb-4"
-      >
-        <label
-          class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-          for="story-heading"
-        >
-          Heading
-        </label>
-        <input
-          class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-          id="story-heading"
-          type="text"
-          value="About"
-        />
-      </div>
-      <ul>
-        <li
-          class="mb-6 rounded border border-gray-200 p-4"
-        >
-          <div
-            class="mb-3 flex items-center justify-between gap-2"
-          >
-            <div
-              class="flex gap-2"
-            >
-              <button
-                aria-label="Move paragraph 1 down"
-                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
-                type="button"
-              >
-                Down
-              </button>
-            </div>
-            <button
-              aria-label="Remove paragraph 1"
-              class="rounded border border-red-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-red-600 transition hover:bg-red-600 hover:text-white"
-              type="button"
-            >
-              Remove
-            </button>
-          </div>
-          <div
-            class="mb-4"
-          >
-            <label
-              class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-              for="story-paragraph-0"
-            >
-              Paragraph 1
-            </label>
-            <textarea
-              class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-              id="story-paragraph-0"
-            >
-              Welcome to Via Bianca, a love letter to Italy. The interiors that are inspired by Puglia, its whitewashed streets, sunlit kitchens, and soulful food, we bring you more than a menu; we bring you a moment. One that's heartfelt, full of flavour, and kneaded with love.
-            </textarea>
-          </div>
-        </li>
-        <li
-          class="mb-6 rounded border border-gray-200 p-4"
-        >
-          <div
-            class="mb-3 flex items-center justify-between gap-2"
-          >
-            <div
-              class="flex gap-2"
-            >
-              <button
-                aria-label="Move paragraph 2 up"
-                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
-                type="button"
-              >
-                Up
-              </button>
-              <button
-                aria-label="Move paragraph 2 down"
-                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
-                type="button"
-              >
-                Down
-              </button>
-            </div>
-            <button
-              aria-label="Remove paragraph 2"
-              class="rounded border border-red-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-red-600 transition hover:bg-red-600 hover:text-white"
-              type="button"
-            >
-              Remove
-            </button>
-          </div>
-          <div
-            class="mb-4"
-          >
-            <label
-              class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-              for="story-paragraph-1"
-            >
-              Paragraph 2
-            </label>
-            <textarea
-              class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-              id="story-paragraph-1"
-            >
-              Born from my journey through the homes and kitchens of Puglia, Le Marche, and Emilia-Romagna, Via Bianca is a tribute to the Italian way of life; slow, simple, and deeply satisfying. After years spent training in iconic kitchens across India and Italy, I didn't just return with recipes but with a dream of a place where people gather, stories simmer, and pasta is made with heart and a whole lot of love and attention.
-            </textarea>
-          </div>
-        </li>
-        <li
-          class="mb-6 rounded border border-gray-200 p-4"
-        >
-          <div
-            class="mb-3 flex items-center justify-between gap-2"
-          >
-            <div
-              class="flex gap-2"
-            >
-              <button
-                aria-label="Move paragraph 3 up"
-                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
-                type="button"
-              >
-                Up
-              </button>
-              <button
-                aria-label="Move paragraph 3 down"
-                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
-                type="button"
-              >
-                Down
-              </button>
-            </div>
-            <button
-              aria-label="Remove paragraph 3"
-              class="rounded border border-red-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-red-600 transition hover:bg-red-600 hover:text-white"
-              type="button"
-            >
-              Remove
-            </button>
-          </div>
-          <div
-            class="mb-4"
-          >
-            <label
-              class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-              for="story-paragraph-2"
-            >
-              Paragraph 3
-            </label>
-            <textarea
-              class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-              id="story-paragraph-2"
-            >
-              At Via Bianca, we serve up age-old classics alongside rare regional dishes, and take pride in the little things- like a great cup of coffee or a perfectly blistered pizza crust. From Spaghetti all'Assassina to Corzetti, affogatos to aperitivos, you'll find seasonal plates inspired by the ingredients we love, and a menu that is a slow dance between tradition and surprise.
-            </textarea>
-          </div>
-        </li>
-        <li
-          class="mb-6 rounded border border-gray-200 p-4"
-        >
-          <div
-            class="mb-3 flex items-center justify-between gap-2"
-          >
-            <div
-              class="flex gap-2"
-            >
-              <button
-                aria-label="Move paragraph 4 up"
-                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
-                type="button"
-              >
-                Up
-              </button>
-              <button
-                aria-label="Move paragraph 4 down"
-                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
-                type="button"
-              >
-                Down
-              </button>
-            </div>
-            <button
-              aria-label="Remove paragraph 4"
-              class="rounded border border-red-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-red-600 transition hover:bg-red-600 hover:text-white"
-              type="button"
-            >
-              Remove
-            </button>
-          </div>
-          <div
-            class="mb-4"
-          >
-            <label
-              class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-              for="story-paragraph-3"
-            >
-              Paragraph 4
-            </label>
-            <textarea
-              class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-              id="story-paragraph-3"
-            >
-              Here, we believe in good food, relaxed meals, shared bites, and memories made around the table. So slow down, stay awhile. Let Italy come to you, one plate at a time.
-            </textarea>
-          </div>
-        </li>
-        <li
-          class="mb-6 rounded border border-gray-200 p-4"
-        >
-          <div
-            class="mb-3 flex items-center justify-between gap-2"
-          >
-            <div
-              class="flex gap-2"
-            >
-              <button
-                aria-label="Move paragraph 5 up"
-                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
-                type="button"
-              >
-                Up
-              </button>
-              <button
-                aria-label="Move paragraph 5 down"
-                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
-                type="button"
-              >
-                Down
-              </button>
-            </div>
-            <button
-              aria-label="Remove paragraph 5"
-              class="rounded border border-red-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-red-600 transition hover:bg-red-600 hover:text-white"
-              type="button"
-            >
-              Remove
-            </button>
-          </div>
-          <div
-            class="mb-4"
-          >
-            <label
-              class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-              for="story-paragraph-4"
-            >
-              Paragraph 5
-            </label>
-            <textarea
-              class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-              id="story-paragraph-4"
-            >
-              Created by emotion and travel, we hope that you fall in love with Italy, the same way I did.
-            </textarea>
-          </div>
-        </li>
-        <li
-          class="mb-6 rounded border border-gray-200 p-4"
-        >
-          <div
-            class="mb-3 flex items-center justify-between gap-2"
-          >
-            <div
-              class="flex gap-2"
-            >
-              <button
-                aria-label="Move paragraph 6 up"
-                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
-                type="button"
-              >
-                Up
-              </button>
-            </div>
-            <button
-              aria-label="Remove paragraph 6"
-              class="rounded border border-red-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-red-600 transition hover:bg-red-600 hover:text-white"
-              type="button"
-            >
-              Remove
-            </button>
-          </div>
-          <div
-            class="mb-4"
-          >
-            <label
-              class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-              for="story-paragraph-5"
-            >
-              Paragraph 6
-            </label>
-            <textarea
-              class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-              id="story-paragraph-5"
-            >
-              Buon appetito e divertiti, Chef Kamalika Anand
-            </textarea>
-          </div>
-        </li>
-      </ul>
-      <button
-        class="mt-2 w-full rounded border-2 border-dashed border-brand py-2 font-['Montserrat'] text-sm uppercase tracking-wide text-accent transition hover:bg-brand/10"
-        type="button"
-      >
-        Add a paragraph
       </button>
     </div>
   </fieldset>

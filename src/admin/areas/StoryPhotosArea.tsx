@@ -1,4 +1,4 @@
-// The Story & Photos area: the photo galleries, the Our Story prose, and
+// The Story & Photos area: the photo galleries, the About prose, and
 // press coverage.
 //
 // Three files, one thing to her. Every panel body below was MOVED here from
@@ -28,8 +28,8 @@ const StoryPhotosArea: React.FC<AreaProps> = ({ registry, restoreDraft, stage, p
         <GallerySection stage={stage} registry={registry} restoreDraft={restoreDraft} previews={previews} />
       </CollapsibleSection>
     </SectionErrorBoundary>
-    <SectionErrorBoundary name="Our Story">
-      <CollapsibleSection id="story" heading="Our Story" locked={publishLocked}>
+    <SectionErrorBoundary name="About">
+      <CollapsibleSection id="story" heading="About" locked={publishLocked}>
         <StorySection registry={registry} restoreDraft={restoreDraft} />
       </CollapsibleSection>
     </SectionErrorBoundary>
