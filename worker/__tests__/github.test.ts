@@ -297,7 +297,7 @@ describe('commitFiles', () => {
     // Every content file this Worker's validateContent (Task 2) actually
     // recognises must still be a legal commitFiles path -- the allowlist
     // tightened in response to Minor 4 must not accidentally start
-    // rejecting one of the nine real files it exists to allow.
+    // rejecting one of the eleven real files it exists to allow.
     it.each([
       'copy.json',
       'dishes.json',

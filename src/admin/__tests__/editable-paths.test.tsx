@@ -240,7 +240,7 @@ describe('every renderText/renderImage call site passes a path that really point
 // test of the exported module's own membership, not a re-derivation of it
 // (which would only ever prove the module equals itself).
 describe('EDITABLE_TEXT_PATHS (src/admin/editable-paths.ts)', () => {
-  it('has exactly 30 entries, every one a real COPY_FIELDS key', () => {
+  it('has exactly 32 entries, every one a real COPY_FIELDS key', () => {
     expect(EDITABLE_TEXT_PATHS).toHaveLength(32);
     const copyFieldKeys = new Set(Object.keys(COPY_FIELDS));
     EDITABLE_TEXT_PATHS.forEach((path) => expect(copyFieldKeys.has(path)).toBe(true));

@@ -59,6 +59,21 @@ describe('Experiences', () => {
     expect(card.tagName).not.toBe('A');
     expect(within(card).queryByRole('button')).not.toBeInTheDocument();
     expect(screen.getByTestId('experience-stamp-membership')).toBeInTheDocument();
+    // Element existence alone does not prove inertness: a static div with
+    // tabIndex={0} added back would still pass every assertion above while
+    // becoming keyboard-focusable, which is exactly the "inert" contract
+    // Experiences.tsx's own comment describes. Un-navigable therefore also
+    // means un-tabbable.
+    expect(card).not.toHaveAttribute('tabindex');
+  });
+
+  it('renders a navigable item with no Coming Soon stamp', () => {
+    const items = [experience({ id: 'catering', link: '/catering' })];
+    renderExperiences(items, [page('catering', true)]);
+    // Guards against the stamp being rendered unconditionally (e.g. moved
+    // outside the navigable/comingSoon branch): the test above only proves
+    // a comingSoon card HAS a stamp, never that a navigable one lacks one.
+    expect(screen.queryByTestId('experience-stamp-catering')).toBeNull();
   });
 
   // The degradation path nothing else covers: a link that is well-formed and
