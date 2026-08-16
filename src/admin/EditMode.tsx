@@ -224,7 +224,11 @@ const EMPTY_SITE: SiteContent = {
 // and validateContent refuses it, so no publish can ever produce one.
 const EMPTY_GALLERIES: Galleries = { atmosphere: [], ourStory: [], heroCollage: null };
 
-const EMPTY_STORY: StoryContent = { heading: '', paragraphs: [] };
+const EMPTY_STORY: StoryContent = {
+  heading: '',
+  paragraphs: [],
+  chef: { name: '', role: '', portrait: '', portraitAlt: '' },
+};
 
 // Plan 7, Task 1: an empty page list -- matches src/content/pages.json's
 // own starting value (see that file's own comment), and, like every other

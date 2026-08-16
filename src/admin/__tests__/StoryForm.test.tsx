@@ -6,9 +6,17 @@ import { validateContent } from '../../content/validate';
 import type { StoryContent } from '../../content/types';
 import type { ValidationProblem } from '../../content/validate';
 
+const CHEF = {
+  name: 'Kamalika Anand',
+  role: 'Chef and owner',
+  portrait: '/team/kamalika-anand.webp',
+  portraitAlt: 'Chef Kamalika Anand',
+};
+
 const STORY: StoryContent = {
   heading: 'Our Story',
   paragraphs: ['First paragraph, a real sentence.', 'Second paragraph, also real.'],
+  chef: CHEF,
 };
 
 function renderForm(overrides: Partial<Parameters<typeof StoryForm>[0]> = {}) {
@@ -82,7 +90,7 @@ describe('StoryForm: add, remove, and reorder paragraphs', () => {
 // component invents or re-checks itself.
 describe('StoryForm: the ellipsis rule is surfaced inline, from the real validator, not re-implemented here', () => {
   it('a paragraph trailing off with "..." shows the real validator\'s own message on that paragraph', () => {
-    const trailing: StoryContent = { heading: 'Our Story', paragraphs: ['This trails off...'] };
+    const trailing: StoryContent = { heading: 'Our Story', paragraphs: ['This trails off...'], chef: CHEF };
     const problems = validateContent('story.json', trailing);
     expect(problems).toEqual([{ field: 'paragraphs[0]', message: expect.stringMatching(/trails off with an ellipsis/) }]);
 
@@ -100,23 +108,23 @@ describe('StoryForm: the ellipsis rule is surfaced inline, from the real validat
 
 describe('StoryForm: an EMPTY paragraph list still surfaces the real validator\'s own message', () => {
   it('shows "the story needs at least one paragraph" when every paragraph is removed', () => {
-    const empty: StoryContent = { heading: 'Our Story', paragraphs: [] };
+    const empty: StoryContent = { heading: 'Our Story', paragraphs: [], chef: CHEF };
     const problems = validateContent('story.json', empty);
-    expect(problems).toEqual([{ field: 'paragraphs', message: 'the story needs at least one paragraph' }]);
+    expect(problems).toEqual([{ field: 'paragraphs', message: 'the About section needs at least one paragraph' }]);
     render(<StoryForm value={empty} onChange={vi.fn()} problems={problems} />);
     expect(screen.getByRole('alert', { name: "Problems with the story's paragraphs" })).toHaveTextContent(
-      'the story needs at least one paragraph',
+      'the About section needs at least one paragraph',
     );
   });
 });
 
 describe("StoryForm: a blank heading's own message attaches to the heading, not the paragraph banner", () => {
   it('shows "the story needs a heading" on the heading field only', () => {
-    const blankHeading: StoryContent = { heading: '', paragraphs: STORY.paragraphs };
+    const blankHeading: StoryContent = { heading: '', paragraphs: STORY.paragraphs, chef: CHEF };
     const problems = validateContent('story.json', blankHeading);
-    expect(problems).toEqual([{ field: 'heading', message: 'the story needs a heading' }]);
+    expect(problems).toEqual([{ field: 'heading', message: 'the About section needs a heading' }]);
     render(<StoryForm value={blankHeading} onChange={vi.fn()} problems={problems} />);
-    expect(screen.getByLabelText('Heading')).toHaveAccessibleDescription('the story needs a heading');
+    expect(screen.getByLabelText('Heading')).toHaveAccessibleDescription('the About section needs a heading');
     expect(screen.queryByRole('alert', { name: "Problems with the story's paragraphs" })).not.toBeInTheDocument();
   });
 });

@@ -7,5 +7,11 @@
     "Here, we believe in good food, relaxed meals, shared bites, and memories made around the table. So slow down, stay awhile. Let Italy come to you, one plate at a time.",
     "Created by emotion and travel, we hope that you fall in love with Italy, the same way I did.",
     "Buon appetito e divertiti, Chef Kamalika Anand"
-  ]
+  ],
+  "chef": {
+    "name": "Kamalika Anand",
+    "role": "Chef and owner",
+    "portrait": "/team/kamalika-anand.webp",
+    "portraitAlt": "Chef Kamalika Anand"
+  }
 }

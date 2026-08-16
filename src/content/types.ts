@@ -171,9 +171,35 @@ export interface Galleries {
   heroCollage: CollageNode | null;
 }
 
+// Phase 4. Kamalika's byline under the About prose. The six paragraphs are
+// already written in her first person and already signed off in her name
+// (src/content/story.json), so this adds attribution and a face rather than
+// a second block of prose saying the same thing again -- which is what the
+// spec's "adds Kamalika's personal introduction" turns out to mean once you
+// read the copy that is already there.
+//
+// Every field is REQUIRED. A byline with no name, or a name with no
+// photograph, reads as a half-finished page rather than as a smaller
+// version of the same idea -- the same reasoning Experience['image'] uses
+// (see that interface) and the opposite of Award['image'], where an award
+// with no badge is simply an ordinary award.
+//
+// `portrait` is a site-relative derivative path ('/team/kamalika-anand.webp'),
+// never an absolute URL: validateStory refuses anything else, and the
+// committed story.json is what keeps this path inside
+// src/content/__tests__/assets.test.ts's walk even after Phase 4 moves this
+// document's live copy to D1 (see that task's own reasoning).
+export interface ChefIntro {
+  name: string;
+  role: string;
+  portrait: string;
+  portraitAlt: string;
+}
+
 export interface StoryContent {
   heading: string;
   paragraphs: string[];
+  chef: ChefIntro;
 }
 
 export interface MenuFile {

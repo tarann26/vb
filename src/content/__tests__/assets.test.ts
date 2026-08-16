@@ -149,7 +149,13 @@ describe('content assets', () => {
   it('discovers the paths hardcoded outside src/content too', () => {
     expect(paths).toContain('/hero/brick.webp'); // Hero.tsx and src/index.css
     expect(paths).toContain('/favicon-32.png'); // index.html (the placeholder SVG it replaced is gone)
-    expect(paths).toContain('/team/kamalika-anand.webp'); // parked ChefGallery.tsx
+    // Reached from three places now: src/content/press.json's chef-interview
+    // article, src/content/story.json's chef byline (Phase 4), and the
+    // parked src/components/ChefGallery.tsx. The story.json reference is the
+    // one that matters most, because Phase 4 moves that document's LIVE copy
+    // to D1 -- where this walk cannot see it -- and the committed file is
+    // what keeps the portrait inside this guarantee.
+    expect(paths).toContain('/team/kamalika-anand.webp');
     expect(paths).toContain('/menus/food-menu.pdf'); // parked SignatureMocktails.tsx
   });
 

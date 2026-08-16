@@ -60,6 +60,12 @@ const newerArticle: Article = {
 const validStory: StoryContent = {
   heading: 'Our Story',
   paragraphs: ['A paragraph with a clean, finished sentence.'],
+  chef: {
+    name: 'Kamalika Anand',
+    role: 'Chef and owner',
+    portrait: '/team/kamalika-anand.webp',
+    portraitAlt: 'Chef Kamalika Anand',
+  },
 };
 
 const validCopy: Copy = {
@@ -1178,5 +1184,77 @@ describe('validateContent: a value that reaches an href or src cannot carry a sc
     expect(
       validateContent('site.json', { ...validSite, socials: { instagram: 'https://instagram.com/x', linkedin: null } }),
     ).toEqual([]);
+  });
+});
+
+describe('story.json chef intro', () => {
+  // Phase 4. The chef byline is required content, not decoration: an About
+  // section that shows a face with no name, or a name with no photo, is
+  // worse than one with neither. Every field is checked BEFORE the
+  // paragraph loop below returns early on an empty list -- see
+  // validateStory's own comment for why that ordering is load-bearing.
+  const VALID_CHEF = {
+    name: 'Kamalika Anand',
+    role: 'Chef and owner',
+    portrait: '/team/kamalika-anand.webp',
+    portraitAlt: 'Chef Kamalika Anand',
+  };
+  const VALID_STORY = { heading: 'About', paragraphs: ['A real paragraph.'], chef: VALID_CHEF };
+
+  it('accepts a story with a well-formed chef intro', () => {
+    expect(validateContent('story.json', VALID_STORY)).toEqual([]);
+  });
+
+  it('refuses a blank chef name', () => {
+    const problems = validateContent('story.json', { ...VALID_STORY, chef: { ...VALID_CHEF, name: '  ' } });
+    expect(problems.map((p) => p.field)).toContain('chef.name');
+  });
+
+  it('refuses a blank role', () => {
+    const problems = validateContent('story.json', { ...VALID_STORY, chef: { ...VALID_CHEF, role: '' } });
+    expect(problems.map((p) => p.field)).toContain('chef.role');
+  });
+
+  it('refuses a missing portrait', () => {
+    const problems = validateContent('story.json', { ...VALID_STORY, chef: { ...VALID_CHEF, portrait: '' } });
+    expect(problems.map((p) => p.field)).toContain('chef.portrait');
+  });
+
+  // isUnsafeAssetPath (validate.ts) -- the same check every other image
+  // field in this file already goes through. An off-site portrait is not a
+  // styling choice, it is a third-party request on the homepage.
+  it.each(['team/kamalika.webp', '//evil.example/x.webp', '/team/../../etc/passwd', 'https://evil.example/x.webp'])(
+    'refuses a portrait path that is not a site-relative asset path: %s',
+    (portrait) => {
+      const problems = validateContent('story.json', { ...VALID_STORY, chef: { ...VALID_CHEF, portrait } });
+      expect(problems.map((p) => p.field)).toContain('chef.portrait');
+    },
+  );
+
+  it('refuses a blank portrait description', () => {
+    const problems = validateContent('story.json', { ...VALID_STORY, chef: { ...VALID_CHEF, portraitAlt: '' } });
+    expect(problems.map((p) => p.field)).toContain('chef.portraitAlt');
+  });
+
+  // The ordering trap, asserted rather than assumed: validateStory returns
+  // early when `paragraphs` is empty. If the chef checks sat after that
+  // return, a story with no paragraphs would skip them entirely and every
+  // test above would still pass -- the chef rules would be unreachable for
+  // the one input most likely to be malformed.
+  it('still reports a bad chef intro when the paragraph list is empty', () => {
+    const problems = validateContent('story.json', { heading: 'About', paragraphs: [], chef: { ...VALID_CHEF, name: '' } });
+    expect(problems.map((p) => p.field)).toContain('chef.name');
+    expect(problems.map((p) => p.field)).toContain('paragraphs');
+  });
+
+  // A missing `chef` key entirely -- what an old D1 revision restored by
+  // undo would look like. asRecord maps a missing value to {}, so every
+  // field check fires; this pins that it degrades to four honest problems
+  // rather than throwing.
+  it('refuses a story with no chef intro at all, without throwing', () => {
+    const problems = validateContent('story.json', { heading: 'About', paragraphs: ['A real paragraph.'] });
+    expect(problems.map((p) => p.field).sort()).toEqual(
+      ['chef.name', 'chef.portrait', 'chef.portraitAlt', 'chef.role'].sort(),
+    );
   });
 });

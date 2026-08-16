@@ -333,9 +333,30 @@ function validatePress(data: unknown): ValidationProblem[] {
 function validateStory(data: unknown): ValidationProblem[] {
   const story = asRecord(data);
   const problems: ValidationProblem[] = [];
-  if (isBlank(story.heading)) problems.push(problem('heading', 'the story needs a heading'));
+  if (isBlank(story.heading)) problems.push(problem('heading', 'the About section needs a heading'));
+
+  // Phase 4. Checked HERE, before the paragraph block below, because that
+  // block returns early on an empty list -- chef rules placed after it
+  // would be unreachable for exactly the input most likely to be malformed,
+  // and every chef test would still pass while checking nothing.
+  const chef = asRecord(story.chef);
+  if (isBlank(chef.name)) {
+    problems.push(problem('chef.name', 'the About section needs your name'));
+  }
+  if (isBlank(chef.role)) {
+    problems.push(problem('chef.role', 'the About section needs a short line saying who you are, e.g. "Chef and owner"'));
+  }
+  if (isBlank(chef.portrait)) {
+    problems.push(problem('chef.portrait', 'the About section needs a photo of you'));
+  } else if (isUnsafeAssetPath(chef.portrait)) {
+    problems.push(problem('chef.portrait', 'your photo needs to be one uploaded through this dashboard, starting with /'));
+  }
+  if (isBlank(chef.portraitAlt)) {
+    problems.push(problem('chef.portraitAlt', 'your photo needs a short description, for people using a screen reader'));
+  }
+
   if (!Array.isArray(story.paragraphs) || story.paragraphs.length === 0) {
-    problems.push(problem('paragraphs', 'the story needs at least one paragraph'));
+    problems.push(problem('paragraphs', 'the About section needs at least one paragraph'));
     return problems;
   }
   story.paragraphs.forEach((raw: unknown, i: number) => {
