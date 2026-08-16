@@ -122,12 +122,18 @@ function resolveTextValue(bundle: ContentBundle, path: string): unknown {
   }, bundle.copy);
 }
 
-// Every real renderImage call site is one of three shapes: an index into one
+// Every real renderImage call site is one of FOUR shapes: an index into one
 // of galleries.json's two flat arrays, a photo ID into the hero collage's
-// tree, or `<collection>.<id>.image` into dishes/drinks/press. A path of none
-// of those shapes is not a defect this test knows how to check -- it throws
-// rather than silently passing, so a renderImage call site with a new path
-// shape some day fails loudly here instead of going unchecked.
+// tree, `<collection>.<id>.image` into dishes/drinks/press, or a template
+// section's own `sections.<id>.content.images.<i>` / `...items.<i>.image` --
+// the two shapes setTemplateSectionImage (template-section-paths.ts) itself
+// recognises. The fourth shape was unreached until a real page carried a
+// template section with real images rendered live -- Task 6's catering
+// gallery is what surfaces it, the same way family 2 of resolveTextValue
+// above was surfaced by the first template section's heading. A path of
+// none of those four shapes is not a defect this test knows how to check --
+// it throws rather than silently passing, so a renderImage call site with a
+// new path shape some day fails loudly here instead of going unchecked.
 function resolveImageSrc(bundle: ContentBundle, path: string): string | null | undefined {
   const gallery = path.match(/^galleries\.(atmosphere|ourStory)\.(\d+)$/);
   if (gallery) {
@@ -144,6 +150,23 @@ function resolveImageSrc(bundle: ContentBundle, path: string): string | null | u
     const [, collection, id] = item;
     const list = bundle[collection as 'dishes' | 'drinks' | 'press'] as { id: string; image: string | null }[];
     return list.find((entry) => entry.id === id)?.image;
+  }
+  const section = parseSectionContentPath(path);
+  if (section) {
+    // Same pool as resolveTextValue above: template sections live in
+    // pages.json now, so bundle.sections alone would miss a page's own.
+    const pools = [bundle.sections, ...defaultBundle.pages.map((page) => page.sections)];
+    const found = pools.map((pool) => findTemplateSection(pool, section.sectionId)).find(Boolean);
+    if (!found) return undefined;
+    const imagesMatch = section.rest.match(/^images\.(\d+)$/);
+    if (imagesMatch && 'images' in found.content) {
+      return found.content.images[Number(imagesMatch[1])]?.src;
+    }
+    const itemMatch = section.rest.match(/^items\.(\d+)\.image$/);
+    if (itemMatch && 'items' in found.content) {
+      return found.content.items[Number(itemMatch[1])]?.image;
+    }
+    return undefined;
   }
   throw new Error(`resolveImageSrc: unrecognized renderImage path shape "${path}"`);
 }
