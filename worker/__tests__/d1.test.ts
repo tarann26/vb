@@ -151,6 +151,26 @@ describe('undo', () => {
     expect((await store.read('src/content/awards.json'))!.content).toBe('v1');
   });
 
+  // Task 6: worker/index.ts's handleUndo refuses a REPEAT undo of the same
+  // publish with a 409, and it can only do that off this return value being
+  // empty the second time. Without the consuming delete this pins, the
+  // SELECT this method runs would find the exact same revision rows again --
+  // restoring them changes nothing about their own existence in `revisions`
+  // -- and a second call would silently restore the same group a second
+  // time rather than reporting nothing left to undo.
+  it('consumes the group it restores, so a second undo of the same publish finds nothing left', async () => {
+    await store.write([file('src/content/awards.json', 'v1')], 'first', 'p1');
+    await store.write([file('src/content/awards.json', 'v2')], 'second', 'p2');
+    expect(await store.undo('p2')).toEqual(['src/content/awards.json']);
+    expect(await store.undo('p2')).toEqual([]);
+    // And the content stays at what the first undo restored -- a second,
+    // silently-applied restore would still show 'v1' here even if it were
+    // wrongly allowed to run, so this alone would not catch the bug; paired
+    // with the empty-array assertion above it confirms both that nothing
+    // ran a second time AND that nothing was corrupted by trying.
+    expect((await store.read('src/content/awards.json'))!.content).toBe('v1');
+  });
+
   // `results.map(...)` on an empty array is `[]` regardless, so asserting
   // only the return value here cannot tell "undo returned early" from "undo
   // ran write([]) and that happened to produce the same answer" -- write([])

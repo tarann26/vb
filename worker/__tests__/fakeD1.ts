@@ -77,6 +77,15 @@ export class FakeD1 {
       this.content.set(path, { path, body, sha, version, updated_at: updatedAt });
       return { changes: 1 };
     }
+    if (sql.startsWith('DELETE FROM revisions WHERE publish_id = ?')) {
+      // Consumes a whole revision group by publish_id -- distinct from the
+      // pruning DELETE below, which scopes by path and keeps a count. This
+      // one deletes everything sharing the bound publish_id, regardless of
+      // path, which is what makes a second `undo(publishId)` find nothing.
+      const publishId = args[0] as string;
+      this.revisions = this.revisions.filter((r) => r.publish_id !== publishId);
+      return { changes: 0 };
+    }
     if (sql.startsWith('DELETE FROM revisions WHERE path = ? AND id NOT IN')) {
       // Three `?` placeholders in the real SQL (outer path, inner subquery's
       // path, LIMIT), because the inner subquery re-selects by path rather

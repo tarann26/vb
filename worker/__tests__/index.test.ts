@@ -1159,6 +1159,20 @@ describe('POST /api/undo', () => {
     return new Request('https://viabiancadelhi.com/api/undo', { method: 'POST', headers, body: JSON.stringify(body) });
   }
 
+  // Task 6: a D1-only undo needs a D1-only publish to undo. Local to this
+  // describe block -- the `publishRequest` in the POST /api/publish suite
+  // above takes a `{ files }` envelope and is scoped to that describe --
+  // this one takes the bare files array these tests actually pass around,
+  // with the session cookie supplied explicitly rather than baked in, so a
+  // test can (deliberately) omit it the same way undoRequest lets it.
+  function publishRequest(files: unknown[], sessionCookie: string): Request {
+    return new Request('https://viabiancadelhi.com/api/publish', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: sessionCookie },
+      body: JSON.stringify({ files }),
+    });
+  }
+
   function stubWith(opts: Parameters<typeof makeGitHubStub>[0] = {}) {
     stub = makeGitHubStub(opts);
     vi.stubGlobal('fetch', stub.fetch);
@@ -1251,7 +1265,9 @@ describe('POST /api/undo', () => {
     stubWith();
     const response = await worker.fetch(undoRequest({ sha: BASE_COMMIT_SHA }, await cookie()), env);
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ sha: NEW_COMMIT_SHA });
+    // No `publishId` was sent, so the D1 leg never ran and `restored` stays
+    // empty -- this is a GitHub-only undo, unchanged from before Task 6.
+    expect(await response.json()).toEqual({ sha: NEW_COMMIT_SHA, restored: [] });
   });
 
   // The structural guard, covering the window inside the request that no
@@ -1286,5 +1302,81 @@ describe('POST /api/undo', () => {
     stubWith({ failOn: `/git/trees/${PARENT_TREE_SHA}?recursive=1`, failStatus: 500 });
     const response = await worker.fetch(undoRequest({ sha: BASE_COMMIT_SHA }, await cookie()), env);
     expect(response.status).toBe(502);
+  });
+
+  // Task 6: undo now has a D1 half too. These publish through the D1-only
+  // pilot path (src/content/awards.json, D1_ONLY_PATHS) rather than through
+  // GitHub, so no GitHub stub is set up here at all -- a stray GitHub call
+  // from either the publish or the undo would surface as a real, unstubbed
+  // `fetch` throwing, which is exactly the failure a mistaken store routing
+  // should produce.
+  it('puts back a D1-only publish with no commit involved', async () => {
+    const fake = new FakeD1();
+    const d1env = { ...env, DB: asD1(fake) };
+    const c = await cookie();
+    await worker.fetch(
+      publishRequest([{ path: 'src/content/awards.json', content: '[{"id":"a"}]', encoding: 'utf-8' }], c),
+      d1env,
+    );
+    const second = await worker.fetch(
+      publishRequest([{ path: 'src/content/awards.json', content: '[{"id":"b"}]', encoding: 'utf-8' }], c),
+      d1env,
+    );
+    const { publishId } = (await second.json()) as { publishId: string };
+
+    const undone = await worker.fetch(undoRequest({ publishId }, c), d1env);
+    expect(undone.status).toBe(200);
+    expect(await undone.json()).toEqual({ sha: null, restored: ['src/content/awards.json'] });
+    expect(fake.content.get('src/content/awards.json')?.body).toBe('[{"id":"a"}]');
+  });
+
+  it('refuses a second undo of the same publish rather than reverting twice', async () => {
+    const fake = new FakeD1();
+    const d1env = { ...env, DB: asD1(fake) };
+    const c = await cookie();
+    await worker.fetch(
+      publishRequest([{ path: 'src/content/awards.json', content: '[{"id":"a"}]', encoding: 'utf-8' }], c),
+      d1env,
+    );
+    const second = await worker.fetch(
+      publishRequest([{ path: 'src/content/awards.json', content: '[{"id":"b"}]', encoding: 'utf-8' }], c),
+      d1env,
+    );
+    const { publishId } = (await second.json()) as { publishId: string };
+
+    await worker.fetch(undoRequest({ publishId }, c), d1env);
+    const again = await worker.fetch(undoRequest({ publishId }, c), d1env);
+    expect(again.status).toBe(409);
+  });
+
+  // The pre-existing GitHub behaviour, re-asserted here because this task
+  // rewrote handleUndo's shared plumbing around it: 'is 409 when the sha is
+  // no longer the branch head, and writes nothing' above already covers a
+  // sha-only request end to end. This covers the shape Task 6 actually
+  // introduced -- a MIXED request naming both a valid, already-restored
+  // publishId and a stale sha -- so a D1 leg that succeeds cannot mask a
+  // GitHub leg that must still refuse.
+  it('still refuses an undo whose commit sha is no longer the head, even with a valid publishId', async () => {
+    const fake = new FakeD1();
+    const d1env = { ...env, DB: asD1(fake) };
+    const c = await cookie();
+    stubWith();
+    await worker.fetch(
+      publishRequest([{ path: 'src/content/awards.json', content: '[{"id":"a"}]', encoding: 'utf-8' }], c),
+      d1env,
+    );
+    const second = await worker.fetch(
+      publishRequest([{ path: 'src/content/awards.json', content: '[{"id":"b"}]', encoding: 'utf-8' }], c),
+      d1env,
+    );
+    const { publishId } = (await second.json()) as { publishId: string };
+
+    const response = await worker.fetch(undoRequest({ sha: 'some-other-commit', publishId }, c), d1env);
+    expect(response.status).toBe(409);
+    // The D1 half still ran and restored -- the GitHub-half refusal did not
+    // roll it back (there is no cross-store transaction to do that with; see
+    // handlePublish's own comment on the same limitation). Stated so the
+    // next reader doesn't mistake the 409 for "nothing happened".
+    expect(fake.content.get('src/content/awards.json')?.body).toBe('[{"id":"a"}]');
   });
 });

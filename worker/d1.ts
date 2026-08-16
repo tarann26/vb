@@ -193,6 +193,23 @@ export class D1Store implements ContentStore {
       'Put back the previous version',
       undoPublishId,
     );
+
+    // Consumes the group once it has been restored. Without this, the SELECT
+    // above would find the exact same rows on a SECOND call to
+    // `undo(publishId)` -- nothing about restoring them removes them from
+    // `revisions` -- and would restore them again, silently, rather than
+    // reporting nothing left to undo. worker/index.ts's handleUndo relies on
+    // an EMPTY result here to refuse a repeat undo with 409 instead of
+    // reverting twice.
+    //
+    // Run after the restoring write, not batched with it: if this delete
+    // itself fails, the worst case is a group that can still be undone again
+    // (a redundant, harmless re-restore, since `content` is already at the
+    // restored value) -- never a group whose restore silently didn't happen.
+    // Scoped to `publish_id`, not `path`: it must not touch any OTHER
+    // publish's revisions for the same path, including the one this very
+    // call just created for `undoPublishId`.
+    await this.db.prepare('DELETE FROM revisions WHERE publish_id = ?').bind(publishId).run();
     return results.map((row) => row.path);
   }
 }

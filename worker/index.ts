@@ -36,7 +36,7 @@ import { handleAnalytics, type WebAnalyticsEnv } from './analytics';
 import { todayInKolkata } from './date';
 import { WA_COUNTS_KV_KEY, readWaCounts } from './wa';
 import { storeFor, partitionByStore } from './store';
-import { D1ConflictError } from './d1';
+import { D1ConflictError, D1Store } from './d1';
 
 // Grows as later tasks need more bindings -- only what this file actually
 // reads belongs here. GITHUB_OWNER/REPO/BRANCH/TOKEN come in via GitHubEnv
@@ -800,22 +800,26 @@ async function handlePublish(request: Request, env: Env): Promise<Response> {
 // ---------------------------------------------------------------------------
 // POST /api/undo -- put back the publish she just made.
 //
-// The client sends the sha it watched itself create, and this route refuses
-// unless that sha is still the branch head. That is deliberately stronger
-// than the per-file baseSha check a publish uses: an undo is only meaningful
-// relative to one specific commit, so ANY movement of the branch -- a second
-// device, a developer's push -- has to refuse rather than revert a stale
-// one. The cost of refusing is a reload; the cost of not refusing is
-// silently discarding whatever landed in between.
+// A publish can now move two stores (Task 5), so undo takes two identifiers
+// instead of one: `sha` names the commit (GitHub's half), `publishId` names
+// the revision group (D1's half). Both come from the client's own record,
+// never derived here from whatever happens to be at the branch head or
+// whatever is newest in D1. That is what makes it structurally impossible to
+// offer to revert a developer's hand commit and describe it to her as "the
+// change you published" -- content in this repository has historically
+// arrived that way, so a head-inspecting version would do exactly that. It
+// also removes any need for a commit-message marker, which would be
+// client-forgeable anyway since handlePublish already accepts a
+// caller-supplied message.
 //
-// The offer itself is held client-side (src/admin/undo.ts), never derived
-// here from whatever happens to be at the head. That is what makes it
-// structurally impossible to offer to revert a developer's hand commit and
-// describe it to her as "the change you published" -- content in this
-// repository has historically arrived that way, so a head-inspecting version
-// would do exactly that. It also removes any need for a commit-message
-// marker, which would be client-forgeable anyway since handlePublish already
-// accepts a caller-supplied message.
+// For the GitHub half specifically: the client sends the sha it watched
+// itself create, and this route refuses unless that sha is still the branch
+// head. That is deliberately stronger than the per-file baseSha check a
+// publish uses: an undo is only meaningful relative to one specific commit,
+// so ANY movement of the branch -- a second device, a developer's push --
+// has to refuse rather than revert a stale one. The cost of refusing is a
+// reload; the cost of not refusing is silently discarding whatever landed in
+// between.
 async function handleUndo(request: Request, env: Env): Promise<Response> {
   // 1. Verify token -- first, and unconditionally, so an unauthenticated
   // request cannot spend any of the 8 GitHub subrequests an undo costs.
@@ -826,23 +830,60 @@ async function handleUndo(request: Request, env: Env): Promise<Response> {
     return json(401, { message: 'Not authenticated.' });
   }
 
-  // 1a. Same ceiling as handlePublish -- an undo body is one sha, so this is
-  // pure backstop rather than a limit anything legitimate approaches.
+  // 1a. Same ceiling as handlePublish -- an undo body is two identifiers at
+  // most, so this is pure backstop rather than a limit anything legitimate
+  // approaches.
   if (tooLargeToRead(request)) {
     return json(413, { message: 'That is too much to send.' });
   }
 
-  // 2. Parse.
-  let sha: string;
+  // 2. Parse. Two identifiers now, because a publish can move two stores.
+  // `sha` names the commit (GitHub's half); `publishId` names the revision
+  // group (D1's half). At least one is required. Both come from the
+  // client's own UndoRecord -- held client-side, never derived from
+  // whatever happens to be at the branch head, for the reason this route's
+  // header comment already gives: content in this repository has
+  // historically arrived by hand commit, and a head-inspecting undo would
+  // offer to revert a developer's edit and describe it to her as "the
+  // change you published".
+  let sha: string | null;
+  let publishId: string | null;
   try {
     const body: unknown = await request.json();
-    const raw = (body as { sha?: unknown } | null)?.sha;
-    if (typeof raw !== 'string' || raw.length === 0) {
+    const rawSha = (body as { sha?: unknown } | null)?.sha;
+    const rawPublishId = (body as { publishId?: unknown } | null)?.publishId;
+    sha = typeof rawSha === 'string' && rawSha.length > 0 ? rawSha : null;
+    publishId = typeof rawPublishId === 'string' && rawPublishId.length > 0 ? rawPublishId : null;
+    if (!sha && !publishId) {
       return json(400, { message: 'No change named to put back.' });
     }
-    sha = raw;
   } catch {
     return json(400, { message: 'Invalid request body.' });
+  }
+
+  // 2a. Run the D1 leg first, then the GitHub leg -- same ordering as
+  // publish, for the same reason: the GitHub leg's own guard is the head-sha
+  // check plus a non-fast-forward PATCH, and both stay valid whether or not
+  // the D1 restore has already happened. Reversed, a successful revert
+  // commit would move the head and make the D1 leg's own failure
+  // unrecoverable without a second reload.
+  const restored: string[] = [];
+  if (publishId) {
+    try {
+      restored.push(...(await new D1Store(env.DB).undo(publishId)));
+    } catch (error) {
+      return json(502, { message: error instanceof Error ? error.message : 'Could not put that change back.' });
+    }
+  }
+
+  if (!sha) {
+    // A publish that only touched D1 produced no commit, so there is
+    // nothing for the GitHub half to do. `restored` empty here means the
+    // revision group was already undone (or never existed) -- 409, the same
+    // word this codebase uses everywhere for "the state you were looking at
+    // is not the state that is there now".
+    if (restored.length === 0) return json(409, { message: 'There is nothing left to put back.' });
+    return json(200, { sha: null, restored });
   }
 
   try {
@@ -891,7 +932,7 @@ async function handleUndo(request: Request, env: Env): Promise<Response> {
     // turns that case into a non-fast-forward PATCH, GitHub's own 422, and
     // the 409 below.
     const result = await restoreBlobs(env, entries, 'Put back the previous version', head.sha);
-    return json(200, { sha: result.sha });
+    return json(200, { sha: result.sha, restored });
   } catch (error) {
     if (error instanceof DisallowedPathError) {
       return json(400, { message: error.message });
