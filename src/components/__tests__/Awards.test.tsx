@@ -91,12 +91,25 @@ describe('Awards', () => {
   // The brief's own third case: a non-array response is handled the same
   // way fetchAwards itself handles it -- no crash, an empty list, still no
   // visible error.
+  //
+  // Review finding (Minor 1): asserting on `img` count here is vacuous --
+  // neither fixture award in this file carries an `image`, so zero `<img>`
+  // elements holds even if fetchAwards regressed to `[parsed]` (a single,
+  // malformed "award" with no title/awardedBy/year of its own, which would
+  // still render a card with no badge). Asserting the grid itself has no
+  // children is what actually distinguishes "the list stayed empty" from
+  // "one bad entry rendered". Mutation-proven: with fetchAwards temporarily
+  // changed to `return [parsed as Award]` for a non-array body, this
+  // assertion went red (`expected 1 to be 0`) while the old `img`-count
+  // version stayed green; reverted after confirming.
   it('renders no crash and an empty list when the fetch resolves to a non-array body', async () => {
     const fetchImpl = vi.fn(async () => jsonResponse(200, {}));
     render(<Awards fetchImpl={fetchImpl as unknown as typeof fetch} />);
     await waitFor(() => expect(fetchImpl).toHaveBeenCalled());
     await waitFor(() => expect(screen.getByText(copy.awards.heading)).toBeInTheDocument());
-    expect(document.querySelectorAll('img')).toHaveLength(0);
+    const grid = document.querySelector('#awards .grid');
+    expect(grid).not.toBeNull();
+    expect(grid!.children).toHaveLength(0);
   });
 
   // `alt=""` is deliberate (a badge next to its own already-visible title,

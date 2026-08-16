@@ -9,12 +9,12 @@
 // D6: "Nothing is ever deleted, only disabled." This component offers
 // REORDER and TOGGLE only -- deliberately **no Add and no Remove button
 // anywhere**. That is what makes rule 3 unreachable BY CONSTRUCTION, not
-// merely checked after the fact: reordering only ever PERMUTES the seven
+// merely checked after the fact: reordering only ever PERMUTES the eight
 // entries this screen was handed, and toggling only ever flips `enabled` on
 // one of them -- neither operation can change WHICH SectionIds are present.
-// Starting from a real, already-valid sections.json (exactly seven unique
+// Starting from a real, already-valid sections.json (exactly eight unique
 // ids, guaranteed by the same guard at build time) means every state this
-// component can produce still has exactly those same seven ids, always.
+// component can produce still has exactly those same eight ids, always.
 // Rule 1 (hero) is enforced the same way, at the single row it applies to:
 // hero's own toggle is rendered `disabled`, so this screen cannot even
 // SUBMIT a click that would turn it off, rather than merely showing a
@@ -25,7 +25,7 @@ import { MOVE_BUTTON_CLASSNAME } from './RecordList';
 
 // Plan 7, Task 1: `BespokeSection[]`, not the full `Section[]` union -- this
 // screen's own D6 header comment (below) is still true today: it only ever
-// permutes the seven bespoke, component-backed entries. AdminApp.tsx's own
+// permutes the eight bespoke, component-backed entries. AdminApp.tsx's own
 // SectionsSection is what narrows the full sections.json array down to this
 // shape before handing it here, and re-merges any template entries back in
 // on write -- see that component's own comment for exactly how, and for the

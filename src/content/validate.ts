@@ -1079,11 +1079,26 @@ function validateAwards(data: unknown): ValidationProblem[] {
 // repo-relative path -- so the entry below also waves through any OTHER
 // path that happens to end in "awards.json", e.g.
 // `assets-source/food/awards.json`, where it previously 422'd with "This
-// file cannot be edited here". Still narrow in practice for the same reason
-// Task 5 recorded: that route is authenticated, and commitFiles' own
-// allowlist still refuses to WRITE it (assets-source/ requires a real asset
-// filename shape, not `.json`) -- so this can widen what a request is TOLD
-// is valid content, not what a request can actually get COMMITTED.
+// file cannot be edited here".
+//
+// Task 5's own mitigation claim here was checked directly (Task 9 review)
+// and is FALSE: `ASSET_PATH` (worker/github.ts) is
+// `/^assets-source\/[a-z0-9_-]+\/[A-Za-z0-9 ._-]+$/`, which matches
+// `assets-source/food/awards.json` -- there is no "requires a real asset
+// filename shape, not .json" refusal anywhere in that regex. Combined with
+// this entry, such a path now both validates AND commits (worker/index.ts's
+// handlePublish parses any `.json` path as UTF-8 and validates it on
+// basename regardless of directory), where before this task it 422'd. The
+// hole is therefore real, not merely a widened "told valid" with nothing
+// to exploit it -- it is a widened "told valid" that a real write can reach.
+//
+// What actually limits it: this route is authenticated, and a session that
+// can reach it can already commit arbitrary bytes to
+// `assets-source/<any category>/<any filename>` through the exact same
+// request shape -- this entry does not grant a session anything it could
+// not already do to that directory; it only lets it *also* spell one such
+// write "awards.json" and have it pass content validation instead of being
+// refused outright. No worse than what an authenticated session already has.
 //
 // Not closed by this task: `validateContent`'s own signature
 // (`validateContent(file: string, data: unknown, current?: unknown)`) only

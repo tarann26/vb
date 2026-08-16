@@ -14,7 +14,7 @@
 // evaluating by the time this chunk loads), duplicating the small
 // SectionId -> component map here keeps this file's dependency graph
 // independent of App.tsx entirely, which is simpler to reason about than
-// relying on that ordering. The seven components are the same ones
+// relying on that ordering. The eight components are the same ones
 // SECTION_COMPONENTS (App.tsx) uses, imported the same way.
 import React, { useEffect, useState } from 'react';
 import Navbar from '../components/NavBar';
