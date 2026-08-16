@@ -121,6 +121,17 @@ type BarState =
   | { phase: 'stalled'; commitUrl: string | null; sha: string }
   | { phase: 'mismatch' }
   | { phase: 'conflict' }
+  // Fix round 1 review, Minor 2: a 409/502 whose files `reconcileAfterConflict`
+  // (publish.ts) confirmed ALL actually landed -- the committed content now
+  // matches exactly what this attempt sent, for every file it touched -- is
+  // not the same fact as 'conflict'/'server-error', and rendering either of
+  // those sentences here told her someone else had interfered, or that
+  // nothing was lost and to try again, in the same breath the Publish
+  // button went back to disabled because there is nothing left to send. A
+  // publish-only phase: undo's own D1-consuming design already answers
+  // "there is nothing left to put back" honestly on its own, so
+  // performUndo never reaches this.
+  | { phase: 'already-saved' }
   | { phase: 'validation'; problems: ValidationProblem[] }
   // No `message`. Review finding (Minor): it carried one for both flows and
   // PublishStatus never read it, so `'Could not put that change back.'` --
@@ -690,18 +701,30 @@ const PublishBar: React.FC<PublishBarProps> = ({
       return;
     }
     if (result.status !== 'success') {
-      setState(resultToBarState(result));
-      // A 'conflict' or 'server-error' here can follow a D1 write that
-      // already landed in THIS request (a mixed publish, GitHub failing
-      // after awards.json already committed) -- see publish.ts's own
-      // reconcileAfterConflict comment for the misattributed-conflict this
-      // closes. Fire-and-forget: it only ever refreshes a file whose
-      // CURRENT committed content matches what was just sent, so a genuine
-      // external conflict is untouched and keeps refusing on the next
-      // attempt.
       if (result.status === 'conflict' || result.status === 'server-error') {
-        void reconcileAfterConflict(registry, plan.contentSnapshots);
+        // A 'conflict' or 'server-error' here can, in principle, follow a
+        // write that actually landed -- see publish.ts's own
+        // reconcileAfterConflict comment for exactly what that covers
+        // TODAY (a plain GitHub commit, not the mixed D1 case its own
+        // header once described; that case is not reachable yet). Awaited,
+        // not fire-and-forget -- fix round 1's own Minor 2 -- so the
+        // sentence she reads is picked AFTER reconciliation has actually
+        // run. Rendering the generic conflict/server-error sentence first
+        // and then silently disabling the Publish button underneath it a
+        // moment later read as a contradiction, not a correction: an error
+        // alert sitting above a button that says there is nothing left to
+        // send.
+        const filesInAttempt = Object.keys(plan.contentSnapshots) as ContentFileName[];
+        await reconcileAfterConflict(registry, plan.contentSnapshots);
+        if (!mountedRef.current) return;
+        const stillDirty = dirtyContentFiles(registry.getEntries());
+        const resolvedEverything = filesInAttempt.length > 0 && filesInAttempt.every((file) => !stillDirty.includes(file));
+        if (resolvedEverything) {
+          setState({ phase: 'already-saved' });
+          return;
+        }
       }
+      setState(resultToBarState(result));
       return;
     }
 
@@ -1356,6 +1379,18 @@ function PublishStatus({
       return (
         <p role="status" className="mt-3 font-['Montserrat'] text-sm text-green-700">
           {undoing ? 'Your site is back to how it was.' : 'Your changes are live.'}
+        </p>
+      );
+    // Fix round 1 review, Minor 2: reached only when a failed publish
+    // attempt's own re-check (reconcileAfterConflict, publish.ts) confirmed
+    // every file it touched is already saved -- never for undo, whose own
+    // "there is nothing left to put back" 409 already says this honestly on
+    // its own. `role="status"`, not `alert`: this is the good outcome, the
+    // same reason 'success' above isn't an alert either.
+    case 'already-saved':
+      return (
+        <p role="status" className="mt-3 font-['Montserrat'] text-sm text-green-700">
+          {"That went through after all — it's already saved, so there's nothing left to publish."}
         </p>
       );
     case 'mismatch':

@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import worker, { AUTHENTICATED_PATHS } from '../index';
 import { hashPassword, parseCookie, verifyToken, signToken } from '../auth';
+import * as github from '../github';
 import {
   makeGitHubStub,
   utf8,
@@ -1146,6 +1147,10 @@ describe('POST /api/undo', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    // Restores the one test below that spies on `github.restoreBlobs`
+    // directly -- defensive here too, in case that test fails before its
+    // own explicit `mockRestore()` runs.
+    vi.restoreAllMocks();
   });
 
   async function cookie(): Promise<string> {
@@ -1429,5 +1434,104 @@ describe('POST /api/undo', () => {
     expect(response.status).toBe(409);
     const body = (await response.json()) as { partial?: unknown };
     expect(body.partial).toBe(false);
+  });
+
+  // Fix round 1 review, Minor 1: `partial` was proven above on exactly ONE
+  // of the four branches reachable after a successful D1 restore (step 3's
+  // head-mismatch 409). The other three -- step 4's changedPaths 409, and
+  // the catch block's PublishConflictError/UndoNotPossibleError 409 and
+  // generic 502 -- carried it too, but nothing pinned any of them: deleting
+  // `partial` from any one of those three left the whole suite green. The
+  // three tests below close that, each built the same way the mixed test
+  // above is (a D1-only publish for `restored.length > 0`, THEN a GitHub
+  // failure of the shape each pre-existing sha-only test already proves).
+  async function mixedPublishId(d1env: typeof env, c: string): Promise<string> {
+    await worker.fetch(
+      publishRequest([{ path: 'src/content/awards.json', content: VALID_AWARDS_A, encoding: 'utf-8' }], c),
+      d1env,
+    );
+    const second = await worker.fetch(
+      publishRequest([{ path: 'src/content/awards.json', content: VALID_AWARDS_B, encoding: 'utf-8' }], c),
+      d1env,
+    );
+    const { publishId } = (await second.json()) as { publishId: string };
+    return publishId;
+  }
+
+  it('step 4\'s changedPaths refusal also carries partial when the D1 half already landed', async () => {
+    const fake = new FakeD1();
+    const d1env = { ...env, DB: asD1(fake) };
+    const c = await cookie();
+    stubWith({
+      headCommit: {
+        sha: BASE_COMMIT_SHA,
+        parents: [{ sha: PARENT_COMMIT_SHA }],
+        files: [{ filename: 'src/content/dishes.json' }, { filename: 'src/components/Hero.tsx' }],
+      },
+    });
+    const publishId = await mixedPublishId(d1env, c);
+    const response = await worker.fetch(undoRequest({ sha: BASE_COMMIT_SHA, publishId }, c), d1env);
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual(
+      expect.objectContaining({ message: 'That change touched files this cannot put back.', partial: true }),
+    );
+  });
+
+  it('the "nothing to put back" refusal (every path was an addition) also carries partial', async () => {
+    const fake = new FakeD1();
+    const d1env = { ...env, DB: asD1(fake) };
+    const c = await cookie();
+    stubWith({
+      headCommit: {
+        sha: BASE_COMMIT_SHA,
+        parents: [{ sha: PARENT_COMMIT_SHA }],
+        files: [{ filename: 'assets-source/food/newphoto.jpg' }],
+      },
+      trees: { [PARENT_TREE_SHA]: { tree: [] } },
+    });
+    const publishId = await mixedPublishId(d1env, c);
+    const response = await worker.fetch(undoRequest({ sha: BASE_COMMIT_SHA, publishId }, c), d1env);
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual(expect.objectContaining({ partial: true }));
+  });
+
+  it('a GitHub outage on the tree read also carries partial', async () => {
+    const fake = new FakeD1();
+    const d1env = { ...env, DB: asD1(fake) };
+    const c = await cookie();
+    stubWith({ failOn: `/git/trees/${PARENT_TREE_SHA}?recursive=1`, failStatus: 500 });
+    const publishId = await mixedPublishId(d1env, c);
+    const response = await worker.fetch(undoRequest({ sha: BASE_COMMIT_SHA, publishId }, c), d1env);
+    expect(response.status).toBe(502);
+    expect(await response.json()).toEqual(expect.objectContaining({ partial: true }));
+  });
+
+  // The fourth branch -- DisallowedPathError's 400 -- is, unlike the other
+  // three, provably UNREACHABLE through any real or adversarially-stubbed
+  // GitHub response: `isRestorablePath` above and `assertAllowedPath`
+  // (worker/github.ts) are byte-for-byte the same three regexes, so any
+  // path this route would ever pass to `restoreBlobs` has already passed
+  // the identical check `head.changedPaths.every(isRestorablePath)` performs
+  // first. That is BY DESIGN (see step 4's own comment: "duplicated on
+  // purpose, so a commit that touched a source file refuses with a sentence
+  // of its own rather than surfacing as a DisallowedPathError"), not an
+  // oversight to route around.
+  //
+  // Pinning `partial` on this branch therefore needs the one thing every
+  // other test in this file avoids: reaching into `restoreBlobs` directly,
+  // rather than driving it through a GitHub response shape. `vi.spyOn` on
+  // the imported module is what makes that possible without touching
+  // worker/github.ts itself -- confirmed live-binding-visible to
+  // worker/index.ts's own `restoreBlobs` call before this was added.
+  it('the (unreachable-in-practice) DisallowedPathError branch also carries partial, proven by spying on restoreBlobs directly', async () => {
+    const fake = new FakeD1();
+    const d1env = { ...env, DB: asD1(fake) };
+    const c = await cookie();
+    stubWith();
+    const publishId = await mixedPublishId(d1env, c);
+    vi.spyOn(github, 'restoreBlobs').mockRejectedValueOnce(new github.DisallowedPathError('refuses to write to path'));
+    const response = await worker.fetch(undoRequest({ sha: BASE_COMMIT_SHA, publishId }, c), d1env);
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ message: 'refuses to write to path', partial: true });
   });
 });

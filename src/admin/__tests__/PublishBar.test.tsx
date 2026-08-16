@@ -707,13 +707,22 @@ describe('PublishBar: Step 5 translation table', () => {
   });
 
   // Wires publish.test.ts's own reconcileAfterConflict unit coverage into
-  // the real component: a 409 whose underlying cause was her own prior D1
-  // write landing (the committed content now matches exactly what THIS
-  // attempt sent) quietly clears the false conflict rather than leaving her
-  // stuck retrying into the same misattributed refusal. Proven end to end
-  // by the button itself going back to disabled -- dishes.json is no longer
-  // dirty once the reconcile confirms it already landed.
-  it('409 after content that matches what was sent is quietly reconciled -- the Publish button goes back to disabled', async () => {
+  // the real component: a 409 whose underlying content re-check confirms it
+  // already landed (the committed content matches exactly what THIS attempt
+  // sent) is reconciled rather than left as a false conflict she'd retry
+  // into forever. Proven end to end by the button itself going back to
+  // disabled -- dishes.json is no longer dirty once the reconcile confirms
+  // it already landed.
+  //
+  // Fix round 1 review, Minor 2: reconciliation is now AWAITED before any
+  // state renders (handlePublish no longer fires it and shows the generic
+  // conflict sentence in the same breath), so the ONLY thing that ever
+  // paints for this case is the dedicated "already saved" status line --
+  // never the generic "someone else changed this" alert, not even for one
+  // frame. That is the assertion that actually catches a regression back to
+  // the old fire-and-forget shape: a test that only checked the FINAL state
+  // would still pass if the wrong sentence flashed first.
+  it('409 after content that matches what was sent resolves straight to "already saved" -- the generic conflict sentence never renders', async () => {
     const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url === '/api/publish') return jsonResponse(409, { problems: [{ field: 'src/content/dishes.json', message: 'Someone else changed this.' }] });
@@ -725,25 +734,26 @@ describe('PublishBar: Step 5 translation table', () => {
     dirty(captured!.registry);
     clickPublishAndAccept();
 
-    await screen.findByRole('alert');
+    await screen.findByText("That went through after all — it's already saved, so there's nothing left to publish.");
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole('button', { name: 'Publish' })).toBeDisabled());
     const entry = captured!.registry.getEntries()['dishes.json']!;
     expect(entry.sha).toBe('fresh-sha');
   });
 
   // The other half: a 409 whose cause is a genuinely DIFFERENT committed
-  // value must leave the file dirty and refusing -- reconciliation never
-  // silently clears a real conflict, which is what keeps a later retry from
-  // fast-forwarding straight over someone else's change.
+  // value must leave the file dirty and refusing, with the GENERIC conflict
+  // sentence -- reconciliation never silently clears a real conflict, and
+  // never claims "already saved" for one either.
   //
   // The re-read is a manually-controlled promise here (not an immediately-
   // resolving mock, as the matching-case test above uses) specifically so
-  // this test can prove a NEGATIVE deterministically: asserting "nothing
-  // changed" immediately after the alert appears would pass just as well if
-  // reconciliation simply hadn't finished running yet, which is exactly the
-  // kind of vacuous pass this whole task's brief warns against. Awaiting
-  // the content promise itself, from the test, is what makes the compare
-  // inside reconcileAfterConflict provably done before the assertions run.
+  // this test can prove reconciliation genuinely ran and genuinely decided
+  // "no match" -- asserting the alert text immediately would otherwise be
+  // indistinguishable from the alert simply not having rendered yet.
+  // Because reconciliation is now awaited before any state renders (Minor
+  // 2's own fix), the alert CANNOT appear at all until this promise
+  // resolves -- proven directly below before it does.
   it('409 after content that does NOT match what was sent stays dirty -- a real conflict is never silently cleared', async () => {
     let resolveContent!: (response: Response) => void;
     const contentResponse = new Promise<Response>((resolve) => {
@@ -760,19 +770,26 @@ describe('PublishBar: Step 5 translation table', () => {
     dirty(captured!.registry);
     clickPublishAndAccept();
 
-    await screen.findByRole('alert');
     await waitFor(() => expect(fetchImpl).toHaveBeenCalledWith(expect.stringContaining('/api/content'), expect.anything()));
+    // Still suspended inside reconcileAfterConflict's own fetch -- nothing
+    // has rendered a terminal state yet, proving the await (not the fire-
+    // and-forget it replaced) is what actually runs here.
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByText(/already saved/)).not.toBeInTheDocument();
+
     await act(async () => {
       resolveContent(jsonResponse(200, { content: JSON.stringify([{ id: 'a', name: 'Someone else’s edit' }]), sha: 'their-fresh-sha' }));
       // Flushes reconcileAfterConflict's own await chain (fetchContent's
       // response.json(), then the JSON.stringify compare) past the point
       // where a match WOULD have called markPublished, before anything
-      // below reads the registry.
+      // below reads the registry or the DOM.
       await Promise.resolve();
       await Promise.resolve();
       await Promise.resolve();
     });
 
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('This may already be published');
     expect(screen.getByRole('button', { name: 'Publish' })).toBeEnabled();
     const entry = captured!.registry.getEntries()['dishes.json']!;
     expect(entry.sha).toBe('sha-1');

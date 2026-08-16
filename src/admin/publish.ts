@@ -442,29 +442,43 @@ export async function refreshBaseShas(
 }
 
 // ---------------------------------------------------------------------------
-// Task 10's carried-forward gap: a blind retry of a mixed publish (a D1 file
-// plus a GitHub file in the same request) can misattribute a conflict to a
-// third party. worker/index.ts's own comment on handlePublish's write step
-// spells out why -- D1's own baseSha (a sha256 of the body) MOVES the instant
-// the D1 leg lands, exactly the way a reversed write order would move a
-// GitHub blob sha, so an unmodified retry of the SAME request reaches the D1
-// file with a now-stale baseSha and gets refused: "someone else changed
-// src/content/awards.json while you were editing", naming a third party for
-// what was actually her own prior, already-successful half-publish.
+// Originally reasoned about against Task 10's own carried-forward gap: a
+// blind retry of a mixed publish (a D1 file plus a GitHub file in the same
+// request) can misattribute a conflict to a third party, because D1's own
+// baseSha (a sha256 of the body) moves the instant the D1 leg lands, exactly
+// the way a reversed write order would move a GitHub blob sha (see
+// worker/index.ts's own comment on handlePublish's write step).
 //
-// The 409/502 the client sees carries no path list and no `partial` flag --
-// requestPublish branches on STATUS alone, never on body text, so there is
-// no wire signal to say WHICH file (if any) already landed. This works
-// around that with no wire change at all: it re-reads every file THIS
-// request attempted and compares the CURRENT committed content against what
-// was actually sent. A match is proof the write took, whatever opaque token
-// the store now carries for it -- not merely a coincidence to disbelieve --
-// so that file is reconciled exactly the way a successful publish already
-// reconciles it (`markPublished`, preserving any edit made since). A
-// mismatch means someone else's content is genuinely different, and is left
-// entirely alone: this function never writes a fresh baseSha over a file it
-// cannot prove landed, which is what keeps a genuine external conflict
-// refusing on the next attempt instead of silently fast-forwarding over it.
+// Fix round 1 review found that this function CANNOT reach that case today,
+// and this paragraph corrects the claim rather than leaving it standing:
+// `contentSnapshots` is keyed by `ContentFileName` (content.ts's
+// `CONTENT_FILES`), and `awards.json` -- the only D1-only path
+// (worker/store.ts's D1_ONLY_PATHS) -- is not in that list (Awards has no
+// editable panel this phase; see fields.ts). It can therefore never appear
+// in a snapshot this function is handed, and a single publish request
+// touching both a D1 path and a GitHub path is unreachable under either
+// CONTENT_STORE setting today regardless. Task 11 (the Awards dashboard
+// panel) is what will first make the mixed-publish case reachable.
+//
+// What this DOES do today, and is kept for: any GitHub-only publish whose
+// response reported `conflict` or `server-error` after the commit in fact
+// landed -- a redundant retry racing its own prior success, or a failure
+// response for a write that otherwise went through. The 409/502 the client
+// sees carries no path list and no `partial` flag -- requestPublish branches
+// on STATUS alone, never on body text -- so there is no wire signal to say
+// WHICH file (if any) already landed. This works around that with no wire
+// change at all: it re-reads every file THIS request attempted and compares
+// the CURRENT committed content against what was actually sent. A match is
+// proof the write took, whatever opaque token the store now carries for it
+// -- not merely a coincidence to disbelieve -- so that file is reconciled
+// exactly the way a successful publish already reconciles it
+// (`markPublished`, preserving any edit made since). A mismatch means
+// someone else's content is genuinely different, and is left entirely
+// alone: this function never writes a fresh baseSha over a file it cannot
+// prove landed, which is what keeps a genuine external conflict refusing on
+// the next attempt instead of silently fast-forwarding over it. That safety
+// property holds independent of which scenario ends up reaching this
+// function, which is why it stays wired in rather than reverted.
 //
 // Best-effort and silent: called after a failure has already been reported,
 // so a re-read that itself fails just leaves that file exactly as stale as
