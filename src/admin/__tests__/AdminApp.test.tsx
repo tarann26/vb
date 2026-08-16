@@ -23,6 +23,7 @@ import {
   COPY,
   DISHES,
   DRINKS,
+  EXPERIENCES,
   GALLERIES,
   MENUS,
   PRESS,
@@ -35,7 +36,7 @@ import {
   stubFetch,
 } from './dashboardFixtures';
 import { collagePhotos } from '../../content/collage';
-import type { Dish } from '../../content/types';
+import type { Dish, Page } from '../../content/types';
 import { DRAFT_STORAGE_KEY, DRAFT_STAGED_COUNT_KEY, saveDraft } from '../drafts';
 import { LOCK_TIMEOUT_MS } from '../PublishBar';
 
@@ -380,6 +381,77 @@ describe('AdminApp: the real "Pages" screen', () => {
     const section = await sectionByHeading('Pages');
     await waitFor(() => expect(within(section).queryByText(/^Loading/)).not.toBeInTheDocument());
     expect(within(section).queryByRole('button', { name: /add a page/i })).not.toBeInTheDocument();
+  });
+
+  // Review fix round 1, Important 2: the two tests this replaced ("fetches
+  // pages.json and offers 'Add a page'" / "'Add a page' … adds a page row
+  // she can then open and edit") drove the real, mounted PageList end to
+  // end -- and their replacements did not restore that coverage, since the
+  // shared `dashboardFixtures` stub answers pages.json with `[]`, leaving
+  // nothing in the Pages panel for a positive assertion to reach. Proven
+  // directly: with `PageList` mutated to return `null`, this file's other
+  // 44 tests all stayed green (see the report's own mutation log).
+  //
+  // This test supplies real pages through its own local fetch stub (the
+  // same "malformed content file" pattern above uses, not the shared
+  // `stubFetch`, since that helper only lets a caller override dishes.json)
+  // so the real, mounted Pages panel has real rows to assert on -- the
+  // count of "Edit" buttons pins the fetched pages.json data actually
+  // reaching PageList, and clicking one open still reveals the same fields
+  // the removed test checked.
+  it('fetches pages.json and renders one row per real page, each of them editable', async () => {
+    const PAGES: Page[] = [
+      {
+        slug: 'catering',
+        name: 'Catering',
+        inNav: true,
+        enabled: true,
+        seo: { title: 'Catering | Via Bianca', description: 'Bespoke catering.' },
+        sections: [],
+      },
+      {
+        slug: 'cheeseboards',
+        name: 'Cheeseboards',
+        inNav: true,
+        enabled: true,
+        seo: { title: 'Cheeseboards | Via Bianca', description: 'Our cheeseboards.' },
+        sections: [],
+      },
+    ];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url === '/api/wa') return WA_RESPONSE();
+        if (url.includes('dishes.json')) return contentResponse(DISHES, 'sha-dishes');
+        if (url.includes('drinks.json')) return contentResponse(DRINKS, 'sha-drinks');
+        if (url.includes('press.json')) return contentResponse(PRESS, 'sha-press');
+        if (url.includes('sections.json')) return contentResponse(SECTIONS, 'sha-sections');
+        if (url.includes('site.json')) return contentResponse(SITE, 'sha-site');
+        if (url.includes('galleries.json')) return contentResponse(GALLERIES, 'sha-galleries');
+        if (url.includes('menus.json')) return contentResponse(MENUS, 'sha-menus');
+        if (url.includes('story.json')) return contentResponse(STORY, 'sha-story');
+        if (url.includes('copy.json')) return contentResponse(COPY, 'sha-copy');
+        if (url.includes('pages.json')) return contentResponse(PAGES, 'sha-pages');
+        if (url.includes('awards.json')) return contentResponse([], 'sha-awards');
+        if (url.includes('experiences.json')) return contentResponse(EXPERIENCES, 'sha-experiences');
+        throw new Error(`unexpected fetch to ${url}`);
+      }),
+    );
+    const user = userEvent.setup();
+    renderDashboard('/edit/manage/pages');
+    const section = await sectionByHeading('Pages');
+
+    // Mutation this guards: `PageList` returning `null` (or `items.map`
+    // never running) -- confirmed red, both assertions below.
+    const editButtons = await within(section).findAllByRole('button', { name: 'Edit' });
+    expect(editButtons).toHaveLength(2);
+    expect(within(section).getByText('Catering')).toBeInTheDocument();
+    expect(within(section).getByText('Cheeseboards')).toBeInTheDocument();
+
+    await user.click(editButtons[0]);
+    expect(within(section).getByLabelText('Page name')).toHaveValue('Catering');
+    expect(within(section).getByLabelText('Web address')).toHaveValue('catering');
   });
 });
 

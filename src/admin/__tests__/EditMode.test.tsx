@@ -15,7 +15,7 @@ import EditMode, { buildBundle } from '../EditMode';
 import { AppRoutes } from '../../App';
 import type { ContentEntries, ContentRegistry } from '../publish';
 import { loadDraft, saveDraft } from '../drafts';
-import type { Article, Copy, Dish, Drink, Galleries, MenuFile, Section, SiteContent, StoryContent } from '../../content/types';
+import type { Article, Copy, Dish, Drink, Experience, Galleries, MenuFile, Section, SiteContent, StoryContent } from '../../content/types';
 // Real, committed files for galleries/story/menus/copy -- the same choice
 // AdminApp.test.tsx already makes (see that file's own comment): each has
 // real structural shape a hand-typed fixture would have to reproduce, and
@@ -180,11 +180,16 @@ function stubFetch(overrides: {
       // CONTENT_FILES (and therefore EditMode's own blanket load effect)
       // now that src/admin/content.ts registers it -- the same reason
       // pages.json and awards.json each needed a branch here when THEY
-      // joined. `EditMode.tsx`'s own `buildBundle` still hands the
-      // `experiences` section a hardcoded `EMPTY_EXPERIENCES` rather than
-      // this fetch's data (real inline editing is Task 8's), so this
-      // response is never read for its content -- only for keeping the
-      // load effect itself from throwing "Could not load experiences.json"
+      // joined. Task 8's own `buildBundle` now reads this through `pick`
+      // (review fix round 1), the same as every other file here -- but no
+      // test in this file renders the Experiences section at all, because
+      // none of the local `SECTIONS` fixtures above include an `experiences`
+      // entry. The `pick` wiring itself is covered directly against
+      // `buildBundle`, below ("review fix round 1: buildBundle reads
+      // experiences.json through pick"), which needs no full render and so
+      // needs no fetch stub at all. Empty here is simply "nothing to show,"
+      // not a stand-in for real content -- this branch exists only to keep
+      // the load effect from throwing "Could not load experiences.json"
       // over every test in this file, none of which is about experiences.
       if (url.includes('experiences.json')) return contentResponse([], 'sha-experiences');
       throw new Error(`EditMode.test.tsx: unexpected fetch to ${url}${init ? ` (${init.method ?? 'GET'})` : ''}`);
@@ -2234,5 +2239,59 @@ describe('EditMode: the hero collage is rearrangeable at /edit', () => {
     fireEvent.change(input);
     await waitFor(() => expect(FakeXHR.instances.length).toBeGreaterThan(0));
     await waitFor(() => expect(within(box).getByRole('presentation', { hidden: true })).toHaveAttribute('src', expect.stringMatching(/^blob:/)));
+  });
+});
+
+// Review fix round 1, Important 1: `buildBundle` used to hand
+// `bundle.experiences` a hardcoded `EMPTY_EXPERIENCES` unconditionally, even
+// once `experiences.json` had actually loaded into the registry -- so /edit's
+// own Experiences.tsx (no empty guard, by design) always rendered the
+// section's heading and intro over zero cards, while the live homepage
+// showed six. The fix is the same `pick(entries, 'experiences.json',
+// EMPTY_EXPERIENCES)` every other committed content file already goes
+// through, a few lines above this file's own `pages`/`sections` cases -- this
+// test proves it directly against `buildBundle`'s return value, the same
+// "call buildBundle, read the field" shape this file's other direct
+// buildBundle tests already use, rather than a full render (nothing about
+// this fix is about markup; `Experiences.tsx` itself is unchanged).
+describe('Phase 3, Task 8 review fix round 1: buildBundle reads experiences.json through pick', () => {
+  const EXPERIENCES_DATA: Experience[] = [
+    { id: 'catering', title: 'Catering', description: 'd', image: '/atmosphere/table.webp', link: '/catering', comingSoon: false },
+    { id: 'retail', title: 'Retail', description: 'd', image: '/experiences/retail.webp', comingSoon: true },
+  ];
+
+  it('a loaded experiences.json flows through to bundle.experiences, not the empty fallback', () => {
+    const entries: ContentEntries = {
+      'experiences.json': { data: EXPERIENCES_DATA, initial: EXPERIENCES_DATA, sha: 'sha-experiences' },
+    };
+    const registry: ContentRegistry = {
+      register: vi.fn(),
+      updateData: vi.fn(),
+      getEntries: () => entries,
+      version: 0,
+      markPublished: vi.fn(),
+    };
+
+    const bundle = buildBundle(entries, registry, vi.fn());
+
+    // Mutation this guards: reverting `experiences: pick(entries,
+    // 'experiences.json', EMPTY_EXPERIENCES)` back to the hardcoded
+    // `experiences: EMPTY_EXPERIENCES` -- confirmed red (`[]` !== the real
+    // two-item array).
+    expect(bundle.experiences).toEqual(EXPERIENCES_DATA);
+  });
+
+  it('before experiences.json has loaded, bundle.experiences is the empty fallback, not undefined or a crash', () => {
+    const registry: ContentRegistry = {
+      register: vi.fn(),
+      updateData: vi.fn(),
+      getEntries: () => ({}),
+      version: 0,
+      markPublished: vi.fn(),
+    };
+
+    const bundle = buildBundle({}, registry, vi.fn());
+
+    expect(bundle.experiences).toEqual([]);
   });
 });

@@ -232,14 +232,18 @@ const EMPTY_STORY: StoryContent = { heading: '', paragraphs: [] };
 // may not import that -- see the module header comment above).
 const EMPTY_PAGES: Page[] = [];
 
-// Phase 3, Task 2: experiences.json is not yet in CONTENT_FILES (src/admin/
-// content.ts) -- there is no fetch, no draft, no panel for it in /edit yet,
-// deliberately: this task builds the data shape only, with no UI (see this
-// task's own header). `experiences` is present on ContentBundle from this
-// task onward (so a rendering surface Task 3 adds needs no further plumbing
-// here), and this constant is what satisfies that field on /edit's own
-// bundle until Task 8 wires a real fetch through `pick`, the same way
-// EMPTY_PAGES did for `pages` before PageList.tsx (Task 4 there) existed.
+// Phase 3, Task 8 review fix round 1 (Important 1): experiences.json IS in
+// CONTENT_FILES (b9ab43d) and buildBundle now reads it through `pick`, the
+// same as every other committed content file below -- this constant is only
+// the fallback for the brief window before that fetch has resolved (the
+// same "empty in memory until loaded" role EMPTY_PAGES/EMPTY_STORY/etc. play
+// for their own files), never a permanent stand-in. There is still no
+// EDITING surface for individual cards inside /edit itself, deliberately --
+// EXPERIENCE_FIELDS' own comment (fields.ts) is explicit that the carousel's
+// cards are edited from the dashboard's Experiences panel
+// (ExperiencesArea.tsx), not in place here -- but the /edit PREVIEW now
+// shows the same six cards the live homepage does, rather than a carousel
+// that looks broken.
 const EMPTY_EXPERIENCES: Experience[] = [];
 
 const EMPTY_COPY: Copy = {
@@ -635,7 +639,16 @@ export function buildBundle(
     // would author the first ones, is blocked on the founder), so nothing
     // is lost by deferring the in-place editor for them specifically.
     pages: pick(entries, 'pages.json', EMPTY_PAGES),
-    experiences: EMPTY_EXPERIENCES,
+    // Review fix round 1 (Important 1): this used to be the hardcoded
+    // `EMPTY_EXPERIENCES` constant unconditionally, which meant /edit's own
+    // Experiences.tsx (no empty guard, by design -- its own header comment)
+    // always rendered the section's heading and intro over ZERO cards, no
+    // matter what experiences.json actually held, while the live homepage
+    // showed six. `experiences.json` is a committed file that already loads
+    // through the blanket CONTENT_FILES fetch effect below -- the same fetch
+    // that already put every OTHER file's real data into `entries` -- so the
+    // fix is this one `pick`, not a new fetch path.
+    experiences: pick(entries, 'experiences.json', EMPTY_EXPERIENCES),
     // Plan 7, Task 5, Step 1: a section-content path needs sections.json
     // loaded, never copy.json -- gating both kinds on `copyLoaded` alone
     // (the pre-Task-5 shape) would have shown a contentEditable affordance

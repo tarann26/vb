@@ -302,6 +302,11 @@ describe('commitFiles', () => {
       'copy.json',
       'dishes.json',
       'drinks.json',
+      // Phase 3, Task 2: the twelfth real content file (Task 8 review fix
+      // round 1, Minor 3) -- unlike awards.json (D1-only, deliberately
+      // absent from this list), experiences.json is a real GitHub-store
+      // file and this allowlist has to keep accepting it.
+      'experiences.json',
       'galleries.json',
       'menus.json',
       // Plan 7, Task 1: the tenth real content file.
