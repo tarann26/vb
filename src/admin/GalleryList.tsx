@@ -130,14 +130,18 @@ interface GalleryImageListProps {
   // "Problems with {heading}") -- her own vocabulary for this list.
   heading: string;
   // The actual <h3> text, separate from `heading` above: StorySection
-  // (AdminApp.tsx) already renders an <h2>Our Story</h2> for story.json's
-  // OWN screen, and `sectionHeading` here has to read differently for the
-  // ourStory list specifically, or the two collide on the identical
-  // accessible name for every `role="heading"` query on the page --
-  // confirmed directly (AdminApp.test.tsx's own `sectionByHeading` helper
-  // could no longer tell the two apart). `heading` itself stays "Our Story"
-  // everywhere else (buttons, banner) since none of those are heading-role
-  // elements and none of them collide with anything.
+  // (src/admin/areas/StoryPhotosArea.tsx, moved there from AdminApp.tsx
+  // when the Story & Photos area was split out) already renders an
+  // <h2>Our Story</h2> of its own on the very same area screen -- the
+  // collapsible section around StoryForm, sharing this screen with
+  // Galleries and Press rather than a standalone "story.json screen".
+  // `sectionHeading` here has to read differently for the ourStory list
+  // specifically, or the two collide on the identical accessible name for
+  // every `role="heading"` query on the page -- confirmed directly
+  // (AdminApp.test.tsx's own `sectionByHeading` helper could no longer
+  // tell the two apart). `heading` itself stays "Our Story" everywhere
+  // else (buttons, banner) since none of those are heading-role elements
+  // and none of them collide with anything.
   sectionHeading: string;
   addLabel: string;
   category: UploadCategory;

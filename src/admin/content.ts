@@ -99,7 +99,7 @@ export const CONTENT_FILE_LABELS: Record<ContentFileName, string> = {
   'dishes.json': 'Dishes',
   'drinks.json': 'Drinks',
   'press.json': 'Press',
-  'story.json': 'Our Story',
+  'story.json': 'About',
   'menus.json': 'Menu PDFs',
   'copy.json': 'Words on the site',
   'sections.json': 'What shows on the homepage',
