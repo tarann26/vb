@@ -193,23 +193,34 @@ for (const viewport of VIEWPORTS) {
       expect(Math.abs(measured.tall.height - measured.short.height)).toBeLessThanOrEqual(1);
     });
 
-    test('every photo has a real box on screen, none collapsed to nothing', async ({ page }) => {
+    // Not `getBoundingClientRect().width/height > 0`: that ignores the
+    // section's own `overflow-hidden` entirely, since a rect's geometry is
+    // reported the same whether or not an ancestor clips it -- a box laid out
+    // wholly outside the collage container would still measure nonzero and
+    // pass. That is precisely the shape of the original nine-photo bug this
+    // file's header describes. Fixed by intersecting each box with the
+    // collage container's own rect and requiring real overlap on both axes.
+    test('every photo has a real box on screen, none collapsed to nothing or clipped away', async ({ page }) => {
       await page.goto('/');
       await settle(page);
 
       const boxes = await page.evaluate(() => {
         const container = document.querySelector('section .absolute.inset-0.flex');
-        return [...container!.querySelectorAll('img')].map((img) => {
+        if (!container) throw new Error('collage container not found');
+        const c = container.getBoundingClientRect();
+        return [...container.querySelectorAll('img')].map((img) => {
           const el = img.closest('div')!;
           const r = el.getBoundingClientRect();
-          return { src: img.getAttribute('src'), width: r.width, height: r.height };
+          const visibleWidth = Math.max(0, Math.min(r.right, c.right) - Math.max(r.left, c.left));
+          const visibleHeight = Math.max(0, Math.min(r.bottom, c.bottom) - Math.max(r.top, c.top));
+          return { src: img.getAttribute('src'), visibleWidth, visibleHeight };
         });
       });
 
       expect(boxes.length).toBe(PHOTO_COUNT);
       for (const box of boxes) {
-        expect(box.width, `${box.src} has no width`).toBeGreaterThan(0);
-        expect(box.height, `${box.src} has no height`).toBeGreaterThan(0);
+        expect(box.visibleWidth, `${box.src} has no width actually visible inside the collage container`).toBeGreaterThan(0);
+        expect(box.visibleHeight, `${box.src} has no height actually visible inside the collage container`).toBeGreaterThan(0);
       }
     });
   });

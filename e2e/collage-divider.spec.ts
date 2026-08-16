@@ -150,7 +150,23 @@ test.describe('the collage’s dividers at 1440px', () => {
     // `right` sitting outside the pair entirely.
     expect(grew.map((b) => b.id)).toEqual(['photo-1']);
     expect(narrowed.map((b) => b.id)).toEqual(['photo-2', 'photo-3']);
-    expect(grew.length + narrowed.length).toBe(3);
+    // `grew.length + narrowed.length === 3` used to sit here, but the two
+    // `toEqual`s above already pin both arrays' exact contents (one element,
+    // then two), which pins their combined length too -- it could never fail
+    // and was not checking anything they do not already check. What they
+    // genuinely do NOT check: `grew`/`narrowed` are filtered on WIDTH alone,
+    // so a bug that also nudged one of the eight `right`-branch boxes' x, y or
+    // height (rather than its width) would slip through both arrays
+    // unnoticed. Checked directly, per box, on all four numbers.
+    const untouchedIds = boxesBefore.map((b) => b.id).filter((id) => id !== 'photo-1' && id !== 'photo-2' && id !== 'photo-3');
+    for (const id of untouchedIds) {
+      const beforeBox = boxesBefore.find((b) => b.id === id)!;
+      const afterBox = boxesAfter.find((b) => b.id === id)!;
+      expect(
+        [afterBox.x, afterBox.y, afterBox.width, afterBox.height],
+        `${id} moved even though it sits inside 'right', outside the pair root:0 divides`,
+      ).toEqual([beforeBox.x, beforeBox.y, beforeBox.width, beforeBox.height]);
+    }
     expect(boxesAfter).toHaveLength(PHOTO_COUNT);
   });
 
@@ -180,7 +196,7 @@ test.describe('the collage’s dividers at 1440px', () => {
 
   // The handles are absolutely positioned, so they are out of flow and take no
   // space from any flex line. Measured rather than reasoned about: the same
-  // same rectangles, from the same tree, with and without the editor.
+  // rectangles, from the same tree, with and without the editor.
   test('the editor’s handles cost the layout nothing -- /edit lays out exactly as / does', async ({ page }) => {
     await openCollage(page, '/');
     const publicBoxes = (await collageBoxes(page)).map((b) => [b.x, b.y, b.width, b.height]);

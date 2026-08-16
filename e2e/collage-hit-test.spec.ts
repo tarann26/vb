@@ -37,9 +37,11 @@ const PHOTO_COUNT = heroCollagePhotoCount();
 // measures a page with NOTHING selected. The collage panel is a bottom-docked
 // `fixed ... z-50` sheet, so once something IS selected it covers the bottom
 // band of the viewport, and a control whose own rectangle falls inside that
-// band resolves to the panel instead. Measured with photo-16 selected: one of
-// the sixteen select badges (photo-15's) and a handful of camera badges are
-// occluded that way at each viewport. That is a property of a bottom sheet
+// band resolves to the panel instead. Measured with a photo near the bottom
+// of the collage selected: a select badge or two, and a handful of camera
+// badges, are occluded that way at each viewport (photo-16, used when this
+// was first measured, was one of the five Farfalle photos Task 6 later
+// removed). That is a property of a bottom sheet
 // rather than of this collage -- pressing Done, or scrolling, clears it -- and
 // dropping a dragged photo onto a box under the panel does work, because
 // CollageEditor asks `elementsFromPoint` for the whole stack rather than

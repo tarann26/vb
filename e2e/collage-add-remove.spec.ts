@@ -135,20 +135,25 @@ test.describe('adding and removing collage photos at 1440px', () => {
     await expect(status).not.toContainText('nothing else moved');
 
     // ...and the pixels back that up: the divided box is the only one that
-    // really changes. Everything else is within the gap arithmetic above --
-    // measured at 1-3px on this arrangement (photo-6's own row gained a
-    // fourth child, so one more 4px gap is subtracted before proportions are
-    // applied), bounded here at 4 -- rather than pinned at zero, which is the
-    // claim the sentence no longer makes.
+    // really changes. photo-7 and photo-8 -- right-top's other two children,
+    // the only boxes whose OWN share of that row moves when a fourth child
+    // splices in (one more 4px gap subtracted before proportions are
+    // applied) -- are within that gap arithmetic, measured at 1-3px on this
+    // arrangement, bounded here at 4. Every other box lives outside
+    // right-top entirely and has no reason to move by more than the 2px of
+    // sub-pixel rounding slack used elsewhere in this suite; widening ITS
+    // tolerance to 4 too would have hidden a real bug moving one of them.
     const after = await collageBoxes(page);
     const added = after.find((box) => !before.some((old) => old.id === box.id));
     expect(added).toBeDefined();
+    const rightTopRowMates = new Set(['photo-7', 'photo-8']);
     before.forEach((box) => {
       if (box.id === 'photo-6') return;
       const now = after.find((candidate) => candidate.id === box.id);
       expect(now, `${box.id} left the collage`).toBeDefined();
+      const tolerance = rightTopRowMates.has(box.id) ? 4 : 2;
       (['x', 'y', 'width', 'height'] as const).forEach((side) => {
-        expect(Math.abs(now![side] - box[side]), `${box.id} ${side} moved more than the gap arithmetic`).toBeLessThanOrEqual(4);
+        expect(Math.abs(now![side] - box[side]), `${box.id} ${side} moved more than the gap arithmetic`).toBeLessThanOrEqual(tolerance);
       });
     });
   });

@@ -25,7 +25,7 @@ const PHOTO_COUNT = heroCollagePhotoCount();
 // WHY THIS FILE AND NOT collage-hit-test.spec.ts. That spec asks the narrow
 // question -- does this control's own centre pixel resolve to itself -- and
 // now asks it of the select badge too. This one asks the question a reviewer
-// actually asked: can she CHOOSE each of the sixteen, driven as a user, and do
+// actually asked: can she CHOOSE every surviving photo, driven as a user, and do
 // the two drag gestures work for the box the content column completely
 // covers. A badge that hit-tests but does not select would pass the first and
 // fail this.
@@ -33,8 +33,10 @@ const PHOTO_COUNT = heroCollagePhotoCount();
 // The specs that existed found none of it because `grabPoint`
 // (e2e/collage-page.ts) SCANS a box for a point that happens to be free and
 // the collage specs only ever ask it for photo-1, photo-5, photo-8, photo-10,
-// photo-12 and photo-16 -- every one of them in the reachable set. Nothing
-// asserted that every photo has a point at all. This does.
+// photo-12 and photo-16 (the pre-Task-6 ids this review measured against --
+// photo-5 and photo-16 were two of the five Farfalle photos Task 6 later
+// removed) -- every one of them in the reachable set. Nothing asserted that
+// every photo has a point at all. This does.
 
 const VIEWPORTS = [
   { label: '390px (phone)', width: 390, height: 844, touch: true },
@@ -173,6 +175,31 @@ test.describe('the box the hero’s own content column covers, at 1440px', () =>
     });
   }
 
+  // The precondition this whole describe block depends on, asserted rather
+  // than assumed: photo-3's own centre pixel must resolve to Hero's content
+  // column (`section .relative.z-10`), not to itself. Without this, the two
+  // tests below degrade silently -- a later rebalance that gives
+  // left-upper-column even a little more width could uncover photo-3's centre
+  // by a few pixels, and both tests would keep passing as ordinary
+  // drag-and-drop tests that no longer exercise the covered-box case they
+  // exist for. Measured directly (not `.relative.z-10` alone, which would
+  // also match if the point fell on the box's own element for some other
+  // reason): `document.elementFromPoint` at the centre must find something
+  // inside the content column AND that something must not be inside photo-3's
+  // own box.
+  async function centreIsCoveredByContentColumn(page: Page, photoId: string): Promise<boolean> {
+    const { x, y } = await centreOf(page, photoId);
+    return page.evaluate(
+      ([px, py, id]) => {
+        const hit = document.elementFromPoint(px as number, py as number);
+        if (!hit) return false;
+        if (hit.closest(`[data-collage-photo-id="${id as string}"]`)) return false;
+        return hit.closest('section .relative.z-10') !== null;
+      },
+      [x, y, photoId] as const,
+    );
+  }
+
   async function dragBetween(page: Page, from: { x: number; y: number }, to: { x: number; y: number }): Promise<void> {
     await page.mouse.move(from.x, from.y);
     await page.mouse.down();
@@ -184,9 +211,14 @@ test.describe('the box the hero’s own content column covers, at 1440px', () =>
   // photo-3, not photo-9: photo-9 was one of the five Farfalle photos Task 6
   // removed. The property this describe block needs -- a box whose CENTRE
   // resolves to the content column rather than to itself, so a naive
-  // single-point `elementFromPoint` drag or drop fails on it -- is confirmed
-  // directly against the rebalanced tree: photo-3's own centre sits under the
-  // reservation phone numbers, not under its own <img>. (photo-9 used to fail
+  // single-point `elementFromPoint` drag or drop fails on it -- is asserted
+  // directly against the rebalanced tree by `centreIsCoveredByContentColumn`
+  // below, at the top of both tests: photo-3's own centre sits under the
+  // reservation phone numbers, not under its own <img>. That assertion is
+  // what stops a future rebalance from quietly widening left-upper-column
+  // enough to uncover photo-3's centre and turning both tests into ordinary
+  // drag-and-drop tests that stay green without checking what they exist
+  // for. (photo-9 used to fail
   // EVERYWHERE inside its box, not just at the centre; Task 6's own rebalance
   // -- the owner's "whitespace can be squashed" -- widened every surviving
   // tile enough that none is fully swallowed by the column any more at this
@@ -208,6 +240,10 @@ test.describe('the box the hero’s own content column covers, at 1440px', () =>
   // starts at y=362, well clear of that window.
   test('a drag begun on its badge carries the photo, and the two trade places', async ({ page }) => {
     await openCollage(page, '/edit');
+    expect(
+      await centreIsCoveredByContentColumn(page, 'photo-3'),
+      'precondition: photo-3’s own centre must resolve to the content column, not to itself -- otherwise this test is not exercising the covered-box case it exists for',
+    ).toBe(true);
     const before = await collageBoxes(page);
     const fromIndex = before.findIndex((box) => box.id === 'photo-3');
     const toIndex = before.findIndex((box) => box.id === 'photo-1');
@@ -233,6 +269,10 @@ test.describe('the box the hero’s own content column covers, at 1440px', () =>
   // to swap with there" and was never even marked as a destination mid-drag.
   test('a drop onto its centre is marked before the drop, and accepted', async ({ page }) => {
     await openCollage(page, '/edit');
+    expect(
+      await centreIsCoveredByContentColumn(page, 'photo-3'),
+      'precondition: photo-3’s own centre must resolve to the content column, not to itself -- otherwise this test is not exercising the covered-box case it exists for',
+    ).toBe(true);
     const before = await collageBoxes(page);
     const fromIndex = before.findIndex((box) => box.id === 'photo-1');
     const toIndex = before.findIndex((box) => box.id === 'photo-3');
