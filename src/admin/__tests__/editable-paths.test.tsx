@@ -181,7 +181,7 @@ describe('every renderText/renderImage call site passes a path that really point
   });
 
   it('the recorded copy.json paths are exactly EDITABLE_TEXT_PATHS (src/admin/editable-paths.ts) -- no missing, no extra', () => {
-    expect(EDITABLE_TEXT_PATHS).toHaveLength(30);
+    expect(EDITABLE_TEXT_PATHS).toHaveLength(32);
     // Partitioned, not filtered-and-forgotten: EDITABLE_TEXT_PATHS is derived
     // from COPY_FIELDS and therefore describes copy.json ONLY, so a template
     // section's `sections.<id>.content.*` path is legitimately not a member.
@@ -241,17 +241,17 @@ describe('every renderText/renderImage call site passes a path that really point
 // (which would only ever prove the module equals itself).
 describe('EDITABLE_TEXT_PATHS (src/admin/editable-paths.ts)', () => {
   it('has exactly 30 entries, every one a real COPY_FIELDS key', () => {
-    expect(EDITABLE_TEXT_PATHS).toHaveLength(30);
+    expect(EDITABLE_TEXT_PATHS).toHaveLength(32);
     const copyFieldKeys = new Set(Object.keys(COPY_FIELDS));
     EDITABLE_TEXT_PATHS.forEach((path) => expect(copyFieldKeys.has(path)).toBe(true));
   });
 
-  // The eight names this list must NOT contain, spelled out independently of
+  // The six names this list must NOT contain, spelled out independently of
   // editable-paths.ts's own internal set (fields.ts's CopyLeafShape comment
   // is the authority the first five trace back to) -- if editable-paths.ts
   // ever dropped its own exclusion, this still catches it without depending
   // on the same constant that would already be wrong.
-  it('excludes exactly the eight COPY_FIELDS leaves /edit does not offer in place, and nothing else', () => {
+  it('excludes exactly the six COPY_FIELDS leaves /edit does not offer in place, and nothing else', () => {
     const notEditableInPlace = [
       // Bound to an attribute, never painted as visible text.
       'nav.instagramLabel',
@@ -262,13 +262,16 @@ describe('EDITABLE_TEXT_PATHS (src/admin/editable-paths.ts)', () => {
       // Painted, but as a <button>'s own label -- see NavBar.tsx's own
       // comment, and the describe block at the end of this file.
       'nav.pagesLabel',
-      // Phase 3, Task 2: no component renders these yet -- see
-      // editable-paths.ts's own comment on this pair.
-      'experiences.heading',
-      'experiences.intro',
     ];
     notEditableInPlace.forEach((path) => expect(EDITABLE_TEXT_PATHS).not.toContain(path));
     expect(Object.keys(COPY_FIELDS)).toHaveLength(EDITABLE_TEXT_PATHS.length + notEditableInPlace.length);
+    // Phase 3, Task 3: experiences.heading/intro are now painted through a
+    // live content.renderText call (Experiences.tsx), so they belong in
+    // EDITABLE_TEXT_PATHS rather than in the excluded set above -- the
+    // opposite assertion from Task 2, when nothing on the page could reach
+    // them yet.
+    expect(EDITABLE_TEXT_PATHS).toContain('experiences.heading');
+    expect(EDITABLE_TEXT_PATHS).toContain('experiences.intro');
   });
 
   // The other half of the decision, and the reason excluding it is honest

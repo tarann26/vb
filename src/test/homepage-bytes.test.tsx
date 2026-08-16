@@ -123,6 +123,17 @@ import { AppRoutes } from '../App';
 // CHROME: `<section id="awards">`, the heading, the intro paragraph, and the
 // empty grid `<div>` the (zero-length) awards list maps into -- no cards,
 // because there is nothing loaded yet to render one from.
+//
+// Phase 3, Task 3: 46443 -> 52109 (+5666 bytes). The Experiences carousel is
+// new, and unlike Awards it is NOT chrome-only: its content is the committed
+// build-time snapshot (`experiences.json`, Task 2), not a runtime fetch, so
+// every card is already resolved at the first paint this test renders. The
+// difference is the whole section: `<section id="experiences">`, the
+// heading and intro, and six full cards -- each an `<img>`, a title and a
+// description. Four of the six (Catering, Cheeseboards, Cooking Class,
+// Membership) link to real, enabled pages and render as a plain `<a>`; the
+// other two (Gifting, Retail) carry no link and render as a static `<div>`
+// with a "Coming Soon" stamp.
 describe('homepage byte count', () => {
   it('the public homepage is unchanged', () => {
     const { container } = render(
@@ -130,6 +141,6 @@ describe('homepage byte count', () => {
         <AppRoutes />
       </MemoryRouter>,
     );
-    expect(new TextEncoder().encode(container.innerHTML).length).toBe(46443);
+    expect(new TextEncoder().encode(container.innerHTML).length).toBe(52109);
   });
 });

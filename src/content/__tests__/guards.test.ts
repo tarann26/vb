@@ -87,12 +87,13 @@ describe('guards module', () => {
 // private helper" posture this file already takes toward assertCopy/
 // assertDrinkCategory above.
 describe('template sections (Plan 7)', () => {
-  const BESPOKE_EIGHT = [
+  const BESPOKE_NINE = [
     { kind: 'bespoke', id: 'hero', enabled: true },
     { kind: 'bespoke', id: 'ourStory', enabled: true },
     { kind: 'bespoke', id: 'atmosphere', enabled: true },
     { kind: 'bespoke', id: 'food', enabled: true },
     { kind: 'bespoke', id: 'drinks', enabled: true },
+    { kind: 'bespoke', id: 'experiences', enabled: true },
     { kind: 'bespoke', id: 'press', enabled: true },
     { kind: 'bespoke', id: 'awards', enabled: true },
     { kind: 'bespoke', id: 'visit', enabled: true },
@@ -106,36 +107,36 @@ describe('template sections (Plan 7)', () => {
     content: { heading: 'Join Us', paragraphs: ['Membership has its privileges.'] },
   };
 
-  it('accepts a homepage with the eight bespoke sections plus one valid template section', async () => {
+  it('accepts a homepage with the nine bespoke sections plus one valid template section', async () => {
     const { assertSections } = await import('../guards');
-    const result = assertSections([...BESPOKE_EIGHT, VALID_TEXT_TEMPLATE]);
-    expect(result).toHaveLength(9);
-    expect(result[8]).toEqual(VALID_TEXT_TEMPLATE);
+    const result = assertSections([...BESPOKE_NINE, VALID_TEXT_TEMPLATE]);
+    expect(result).toHaveLength(10);
+    expect(result[9]).toEqual(VALID_TEXT_TEMPLATE);
   });
 
   it('rejects a template section id colliding with a built-in SectionId', async () => {
     const { assertSections } = await import('../guards');
     const colliding = { ...VALID_TEXT_TEMPLATE, id: 'food' };
-    expect(() => assertSections([...BESPOKE_EIGHT, colliding])).toThrow(/food.*collides with a built-in section/);
+    expect(() => assertSections([...BESPOKE_NINE, colliding])).toThrow(/food.*collides with a built-in section/);
   });
 
   it('rejects two template sections sharing an id', async () => {
     const { assertSections } = await import('../guards');
     expect(() =>
-      assertSections([...BESPOKE_EIGHT, VALID_TEXT_TEMPLATE, VALID_TEXT_TEMPLATE]),
+      assertSections([...BESPOKE_NINE, VALID_TEXT_TEMPLATE, VALID_TEXT_TEMPLATE]),
     ).toThrow(/duplicate section id "membership"/);
   });
 
   it('rejects an unknown template type', async () => {
     const { assertSections } = await import('../guards');
     const bad = { ...VALID_TEXT_TEMPLATE, template: 'carousel' };
-    expect(() => assertSections([...BESPOKE_EIGHT, bad])).toThrow(/unknown template "carousel"/);
+    expect(() => assertSections([...BESPOKE_NINE, bad])).toThrow(/unknown template "carousel"/);
   });
 
   it('rejects a template section with a blank id', async () => {
     const { assertSections } = await import('../guards');
     const bad = { ...VALID_TEXT_TEMPLATE, id: '  ' };
-    expect(() => assertSections([...BESPOKE_EIGHT, bad])).toThrow(/needs an id/);
+    expect(() => assertSections([...BESPOKE_NINE, bad])).toThrow(/needs an id/);
   });
 
   // C1 review fix: the whole point of this rule is a dotted id -- confirmed
@@ -152,7 +153,7 @@ describe('template sections (Plan 7)', () => {
     async (id) => {
       const { assertSections } = await import('../guards');
       const bad = { ...VALID_TEXT_TEMPLATE, id };
-      expect(() => assertSections([...BESPOKE_EIGHT, bad])).toThrow(/letters a-z, numbers and hyphens only/);
+      expect(() => assertSections([...BESPOKE_NINE, bad])).toThrow(/letters a-z, numbers and hyphens only/);
     },
   );
 
@@ -168,7 +169,7 @@ describe('template sections (Plan 7)', () => {
   ])('rejects malformed %s content: %j', async (template, content, expected) => {
     const { assertSections } = await import('../guards');
     const bad = { kind: 'template', id: 'x', enabled: true, template, content };
-    expect(() => assertSections([...BESPOKE_EIGHT, bad])).toThrow(expected);
+    expect(() => assertSections([...BESPOKE_NINE, bad])).toThrow(expected);
   });
 
   it('accepts every template type with a minimal valid content shape', async () => {
@@ -197,7 +198,7 @@ describe('template sections (Plan 7)', () => {
         content: { heading: 'H', body: 'b', facts: [{ label: 'l', value: 'v' }] },
       },
     ];
-    expect(() => assertSections([...BESPOKE_EIGHT, ...entries])).not.toThrow();
+    expect(() => assertSections([...BESPOKE_NINE, ...entries])).not.toThrow();
   });
 
   it('accepts an optional whatsapp button and rejects a malformed one', async () => {
@@ -206,19 +207,19 @@ describe('template sections (Plan 7)', () => {
       ...VALID_TEXT_TEMPLATE,
       content: { ...VALID_TEXT_TEMPLATE.content, whatsapp: { label: 'Ask us', message: 'Hi, I have a question' } },
     };
-    expect(() => assertSections([...BESPOKE_EIGHT, withButton])).not.toThrow();
+    expect(() => assertSections([...BESPOKE_NINE, withButton])).not.toThrow();
 
     const badButton = {
       ...VALID_TEXT_TEMPLATE,
       content: { ...VALID_TEXT_TEMPLATE.content, whatsapp: { label: 'Ask us' } },
     };
-    expect(() => assertSections([...BESPOKE_EIGHT, badButton])).toThrow(/whatsapp button needs a "label" and a "message"/);
+    expect(() => assertSections([...BESPOKE_NINE, badButton])).toThrow(/whatsapp button needs a "label" and a "message"/);
   });
 
   it('rejects an entry with neither a bespoke nor a template kind', async () => {
     const { assertSections } = await import('../guards');
     const bad = { kind: 'mystery', id: 'x', enabled: true };
-    expect(() => assertSections([...BESPOKE_EIGHT, bad])).toThrow(/needs a "kind" of "bespoke" or "template"/);
+    expect(() => assertSections([...BESPOKE_NINE, bad])).toThrow(/needs a "kind" of "bespoke" or "template"/);
   });
 });
 

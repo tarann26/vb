@@ -187,17 +187,20 @@ export interface MenuFile {
 // the anchor are independently load-bearing (the anchor is a live, possibly
 // bookmarked URL) and neither may be renamed to line up with the other.
 //
-// Grows to eight here, Phase 2 Task 9 -- the first time since this union was
+// Grew to eight in Phase 2 Task 9, the first time since this union was
 // written. 'awards' is its own kind of member: every other SectionId names a
 // component whose CONTENT lives in a JSON file on GitHub; awards' entries
 // live in D1 instead (see the Award interface below), read at runtime rather
-// than compiled in. The id itself is still just a string in this union --
-// SECTION_ID_SET (guards.ts), SECTION_COMPONENTS (App.tsx, EditMode.tsx) and
-// every other `Record<SectionId, …>` literal had to grow a matching entry
-// before `tsc -b` went green again, which is the completeness guarantee
-// working, not incidental churn.
+// than compiled in. Nine now, Phase 3: 'experiences' is back to the GitHub-
+// JSON kind, same as every other member but 'awards' (see the Experience
+// interface below for why this one is committed rather than D1). The id
+// itself is still just a string in this union -- SECTION_ID_SET (guards.ts),
+// SECTION_COMPONENTS (App.tsx, EditMode.tsx) and every other
+// `Record<SectionId, …>` literal had to grow a matching entry before
+// `tsc -b` went green again, which is the completeness guarantee working,
+// not incidental churn.
 export type SectionId =
-  | 'hero' | 'ourStory' | 'atmosphere' | 'food' | 'drinks' | 'press' | 'awards' | 'visit';
+  | 'hero' | 'ourStory' | 'atmosphere' | 'food' | 'drinks' | 'experiences' | 'press' | 'awards' | 'visit';
 
 // Phase 2's pilot, pulled forward from Phase 4. Built on D1 from the start
 // rather than as a JSON file that would need migrating two months later --
@@ -249,8 +252,8 @@ export interface Experience {
 // closure guarantee `SectionId` already gets from `SECTION_ID_SET`
 // (guards.ts).
 //
-// `SectionId` itself stays closed at eight, on purpose (see this file's own
-// comment on it, above) -- nothing she does can add a ninth. A template
+// `SectionId` itself stays closed at nine, on purpose (see this file's own
+// comment on it, above) -- nothing she does can add a tenth. A template
 // section's `id`, by contrast, is a free string SHE creates, so it carries
 // no such closure and needs its own uniqueness rule instead (assertSections/
 // assertPages in guards.ts: a template id must be unique among every

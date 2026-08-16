@@ -1,11 +1,11 @@
 // The explicit list of dotted copy.json paths edit mode lets her rewrite in
 // place -- Plan 5 Task 3, Step 1. Derived from COPY_FIELDS
 // (src/admin/fields.ts, Plan 4 Task 2's flat map), not re-typed by hand: a
-// second, hand-copied 28-entry list here could silently drift from
+// second, hand-copied 32-entry list here could silently drift from
 // fields.ts the moment a field is added, renamed, or reclassified as
 // attribute-only there. src/admin/__tests__/editable-paths.test.tsx imports
 // this same constant for its own "recorded calls match exactly" check, so
-// there is exactly one place this 28-entry set is ever written down.
+// there is exactly one place this 32-entry set is ever written down.
 //
 // Three exclusions. The first two were decided by the edit mode plan's own
 // coverage table and are not re-litigated here:
@@ -54,15 +54,6 @@ const NOT_EDITABLE_IN_PLACE_COPY_FIELDS = new Set([
   'footer.linkedinLabel',
   // Painted as visible text, but inside a control that owns the click.
   'nav.pagesLabel',
-  // Phase 3, Task 2: no component calls `content.renderText('experiences.*',
-  // ...)` yet -- this task adds only the data shape and copy.json's own two
-  // strings, deliberately with no UI (see this task's own header). Task 3 is
-  // what adds Experiences.tsx and, with it, the live renderText call this
-  // boundary test (editable-paths.test.tsx) checks against; remove these two
-  // from this set there, not here, or the recorded-vs-EDITABLE_TEXT_PATHS
-  // check goes red for a path nothing on the page can reach yet.
-  'experiences.heading',
-  'experiences.intro',
 ]);
 
 // `readonly string[]`, not a narrowed literal union: `Object.keys(COPY_FIELDS)`

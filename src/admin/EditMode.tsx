@@ -14,7 +14,7 @@
 // evaluating by the time this chunk loads), duplicating the small
 // SectionId -> component map here keeps this file's dependency graph
 // independent of App.tsx entirely, which is simpler to reason about than
-// relying on that ordering. The eight components are the same ones
+// relying on that ordering. The nine components are the same ones
 // SECTION_COMPONENTS (App.tsx) uses, imported the same way.
 import React, { useEffect, useState } from 'react';
 import Navbar from '../components/NavBar';
@@ -23,6 +23,7 @@ import OurStory from '../components/OurStory';
 import PlaceGallery from '../components/PlaceGallery';
 import FoodGallery from '../components/FoodGallery';
 import Drinks from '../components/Drinks';
+import Experiences from '../components/Experiences';
 import BlogTeaser from '../components/BlogTeaser';
 import Awards from '../components/Awards';
 import VisitUs from '../components/VisitUs';
@@ -102,6 +103,7 @@ const SECTION_COMPONENTS: Record<SectionId, () => React.ReactNode> = {
   atmosphere: () => <PlaceGallery />,
   food: () => <FoodGallery />,
   drinks: () => <Drinks />,
+  experiences: () => <Experiences />,
   press: () => <BlogTeaser />,
   awards: () => <Awards />,
   visit: () => <VisitUs />,
@@ -113,6 +115,7 @@ const SECTION_LABELS: Record<SectionId, string> = {
   atmosphere: 'Atmosphere gallery',
   food: 'Menu',
   drinks: 'Drinks',
+  experiences: 'Experiences',
   press: 'Press',
   awards: 'Awards',
   visit: 'Visit',

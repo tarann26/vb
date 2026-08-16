@@ -21,6 +21,11 @@
   },
   {
     "kind": "bespoke",
+    "id": "experiences",
+    "enabled": true
+  },
+  {
+    "kind": "bespoke",
     "id": "press",
     "enabled": true
   },

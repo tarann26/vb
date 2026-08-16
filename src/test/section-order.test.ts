@@ -8,7 +8,7 @@ describe('homepage section order', () => {
     // The PR head's note: atmosphere, food, then drinks come first. Taran's:
     // About moves towards the bottom. Both are satisfied by this order.
     expect(sections.map((s) => s.id)).toEqual([
-      'hero', 'atmosphere', 'food', 'drinks', 'press', 'awards', 'ourStory', 'visit',
+      'hero', 'atmosphere', 'food', 'drinks', 'experiences', 'press', 'awards', 'ourStory', 'visit',
     ]);
   });
 

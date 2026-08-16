@@ -120,6 +120,7 @@ const validSections: Section[] = [
   { kind: 'bespoke', id: 'atmosphere', enabled: true },
   { kind: 'bespoke', id: 'food', enabled: true },
   { kind: 'bespoke', id: 'drinks', enabled: true },
+  { kind: 'bespoke', id: 'experiences', enabled: true },
   { kind: 'bespoke', id: 'press', enabled: true },
   { kind: 'bespoke', id: 'awards', enabled: true },
   { kind: 'bespoke', id: 'visit', enabled: true },
@@ -437,7 +438,7 @@ describe('validateContent: structural rules on the remaining files', () => {
       },
     ];
     const problems = validateContent('sections.json', bad);
-    expect(problems.some((p) => p.field === '[8].id' && /can only use letters a-z, numbers and hyphens/.test(p.message))).toBe(
+    expect(problems.some((p) => p.field === '[9].id' && /can only use letters a-z, numbers and hyphens/.test(p.message))).toBe(
       true,
     );
   });
@@ -1026,7 +1027,7 @@ describe('validateContent: a key the type does not have is refused at the write 
       publishAt: '2099-01-01',
     };
     const homepage = validateContent('sections.json', [...validSections, templateSection]);
-    expect(homepage.some((p) => p.field === '[8].publishAt')).toBe(true);
+    expect(homepage.some((p) => p.field === '[9].publishAt')).toBe(true);
 
     const page = validateContent('pages.json', [
       {

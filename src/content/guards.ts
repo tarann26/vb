@@ -208,7 +208,7 @@ export function assertDrinkCategory(raw: unknown, index: number): DrinkCategory 
 // The single runtime source of truth for the SectionId union -- TS erases
 // the type at runtime, so isSectionId/assertSections/narrowSectionId below
 // all check membership and completeness against this rather than each
-// re-deriving their own copy of the eight literals.
+// re-deriving their own copy of the nine literals.
 //
 // Deliberately a `Record<SectionId, true>`, not a plain `SectionId[]`
 // literal: an array literal only gets each *element* checked against
@@ -235,6 +235,7 @@ const SECTION_ID_SET: Record<SectionId, true> = {
   atmosphere: true,
   food: true,
   drinks: true,
+  experiences: true,
   press: true,
   awards: true,
   visit: true,
@@ -243,7 +244,7 @@ const SECTION_IDS = Object.keys(SECTION_ID_SET) as SectionId[];
 
 // Shared by assertSections (validating sections.json's `id`) and assertCopy
 // (validating copy.json's `nav.links[].section`) -- both need to know
-// whether an arbitrary value is one of the eight real SectionIds.
+// whether an arbitrary value is one of the nine real SectionIds.
 export function isSectionId(value: unknown): value is SectionId {
   return typeof value === 'string' && (SECTION_IDS as readonly string[]).includes(value);
 }
@@ -415,7 +416,7 @@ function assertSectionEntry(raw: unknown, index: number, seenIds: Set<string>, f
         `content/${fileLabel}: template section id "${id}" -- use letters a-z, numbers and hyphens only, e.g. "our-menu"`,
       );
     }
-    // A template id colliding with one of the eight closed SectionIds is
+    // A template id colliding with one of the nine closed SectionIds is
     // refused here, not merely discouraged -- App.tsx's/EditMode.tsx's own
     // dispatch keys every REACT list `key` on `section.id` regardless of
     // `kind`, so two sections sharing one id (a bespoke `visit` and a
