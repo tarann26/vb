@@ -72,10 +72,19 @@ export class D1Store implements ContentStore {
   // What that leaves, stated rather than papered over: two writes landing
   // between the guard and the batch can both pass the guard. The conditional
   // WHERE makes the loser a no-op instead of an overwrite, and the loser's
-  // prior value survives in `revisions` either way. On a single-owner site
-  // with a 12-publishes-per-6-hours rate limit this window is not reachable
-  // in practice; it is written down because a comment claiming atomicity
-  // here would be false.
+  // own prior read is still recorded in `revisions` -- for an ORDINARY
+  // publish, where nothing downstream ever deletes that row.
+  //
+  // That guarantee stopped being unconditional the moment `undo` (below)
+  // grew its own consuming DELETE. `undo`'s restoring call is itself a write
+  // through this same guard, so it can lose this exact race: its content
+  // UPDATE no-ops, but the DELETE that follows it runs regardless, because
+  // that DELETE has no way to see whether the paired UPDATE actually
+  // matched. See `undo`'s own comment on its DELETE for what that narrow
+  // case costs -- it is real, not merely theoretical, even though this
+  // paragraph's window is not reachable in practice on a single-owner site
+  // with a 12-publishes-per-6-hours rate limit. Written down because a
+  // comment claiming atomicity here would be false.
   async write(files: StoreWriteFile[], _message: string, publishId: string): Promise<{ sha: null }> {
     const now = Date.now();
 
@@ -202,13 +211,30 @@ export class D1Store implements ContentStore {
     // an EMPTY result here to refuse a repeat undo with 409 instead of
     // reverting twice.
     //
-    // Run after the restoring write, not batched with it: if this delete
+    // Run after the restoring write, not batched with it: if this DELETE
     // itself fails, the worst case is a group that can still be undone again
     // (a redundant, harmless re-restore, since `content` is already at the
     // restored value) -- never a group whose restore silently didn't happen.
     // Scoped to `publish_id`, not `path`: it must not touch any OTHER
     // publish's revisions for the same path, including the one this very
     // call just created for `undoPublishId`.
+    //
+    // The reverse direction is real, and this DELETE running unconditionally
+    // is exactly why: the `write` call just above is itself a write through
+    // `write`'s own concurrency guard (see that method's comment), and its
+    // content UPDATE can no-op if a concurrent write races between THIS
+    // method's SELECT above and `write`'s own batch -- the same unclosed
+    // window that comment already documents, reached here instead of by an
+    // ordinary publish. When that happens, `content` is never actually
+    // updated to the restored value, but this DELETE still runs and removes
+    // the only surviving copy of that value -- the revision row this method
+    // just read out. That is genuine data loss, not a redundant re-restore,
+    // and it is also what makes the write guard's "the loser's prior value
+    // survives in `revisions` either way" no longer an unconditional claim.
+    // Left as documented risk rather than fixed here, for the same reason
+    // the write guard's own window is: one owner, a rate limit of twelve
+    // publishes per six hours, and the cross-store atomicity gap this phase
+    // has already chosen to accept rather than close.
     await this.db.prepare('DELETE FROM revisions WHERE publish_id = ?').bind(publishId).run();
     return results.map((row) => row.path);
   }

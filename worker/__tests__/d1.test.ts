@@ -171,6 +171,32 @@ describe('undo', () => {
     expect((await store.read('src/content/awards.json'))!.content).toBe('v1');
   });
 
+  // Review Minor 1: the property that licenses the consuming DELETE above --
+  // that it removes only a redundant copy, never the last one -- was
+  // asserted in comments but never in a test. An over-broad DELETE (the
+  // `publish_id` predicate dropped, or widened to match by path) would have
+  // been caught today only by FakeD1 throwing on unrecognised SQL, which is
+  // incidental protection, not a guard on this specific, destructive
+  // property. Pinned directly: two SEPARATE groups on the same path, undo
+  // the newer one, and the older group must still be there, still
+  // restorable, and must still return ITS OWN value -- not be swept away as
+  // collateral damage by the newer group's own DELETE.
+  it('does not delete a different group\'s revisions for the same path', async () => {
+    await store.write([file('src/content/awards.json', 'v1')], 'first', 'p1');
+    await store.write([file('src/content/awards.json', 'v2')], 'second', 'p2'); // group p2 holds prior v1
+    await store.write([file('src/content/awards.json', 'v3')], 'third', 'p3'); // group p3 holds prior v2
+
+    expect(await store.undo('p3')).toEqual(['src/content/awards.json']);
+    expect((await store.read('src/content/awards.json'))!.content).toBe('v2');
+
+    // The OLDER group (p2) is untouched by p3's undo and must still restore
+    // to its own prior value, v1 -- not [] (deleted) and not v2's own prior
+    // (there is only one path here, so a delete scoped by path instead of
+    // publish_id would remove p2's row too, and this would go red).
+    expect(await store.undo('p2')).toEqual(['src/content/awards.json']);
+    expect((await store.read('src/content/awards.json'))!.content).toBe('v1');
+  });
+
   // `results.map(...)` on an empty array is `[]` regardless, so asserting
   // only the return value here cannot tell "undo returned early" from "undo
   // ran write([]) and that happened to produce the same answer" -- write([])
