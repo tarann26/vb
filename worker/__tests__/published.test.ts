@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { CONTENT_SOURCE_HEADER, handlePublished, type PublishedEnv } from '../published';
 import { D1Store, sha256Hex } from '../d1';
+import { snapshotFor } from '../snapshot';
 import { asD1, FakeD1 } from './fakeD1';
+
+// The real compiled snapshot's body, not a hardcoded '[]' -- worker/snapshot.ts
+// (Task 8) now compiles the seed content in src/test/awards-seed.json rather
+// than an empty list, so these two assertions read the same value the module
+// under test actually returns instead of pinning stale content by hand.
+const SNAPSHOT_BODY = snapshotFor('awards.json')!;
 
 // A Map keyed on the cache key's URL, in the same spirit as fakeD1.ts: real
 // enough to prove the caching behaviour handlePublished depends on (a miss
@@ -115,7 +122,7 @@ describe('GET /api/published', () => {
     const response = await handlePublished(req(), env(fake), cache() as unknown as Cache);
 
     expect(response.status).toBe(200);
-    expect(await response.text()).toBe('[]');
+    expect(await response.text()).toBe(SNAPSHOT_BODY);
     expect(response.headers.get(CONTENT_SOURCE_HEADER)).toBe('snapshot');
   });
 
@@ -133,7 +140,7 @@ describe('GET /api/published', () => {
     const response = await handlePublished(req(), env(fake), cache() as unknown as Cache);
 
     expect(response.status).toBe(200);
-    expect(await response.text()).toBe('[]');
+    expect(await response.text()).toBe(SNAPSHOT_BODY);
     expect(response.headers.get(CONTENT_SOURCE_HEADER)).toBe('snapshot');
   });
 
