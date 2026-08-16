@@ -11,6 +11,7 @@ import {
   dirtyDraftMap,
   fetchBuildInfo,
   fetchBuildStatus,
+  reconcileAfterConflict,
   refreshBaseShas,
   requestPublish,
   trackPublish,
@@ -690,6 +691,17 @@ const PublishBar: React.FC<PublishBarProps> = ({
     }
     if (result.status !== 'success') {
       setState(resultToBarState(result));
+      // A 'conflict' or 'server-error' here can follow a D1 write that
+      // already landed in THIS request (a mixed publish, GitHub failing
+      // after awards.json already committed) -- see publish.ts's own
+      // reconcileAfterConflict comment for the misattributed-conflict this
+      // closes. Fire-and-forget: it only ever refreshes a file whose
+      // CURRENT committed content matches what was just sent, so a genuine
+      // external conflict is untouched and keeps refusing on the next
+      // attempt.
+      if (result.status === 'conflict' || result.status === 'server-error') {
+        void reconcileAfterConflict(registry, plan.contentSnapshots);
+      }
       return;
     }
 
@@ -714,7 +726,12 @@ const PublishBar: React.FC<PublishBarProps> = ({
       ...(Object.keys(plan.contentSnapshots) as ContentFileName[]).map((file) => `src/content/${file}`),
       ...plan.files.filter((file) => file.encoding === 'base64').map((file) => file.path),
     ];
-    const record: UndoRecord = { sha: result.sha, at: Date.now(), paths: undoPaths };
+    // `publishId` alongside `sha` -- Task 10's own reason the undo record
+    // exists as a pair now: a publish that touched D1 has no commit at all
+    // (`sha` is null), and undo needs the revision-group id to put THAT half
+    // back. Both come straight from the response the server just confirmed,
+    // never invented here.
+    const record: UndoRecord = { sha: result.sha, publishId: result.publishId, at: Date.now(), paths: undoPaths };
     rememberPublish(record);
     setUndoRecord(record);
 
@@ -732,11 +749,28 @@ const PublishBar: React.FC<PublishBarProps> = ({
     });
     registry.markPublished(updates);
 
+    // Bound once, to a name TypeScript can hold narrowed to `string` across
+    // every statement below -- `result.sha` itself stays `string | null` on
+    // the union type, and re-reading the property directly after an
+    // `if (result.sha === null) return;` guard is control-flow narrowing
+    // this codebase would rather not lean on across an intervening `await`.
+    const publishSha = result.sha;
+    if (publishSha === null) {
+      // No commit, so no Cloudflare build to wait for -- the change is
+      // already live the moment this response arrived (an awards-only
+      // publish, D1-backed). Polling build-status here would ask about a
+      // deployment that will never exist: it would sit on 'queued' for ten
+      // minutes and end on 'stalled' -- the failure state -- for the
+      // fastest publish this dashboard can make.
+      setState({ phase: 'success' });
+      return;
+    }
+
     setState({ phase: 'polling', buildState: 'queued' });
     const controller = new AbortController();
     abortRef.current = controller;
     const outcome = await trackPublish(
-      result.sha,
+      publishSha,
       {
         fetchBuildStatus: (sha) => fetchBuildStatus(sha),
         fetchBuildInfo: () => fetchBuildInfo(),
@@ -745,11 +779,11 @@ const PublishBar: React.FC<PublishBarProps> = ({
         signal: controller.signal,
       },
       (progress) => {
-        if (mountedRef.current) setState(progressToBarState(progress, result.sha, 'publish'));
+        if (mountedRef.current) setState(progressToBarState(progress, publishSha, 'publish'));
       },
     );
     if (!mountedRef.current) return;
-    const nextState = progressToBarState(outcome, result.sha, 'publish');
+    const nextState = progressToBarState(outcome, publishSha, 'publish');
     setState(nextState);
     if (nextState.phase === 'unauthenticated') onUnauthenticated(nextState.notice);
   }
@@ -762,7 +796,11 @@ const PublishBar: React.FC<PublishBarProps> = ({
     setFlow('undo');
     setLockReleased(false);
     setState({ phase: 'publishing' });
-    const result = await requestUndo(record.sha);
+    // Both identifiers, straight from the record Task 10 now writes with
+    // both -- `sha` names the commit half, `publishId` the D1 revision-group
+    // half, and a publish that only touched one store leaves the other null
+    // (see undo.ts's own UndoRecord comment).
+    const result = await requestUndo({ sha: record.sha, publishId: record.publishId });
     if (!mountedRef.current) return;
 
     if (result.status === 'unauthenticated') {
@@ -787,11 +825,26 @@ const PublishBar: React.FC<PublishBarProps> = ({
     clearUndoRecord();
     setUndoRecord(null);
 
+    // Bound once, for the same reason handlePublish's own `publishSha` is:
+    // `result.sha` stays `string | null` on the union, and everything below
+    // needs it narrowed to `string` across an `await`.
+    const undoSha = result.sha;
+    if (undoSha === null) {
+      // A D1-only publish produced no commit, so undoing it produces none
+      // either -- there is no Cloudflare build to wait for, and the restored
+      // content is already live. Reload immediately, the same as the
+      // build-confirmed case below: nothing here is waiting on a poll that
+      // will never resolve to anything but 'stalled'.
+      setState({ phase: 'success' });
+      reload();
+      return;
+    }
+
     setState({ phase: 'polling', buildState: 'queued' });
     const controller = new AbortController();
     abortRef.current = controller;
     const outcome = await trackPublish(
-      result.sha,
+      undoSha,
       {
         fetchBuildStatus: (sha) => fetchBuildStatus(sha),
         fetchBuildInfo: () => fetchBuildInfo(),
@@ -800,11 +853,11 @@ const PublishBar: React.FC<PublishBarProps> = ({
         signal: controller.signal,
       },
       (progress) => {
-        if (mountedRef.current) setState(progressToBarState(progress, result.sha, 'undo'));
+        if (mountedRef.current) setState(progressToBarState(progress, undoSha, 'undo'));
       },
     );
     if (!mountedRef.current) return;
-    const nextState = progressToBarState(outcome, result.sha, 'undo');
+    const nextState = progressToBarState(outcome, undoSha, 'undo');
     setState(nextState);
     if (nextState.phase === 'unauthenticated') onUnauthenticated(nextState.notice);
     // Gated on the build actually reporting live, never on the POST alone --

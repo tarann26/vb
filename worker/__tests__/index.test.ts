@@ -1406,5 +1406,28 @@ describe('POST /api/undo', () => {
     // handlePublish's own comment on the same limitation). Stated so the
     // next reader doesn't mistake the 409 for "nothing happened".
     expect(fake.content.get('src/content/awards.json')?.body).toBe(VALID_AWARDS_A);
+    // Task 10's own blocking precondition (carried from the Task 6 review):
+    // Task 5 gave publish's own GitHub-failure branches a `partial` flag for
+    // exactly this shape of response -- a write that already landed, told
+    // about through a failure. Undo was left without it because the client
+    // never sent `publishId`, making this mixed path unreachable; it is
+    // reachable now, so the response must say so.
+    expect(await response.json()).toEqual(
+      expect.objectContaining({ message: 'Something else has been published since.', partial: true }),
+    );
+  });
+
+  // The other half of the same proof: a GitHub-only undo (no `publishId`
+  // sent, so the D1 leg never ran at all) must NOT claim a partial landing
+  // it never had. Without this, a `partial: true` that fired unconditionally
+  // on every 409 -- rather than only when `restored.length > 0` -- would
+  // pass the test above just as well, and tell her a D1 write landed when
+  // none was ever attempted.
+  it('a GitHub-only undo conflict reports partial: false -- nothing in D1 ever ran', async () => {
+    stubWith();
+    const response = await worker.fetch(undoRequest({ sha: 'some-other-commit' }, await cookie()), env);
+    expect(response.status).toBe(409);
+    const body = (await response.json()) as { partial?: unknown };
+    expect(body.partial).toBe(false);
   });
 });

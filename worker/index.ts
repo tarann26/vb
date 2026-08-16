@@ -931,11 +931,22 @@ async function handleUndo(request: Request, env: Env): Promise<Response> {
     return json(200, { sha: null, restored });
   }
 
+  // Everything below this line runs AFTER the D1 leg above has already run
+  // to completion for this request -- `restored.length > 0` means it landed.
+  // Task 5's review finding fixed exactly this gap for publish (`partial`
+  // rides every failure branch reachable after a successful D1 write); undo
+  // was left inconsistent, and that was accepted only because the client
+  // never sent `publishId`, making a mixed undo unreachable. Task 10 wires
+  // `publishId` into the client's UndoRecord, so this is reachable now: a
+  // GitHub-half refusal below must say the D1 half already landed, or she is
+  // told "refused" for an undo that half-happened.
+  const partial = restored.length > 0;
+
   try {
     // 3. The explicit guard. Produces a clear sentence and spends no write.
     const head = await getHeadCommit(env);
     if (head.sha !== sha) {
-      return json(409, { message: 'Something else has been published since.' });
+      return json(409, { message: 'Something else has been published since.', partial });
     }
 
     // 4. The paths come from the COMMIT, never from anything the client
@@ -944,7 +955,7 @@ async function handleUndo(request: Request, env: Env): Promise<Response> {
     // with a sentence of its own rather than surfacing as a
     // DisallowedPathError partway through a write.
     if (!head.changedPaths.every((path) => isRestorablePath(path))) {
-      return json(409, { message: 'That change touched files this cannot put back.' });
+      return json(409, { message: 'That change touched files this cannot put back.', partial });
     }
 
     // 5. Build entries from the PARENT's tree. A path absent from it is one
@@ -980,15 +991,15 @@ async function handleUndo(request: Request, env: Env): Promise<Response> {
     return json(200, { sha: result.sha, restored });
   } catch (error) {
     if (error instanceof DisallowedPathError) {
-      return json(400, { message: error.message });
+      return json(400, { message: error.message, partial });
     }
     // Both map to 409, the one word this codebase already uses for "the
     // state you were looking at is not the state that is there now" -- so
     // the client branches on STATUS alone, never on message text.
     if (error instanceof PublishConflictError || error instanceof UndoNotPossibleError) {
-      return json(409, { message: error.message });
+      return json(409, { message: error.message, partial });
     }
-    return json(502, { message: error instanceof Error ? error.message : 'Could not put that change back.' });
+    return json(502, { message: error instanceof Error ? error.message : 'Could not put that change back.', partial });
   }
 }
 

@@ -740,7 +740,7 @@ describe('AdminApp: Critical review fix -- a restored draft cannot publish a pho
         if (url === '/api/wa') return WA_RESPONSE();
         if (url === '/api/publish') {
           publishBodies.push(JSON.parse(String(init?.body)) as { files: { path: string; content: string; encoding: string }[] });
-          return new Response(JSON.stringify({ sha: 'commit-1' }), { status: 200, headers: { 'content-type': 'application/json' } });
+          return new Response(JSON.stringify({ sha: 'commit-1', publishId: 'p1' }), { status: 200, headers: { 'content-type': 'application/json' } });
         }
         if (url.startsWith('/api/build-status')) {
           return new Response(JSON.stringify({ state: 'live', deploymentUrl: null, commitUrl: 'https://c' }), {
@@ -1167,7 +1167,7 @@ describe('AdminApp: editing is paused while a publish request is in flight', () 
   // that would be a worse failure than the confusion it prevents.
   it('the build-poll window does NOT pause anything, even though the bar still says Publishing…', async () => {
     const user = userEvent.setup();
-    stubFetchWithPublish(async () => new Response(JSON.stringify({ sha: 'commit-1' }), { status: 200 }));
+    stubFetchWithPublish(async () => new Response(JSON.stringify({ sha: 'commit-1', publishId: 'p1' }), { status: 200 }));
     const input = await publishAndGetDishInput(user);
 
     await screen.findByText('Publishing… waiting for the build to start.');

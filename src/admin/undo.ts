@@ -26,8 +26,19 @@ export const UNDO_STORAGE_KEY = 'vb:undo:v1';
 
 export interface UndoRecord {
   // The commit this publish created -- what the server checks the branch
-  // head against before it will put anything back.
-  sha: string;
+  // head against before it will put anything back. `null` when the publish
+  // touched only D1 (an awards-only publish): no commit, nothing for the
+  // GitHub half of undo to do. Task 10's own reason this is nullable now,
+  // not merely optional -- requestUndo (below) sends it either way, and a
+  // caller that dropped a falsy `sha` on the floor would silently ask to
+  // undo NOTHING when a publish moved D1 alone.
+  sha: string | null;
+  // The revision-group id the D1 half of this publish wrote under
+  // (worker/d1.ts's `publishId`) -- `null` when the publish touched only
+  // GitHub. A publish can move both stores in one request (Task 5), so undo
+  // needs both identifiers to put both halves back; either alone still
+  // names a real, undoable half.
+  publishId: string | null;
   // Epoch ms, so the offer can say "4 minutes ago" rather than showing her a
   // timestamp.
   at: number;
@@ -79,6 +90,21 @@ export function rememberPublish(record: UndoRecord, storage?: Storage): void {
 // that anything it offers is still something she was doing today.
 export const UNDO_MAX_AGE_MS = 60 * 60 * 1000;
 
+// A field that names half of a publish: valid as `undefined` (a record
+// written before this field existed -- backward compatibility, see
+// UndoRecord's own `publishId` comment), `null` (that half was not
+// touched), or a non-empty string (it was). Anything else -- a number, an
+// empty string -- is malformed and the WHOLE record is rejected; an empty
+// string in particular is treated as absent rather than preserved, since
+// UndoRecord's own type promises `string | null`, never `''`.
+type IdField = { ok: true; value: string | null } | { ok: false };
+
+function readIdField(value: unknown): IdField {
+  if (value === undefined || value === null) return { ok: true, value: null };
+  if (typeof value !== 'string') return { ok: false };
+  return { ok: true, value: value.length > 0 ? value : null };
+}
+
 export function loadUndoRecord(storage?: Storage, now: number = Date.now()): UndoRecord | null {
   const store = safeStorage(storage);
   if (!store) return null;
@@ -87,8 +113,22 @@ export function loadUndoRecord(storage?: Storage, now: number = Date.now()): Und
     if (!raw) return null;
     const parsed: unknown = JSON.parse(raw);
     if (parsed === null || typeof parsed !== 'object') return null;
-    const { sha, at, paths } = parsed as { sha?: unknown; at?: unknown; paths?: unknown };
-    if (typeof sha !== 'string' || sha.length === 0) return null;
+    const { sha, publishId, at, paths } = parsed as { sha?: unknown; publishId?: unknown; at?: unknown; paths?: unknown };
+    const shaField = readIdField(sha);
+    // `publishId` is read with the SAME field parser as `sha`, and both
+    // being absent (`undefined`) is exactly what a record written by a tab
+    // loaded before this field existed looks like -- it must keep reading
+    // as a valid, sha-only record (backward compatibility, this task's own
+    // requirement), not be rejected for a field it never had.
+    const publishIdField = readIdField(publishId);
+    if (!shaField.ok || !publishIdField.ok) return null;
+    // Task 10's own relaxation: a record used to be rejected unless `sha`
+    // alone was a non-empty string. A publish that touched only D1 has no
+    // commit at all, so its record's `sha` is legitimately null -- what
+    // still has to be true is that AT LEAST ONE of the two identifies
+    // something to undo; a record naming neither is malformed the same way
+    // one with no `sha` at all used to be.
+    if (shaField.value === null && publishIdField.value === null) return null;
     if (typeof at !== 'number' || !Number.isFinite(at)) return null;
     if (!Array.isArray(paths) || !paths.every((p): p is string => typeof p === 'string')) return null;
     // Read as "no offer", not removed: a clock that is briefly wrong (a
@@ -96,7 +136,7 @@ export function loadUndoRecord(storage?: Storage, now: number = Date.now()): Und
     // be able to destroy a record another tab is legitimately holding. The
     // key is overwritten by the next publish anyway.
     if (now - at > UNDO_MAX_AGE_MS) return null;
-    return { sha, at, paths };
+    return { sha: shaField.value, publishId: publishIdField.value, at, paths };
   } catch {
     return null;
   }
@@ -180,20 +220,31 @@ export function describesAddedPhoto(paths: string[]): boolean {
 // branched on STATUS alone -- never on message text.
 
 export type UndoRequestResult =
-  | { status: 'success'; sha: string }
+  | { status: 'success'; sha: string | null }
   | { status: 'conflict' }
   | { status: 'unauthenticated' }
   | { status: 'server-error' }
   | { status: 'network-error' };
 
-export async function requestUndo(sha: string, fetchImpl: typeof fetch = fetch): Promise<UndoRequestResult> {
+// Takes only the two identifiers, not a whole UndoRecord -- `at`/`paths`
+// describe the offer to HER; the server was never told either, before this
+// task or after it.
+export async function requestUndo(
+  record: Pick<UndoRecord, 'sha' | 'publishId'>,
+  fetchImpl: typeof fetch = fetch,
+): Promise<UndoRequestResult> {
   let response: Response;
   try {
     response = await fetchImpl('/api/undo', {
       method: 'POST',
       credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sha }),
+      // `?? undefined`, not the `null` the record may actually hold: the
+      // Worker's own parse (worker/index.ts's handleUndo) treats a missing
+      // key and an explicit `null` identically, but `undefined` is what
+      // `JSON.stringify` drops from the body entirely, which is the
+      // smaller, more honest wire shape for "this half was not touched".
+      body: JSON.stringify({ sha: record.sha ?? undefined, publishId: record.publishId ?? undefined }),
     });
   } catch {
     return { status: 'network-error' };
@@ -202,7 +253,14 @@ export async function requestUndo(sha: string, fetchImpl: typeof fetch = fetch):
   if (response.status === 200) {
     try {
       const body = (await response.json()) as { sha?: unknown };
-      if (typeof body.sha === 'string') return { status: 'success', sha: body.sha };
+      // `sha` is null on a D1-only undo -- no commit, so nothing for
+      // PublishBar to poll build-status for. Mirrors requestPublish's own
+      // reasoning exactly (publish.ts's own comment on why a fabricated sha
+      // here would be worse than an honest null): coerced to a string, it
+      // would be polled against a deployment that will never exist and time
+      // out on 'stalled' after ten minutes, for an undo that was actually
+      // finished before this response arrived.
+      if (body.sha === null || typeof body.sha === 'string') return { status: 'success', sha: body.sha ?? null };
     } catch {
       // falls through to server-error
     }

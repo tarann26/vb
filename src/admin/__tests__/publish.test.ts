@@ -8,6 +8,7 @@ import {
   fetchBuildStatus,
   isDirty,
   nextPollDelay,
+  reconcileAfterConflict,
   refreshBaseShas,
   requestPublish,
   trackPublish,
@@ -468,21 +469,166 @@ describe('refreshBaseShas', () => {
   });
 });
 
+// Task 10's carried-forward gap: a blind retry of a mixed publish can
+// misattribute a conflict to a third party, because a D1 file's own baseSha
+// moves the instant the D1 leg of the FIRST attempt lands. This closes it
+// with no wire change -- re-read what is actually committed now, and only
+// ever reconcile a file whose current content matches what was just sent
+// (proof the write took), never a file that merely failed to conflict for
+// some unrelated reason.
+describe('reconcileAfterConflict', () => {
+  // A content match is exactly what "my own D1 write landed, the response
+  // just didn't say so" looks like: the committed value now equals the
+  // exact snapshot this attempt sent. Reconciled the same way a successful
+  // publish already reconciles it (markPublished), so a retry with no
+  // further edits sends nothing for this file at all -- it is no longer
+  // dirty -- and one WITH further edits sends fresh content against a sha
+  // that will not false-conflict.
+  it('a content match refreshes sha and clears dirty -- proof the write actually landed', async () => {
+    const { result } = renderHook(() => useContentRegistry());
+    const published = [{ id: 'a', title: 'Award A', awardedBy: 'Body', year: '2020' }];
+    act(() => result.current.register('dishes.json', published, 'stale-sha'));
+    // Simulate what buildPublishRequest snapshotted at the moment this
+    // (failed) attempt was sent -- identical to `published` here, since
+    // nothing has changed locally since.
+    await act(async () => {
+      await reconcileAfterConflict(result.current, { 'dishes.json': published }, async () => ({
+        data: published,
+        sha: 'fresh-sha-from-my-own-write',
+      }));
+    });
+    const entry = result.current.getEntries()['dishes.json']!;
+    expect(entry.sha).toBe('fresh-sha-from-my-own-write');
+    expect(entry.initial).toEqual(published);
+    expect(isDirty(entry)).toBe(false);
+  });
+
+  // Her own edit made AFTER the failed attempt (but before this reconcile
+  // runs) must survive -- reconcileAfterConflict reuses markPublished
+  // exactly, and markPublished's own contract is "never revert to the
+  // published snapshot, only move the baseline underneath it".
+  it('an edit made since the failed attempt survives reconciliation', async () => {
+    const { result } = renderHook(() => useContentRegistry());
+    const sentSnapshot = [{ id: 'a', title: 'Award A', awardedBy: 'Body', year: '2020' }];
+    act(() => result.current.register('dishes.json', sentSnapshot, 'stale-sha'));
+    // She keeps typing after the failed attempt but before reconciliation
+    // resolves.
+    const editedSince = [{ id: 'a', title: 'Award A (edited again)', awardedBy: 'Body', year: '2020' }];
+    act(() => result.current.updateData('dishes.json', editedSince));
+    await act(async () => {
+      await reconcileAfterConflict(result.current, { 'dishes.json': sentSnapshot }, async () => ({
+        data: sentSnapshot,
+        sha: 'fresh-sha',
+      }));
+    });
+    const entry = result.current.getEntries()['dishes.json']!;
+    expect(entry.data).toEqual(editedSince); // her later edit survives
+    expect(entry.initial).toEqual(sentSnapshot); // baseline moves to what actually landed
+    expect(entry.sha).toBe('fresh-sha');
+    expect(isDirty(entry)).toBe(true); // still dirty -- correctly, she has an unpublished edit
+  });
+
+  // THE safety property this function exists to preserve: a genuine
+  // external conflict (the current committed content is NOT what this
+  // attempt sent) must be left completely alone. Silently refreshing sha
+  // here would let a later retry sail past the 409 that is the only thing
+  // protecting a third party's change from being overwritten.
+  //
+  // Mutation this guards: dropping the `JSON.stringify(...) === ...` gate
+  // and unconditionally calling markPublished for every attempted file
+  // passes every OTHER test in this file, but flips `entry.sha` here from
+  // 'stale-sha' to 'someone-elses-fresh-sha' -- this assertion catches it
+  // directly.
+  it('a genuine mismatch (someone else really did change it) is left untouched, not silently absorbed', async () => {
+    const { result } = renderHook(() => useContentRegistry());
+    const sentSnapshot = [{ id: 'a', title: 'Award A', awardedBy: 'Body', year: '2020' }];
+    act(() => result.current.register('dishes.json', sentSnapshot, 'stale-sha'));
+    const someoneElsesContent = [{ id: 'a', title: 'A completely different award', awardedBy: 'Body', year: '2020' }];
+    await act(async () => {
+      await reconcileAfterConflict(result.current, { 'dishes.json': sentSnapshot }, async () => ({
+        data: someoneElsesContent,
+        sha: 'someone-elses-fresh-sha',
+      }));
+    });
+    const entry = result.current.getEntries()['dishes.json']!;
+    expect(entry.sha).toBe('stale-sha');
+    expect(entry.initial).toEqual(sentSnapshot);
+  });
+
+  // A failed re-read (the same network trouble that likely caused the
+  // original failure) must not throw on top of an already-reported failure
+  // -- it just leaves that file exactly as stale as it already was.
+  it('a re-read failure for one file is swallowed, leaving the registry untouched', async () => {
+    const { result } = renderHook(() => useContentRegistry());
+    const sentSnapshot = [{ id: 'a' }];
+    act(() => result.current.register('dishes.json', sentSnapshot, 'stale-sha'));
+    await expect(
+      reconcileAfterConflict(result.current, { 'dishes.json': sentSnapshot }, async () => {
+        throw new Error('network blip');
+      }),
+    ).resolves.toBeUndefined();
+    const entry = result.current.getEntries()['dishes.json']!;
+    expect(entry.sha).toBe('stale-sha');
+  });
+
+  it('an empty snapshot map does nothing and calls nothing', async () => {
+    const { result } = renderHook(() => useContentRegistry());
+    const impl = vi.fn();
+    await reconcileAfterConflict(result.current, {}, impl);
+    expect(impl).not.toHaveBeenCalled();
+  });
+});
+
 function jsonResponse(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 }
 
 describe('requestPublish', () => {
-  it('200 with a sha -> success', async () => {
-    const fetchImpl = vi.fn(async () => jsonResponse(200, { sha: 'commit-sha-1' }));
+  it('200 with a sha and publishId -> success', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse(200, { sha: 'commit-sha-1', publishId: 'p1', d1Paths: [] }));
     const result = await requestPublish([], fetchImpl as unknown as typeof fetch);
-    expect(result).toEqual({ status: 'success', sha: 'commit-sha-1' });
+    expect(result).toEqual({ status: 'success', sha: 'commit-sha-1', publishId: 'p1', d1Paths: [] });
   });
 
-  it('200 with a malformed body (no sha) -> server-error, not a crash', async () => {
+  // Task 10, Step 1: `sha` is null for a publish that touched only D1 -- no
+  // commit, no Pages build, live the instant this response arrived. Must be
+  // accepted as the honest `null`, never coerced to a string PublishBar
+  // would then poll build-status with forever.
+  //
+  // Mutation this guards: changing `body.sha ?? null` to `String(body.sha)`
+  // turns `sha` into the literal string `"null"` here -- this test catches
+  // that directly, and Step 5's second prescribed mutation is exactly this
+  // one.
+  it('200 with sha: null and a publishId (D1-only publish, no commit) -> success with sha: null', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse(200, { sha: null, publishId: 'p1', d1Paths: ['src/content/awards.json'] }));
+    const result = await requestPublish([], fetchImpl as unknown as typeof fetch);
+    expect(result).toEqual({ status: 'success', sha: null, publishId: 'p1', d1Paths: ['src/content/awards.json'] });
+  });
+
+  // Task 10, Step 4: a 200 with no `publishId` at all is not a success this
+  // client can act on -- there would be nothing to write into the undo
+  // record's own `publishId` field, and PublishBar has already cleared the
+  // draft and staged files by the time it would notice. Refused here,
+  // before any of that runs.
+  it('200 with a sha but no publishId -> server-error, not a success missing a field', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse(200, { sha: 'commit-sha-1' }));
+    const result = await requestPublish([], fetchImpl as unknown as typeof fetch);
+    expect(result.status).toBe('server-error');
+  });
+
+  it('200 with a malformed body (no sha, no publishId) -> server-error, not a crash', async () => {
     const fetchImpl = vi.fn(async () => jsonResponse(200, { ok: true }));
     const result = await requestPublish([], fetchImpl as unknown as typeof fetch);
     expect(result.status).toBe('server-error');
+  });
+
+  // `d1Paths` absent entirely (rather than `[]`) must default cleanly --
+  // today's server always sends it, but this keeps the parse honest about
+  // what it actually requires vs. what it tolerates being missing.
+  it('200 with no d1Paths at all defaults to an empty array, not a throw', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse(200, { sha: 'commit-sha-1', publishId: 'p1' }));
+    const result = await requestPublish([], fetchImpl as unknown as typeof fetch);
+    expect(result).toEqual({ status: 'success', sha: 'commit-sha-1', publishId: 'p1', d1Paths: [] });
   });
 
   it('401 -> unauthenticated', async () => {

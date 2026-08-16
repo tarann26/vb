@@ -442,12 +442,62 @@ export async function refreshBaseShas(
 }
 
 // ---------------------------------------------------------------------------
+// Task 10's carried-forward gap: a blind retry of a mixed publish (a D1 file
+// plus a GitHub file in the same request) can misattribute a conflict to a
+// third party. worker/index.ts's own comment on handlePublish's write step
+// spells out why -- D1's own baseSha (a sha256 of the body) MOVES the instant
+// the D1 leg lands, exactly the way a reversed write order would move a
+// GitHub blob sha, so an unmodified retry of the SAME request reaches the D1
+// file with a now-stale baseSha and gets refused: "someone else changed
+// src/content/awards.json while you were editing", naming a third party for
+// what was actually her own prior, already-successful half-publish.
+//
+// The 409/502 the client sees carries no path list and no `partial` flag --
+// requestPublish branches on STATUS alone, never on body text, so there is
+// no wire signal to say WHICH file (if any) already landed. This works
+// around that with no wire change at all: it re-reads every file THIS
+// request attempted and compares the CURRENT committed content against what
+// was actually sent. A match is proof the write took, whatever opaque token
+// the store now carries for it -- not merely a coincidence to disbelieve --
+// so that file is reconciled exactly the way a successful publish already
+// reconciles it (`markPublished`, preserving any edit made since). A
+// mismatch means someone else's content is genuinely different, and is left
+// entirely alone: this function never writes a fresh baseSha over a file it
+// cannot prove landed, which is what keeps a genuine external conflict
+// refusing on the next attempt instead of silently fast-forwarding over it.
+//
+// Best-effort and silent: called after a failure has already been reported,
+// so a re-read that itself fails just leaves that file exactly as stale as
+// it already was -- no worse than not attempting this at all.
+export async function reconcileAfterConflict(
+  registry: Pick<ContentRegistry, 'markPublished'>,
+  contentSnapshots: Partial<Record<ContentFileName, unknown>>,
+  fetchContentImpl: (file: ContentFileName) => Promise<{ data: unknown; sha: string }> = fetchContent,
+): Promise<void> {
+  const files = Object.keys(contentSnapshots) as ContentFileName[];
+  const updates: Partial<Record<ContentFileName, { data: unknown; sha: string }>> = {};
+  await Promise.all(
+    files.map(async (file) => {
+      try {
+        const current = await fetchContentImpl(file);
+        if (JSON.stringify(current.data) === JSON.stringify(contentSnapshots[file])) {
+          updates[file] = { data: contentSnapshots[file], sha: current.sha };
+        }
+      } catch {
+        // Swallowed -- see this function's own header comment.
+      }
+    }),
+  );
+  if (Object.keys(updates).length > 0) registry.markPublished(updates);
+}
+
+// ---------------------------------------------------------------------------
 // POST /api/publish itself. One outcome per row of Step 5's translation
 // table, plus the two this table doesn't need translating (success, and a
 // request that never reached the server at all).
 
 export type PublishRequestResult =
-  | { status: 'success'; sha: string }
+  | { status: 'success'; sha: string | null; publishId: string; d1Paths: string[] }
   | { status: 'validation'; problems: ValidationProblem[] }
   | { status: 'conflict' }
   | { status: 'unauthenticated' }
@@ -478,8 +528,20 @@ export async function requestPublish(files: PublishFilePayload[], fetchImpl: typ
 
   if (response.status === 200) {
     try {
-      const body = (await response.json()) as { sha?: unknown };
-      if (typeof body.sha === 'string') return { status: 'success', sha: body.sha };
+      const body = (await response.json()) as { sha?: unknown; publishId?: unknown; d1Paths?: unknown };
+      // `sha` is null for a publish that touched only D1 -- no commit, no
+      // Pages build, live immediately. Accepted as null rather than coerced
+      // to a string: a fabricated sha here would be polled against
+      // build-status forever and time out after ten minutes on a publish
+      // that was actually finished before the response arrived.
+      if (typeof body.publishId === 'string' && (body.sha === null || typeof body.sha === 'string')) {
+        return {
+          status: 'success',
+          sha: body.sha ?? null,
+          publishId: body.publishId,
+          d1Paths: Array.isArray(body.d1Paths) ? (body.d1Paths as string[]) : [],
+        };
+      }
     } catch {
       // falls through to the generic server-error below
     }

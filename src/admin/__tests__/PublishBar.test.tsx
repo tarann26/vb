@@ -186,7 +186,7 @@ describe('PublishBar: Step 1 carried requirement 2 -- flushes the focused field 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars -- second param exists only to keep the mock's call-tuple type two elements wide, matched against below
     const fetchImpl = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
       const url = String(input);
-      if (url === '/api/publish') return jsonResponse(200, { sha: 'commit-1' });
+      if (url === '/api/publish') return jsonResponse(200, { sha: 'commit-1', publishId: 'p1' });
       if (url.startsWith('/api/build-status')) return jsonResponse(200, { state: 'live', deploymentUrl: null, commitUrl: 'https://c' });
       if (url === '/build-info.json') return jsonResponse(200, { sha: 'commit-1', builtAt: 'now' });
       throw new Error(`unexpected fetch ${url}`);
@@ -317,7 +317,7 @@ describe('PublishBar: the confirmation step before anything is pushed', () => {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars -- second param exists only to keep the mock's call-tuple type two elements wide, matched against below
     const fetchImpl = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
       const url = String(input);
-      if (url === '/api/publish') return jsonResponse(200, { sha: 'commit-1' });
+      if (url === '/api/publish') return jsonResponse(200, { sha: 'commit-1', publishId: 'p1' });
       if (url.startsWith('/api/content')) return jsonResponse(200, { content: '[]', sha: 'sha-fresh' });
       if (url.startsWith('/api/build-status')) return jsonResponse(200, { state: 'live', deploymentUrl: null, commitUrl: 'https://c' });
       if (url === '/build-info.json') return jsonResponse(200, { sha: 'commit-1', builtAt: 'now' });
@@ -372,7 +372,7 @@ describe('PublishBar: the confirmation step before anything is pushed', () => {
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input);
-        if (url === '/api/publish') return jsonResponse(200, { sha: 'commit-1' });
+        if (url === '/api/publish') return jsonResponse(200, { sha: 'commit-1', publishId: 'p1' });
         if (url.startsWith('/api/content')) return jsonResponse(200, { content: '[]', sha: 'sha-fresh' });
         if (url.startsWith('/api/build-status')) return jsonResponse(200, { state: 'live', deploymentUrl: null, commitUrl: 'https://c' });
         if (url === '/build-info.json') return jsonResponse(200, { sha: liveSha, builtAt: 'now' });
@@ -547,7 +547,7 @@ describe('PublishBar: the time expectation while she waits', () => {
   it('polling shows BOTH the build state and the 2-3 minute line', async () => {
     const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
-      if (url === '/api/publish') return jsonResponse(200, { sha: 'commit-1' });
+      if (url === '/api/publish') return jsonResponse(200, { sha: 'commit-1', publishId: 'p1' });
       if (url.startsWith('/api/content')) return jsonResponse(200, { content: '[]', sha: 'sha-fresh' });
       // Never resolves -- holds the bar at the first polling state
       // (`buildState: 'queued'`), which is the sentence she actually reads
@@ -626,7 +626,7 @@ describe('PublishBar: the flush happens before the pause, never after', () => {
 describe('PublishBar: assembling the request', () => {
   it('attaches baseSha to a dirty content file (carried requirement 1)', async () => {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars -- both params exist only to keep the mock's call-tuple type two elements wide, matched against below
-    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => jsonResponse(200, { sha: 'commit-1' }));
+    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => jsonResponse(200, { sha: 'commit-1', publishId: 'p1' }));
     vi.stubGlobal('fetch', fetchImpl);
     render(<Harness pollClock={instantClock()} />);
     act(() => captured!.registry.register('dishes.json', [{ id: 'a', name: '' }], 'sha-original'));
@@ -652,7 +652,7 @@ describe('PublishBar: assembling the request', () => {
   // no help, deleting that line would leave this test green. It does not.
   it('a click on the Publish button flushes the same way a keyboard submit does -- not because the click itself already blurred it', async () => {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars -- both params exist only to keep the mock's call-tuple type two elements wide, matched against below
-    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => jsonResponse(200, { sha: 'commit-1' }));
+    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => jsonResponse(200, { sha: 'commit-1', publishId: 'p1' }));
     vi.stubGlobal('fetch', fetchImpl);
     render(<Harness withTagsField pollClock={instantClock()} />);
     dirty(captured!.registry);
@@ -704,6 +704,78 @@ describe('PublishBar: Step 5 translation table', () => {
     clickPublishAndAccept();
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent("Couldn't reach the server that stores your changes. Nothing was lost — try again in a minute.");
+  });
+
+  // Wires publish.test.ts's own reconcileAfterConflict unit coverage into
+  // the real component: a 409 whose underlying cause was her own prior D1
+  // write landing (the committed content now matches exactly what THIS
+  // attempt sent) quietly clears the false conflict rather than leaving her
+  // stuck retrying into the same misattributed refusal. Proven end to end
+  // by the button itself going back to disabled -- dishes.json is no longer
+  // dirty once the reconcile confirms it already landed.
+  it('409 after content that matches what was sent is quietly reconciled -- the Publish button goes back to disabled', async () => {
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/publish') return jsonResponse(409, { problems: [{ field: 'src/content/dishes.json', message: 'Someone else changed this.' }] });
+      if (url.startsWith('/api/content')) return jsonResponse(200, { content: JSON.stringify([{ id: 'a', name: 'Edited' }]), sha: 'fresh-sha' });
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchImpl);
+    render(<Harness pollClock={instantClock()} />);
+    dirty(captured!.registry);
+    clickPublishAndAccept();
+
+    await screen.findByRole('alert');
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Publish' })).toBeDisabled());
+    const entry = captured!.registry.getEntries()['dishes.json']!;
+    expect(entry.sha).toBe('fresh-sha');
+  });
+
+  // The other half: a 409 whose cause is a genuinely DIFFERENT committed
+  // value must leave the file dirty and refusing -- reconciliation never
+  // silently clears a real conflict, which is what keeps a later retry from
+  // fast-forwarding straight over someone else's change.
+  //
+  // The re-read is a manually-controlled promise here (not an immediately-
+  // resolving mock, as the matching-case test above uses) specifically so
+  // this test can prove a NEGATIVE deterministically: asserting "nothing
+  // changed" immediately after the alert appears would pass just as well if
+  // reconciliation simply hadn't finished running yet, which is exactly the
+  // kind of vacuous pass this whole task's brief warns against. Awaiting
+  // the content promise itself, from the test, is what makes the compare
+  // inside reconcileAfterConflict provably done before the assertions run.
+  it('409 after content that does NOT match what was sent stays dirty -- a real conflict is never silently cleared', async () => {
+    let resolveContent!: (response: Response) => void;
+    const contentResponse = new Promise<Response>((resolve) => {
+      resolveContent = resolve;
+    });
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/publish') return jsonResponse(409, { problems: [{ field: 'src/content/dishes.json', message: 'Someone else changed this.' }] });
+      if (url.startsWith('/api/content')) return contentResponse;
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchImpl);
+    render(<Harness pollClock={instantClock()} />);
+    dirty(captured!.registry);
+    clickPublishAndAccept();
+
+    await screen.findByRole('alert');
+    await waitFor(() => expect(fetchImpl).toHaveBeenCalledWith(expect.stringContaining('/api/content'), expect.anything()));
+    await act(async () => {
+      resolveContent(jsonResponse(200, { content: JSON.stringify([{ id: 'a', name: 'Someone else’s edit' }]), sha: 'their-fresh-sha' }));
+      // Flushes reconcileAfterConflict's own await chain (fetchContent's
+      // response.json(), then the JSON.stringify compare) past the point
+      // where a match WOULD have called markPublished, before anything
+      // below reads the registry.
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(screen.getByRole('button', { name: 'Publish' })).toBeEnabled();
+    const entry = captured!.registry.getEntries()['dishes.json']!;
+    expect(entry.sha).toBe('sha-1');
   });
 
   // Review finding (Important): rendering `problem.field` raw put an
@@ -762,7 +834,7 @@ describe('PublishBar: Step 3 -- polling to live, confirmed against build-info.js
     let statusCall = 0;
     const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
-      if (url === '/api/publish') return jsonResponse(200, { sha: 'commit-1' });
+      if (url === '/api/publish') return jsonResponse(200, { sha: 'commit-1', publishId: 'p1' });
       if (url.startsWith('/api/build-status')) {
         statusCall += 1;
         const state = statusCall === 1 ? 'queued' : statusCall === 2 ? 'building' : 'live';
@@ -779,10 +851,40 @@ describe('PublishBar: Step 3 -- polling to live, confirmed against build-info.js
     await screen.findByText('Your changes are live.');
   });
 
+  // Task 10's own reason to exist: an awards-only publish touches D1 alone,
+  // produces no commit, and is live the instant this response arrives --
+  // there is no Cloudflare build to poll for. Untreated, this dashboard
+  // would poll build-status for a deployment that will never exist, sit on
+  // "queued" for ten minutes, and end on "stalled": the failure state, for
+  // the fastest publish this dashboard can make.
+  //
+  // The `fetchBuildStatus` assertion is the one that actually catches that
+  // -- a test asserting only the final state would pass even while a poll
+  // ran in the background and simply hadn't reported back yet by the time
+  // `findByText` resolved.
+  it('a publish with sha: null (D1-only, no commit) never polls build-status and lands straight on live', async () => {
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/publish') return jsonResponse(200, { sha: null, publishId: 'p1', d1Paths: ['src/content/awards.json'] });
+      if (url.startsWith('/api/content')) return jsonResponse(200, { content: '[]', sha: 'sha-fresh' });
+      if (url.startsWith('/api/build-status')) return jsonResponse(200, { state: 'live', deploymentUrl: null, commitUrl: 'https://c' });
+      if (url === '/build-info.json') return jsonResponse(200, { sha: 'commit-1', builtAt: 'now' });
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchImpl);
+    render(<Harness pollClock={instantClock()} />);
+    dirty(captured!.registry);
+    clickPublishAndAccept();
+
+    await screen.findByText('Your changes are live.');
+    expect(fetchImpl).not.toHaveBeenCalledWith(expect.stringContaining('/api/build-status'), expect.anything());
+    expect(fetchImpl).not.toHaveBeenCalledWith('/build-info.json', expect.anything());
+  });
+
   it('never reaching live -> "taking longer than it should", with the commit link', async () => {
     const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
-      if (url === '/api/publish') return jsonResponse(200, { sha: 'commit-1' });
+      if (url === '/api/publish') return jsonResponse(200, { sha: 'commit-1', publishId: 'p1' });
       if (url.startsWith('/api/build-status')) {
         return jsonResponse(200, { state: 'queued', deploymentUrl: null, commitUrl: 'https://github.com/x/y/commit/commit-1' });
       }
@@ -802,7 +904,7 @@ describe('PublishBar: Step 3 -- polling to live, confirmed against build-info.js
   it('live but build-info.json never catches up -> "hasn\'t picked it up yet"', async () => {
     const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
-      if (url === '/api/publish') return jsonResponse(200, { sha: 'commit-1' });
+      if (url === '/api/publish') return jsonResponse(200, { sha: 'commit-1', publishId: 'p1' });
       if (url.startsWith('/api/build-status')) return jsonResponse(200, { state: 'live', deploymentUrl: null, commitUrl: 'https://c' });
       if (url === '/build-info.json') return jsonResponse(200, { sha: 'some-other-sha', builtAt: 'now' });
       throw new Error(`unexpected fetch ${url}`);
@@ -819,7 +921,7 @@ describe('PublishBar: Step 3 -- polling to live, confirmed against build-info.js
   it('a build state of "failed" -> the developer-link sentence, without waiting out the timeout', async () => {
     const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
-      if (url === '/api/publish') return jsonResponse(200, { sha: 'commit-1' });
+      if (url === '/api/publish') return jsonResponse(200, { sha: 'commit-1', publishId: 'p1' });
       if (url.startsWith('/api/build-status')) return jsonResponse(200, { state: 'failed', deploymentUrl: null, commitUrl: 'https://github.com/x/y/commit/commit-1' });
       throw new Error(`unexpected fetch ${url}`);
     });
@@ -848,7 +950,7 @@ describe('PublishBar: Step 3 -- polling to live, confirmed against build-info.js
     let statusCall = 0;
     const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
-      if (url === '/api/publish') return jsonResponse(200, { sha: 'commit-1' });
+      if (url === '/api/publish') return jsonResponse(200, { sha: 'commit-1', publishId: 'p1' });
       if (url.startsWith('/api/build-status')) {
         statusCall += 1;
         if (statusCall === 1) return jsonResponse(200, { state: 'building', deploymentUrl: null, commitUrl: 'https://c' });
@@ -874,7 +976,7 @@ describe('PublishBar: after a successful publish', () => {
   it('clears exactly the staged keys that were sent, and refreshes baseSha (a second publish would not falsely conflict)', async () => {
     const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
-      if (url === '/api/publish') return jsonResponse(200, { sha: 'commit-1' });
+      if (url === '/api/publish') return jsonResponse(200, { sha: 'commit-1', publishId: 'p1' });
       if (url.startsWith('/api/content')) return jsonResponse(200, { content: JSON.stringify([{ id: 'a', name: 'Edited' }]), sha: 'sha-fresh' });
       if (url.startsWith('/api/build-status')) return jsonResponse(200, { state: 'live', deploymentUrl: null, commitUrl: 'https://c' });
       if (url === '/build-info.json') return jsonResponse(200, { sha: 'commit-1', builtAt: 'now' });
@@ -931,7 +1033,7 @@ describe('PublishBar: after a successful publish', () => {
       captured!.stagedFiles.stage('drinks.json:x:image', midFlightFile);
     });
 
-    resolvePublish(jsonResponse(200, { sha: 'commit-1' }));
+    resolvePublish(jsonResponse(200, { sha: 'commit-1', publishId: 'p1' }));
     await screen.findByText('Your changes are live.');
 
     // Deleting the clearing call entirely fires this assertion (it would
@@ -995,7 +1097,7 @@ describe('PublishBar: after a successful publish', () => {
     act(() => captured!.stagedFiles.stage(KEY, null));
     act(() => captured!.stagedFiles.stage(KEY, fileB));
 
-    resolvePublish(jsonResponse(200, { sha: 'commit-1' }));
+    resolvePublish(jsonResponse(200, { sha: 'commit-1', publishId: 'p1' }));
     await screen.findByText('Your changes are live.');
 
     expect(captured!.stagedFiles.files).toEqual({ [KEY]: fileB });
@@ -1005,7 +1107,7 @@ describe('PublishBar: after a successful publish', () => {
     window.localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify({ 'dishes.json': { data: [], savedAt: 1 } }));
     const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
-      if (url === '/api/publish') return jsonResponse(200, { sha: 'commit-1' });
+      if (url === '/api/publish') return jsonResponse(200, { sha: 'commit-1', publishId: 'p1' });
       if (url.startsWith('/api/build-status')) return jsonResponse(200, { state: 'live', deploymentUrl: null, commitUrl: 'https://c' });
       if (url === '/build-info.json') return jsonResponse(200, { sha: 'commit-1', builtAt: 'now' });
       throw new Error(`unexpected fetch ${url}`);
@@ -1161,7 +1263,12 @@ describe('DraftBanner', () => {
 // structurally impossible to offer to revert a developer's hand commit and
 // call it "the change you published".
 describe('PublishBar: undo my last publish', () => {
-  const RECORD = { sha: 'commit-1', at: Date.now() - 4 * 60_000, paths: ['src/content/dishes.json', 'src/content/site.json'] };
+  const RECORD = {
+    sha: 'commit-1',
+    publishId: 'p1',
+    at: Date.now() - 4 * 60_000,
+    paths: ['src/content/dishes.json', 'src/content/site.json'],
+  };
 
   function undoFetch(undoResponse: () => Promise<Response>) {
     return vi.fn(async (input: RequestInfo | URL) => {
@@ -1240,7 +1347,7 @@ describe('PublishBar: undo my last publish', () => {
     let liveSha = 'commit-1';
     const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
-      if (url === '/api/publish') return jsonResponse(200, { sha: 'commit-1' });
+      if (url === '/api/publish') return jsonResponse(200, { sha: 'commit-1', publishId: 'p1' });
       if (url === '/api/undo') {
         liveSha = 'undo-commit';
         return jsonResponse(200, { sha: 'undo-commit' });
@@ -1325,6 +1432,32 @@ describe('PublishBar: undo my last publish', () => {
     });
 
     await screen.findByText('Your site is back to how it was.');
+    expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  // A D1-only publish's own undo, undoing the exact case Task 10 exists for
+  // from the other direction: no commit, so no build to poll for, and the
+  // restored content is already live. Without this branch, `trackPublish`
+  // would be handed a `null` sha and poll a deployment that will never
+  // exist -- the same ten-minute stall the publish side was fixed for.
+  it('undoing a D1-only publish (sha: null) never polls build-status and reloads immediately', async () => {
+    const d1Record = { sha: null, publishId: 'pub-1', at: Date.now() - 4 * 60_000, paths: ['src/content/awards.json'] };
+    rememberPublish(d1Record);
+    const reload = vi.fn();
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/undo') return jsonResponse(200, { sha: null, restored: ['src/content/awards.json'] });
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchImpl);
+    render(<Harness pollClock={instantClock()} reload={reload} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Undo my last publish' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Yes, undo it' }));
+
+    await screen.findByText('Your site is back to how it was.');
+    expect(fetchImpl).not.toHaveBeenCalledWith(expect.stringContaining('/api/build-status'), expect.anything());
+    expect(fetchImpl).not.toHaveBeenCalledWith('/build-info.json', expect.anything());
     expect(reload).toHaveBeenCalledTimes(1);
   });
 
@@ -1417,7 +1550,7 @@ describe('PublishBar: undo my last publish', () => {
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input);
-        if (url === '/api/publish') return jsonResponse(200, { sha: 'commit-1' });
+        if (url === '/api/publish') return jsonResponse(200, { sha: 'commit-1', publishId: 'p1' });
         if (url.startsWith('/api/content')) return jsonResponse(200, { content: '[]', sha: 'sha-fresh' });
         if (url.startsWith('/api/build-status')) return jsonResponse(200, { state: 'live', deploymentUrl: null, commitUrl: 'https://c' });
         if (url === '/build-info.json') return jsonResponse(200, { sha: 'commit-1', builtAt: 'now' });
@@ -1605,7 +1738,7 @@ describe('PublishBar: undo my last publish', () => {
         vi.fn(async (input: RequestInfo | URL) => {
           const url = String(input);
           if (url === '/api/undo') return jsonResponse(409, { message: 'Something else has been published since.' });
-          if (url === '/api/publish') return jsonResponse(200, { sha: 'commit-2' });
+          if (url === '/api/publish') return jsonResponse(200, { sha: 'commit-2', publishId: 'p2' });
           if (url.startsWith('/api/content')) return jsonResponse(200, { content: '[]', sha: 'sha-fresh' });
           if (url.startsWith('/api/build-status')) return jsonResponse(200, { state: 'live', deploymentUrl: null, commitUrl: 'https://c' });
           if (url === '/build-info.json') return jsonResponse(200, { sha: 'commit-2', builtAt: 'now' });

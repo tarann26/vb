@@ -130,7 +130,7 @@ function stubFetch(overrides: {
       if (url === '/api/wa') return WA_RESPONSE();
       if (url === '/api/login') return new Response(null, { status: 204 });
       if (url === '/api/publish') {
-        return overrides.publishResponse ?? new Response(JSON.stringify({ sha: 'new-commit-sha' }), { status: 200 });
+        return overrides.publishResponse ?? new Response(JSON.stringify({ sha: 'new-commit-sha', publishId: 'p1' }), { status: 200 });
       }
       if (url.startsWith('/api/build-status')) {
         return (
