@@ -483,6 +483,80 @@ describe('EditMode: a 401 mid-load does not unmount the page or lose what alread
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
+
+  // Fix round 1 review (Minor 1): the 404-is-fine branch above returned
+  // without clearing a STALE fileErrors['awards.json'] left by an earlier,
+  // genuine (non-404) attempt -- the success `.then()` branch a few lines up
+  // already clears exactly this for every other file; this branch is
+  // awards.json's own version of success and needs the identical clear, not
+  // a special exemption from it. Without it, a transient failure (a real
+  // 500, a network blip) followed by the ordinary 404 state leaves the
+  // "Could not load awards.json" banner standing over what is, right now, a
+  // perfectly fine empty state.
+  //
+  // press.json is what forces the retry here (a 401, the same re-login
+  // mechanism the "a loaded file is never re-fetched..." test above already
+  // uses) -- awards.json itself has no 401 branch, so its own two calls are
+  // driven by call count alone: the first (real, on initial load) 500s: the
+  // second (after re-login) 404s.
+  it('a stale error on awards.json clears once a later attempt reads its true, empty (404) state', async () => {
+    let awardsCalls = 0;
+    let pressCalls = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url === '/api/wa') return WA_RESPONSE();
+        if (url === '/api/login') return new Response(null, { status: 204 });
+        if (url.includes('dishes.json')) return contentResponse(DISHES, 'sha-dishes');
+        if (url.includes('drinks.json')) return contentResponse(DRINKS, 'sha-drinks');
+        if (url.includes('sections.json')) return contentResponse(SECTIONS, 'sha-sections');
+        if (url.includes('site.json')) return contentResponse(SITE, 'sha-site');
+        if (url.includes('galleries.json')) return contentResponse(GALLERIES, 'sha-galleries');
+        if (url.includes('menus.json')) return contentResponse(MENUS, 'sha-menus');
+        if (url.includes('story.json')) return contentResponse(STORY, 'sha-story');
+        if (url.includes('copy.json')) return contentResponse(COPY, 'sha-copy');
+        if (url.includes('pages.json')) return contentResponse([], 'sha-pages');
+        if (url.includes('press.json')) {
+          pressCalls += 1;
+          return pressCalls === 1 ? unauthorizedResponse() : contentResponse(PRESS, 'sha-press-2');
+        }
+        if (url.includes('awards.json')) {
+          awardsCalls += 1;
+          return awardsCalls === 1
+            ? new Response(null, { status: 500 })
+            : new Response(JSON.stringify({ message: 'That file does not exist yet.' }), { status: 404 });
+        }
+        throw new Error(`EditMode.test.tsx (stale awards error test): unexpected fetch to ${url}`);
+      }),
+    );
+
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <EditMode />
+      </MemoryRouter>,
+    );
+
+    // The real, first-attempt failure: a genuine 500, reported like any
+    // other.
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(/awards\.json/);
+    expect(awardsCalls).toBe(1);
+
+    // press.json's 401 drives the same re-login cycle the sibling test
+    // above already exercises.
+    await screen.findByLabelText(/password/i);
+    await user.type(screen.getByLabelText(/password/i), 'whatever-the-real-password-is');
+    await user.click(screen.getByRole('button', { name: /log in/i }));
+    await waitFor(() => expect(screen.queryByLabelText(/password/i)).not.toBeInTheDocument());
+
+    // awards.json is retried (it never registered on the failed first
+    // attempt) and this time reads its true, empty 404 state -- and the
+    // STALE banner from the earlier 500 is gone, not still standing over it.
+    await waitFor(() => expect(awardsCalls).toBe(2));
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+  });
 });
 
 describe('EditMode: the page\'s own links do not fire', () => {

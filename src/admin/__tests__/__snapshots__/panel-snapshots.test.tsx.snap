@@ -1,6 +1,6 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`the ten panels, as they render today > About (story) 1`] = `
+exports[`the eleven panels, as they render today > About (story) 1`] = `
 <div
   id="section-panel-story"
 >
@@ -318,7 +318,7 @@ exports[`the ten panels, as they render today > About (story) 1`] = `
 </div>
 `;
 
-exports[`the ten panels, as they render today > Awards (awards) 1`] = `
+exports[`the eleven panels, as they render today > Awards (awards) 1`] = `
 <div
   id="section-panel-awards"
 >
@@ -339,7 +339,7 @@ exports[`the ten panels, as they render today > Awards (awards) 1`] = `
 </div>
 `;
 
-exports[`the ten panels, as they render today > Dishes (dishes) 1`] = `
+exports[`the eleven panels, as they render today > Dishes (dishes) 1`] = `
 <div
   id="section-panel-dishes"
 >
@@ -629,7 +629,7 @@ exports[`the ten panels, as they render today > Dishes (dishes) 1`] = `
 </div>
 `;
 
-exports[`the ten panels, as they render today > Drinks (drinks) 1`] = `
+exports[`the eleven panels, as they render today > Drinks (drinks) 1`] = `
 <div
   id="section-panel-drinks"
 >
@@ -933,7 +933,7 @@ exports[`the ten panels, as they render today > Drinks (drinks) 1`] = `
 </div>
 `;
 
-exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
+exports[`the eleven panels, as they render today > Galleries (galleries) 1`] = `
 <div
   id="section-panel-galleries"
 >
@@ -2420,7 +2420,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
 </div>
 `;
 
-exports[`the ten panels, as they render today > Menu PDFs (menus) 1`] = `
+exports[`the eleven panels, as they render today > Menu PDFs (menus) 1`] = `
 <div
   id="section-panel-menus"
 >
@@ -2566,7 +2566,7 @@ exports[`the ten panels, as they render today > Menu PDFs (menus) 1`] = `
 </div>
 `;
 
-exports[`the ten panels, as they render today > Opening hours (hours) 1`] = `
+exports[`the eleven panels, as they render today > Opening hours (hours) 1`] = `
 <div
   id="section-panel-hours"
 >
@@ -2677,7 +2677,7 @@ exports[`the ten panels, as they render today > Opening hours (hours) 1`] = `
 </div>
 `;
 
-exports[`the ten panels, as they render today > Pages (pages) 1`] = `
+exports[`the eleven panels, as they render today > Pages (pages) 1`] = `
 <div
   id="section-panel-pages"
 >
@@ -2698,7 +2698,7 @@ exports[`the ten panels, as they render today > Pages (pages) 1`] = `
 </div>
 `;
 
-exports[`the ten panels, as they render today > Press (press) 1`] = `
+exports[`the eleven panels, as they render today > Press (press) 1`] = `
 <div
   id="section-panel-press"
 >
@@ -3052,7 +3052,7 @@ exports[`the ten panels, as they render today > Press (press) 1`] = `
 </div>
 `;
 
-exports[`the ten panels, as they render today > What shows on the homepage (sections) 1`] = `
+exports[`the eleven panels, as they render today > What shows on the homepage (sections) 1`] = `
 <div
   id="section-panel-sections"
 >
@@ -3496,7 +3496,7 @@ exports[`the ten panels, as they render today > What shows on the homepage (sect
 </div>
 `;
 
-exports[`the ten panels, as they render today > Words on the site (copy) 1`] = `
+exports[`the eleven panels, as they render today > Words on the site (copy) 1`] = `
 <div
   id="section-panel-copy"
 >

@@ -851,6 +851,19 @@ const EditMode: React.FC = () => {
           // still loading forever, which an outright skip would.
           if (file === 'awards.json' && error instanceof ContentNotFoundError) {
             registry.register(file, [], '');
+            // Fix round 1 review (Minor 1): a stale fileErrors['awards.json']
+            // left by an EARLIER, genuine (non-404) failure on a prior retry
+            // must not keep showing that banner over what is, right now, a
+            // successful (empty) load -- the identical reasoning the success
+            // branch above already applies for every other file, just
+            // reached from this branch instead of `.then()` since a 404
+            // here is this file's own version of success, not a failure.
+            setFileErrors((prev) => {
+              if (!(file in prev)) return prev;
+              const next = { ...prev };
+              delete next[file];
+              return next;
+            });
             return;
           }
           const message = error instanceof Error ? error.message : String(error);

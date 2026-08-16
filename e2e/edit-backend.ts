@@ -17,10 +17,12 @@ import type { Page } from '@playwright/test';
 import { ZERO_DATA_PAYLOAD } from '../src/shared/analytics-payload';
 import type { AnalyticsPayload } from '../src/shared/analytics-payload';
 
-// Every file src/admin/content.ts's own CONTENT_FILES fetches. A name
-// missing here is answered 404 by the route below, which surfaces on screen
-// as a "Could not load <file>" banner ABOVE the real page content -- i.e. it
-// shifts everything a spec is about to measure.
+// Every file src/admin/content.ts's own CONTENT_FILES fetches, EXCEPT
+// awards.json -- deliberately, see its own note below. For every name that
+// IS listed here, a name missing would be answered 404 by the route below,
+// which surfaces on screen as a "Could not load <file>" banner ABOVE the
+// real page content -- i.e. it shifts everything a spec is about to
+// measure.
 export const CONTENT_FILES = [
   'site.json',
   'galleries.json',
@@ -33,6 +35,20 @@ export const CONTENT_FILES = [
   'sections.json',
   'pages.json',
 ];
+
+// awards.json is deliberately NOT in the list above, and that is not the
+// same omission the "Could not load" warning names. Every file that IS
+// listed always exists in the real repository, so a 404 for one of THOSE
+// really is a bug this list exists to prevent. awards.json is different: it
+// is D1-backed (worker/store.ts's D1_ONLY_PATHS), never a file in this
+// repository, and genuinely 404s until the very first award is ever
+// published (content.ts's own ContentNotFoundError) -- which is exactly the
+// un-seeded state this fixture is standing in for. Both consumers
+// (AwardsArea.tsx and EditMode.tsx, Phase 2 Task 11) already treat that 404
+// as an empty list, not an error, so the route below answering 404 for it is
+// the CORRECT fixture, not a gap. Adding an entry here would need a
+// `realContentJson('awards.json')` file that must not exist -- do not add
+// one.
 
 // The real, committed content -- not a hand-built fixture, so every spec
 // built on this measures the same photos, the same collage placements and
