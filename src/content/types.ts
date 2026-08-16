@@ -212,6 +212,34 @@ export interface Award {
   image?: string;
 }
 
+// Phase 3. One card in the homepage carousel. `link` and `comingSoon` are
+// BOTH declared because the spec names both, and they are kept from
+// disagreeing by validateExperiences rather than by collapsing one into the
+// other: a derived `comingSoon = link === undefined` would read the same in
+// every rendering path today, but it would also make "an item that links
+// somewhere AND says coming soon" unspellable, which is a decision that
+// belongs in the validator where the owner gets a sentence about it, not in
+// the type where she gets nothing.
+//
+// `image` is REQUIRED, unlike Award['image']. An award with no badge is an
+// ordinary award; a carousel card with no photo is an empty rectangle. That
+// difference is also why this file is committed JSON rather than D1 -- see
+// the plan's own storage section: src/content/__tests__/assets.test.ts only
+// walks src/content/, so a D1-stored image path would be checked by nothing.
+//
+// `link` is a site-relative path ("/catering"), never an absolute URL. The
+// validator refuses anything else; Experiences.tsx resolves it against the
+// live pages list and renders an unresolvable one as a coming-soon card
+// rather than as a dead <Link>.
+export interface Experience {
+  id: string;
+  title: string;
+  description: string;
+  image: string;
+  link?: string;
+  comingSoon: boolean;
+}
+
 // Plan 7, Task 1: the homepage's section list stops being seven fixed ids
 // and becomes a list of two kinds -- bespoke sections rendered by name (the
 // same seven above, unchanged) and template sections rendered by TYPE, with
@@ -403,6 +431,7 @@ export interface Copy {
   atmosphere: { heading: string };
   food: { heading: string };
   drinks: { heading: string; intro: string };
+  experiences: { heading: string; intro: string };
   press: { heading: string; intro: string; readArticle: string; viewAll: string };
   // Chrome only -- the Awards entries themselves live in D1 (see the Award
   // interface, above), not here. Kept in copy.json, on GitHub, deliberately:
@@ -461,6 +490,11 @@ export interface ContentBundle {
   // starts that way); present on ContentBundle from Task 1 onward so a
   // rendering surface added later needs no further plumbing here.
   pages: Page[];
+  // Phase 3. The homepage carousel's six cards, in experiences.json order --
+  // committed JSON on the GitHub store (see Experience's own comment, above,
+  // for why), present on ContentBundle from this task onward so the
+  // rendering surface Task 3 adds needs no further plumbing here.
+  experiences: Experience[];
   // default: (_, v) => v -- see ContentContext.ts's defaultBundle.
   renderText(path: EditableTextPath, value: string): ReactNode;
   // default: (_, p) => createElement('img', p) -- see ContentContext.ts's defaultBundle.

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { validateContent } from '../validate';
 import { MAX_COLLAGE_PHOTOS, MIN_SPLIT_CHILDREN, normalizeSizes } from '../collage';
 import type { CollageNode } from '../types';
-import type { Dish, Drink, Article, StoryContent, Copy, Section, SiteContent, Galleries, MenuFile, Award } from '../types';
+import type { Dish, Drink, Article, StoryContent, Copy, Section, SiteContent, Galleries, MenuFile, Award, Experience } from '../types';
 
 // Every fixture in this file is hand-built against the real types, not read
 // from the repo's own content/*.json. A negative fixture built by cloning
@@ -82,6 +82,10 @@ const validCopy: Copy = {
     heading: 'Drinks',
     intro: 'Our bar pours a full Italian programme.',
   },
+  experiences: {
+    heading: 'Experiences',
+    intro: 'Beyond the table.',
+  },
   press: {
     heading: 'Latest Stories',
     intro: 'Discover what critics are saying.',
@@ -159,6 +163,19 @@ const validAward: Award = {
   title: 'Test Award',
   awardedBy: 'Test Awarding Body',
   year: '2025',
+};
+
+// Phase 3. A well-formed carousel card: linking, not coming soon -- the
+// opposite pairing (`comingSoon: true`, no `link`) is exercised by its own
+// cases below rather than folded in here, since the PAIR rule is exactly
+// what several of those cases mutate.
+const validExperience: Experience = {
+  id: 'test-experience',
+  title: 'Test Experience',
+  description: 'An experience used only by this test file.',
+  image: '/experiences/test.webp',
+  link: '/catering',
+  comingSoon: false,
 };
 
 const messages = (problems: { message: string }[]) => problems.map((p) => p.message).join(' ');
@@ -530,6 +547,83 @@ describe('validateContent: awards.json (Phase 2, Task 9)', () => {
 
   it('rejects awards.json that is not an array', () => {
     const problems = validateContent('awards.json', { not: 'an array' });
+    expect(problems.length).toBeGreaterThan(0);
+  });
+});
+
+// Phase 3. validateContent('experiences.json', ...) -- the write-time
+// counterpart to guards.test.ts's own coverage of assertExperiences (the
+// import-time guard). Deliberately covers the one thing assertExperiences
+// deliberately does NOT: the link/comingSoon pair rule, and the link-shape
+// pattern that refuses an absolute or protocol-relative URL.
+describe('validateContent: experiences.json (Phase 3)', () => {
+  it('accepts a well-formed list', () => {
+    expect(validateContent('experiences.json', [validExperience])).toEqual([]);
+  });
+
+  it('rejects a duplicate id', () => {
+    const problems = validateContent('experiences.json', [
+      validExperience,
+      { ...validExperience, title: 'A Different Experience' },
+    ]);
+    expect(problems.some((p) => p.field === '[1].id' && /already used by another item/.test(p.message))).toBe(true);
+  });
+
+  it('rejects a blank title, naming the field', () => {
+    const problems = validateContent('experiences.json', [{ ...validExperience, title: '' }]);
+    expect(problems.some((p) => p.field === '[0].title')).toBe(true);
+  });
+
+  it('rejects a missing image', () => {
+    const problems = validateContent('experiences.json', [{ ...validExperience, image: '' }]);
+    expect(problems.some((p) => p.field === '[0].image' && /needs a photo/.test(p.message))).toBe(true);
+  });
+
+  it('rejects an image not starting with /', () => {
+    const problems = validateContent('experiences.json', [{ ...validExperience, image: 'javascript:alert(1)' }]);
+    expect(problems.some((p) => p.field === '[0].image' && /starting with \//.test(p.message))).toBe(true);
+  });
+
+  it('rejects an absolute-URL link', () => {
+    const problems = validateContent('experiences.json', [
+      { ...validExperience, link: 'https://example.com/catering' },
+    ]);
+    expect(problems.some((p) => p.field === '[0].link')).toBe(true);
+  });
+
+  it('rejects a protocol-relative link', () => {
+    const problems = validateContent('experiences.json', [{ ...validExperience, link: '//evil.example' }]);
+    expect(problems.some((p) => p.field === '[0].link')).toBe(true);
+  });
+
+  it('rejects a coming-soon item that also carries a link', () => {
+    const problems = validateContent('experiences.json', [{ ...validExperience, comingSoon: true }]);
+    expect(
+      problems.some((p) => p.field === '[0].link' && /marked coming soon, so it cannot open a page yet/.test(p.message)),
+    ).toBe(true);
+  });
+
+  it('rejects a not-coming-soon item with no link', () => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- `link` is destructured only to OMIT it from the proposed value below
+    const { link, ...withoutLink } = validExperience;
+    const problems = validateContent('experiences.json', [withoutLink]);
+    expect(
+      problems.some((p) => p.field === '[0].link' && /needs a page to open, or mark it coming soon/.test(p.message)),
+    ).toBe(true);
+  });
+
+  it('rejects an unknown key', () => {
+    const problems = validateContent('experiences.json', [{ ...validExperience, publishAt: '2099-01-01' }]);
+    expect(problems.some((p) => p.field === '[0].publishAt')).toBe(true);
+  });
+
+  it('rejects an empty array -- unlike awards, a carousel with no cards is a hole in the page', () => {
+    const problems = validateContent('experiences.json', []);
+    expect(problems.length).toBeGreaterThan(0);
+  });
+
+  it('rejects experiences.json that is not an array', () => {
+    const problems = validateContent('experiences.json', { not: 'an array' });
     expect(problems.length).toBeGreaterThan(0);
   });
 });
@@ -981,6 +1075,7 @@ describe('validateContent: a key the type does not have is refused at the write 
     expect(validateContent('press.json', [newerArticle, olderArticle])).toEqual([]);
     expect(validateContent('sections.json', validSections)).toEqual([]);
     expect(validateContent('awards.json', [validAward])).toEqual([]);
+    expect(validateContent('experiences.json', [validExperience])).toEqual([]);
   });
 
   // `Object.prototype`'s own keys are not "known" -- guards.ts's
@@ -1030,6 +1125,7 @@ describe('validateContent: a value that reaches an href or src cannot carry a sc
     },
     { name: 'menus[].file', run: (v) => validateContent('menus.json', [{ ...validMenus[0], file: v }]) },
     { name: 'awards[].image', run: (v) => validateContent('awards.json', [{ ...validAward, image: v }]) },
+    { name: 'experiences[].image', run: (v) => validateContent('experiences.json', [{ ...validExperience, image: v }]) },
   ];
 
   for (const { name, run } of ASSET_FIELDS) {

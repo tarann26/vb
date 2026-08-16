@@ -54,6 +54,15 @@ const NOT_EDITABLE_IN_PLACE_COPY_FIELDS = new Set([
   'footer.linkedinLabel',
   // Painted as visible text, but inside a control that owns the click.
   'nav.pagesLabel',
+  // Phase 3, Task 2: no component calls `content.renderText('experiences.*',
+  // ...)` yet -- this task adds only the data shape and copy.json's own two
+  // strings, deliberately with no UI (see this task's own header). Task 3 is
+  // what adds Experiences.tsx and, with it, the live renderText call this
+  // boundary test (editable-paths.test.tsx) checks against; remove these two
+  // from this set there, not here, or the recorded-vs-EDITABLE_TEXT_PATHS
+  // check goes red for a path nothing on the page can reach yet.
+  'experiences.heading',
+  'experiences.intro',
 ]);
 
 // `readonly string[]`, not a narrowed literal union: `Object.keys(COPY_FIELDS)`

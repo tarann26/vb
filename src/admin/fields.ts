@@ -340,6 +340,8 @@ interface CopyLeafShape {
   'food.heading': string;
   'drinks.heading': string;
   'drinks.intro': string;
+  'experiences.heading': string;
+  'experiences.intro': string;
   'press.heading': string;
   'press.intro': string;
   'press.readArticle': string;
@@ -383,6 +385,13 @@ export const COPY_FIELDS: FieldsOf<CopyLeafShape> = {
   'food.heading': { label: 'Menu heading', kind: 'text' },
   'drinks.heading': { label: 'Drinks heading', kind: 'text' },
   'drinks.intro': { label: 'Drinks intro', kind: 'textarea' },
+  // Chrome only, the same split as awards.heading/awards.intro below: the
+  // carousel's six cards themselves are experiences.json, out of scope for
+  // /edit's inline editing this task (no UI -- see Experience's own comment,
+  // src/content/types.ts). Heading and intro are plain copy.json text, so
+  // they get the ordinary field treatment every other section's chrome does.
+  'experiences.heading': { label: 'Experiences heading', kind: 'text' },
+  'experiences.intro': { label: 'Experiences intro', kind: 'textarea' },
   'press.heading': { label: 'Stories heading', kind: 'text' },
   'press.intro': { label: 'Stories intro', kind: 'textarea' },
   // Drives both the homepage teaser (BlogTeaser) and the /blogs page --

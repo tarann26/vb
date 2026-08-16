@@ -29,6 +29,7 @@ import type {
   Drink,
   Article,
   Award,
+  Experience,
 } from './types';
 
 // ---------------------------------------------------------------------------
@@ -91,6 +92,21 @@ export const AWARD_KEYS: Record<keyof Award, true> = {
   awardedBy: true,
   year: true,
   image: true,
+};
+
+// Phase 3's own key set, same idiom, same two consumers (this module's
+// import-time assertExperiences and validate.ts's write-boundary
+// validateExperiences) as AWARD_KEYS above -- except experiences.json IS a
+// build-time shape test's concern (unlike awards.json), because it is
+// committed JSON on the GitHub store rather than D1: see Experience's own
+// comment (types.ts) for why.
+export const EXPERIENCE_KEYS: Record<keyof Experience, true> = {
+  id: true,
+  title: true,
+  description: true,
+  image: true,
+  link: true,
+  comingSoon: true,
 };
 
 export const BESPOKE_SECTION_KEYS: Record<keyof BespokeSection, true> = {
@@ -556,6 +572,58 @@ export function assertPages(raw: unknown): Page[] {
       seo: { title: seoRecord.title, description: seoRecord.description },
       sections: parsedSections,
     };
+  });
+}
+
+// Phase 3's own import-time guard, same idiom as assertPages above -- it
+// rebuilds each entry from named keys (EXPERIENCE_KEYS, guards.ts) so a stray
+// key in a hand-edited experiences.json can never reach runtime, and throws
+// with a "content/experiences.json: ..." prefixed message naming the
+// offending index.
+//
+// Deliberately does NOT cross-check `link` against pages.json, even though
+// this function runs from index.ts, which imports every content file and
+// could reach `pages` easily. See validateExperiences (validate.ts) for the
+// full argument -- the short form is that a page toggled off in the
+// dashboard would then make an experiences.json that was valid yesterday
+// throw at import time today, failing the build and blocking every
+// subsequent publish of every other file, with no control the owner can
+// reach to recover. The resolution happens at render time instead (Task 3).
+export function assertExperiences(raw: unknown): Experience[] {
+  if (!Array.isArray(raw)) {
+    throw new Error('content/experiences.json: expected an array of experiences');
+  }
+  const seenIds = new Set<string>();
+  return raw.map((entry, i) => {
+    if (!entry || typeof entry !== 'object') {
+      throw new Error(`content/experiences.json: entry [${i}] is not an object`);
+    }
+    const { id, title, description, image, link, comingSoon } = entry as Record<string, unknown>;
+    if (typeof id !== 'string' || id.trim().length === 0) {
+      throw new Error(`content/experiences.json: entry [${i}] needs an id`);
+    }
+    if (seenIds.has(id)) {
+      throw new Error(`content/experiences.json: duplicate id "${id}" at [${i}]`);
+    }
+    seenIds.add(id);
+    if (typeof title !== 'string' || title.trim().length === 0) {
+      throw new Error(`content/experiences.json: "${id}" needs a title`);
+    }
+    if (typeof description !== 'string' || description.trim().length === 0) {
+      throw new Error(`content/experiences.json: "${id}" needs a description`);
+    }
+    if (typeof image !== 'string' || image.trim().length === 0) {
+      throw new Error(`content/experiences.json: "${id}" needs an image`);
+    }
+    if (typeof comingSoon !== 'boolean') {
+      throw new Error(`content/experiences.json: "${id}" at [${i}] needs "comingSoon" to be a boolean`);
+    }
+    if (link !== undefined && (typeof link !== 'string' || link.trim().length === 0)) {
+      throw new Error(`content/experiences.json: "${id}" has an invalid "link"`);
+    }
+    const result: Experience = { id, title, description, image, comingSoon };
+    if (link !== undefined) result.link = link;
+    return result;
   });
 }
 

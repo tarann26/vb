@@ -83,6 +83,7 @@ import type {
   StoryContent,
   Copy,
   Page,
+  Experience,
   TemplateContent,
 } from '../content/types';
 
@@ -228,12 +229,23 @@ const EMPTY_STORY: StoryContent = { heading: '', paragraphs: [] };
 // may not import that -- see the module header comment above).
 const EMPTY_PAGES: Page[] = [];
 
+// Phase 3, Task 2: experiences.json is not yet in CONTENT_FILES (src/admin/
+// content.ts) -- there is no fetch, no draft, no panel for it in /edit yet,
+// deliberately: this task builds the data shape only, with no UI (see this
+// task's own header). `experiences` is present on ContentBundle from this
+// task onward (so a rendering surface Task 3 adds needs no further plumbing
+// here), and this constant is what satisfies that field on /edit's own
+// bundle until Task 8 wires a real fetch through `pick`, the same way
+// EMPTY_PAGES did for `pages` before PageList.tsx (Task 4 there) existed.
+const EMPTY_EXPERIENCES: Experience[] = [];
+
 const EMPTY_COPY: Copy = {
   nav: { wordmark: '', links: [], instagramLabel: '', menuLabel: '', pagesLabel: '' },
   hero: { logoName: '', logoTagline: '', reservationsLabel: '', reserveButton: '' },
   atmosphere: { heading: '' },
   food: { heading: '' },
   drinks: { heading: '', intro: '' },
+  experiences: { heading: '', intro: '' },
   press: { heading: '', intro: '', readArticle: '', viewAll: '' },
   awards: { heading: '', intro: '' },
   visit: { heading: '', navigateButton: '', mapTitle: '' },
@@ -620,6 +632,7 @@ export function buildBundle(
     // would author the first ones, is blocked on the founder), so nothing
     // is lost by deferring the in-place editor for them specifically.
     pages: pick(entries, 'pages.json', EMPTY_PAGES),
+    experiences: EMPTY_EXPERIENCES,
     // Plan 7, Task 5, Step 1: a section-content path needs sections.json
     // loaded, never copy.json -- gating both kinds on `copyLoaded` alone
     // (the pre-Task-5 shape) would have shown a contentEditable affordance

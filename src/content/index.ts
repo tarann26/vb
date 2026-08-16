@@ -8,6 +8,7 @@ import menusRaw from './menus.json';
 import copyRaw from './copy.json';
 import sectionsRaw from './sections.json';
 import pagesRaw from './pages.json';
+import experiencesRaw from './experiences.json';
 import type {
   SiteContent,
   Galleries,
@@ -19,8 +20,18 @@ import type {
   Copy,
   Section,
   Page,
+  Experience,
 } from './types';
-import { assertHours, assertSections, assertPages, assertCopy, assertCollageTree, assertDrinkCategory, narrowSectionId } from './guards';
+import {
+  assertHours,
+  assertSections,
+  assertPages,
+  assertCopy,
+  assertCollageTree,
+  assertDrinkCategory,
+  assertExperiences,
+  narrowSectionId,
+} from './guards';
 
 // Re-exported so existing importers (site.test.ts, copy.test.ts,
 // sections.test.tsx) that import these three guards from `./index` keep
@@ -29,7 +40,7 @@ import { assertHours, assertSections, assertPages, assertCopy, assertCollageTree
 // part of index.ts's public surface and aren't re-exported here; a Worker
 // (or any other future consumer) reaches them directly via `./guards`.
 // Plan 7, Task 1: assertPages joins them for the identical reason.
-export { assertHours, assertSections, assertPages, assertCopy, assertCollageTree };
+export { assertHours, assertSections, assertPages, assertCopy, assertCollageTree, assertExperiences };
 
 export const site: SiteContent = {
   ...siteRaw,
@@ -63,6 +74,11 @@ export const drinks: Drink[] = drinksRaw.map((raw, index) => ({
 
 export const sections: Section[] = assertSections(sectionsRaw);
 export const pages: Page[] = assertPages(pagesRaw);
+// Phase 3. Deliberately parsed with no cross-check against `pages` above,
+// even though both are in scope right here -- see assertExperiences's own
+// comment (guards.ts) for why a page toggled off must not throw at import
+// time and block every subsequent publish.
+export const experiences: Experience[] = assertExperiences(experiencesRaw);
 
 const copyWithNarrowedNavSections = {
   ...copyRaw,

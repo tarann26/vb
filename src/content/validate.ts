@@ -17,6 +17,7 @@ import {
   BESPOKE_SECTION_KEYS,
   DISH_KEYS,
   DRINK_KEYS,
+  EXPERIENCE_KEYS,
   PAGE_KEYS,
   TEMPLATE_SECTION_KEYS,
   assertCopy,
@@ -1073,6 +1074,86 @@ function validateAwards(data: unknown): ValidationProblem[] {
   return data.flatMap((award, i) => validateAward(award, i, seenIds));
 }
 
+// Phase 3. experiences.json, committed under src/content/ and served by the
+// GitHub store -- deliberately NOT in worker/store.ts's D1_ONLY_PATHS. See
+// the phase plan's storage section for the full argument; the short form is
+// that every item carries a mandatory image, a new image needs a build
+// regardless of where the text lives, and a D1-stored image path would be
+// invisible to src/content/__tests__/assets.test.ts.
+const EXPERIENCE_LINK_PATTERN = /^\/[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+function validateExperience(raw: unknown, index: number, seenIds: Set<string>): ValidationProblem[] {
+  const item = asRecord(raw);
+  const problems: ValidationProblem[] = [];
+  const name = String(item.title ?? 'this item');
+
+  if (isBlank(item.id)) {
+    problems.push(problem(`[${index}].id`, `the item at position ${index} needs an id`));
+  } else if (seenIds.has(item.id as string)) {
+    problems.push(problem(`[${index}].id`, `"${item.id}" is already used by another item`));
+  } else {
+    seenIds.add(item.id as string);
+  }
+  if (isBlank(item.title)) {
+    problems.push(problem(`[${index}].title`, 'this item needs a title'));
+  }
+  if (isBlank(item.description)) {
+    problems.push(problem(`[${index}].description`, `"${name}" needs a short description`));
+  }
+  // Required, unlike an award badge: a card with no photo is an empty
+  // rectangle. Same isUnsafeAssetPath rule as every other image field here.
+  if (isBlank(item.image)) {
+    problems.push(problem(`[${index}].image`, `"${name}" needs a photo`));
+  } else if (isUnsafeAssetPath(item.image)) {
+    problems.push(problem(`[${index}].image`, `"${name}" needs a photo on this site, starting with /`));
+  }
+  if (typeof item.comingSoon !== 'boolean') {
+    problems.push(problem(`[${index}].comingSoon`, `"${name}" needs to say whether it is coming soon`));
+  }
+  if (item.link !== undefined) {
+    if (isBlank(item.link)) {
+      problems.push(problem(`[${index}].link`, `"${name}" needs a page to open, or leave it blank`));
+    } else if (!EXPERIENCE_LINK_PATTERN.test((item.link as string).trim())) {
+      // Refuses an absolute URL, a protocol-relative "//evil.example", a
+      // nested path, a trailing slash and a query string in one rule. This
+      // value reaches react-router's <Link to={...}>, and a page slug is
+      // already constrained to the same shape by isUrlSafeSlug -- so the
+      // set of links this accepts is exactly the set of page routes that
+      // can exist, and nothing else.
+      problems.push(problem(`[${index}].link`, `"${name}" can only open a page on this site, like "/catering"`));
+    }
+  }
+  // The one rule that is about the PAIR rather than either field. The spec
+  // binds them: an item with a link navigates, an item without one is a
+  // static Coming Soon card. Both contradictions are refused, and each gets
+  // its own sentence, because they are different mistakes: a coming-soon
+  // item that links somewhere would render a stamp over a working card, and
+  // a not-coming-soon item with no link would render a card that looks
+  // clickable and does nothing.
+  if (typeof item.comingSoon === 'boolean') {
+    if (item.comingSoon && item.link !== undefined) {
+      problems.push(problem(`[${index}].link`, `"${name}" is marked coming soon, so it cannot open a page yet`));
+    }
+    if (!item.comingSoon && item.link === undefined) {
+      problems.push(problem(`[${index}].link`, `"${name}" needs a page to open, or mark it coming soon`));
+    }
+  }
+  problems.push(...validateKnownKeys(item, EXPERIENCE_KEYS, `[${index}]`, name));
+  return problems;
+}
+
+function validateExperiences(data: unknown): ValidationProblem[] {
+  if (!Array.isArray(data)) return [problem('', 'expected a list of experiences')];
+  // An empty list is REFUSED, unlike awards. A zero-award restaurant is an
+  // ordinary state; a homepage section headed "Experiences" with no cards
+  // under it is a hole in the page. She can still switch the whole section
+  // off from "What shows on the homepage", which is the supported way to
+  // have no carousel.
+  if (data.length === 0) return [problem('', 'the carousel needs at least one item')];
+  const seenIds = new Set<string>();
+  return data.flatMap((item, i) => validateExperience(item, i, seenIds));
+}
+
 // Review finding, carried forward from Task 5 rather than closed here: this
 // RULES table is keyed by BASENAME (worker/index.ts's handlePublish calls
 // `validateContent(basename(f.path), parsed)`), not by the full
@@ -1113,6 +1194,19 @@ function validateAwards(data: unknown): ValidationProblem[] {
 // Recorded here, again, rather than silently carried: the fix, when someone
 // takes it, is exactly the one Task 5 already named.
 
+// Same basename hole as awards.json above, and the same accurate limit: this
+// entry also makes `assets-source/<category>/experiences.json` validate and
+// commit, because `RULES` is keyed on basename (worker/index.ts's
+// handlePublish calls `validateContent(basename(f.path), parsed)`) and
+// `ASSET_PATH` (worker/github.ts) is
+// `/^assets-source\/[a-z0-9_-]+\/[A-Za-z0-9 ._-]+$/`, which matches that
+// path -- there is no ".json"-shaped refusal in it. What limits it: the
+// route is authenticated, and an authenticated session can already commit
+// arbitrary bytes to `assets-source/<category>/` through the same request
+// shape, so this grants that session nothing it did not already have; it
+// only lets it also spell one such write "experiences.json" and have it
+// pass content validation instead of being refused outright.
+
 // ---------------------------------------------------------------------------
 
 const RULES: Record<string, (data: unknown) => ValidationProblem[]> = {
@@ -1127,6 +1221,7 @@ const RULES: Record<string, (data: unknown) => ValidationProblem[]> = {
   'menus.json': validateMenus,
   'pages.json': validatePages,
   'awards.json': validateAwards,
+  'experiences.json': validateExperiences,
 };
 
 // The single entry point a Worker's publish route calls before it ever

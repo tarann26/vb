@@ -3778,6 +3778,51 @@ exports[`the eleven panels, as they render today > Words on the site (copy) 1`] 
       <h3
         class="mb-3 font-['Montserrat'] text-base text-[#222]"
       >
+        experiences
+      </h3>
+      <div>
+        <div
+          class="mb-4"
+        >
+          <label
+            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
+            for="copy-experiences.heading"
+          >
+            Experiences heading
+          </label>
+          <input
+            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+            id="copy-experiences.heading"
+            type="text"
+            value="Experiences"
+          />
+        </div>
+      </div>
+      <div>
+        <div
+          class="mb-4"
+        >
+          <label
+            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
+            for="copy-experiences.intro"
+          >
+            Experiences intro
+          </label>
+          <textarea
+            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+            id="copy-experiences.intro"
+          >
+            Beyond the table -- catering, classes and gifts from our kitchen.
+          </textarea>
+        </div>
+      </div>
+    </div>
+    <div
+      class="mb-6"
+    >
+      <h3
+        class="mb-3 font-['Montserrat'] text-base text-[#222]"
+      >
         Press copy
       </h3>
       <div>

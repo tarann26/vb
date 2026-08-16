@@ -346,3 +346,66 @@ describe('assertPages (Plan 7, Task 1)', () => {
     expect(() => assertPages({})).toThrow(/expected an array of pages/);
   });
 });
+
+// Phase 3. assertExperiences (guards.ts) -- the import-time guard that gates
+// src/content/index.ts, same idiom as assertPages above. The write-time
+// rules (link shape, the comingSoon/link pair) are validateExperiences'
+// (validate.ts) job, exercised in validate.test.ts instead -- this guard
+// checks only what the interface itself requires: id, title, description
+// and image are non-empty strings, comingSoon is a boolean, and link, if
+// present, is a non-empty string.
+describe('assertExperiences (Phase 3)', () => {
+  const VALID = {
+    id: 'catering',
+    title: 'Catering',
+    description: 'Bespoke menus for your event.',
+    image: '/experiences/catering.webp',
+    link: '/catering',
+    comingSoon: false,
+  };
+
+  it('accepts a well-formed list', async () => {
+    const { assertExperiences } = await import('../guards');
+    expect(assertExperiences([VALID])).toEqual([VALID]);
+  });
+
+  it('rejects experiences.json that is not an array', async () => {
+    const { assertExperiences } = await import('../guards');
+    expect(() => assertExperiences({})).toThrow(/content\/experiences\.json: expected an array/);
+  });
+
+  it('rejects a duplicate id, naming the offending index', async () => {
+    const { assertExperiences } = await import('../guards');
+    const dup = { ...VALID, title: 'Catering Again' };
+    expect(() => assertExperiences([VALID, dup])).toThrow(/content\/experiences\.json: duplicate id "catering" at \[1\]/);
+  });
+
+  it('rejects a non-boolean comingSoon, naming the offending index', async () => {
+    const { assertExperiences } = await import('../guards');
+    const bad = { ...VALID, comingSoon: 'no' };
+    expect(() => assertExperiences([bad])).toThrow(/content\/experiences\.json: "catering" at \[0\] needs "comingSoon" to be a boolean/);
+  });
+
+  // The one case that matters most in this file: assertExperiences must NOT
+  // cross-check `link` against pages.json, even though it runs from
+  // index.ts, which has `pages` sitting right there. If it threw here, then
+  // switching a page off in the dashboard (an ordinary, supported,
+  // one-click action -- "What shows on the homepage" already offers the
+  // same toggle for every bespoke section) would make an experiences.json
+  // that validated fine yesterday throw at import time today. That failure
+  // is not scoped to the one broken card: it fails `npm run build`, which
+  // blocks every subsequent publish of every other content file, with no
+  // control anywhere in the dashboard able to clear it (see the phase plan's
+  // own storage section, and validateExperiences' identical comment in
+  // validate.ts). A page a link names not existing is a real state a
+  // rendering surface has to handle -- Task 3's Experiences.tsx resolves it
+  // against the live pages list and renders an unresolvable link as a
+  // coming-soon card, at render time, where a bad state costs one card
+  // instead of the whole site.
+  it('accepts an item whose link names a page that does not exist in pages.json', async () => {
+    const { assertExperiences } = await import('../guards');
+    const danglingLink = { ...VALID, link: '/a-page-that-does-not-exist' };
+    expect(() => assertExperiences([danglingLink])).not.toThrow();
+    expect(assertExperiences([danglingLink])).toEqual([danglingLink]);
+  });
+});
