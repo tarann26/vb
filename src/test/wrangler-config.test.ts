@@ -115,6 +115,56 @@ describe('wrangler.toml Cloudflare Pages identifiers', () => {
   });
 });
 
+// Phase 2. D1 database_id is a dashed UUID -- 8-4-4-4-12 lowercase hex --
+// which is what `wrangler d1 create` prints. Deliberately NOT the HEX32
+// pattern the KV namespace id and the Cloudflare account id share above:
+// those are UUIDs with the dashes stripped, and reusing HEX32 here would
+// reject every real value this field can ever hold.
+const D1_ID_PLACEHOLDER = 'PLACEHOLDER-NOT-A-REAL-D1-DATABASE-ID';
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+function isValidD1IdOrPlaceholder(value: string): boolean {
+  return value === D1_ID_PLACEHOLDER || UUID.test(value);
+}
+
+describe('wrangler.toml Phase 2 bindings', () => {
+  it('binds a D1 database with either the placeholder id or a well-formed real one', () => {
+    const toml = readFileSync('wrangler.toml', 'utf8');
+    expect(toml).toMatch(/^\[\[d1_databases\]\]$/m);
+    expect(toml).toMatch(/^binding\s*=\s*"DB"$/m);
+    const match = toml.match(/^database_id\s*=\s*"([^"]+)"/m);
+    expect(match).not.toBeNull();
+    expect(isValidD1IdOrPlaceholder(match![1])).toBe(true);
+  });
+
+  it('accepts a real dashed UUID and the placeholder, rejects a 32-hex id or a half-pasted value', () => {
+    expect(isValidD1IdOrPlaceholder('4b1f2c3d-5e6f-4a7b-8c9d-0e1f2a3b4c5d')).toBe(true);
+    expect(isValidD1IdOrPlaceholder(D1_ID_PLACEHOLDER)).toBe(true);
+    // The exact wrong-shape mistake this pattern exists to catch: pasting the
+    // KV namespace id (32 hex, no dashes) into the D1 field.
+    expect(isValidD1IdOrPlaceholder('3e90a6b54f83487995156291801dce95')).toBe(false);
+    expect(isValidD1IdOrPlaceholder('')).toBe(false);
+    expect(isValidD1IdOrPlaceholder('PLACEHOLDER-partially-edited')).toBe(false);
+  });
+
+  // The KV id check above reads the FIRST line-anchored `id = "…"` in the
+  // file. Pinned here so a future binding added ABOVE the KV block -- one
+  // that happens to use a bare `id` key -- cannot silently redirect that
+  // check onto a different value while still passing.
+  it('still finds the KV namespace id first, ahead of the new bindings', () => {
+    const toml = readFileSync('wrangler.toml', 'utf8');
+    expect(toml.indexOf('[[kv_namespaces]]')).toBeLessThan(toml.indexOf('[[d1_databases]]'));
+  });
+
+  it('defaults CONTENT_STORE to github, so nothing that exists today moves', () => {
+    const toml = readFileSync('wrangler.toml', 'utf8');
+    const match = toml.match(/^CONTENT_STORE\s*=\s*"([^"]+)"/m);
+    expect(match).not.toBeNull();
+    expect(match![1]).toBe('github');
+  });
+});
+
 // Review finding (Important): the descheduling commit deleted wrangler.toml's
 // `[triggers]` section along with the rest of the scheduling subsystem, and
 // deleted this file's old cron-cadence test with it, on the reasoning that

@@ -71,6 +71,9 @@ function buildEnv(kv: FakeKV): Env {
     CLOUDFLARE_PAGES_PROJECT: 'hardening-test-project',
     CLOUDFLARE_API_TOKEN: 'hardening-test-cf-token-not-real',
     CF_WEB_ANALYTICS_SITE_TAG: '29e1ba52fba74885a5fc44875a48a078',
+    // Phase 2. Unused by any test in this file -- required only for `env`
+    // to satisfy `Env`.
+    DB: {} as unknown as D1Database,
   };
 }
 

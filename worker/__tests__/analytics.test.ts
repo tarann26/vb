@@ -816,6 +816,9 @@ describe('the route, reached through the router', () => {
       GITHUB_REPO: 'vb',
       GITHUB_BRANCH: 'main',
       GITHUB_TOKEN: 'analytics-test-github-token-not-real',
+      // Phase 2. Unused by any test in this file -- required only for
+      // `env` to satisfy `Env`.
+      DB: {} as unknown as D1Database,
     };
   }
 

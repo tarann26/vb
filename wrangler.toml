@@ -46,6 +46,14 @@ CLOUDFLARE_PAGES_PROJECT = "vb"
 # with the zone.
 CF_WEB_ANALYTICS_SITE_TAG = "29e1ba52fba74885a5fc44875a48a078"
 
+# The eventual switch. UNSET (or "github") is the default and means every
+# content file that exists today is read from and written to GitHub, exactly
+# as it is now -- see worker/store.ts's `storeFor`. "d1" moves all of them at
+# once. The pilot file (src/content/awards.json) is on D1 either way, because
+# it exists nowhere else. Flipping this is one config change with an instant
+# rollback, which is the whole reason the ContentStore indirection exists.
+CONTENT_STORE = "github"
+
 # An EXPLICIT empty list, not a deleted `[triggers]` section. Those are not
 # the same thing to `wrangler deploy`, and the difference is the whole reason
 # this stays here.
@@ -92,3 +100,38 @@ binding = "KV"
 # all. An invented or half-pasted value still fails, guarding against the
 # Worker failing at runtime with an unbound KV.
 id = "3e90a6b54f83487995156291801dce95"
+
+# Phase 2. The content store the D1 path is proven on. Created by hand
+# (`wrangler d1 create via-bianca-content`) for the same reason the KV id
+# above was: an agent has no Cloudflare account access. A D1 database_id is a
+# UUID WITH DASHES (36 characters), not the 32-character hex the KV id and
+# the account id are -- src/test/wrangler-config.test.ts checks it against
+# its own pattern for exactly that reason, not the HEX32 pattern used above.
+#
+# Free tier, verified against the live docs 2026-08-15: 5,000,000 rows
+# read/day, 100,000 rows written/day, 5 GB per account, 500 MB per database,
+# 10 databases. The entire current content set is 400 KB.
+[[d1_databases]]
+binding = "DB"
+database_name = "via-bianca-content"
+database_id = "7ec61770-4fb1-4458-9c34-46b92bb9702c"
+
+# R2 is deliberately ABSENT from this file, not merely deferred by oversight.
+# `wrangler r2 bucket create via-bianca-assets` failed with code 10042,
+# "Please enable R2 through the Cloudflare Dashboard" -- that activation can
+# require billing details, and the standing authorization does not cover
+# adding a billable prerequisite without the owner's approval. Nothing in
+# Phase 2 reads env.R2 either way, so there is no unexercised binding sitting
+# here waiting on a bucket that does not exist.
+#
+# The image derivative pipeline is the reason R2 was going to be bound at
+# all. The spec says it "runs on upload inside the Worker rather than at
+# build time"; it cannot: scripts/images.mjs loads sharp's native binding at
+# module scope and workerd cannot execute native code, and every Cloudflare
+# resizing product (Images, the /cdn-cgi/image/ transform endpoint) is
+# billable, which the standing authorization also forbids without the
+# owner's approval. Three options are owed a decision before Phase 3:
+# generate derivatives at build time and upload the results to R2; upload
+# originals and resize in the browser before the request; or buy Cloudflare
+# Images. R2's activation is now bundled into that same decision -- both
+# arrive together in Phase 3.

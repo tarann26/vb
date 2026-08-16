@@ -46,6 +46,11 @@ export interface Env extends GitHubEnv, PagesEnv, WebAnalyticsEnv {
   KV: KVNamespace;
   ADMIN_PASSWORD_HASH: string;
   TOKEN_SECRET: string;
+  // Phase 2. Read by worker/store.ts's storeFor and everything behind it.
+  DB: D1Database;
+  // Optional so an env that predates this var (a local `wrangler dev`, an
+  // older test fixture) behaves exactly like today rather than throwing.
+  CONTENT_STORE?: 'github' | 'd1';
 }
 
 // TWO clocks, because one cannot express what a session actually needs.
