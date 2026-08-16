@@ -675,6 +675,18 @@ async function handlePublish(request: Request, env: Env): Promise<Response> {
   if (siteFile) {
     let current: unknown;
     try {
+      // Review finding, recorded rather than fixed: the fallback read below
+      // is `getFileContent`, not `storeFor(...).read`, unlike step 3's own
+      // read a few lines up. Narrow and currently unreachable -- it only
+      // runs when currentByPath has no entry for site.json, i.e. a publish
+      // that sends site.json with NO baseSha -- so under today's
+      // CONTENT_STORE (site.json is never in D1_ONLY_PATHS and the default
+      // store is GitHub) it is exactly as correct as step 3's read. It stops
+      // being correct the moment a future CONTENT_STORE='d1' cutover moves
+      // site.json's developer-owned fields into D1: this fallback would then
+      // read a stale copy from GitHub while the real current value sits in
+      // D1, and the ownership check below would compare against the wrong
+      // baseline. MUST be routed through storeFor before that cutover ships.
       const read = currentByPath.has(siteFile.path) ? currentByPath.get(siteFile.path)! : await getFileContent(env, siteFile.path);
       current = read ? JSON.parse(read.content) : undefined;
     } catch {
@@ -687,12 +699,28 @@ async function handlePublish(request: Request, env: Env): Promise<Response> {
   // 6. Write. Partitioned by store, D1 FIRST, and the ordering is a real
   // decision rather than an accident of how the code was typed.
   //
-  // If the D1 leg succeeds and the GitHub leg then fails, every baseSha in
-  // the request is still current -- the GitHub blobs did not move -- so she
-  // presses Publish again and it succeeds. Reversed, a successful commit
-  // moves every blob sha in the request, the retry gets a 409 that means
-  // "someone else changed this" when the someone else was her own successful
-  // half-publish, and the only way out is a reload that discards her buffer.
+  // If the D1 leg succeeds and the GitHub leg then fails, every GitHub
+  // baseSha in the request is still current -- the GitHub blobs did not
+  // move -- so an unmodified retry of the GitHub files succeeds. Reversed, a
+  // successful commit moves every GitHub blob sha in the request, the retry
+  // gets a 409 that means "someone else changed this" when the someone else
+  // was her own successful half-publish, and the only way out is a reload
+  // that discards her buffer.
+  //
+  // Review finding: that "the retry just works" claim does NOT extend to the
+  // D1 files in the SAME request. D1's own baseSha (d1.ts's sha256Hex of the
+  // body) moves exactly the way a GitHub blob sha would on the reversed
+  // ordering -- the D1 write above already advanced it -- so an unmodified
+  // retry of a mixed publish reaches this route's D1 leg with a now-stale
+  // baseSha for the file that already landed, and gets D1ConflictError -> 409
+  // "someone else changed src/content/awards.json while you were editing".
+  // That message is honestly wrong: the someone else was her own prior
+  // request. It is recoverable (reload re-reads the current baseSha, exactly
+  // like any other conflict), but a blind resend of the same body will not
+  // succeed the way it would for a GitHub-only request. D1-first is still
+  // the right ordering -- it is strictly better than the reversed one, which
+  // would additionally misattribute the GitHub files too -- but it does not
+  // make retrying UNCONDITIONALLY safe, only safe for the GitHub half.
   //
   // CROSS-STORE ATOMICITY IS GENUINELY LOST HERE, one file wide, for the
   // length of the pilot. A publish touching both awards.json and any GitHub
@@ -724,11 +752,23 @@ async function handlePublish(request: Request, env: Env): Promise<Response> {
       const result = await commitFiles(env, github.map(({ path, content, encoding }) => ({ path, content, encoding })), message);
       commitSha = result.sha;
     } catch (error) {
+      // Every branch below can be reached AFTER the D1 leg above has already
+      // landed -- `github.length` only gates whether this block runs at all,
+      // not whether a D1 write preceded it in the same request. `partial`
+      // therefore rides every one of them, not just the 502: a mixed publish
+      // (awards.json plus a GitHub file) that hits a disallowed path or a
+      // conflict on the GitHub half still committed the D1 half, and a
+      // response that only says "conflict" or "bad path" -- with no mention
+      // of the half that DID land -- leaves her to discover that on her own.
+      // Review finding: this used to be true only of the 502 branch below,
+      // so the two branches most likely to actually fire on a mixed publish
+      // (a stale baseSha race, a mistyped path) said nothing about it.
+      const partial = d1.length > 0;
       // A disallowed path is a client mistake, not a GitHub failure -- give it
       // its own 400 rather than falling into the generic 502 below, which
       // would misdirect diagnosis toward "GitHub is broken".
       if (error instanceof DisallowedPathError) {
-        return json(400, { message: error.message });
+        return json(400, { message: error.message, partial });
       }
       // A non-fast-forward ref update: the branch moved between this
       // request's own getBranchHeadSha read and its updateBranchHead write --
@@ -738,7 +778,7 @@ async function handlePublish(request: Request, env: Env): Promise<Response> {
       // github.ts's own PublishConflictError comment for why that distinction
       // matters).
       if (error instanceof PublishConflictError) {
-        return json(409, { message: error.message });
+        return json(409, { message: error.message, partial });
       }
       // The D1 leg above has already landed. Said out loud in the message
       // rather than left for her to discover: telling her "publish failed"
@@ -746,7 +786,7 @@ async function handlePublish(request: Request, env: Env): Promise<Response> {
       // prevent.
       return json(502, {
         message: error instanceof Error ? error.message : 'Publish failed.',
-        partial: d1.length > 0,
+        partial,
       });
     }
   }

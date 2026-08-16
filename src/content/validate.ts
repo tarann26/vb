@@ -1002,6 +1002,19 @@ function validateSiteDeveloperOwnedFields(data: unknown, current: Record<string,
 // invented here ahead of that design would only need reworking the moment
 // it lands, so this registers the file as publishable and defers the shape
 // check to the task that actually designs it.
+//
+// Review finding, recorded rather than fixed here: this RULES table is keyed
+// by BASENAME (worker/index.ts's handlePublish calls `validateContent(
+// basename(f.path), parsed)`), not by the full repo-relative path -- so this
+// entry also waves through any OTHER path that happens to end in
+// "awards.json", e.g. `assets-source/food/awards.json`, where it previously
+// 422'd with "This file cannot be edited here". Narrow in practice: that
+// route is authenticated, and commitFiles' own allowlist still refuses to
+// WRITE it (assets-source/ requires a real asset filename shape, not
+// `.json`) -- so this can widen what a request is told is valid content, not
+// what a request can actually get committed. Worth Task 9's real awards
+// validator being written path-aware rather than basename-aware, so this gap
+// closes with it rather than surviving into the real rule unnoticed.
 function validateAwards(): ValidationProblem[] {
   return [];
 }

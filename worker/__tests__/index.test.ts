@@ -567,7 +567,10 @@ describe('worker entry point', () => {
       );
       expect(response.status).toBe(200);
       expect(fake.statements, 'a GitHub-backed publish issued a D1 statement').toEqual([]);
-      expect(await response.json()).toMatchObject({ sha: expect.any(String), d1Paths: [] });
+      // `toEqual`, not `toMatchObject`: a dropped `publishId` (or any other
+      // key) must turn this red, not pass silently because the keys it does
+      // check happen to match.
+      expect(await response.json()).toEqual({ sha: expect.any(String), publishId: expect.any(String), d1Paths: [] });
     });
 
     it('publishes the pilot file through D1 only, with no commit and no build', async () => {
@@ -585,6 +588,65 @@ describe('worker entry point', () => {
       expect(body.sha, 'a D1-only publish invented a commit sha').toBeNull();
       expect(body.d1Paths).toEqual(['src/content/awards.json']);
       expect(fake.content.get('src/content/awards.json')?.body).toBe('[]');
+    });
+
+    // Review finding (Important 3): nothing anywhere in this suite sent a
+    // MIXED publish -- one D1 file and one GitHub file in the same request
+    // -- so the D1-first ordering step 6's own comment argues for was
+    // provable only by reading the code, never by running it. Pins it
+    // directly: the GitHub leg is made to fail (a ref-update conflict, same
+    // as the GitHub-only case above), and the D1 file's write must still
+    // have landed -- which is only true if D1 ran BEFORE the GitHub attempt.
+    // Reversed (GitHub first), the GitHub failure would return before the
+    // D1 write is ever reached and `fake.content` would stay empty.
+    it('writes the D1 leg before attempting GitHub, so a GitHub failure still leaves it committed', async () => {
+      const fake = new FakeD1();
+      stub = makeGitHubStub({ failOn: '/git/refs/heads/main', failStatus: 422 });
+      vi.stubGlobal('fetch', stub.fetch);
+      const cookie = await sessionCookie();
+      const goodDish = { id: 'x', name: 'X', description: 'd', image: '/food/x.webp', tags: [] };
+      const response = await worker.fetch(
+        publishRequest(
+          {
+            files: [
+              { path: 'src/content/awards.json', content: '[]', encoding: 'utf-8' },
+              utf8('src/content/dishes.json', JSON.stringify([goodDish])),
+            ],
+          },
+          cookie,
+        ),
+        { ...env, DB: asD1(fake) },
+      );
+      expect(response.status).toBe(409);
+      expect(fake.content.get('src/content/awards.json')?.body, 'the D1 leg never landed').toBe('[]');
+    });
+
+    // Review finding (Important 1): `partial` used to ride only the 502
+    // branch, so a mixed publish that hit a GitHub CONFLICT -- the branch
+    // most likely to actually fire, since it needs no GitHub outage at all
+    // -- told her "conflict" and said nothing about the D1 half that had
+    // already committed. She had no way to know without checking herself.
+    it('reports the D1 half already landed when the GitHub half of a mixed publish conflicts', async () => {
+      const fake = new FakeD1();
+      stub = makeGitHubStub({ failOn: '/git/refs/heads/main', failStatus: 422 });
+      vi.stubGlobal('fetch', stub.fetch);
+      const cookie = await sessionCookie();
+      const goodDish = { id: 'x', name: 'X', description: 'd', image: '/food/x.webp', tags: [] };
+      const response = await worker.fetch(
+        publishRequest(
+          {
+            files: [
+              { path: 'src/content/awards.json', content: '[]', encoding: 'utf-8' },
+              utf8('src/content/dishes.json', JSON.stringify([goodDish])),
+            ],
+          },
+          cookie,
+        ),
+        { ...env, DB: asD1(fake) },
+      );
+      expect(response.status).toBe(409);
+      const body = (await response.json()) as { message: string; partial: boolean };
+      expect(body.partial, 'a mixed publish did not say the D1 half had landed').toBe(true);
     });
 
     // Task 10, Step 2: a concurrent-edit ref update (GitHub's own 422 on the
