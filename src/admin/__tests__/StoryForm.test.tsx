@@ -1,7 +1,9 @@
+import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import StoryForm from '../StoryForm';
+import { NO_IMAGE_PREVIEWS } from '../previews';
 import { validateContent } from '../../content/validate';
 import type { StoryContent } from '../../content/types';
 import type { ValidationProblem } from '../../content/validate';
@@ -21,8 +23,42 @@ const STORY: StoryContent = {
 
 function renderForm(overrides: Partial<Parameters<typeof StoryForm>[0]> = {}) {
   const onChange = vi.fn();
-  render(<StoryForm value={STORY} onChange={onChange} problems={[]} {...overrides} />);
+  render(
+    <StoryForm
+      value={STORY}
+      onChange={onChange}
+      problems={[]}
+      stage={vi.fn()}
+      previews={NO_IMAGE_PREVIEWS}
+      {...overrides}
+    />,
+  );
   return { onChange };
+}
+
+// A real state setter feeding StoryForm's own `value` prop back to itself,
+// not a bare spy -- multi-keystroke typing (userEvent.clear + userEvent.type)
+// against a controlled input whose `value` prop never changes reverts to
+// that fixed prop after every keystroke (HoursField.test.tsx's own comment
+// on the identical trap), so a single-keystroke assertion after clearing
+// would silently observe the field snapping back to its ORIGINAL value with
+// the typed character appended, not the character alone. Field.test.tsx's
+// own ControlledField exists for the same reason; this is that same pattern
+// for StoryForm rather than a single bare Field.
+function ControlledStoryForm({ onChange }: { onChange: (next: StoryContent) => void }) {
+  const [value, setValue] = useState(STORY);
+  return (
+    <StoryForm
+      value={value}
+      problems={[]}
+      stage={vi.fn()}
+      previews={NO_IMAGE_PREVIEWS}
+      onChange={(next) => {
+        setValue(next);
+        onChange(next);
+      }}
+    />
+  );
 }
 
 describe('StoryForm: renders the heading and every paragraph, prefilled', () => {
@@ -94,24 +130,24 @@ describe('StoryForm: the ellipsis rule is surfaced inline, from the real validat
     const problems = validateContent('story.json', trailing);
     expect(problems).toEqual([{ field: 'paragraphs[0]', message: expect.stringMatching(/trails off with an ellipsis/) }]);
 
-    render(<StoryForm value={trailing} onChange={vi.fn()} problems={problems} />);
+    render(<StoryForm value={trailing} onChange={vi.fn()} problems={problems} stage={vi.fn()} previews={NO_IMAGE_PREVIEWS} />);
     expect(screen.getByLabelText('Paragraph 1')).toHaveAccessibleDescription(expect.stringMatching(/trails off with an ellipsis/));
   });
 
   it('a paragraph ending in a real sentence has no problem attached', () => {
     const problems = validateContent('story.json', STORY);
     expect(problems).toEqual([]);
-    render(<StoryForm value={STORY} onChange={vi.fn()} problems={problems} />);
+    render(<StoryForm value={STORY} onChange={vi.fn()} problems={problems} stage={vi.fn()} previews={NO_IMAGE_PREVIEWS} />);
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 });
 
 describe('StoryForm: an EMPTY paragraph list still surfaces the real validator\'s own message', () => {
-  it('shows "the story needs at least one paragraph" when every paragraph is removed', () => {
+  it('shows "the About section needs at least one paragraph" when every paragraph is removed', () => {
     const empty: StoryContent = { heading: 'Our Story', paragraphs: [], chef: CHEF };
     const problems = validateContent('story.json', empty);
     expect(problems).toEqual([{ field: 'paragraphs', message: 'the About section needs at least one paragraph' }]);
-    render(<StoryForm value={empty} onChange={vi.fn()} problems={problems} />);
+    render(<StoryForm value={empty} onChange={vi.fn()} problems={problems} stage={vi.fn()} previews={NO_IMAGE_PREVIEWS} />);
     expect(screen.getByRole('alert', { name: "Problems with the story's paragraphs" })).toHaveTextContent(
       'the About section needs at least one paragraph',
     );
@@ -119,11 +155,11 @@ describe('StoryForm: an EMPTY paragraph list still surfaces the real validator\'
 });
 
 describe("StoryForm: a blank heading's own message attaches to the heading, not the paragraph banner", () => {
-  it('shows "the story needs a heading" on the heading field only', () => {
+  it('shows "the About section needs a heading" on the heading field only', () => {
     const blankHeading: StoryContent = { heading: '', paragraphs: STORY.paragraphs, chef: CHEF };
     const problems = validateContent('story.json', blankHeading);
     expect(problems).toEqual([{ field: 'heading', message: 'the About section needs a heading' }]);
-    render(<StoryForm value={blankHeading} onChange={vi.fn()} problems={problems} />);
+    render(<StoryForm value={blankHeading} onChange={vi.fn()} problems={problems} stage={vi.fn()} previews={NO_IMAGE_PREVIEWS} />);
     expect(screen.getByLabelText('Heading')).toHaveAccessibleDescription('the About section needs a heading');
     expect(screen.queryByRole('alert', { name: "Problems with the story's paragraphs" })).not.toBeInTheDocument();
   });
@@ -136,5 +172,66 @@ describe('StoryForm: a problem naming a paragraph index past the end of what is 
     expect(screen.getByRole('alert', { name: "Problems with the story's paragraphs" })).toHaveTextContent(
       'a stale problem for a paragraph no longer here',
     );
+  });
+});
+
+describe('the chef byline fields', () => {
+  it('shows her name, her role and her photo above the paragraphs', () => {
+    const { container } = render(
+      <StoryForm value={STORY} onChange={vi.fn()} problems={[]} stage={vi.fn()} previews={NO_IMAGE_PREVIEWS} />,
+    );
+    expect(screen.getByLabelText('Your name')).toHaveValue(STORY.chef.name);
+    expect(screen.getByLabelText('What you are')).toHaveValue(STORY.chef.role);
+    expect(screen.getByLabelText('Description of your photo')).toHaveValue(STORY.chef.portraitAlt);
+    // PhotoField renders its own label and file input rather than a text
+    // box holding the path -- see Field.tsx's own dispatch comment.
+    expect(screen.getByLabelText('Your photo')).toBeInTheDocument();
+    // Review finding: `getByLabelText('Your photo')` alone proves the FIELD
+    // is wired, not that the PREVIEW <img> actually reads `chef.portrait`
+    // rather than a hardcoded literal that happens to match STORY's own
+    // fixture value -- a hardcoded string is indistinguishable from a real
+    // binding unless the assertion checks the rendered src against a value
+    // this test does not also hand the component through some other channel.
+    // Proven directly: pinning `spec={CHEF_FIELDS.portrait}` `value=` to a
+    // literal (e.g. '/team/some-other-hardcoded-photo.webp') left every
+    // OTHER assertion in this file green -- only this line catches it.
+    expect(container.querySelector('img')).toHaveAttribute('src', STORY.chef.portrait);
+  });
+
+  it('edits her name without disturbing the paragraphs', async () => {
+    const onChange = vi.fn();
+    render(<ControlledStoryForm onChange={onChange} />);
+    await userEvent.clear(screen.getByLabelText('Your name'));
+    await userEvent.type(screen.getByLabelText('Your name'), 'K');
+    expect(onChange).toHaveBeenLastCalledWith({
+      ...STORY,
+      chef: { ...STORY.chef, name: 'K' },
+    });
+  });
+
+  it('edits the role line', async () => {
+    const onChange = vi.fn();
+    render(<ControlledStoryForm onChange={onChange} />);
+    await userEvent.clear(screen.getByLabelText('What you are'));
+    await userEvent.type(screen.getByLabelText('What you are'), 'C');
+    expect(onChange).toHaveBeenLastCalledWith({ ...STORY, chef: { ...STORY.chef, role: 'C' } });
+  });
+
+  // Routed to the right field, not dumped in the banner: validateStory
+  // emits 'chef.name', and StoryForm's existing paragraph banner catches
+  // everything it does not recognise -- so a chef problem with no home
+  // would silently appear in a box labelled "Problems with the About
+  // section's paragraphs".
+  it("shows a chef problem on the chef's own field, not in the paragraph banner", () => {
+    const problems = [{ field: 'chef.name', message: 'the About section needs your name' }];
+    render(<StoryForm value={STORY} onChange={vi.fn()} problems={problems} stage={vi.fn()} previews={NO_IMAGE_PREVIEWS} />);
+    expect(screen.getByText('the About section needs your name')).toBeInTheDocument();
+    expect(screen.queryByRole('alert', { name: /paragraphs/i })).toBeNull();
+  });
+
+  it('still routes a paragraph problem to its paragraph', () => {
+    const problems = [{ field: 'paragraphs[1]', message: 'paragraph 2 is blank' }];
+    render(<StoryForm value={STORY} onChange={vi.fn()} problems={problems} stage={vi.fn()} previews={NO_IMAGE_PREVIEWS} />);
+    expect(screen.getByText('paragraph 2 is blank')).toBeInTheDocument();
   });
 });

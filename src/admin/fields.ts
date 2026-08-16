@@ -37,6 +37,7 @@ import type {
   PageSeo,
   Award,
   Experience,
+  ChefIntro,
 } from '../content/types';
 // The runtime list of gallery layouts, not a second copy of it. guards.ts
 // holds the one array (checked exhaustive against the union at compile
@@ -218,6 +219,45 @@ export const AWARD_FIELDS: FieldsOf<Award> = {
     category: 'press',
     help: 'Optional -- leave it empty if this award has no badge to show.',
     optional: true,
+  },
+};
+
+// Phase 4. story.json's chef byline, rendered at the TOP of the About panel
+// -- above the paragraph list she already knows -- because it is the part
+// of that panel a first-time visitor can complete without reading anything.
+//
+// Labels are second person, unlike every other descriptor in this file.
+// That is deliberate and it is the only place it happens: the owner IS the
+// chef, so "Awarding body" and "Publication" describe someone else while
+// "Your name" describes her. The alternative ("Chef's name") makes her
+// dashboard talk about her in the third person.
+//
+// `category: 'team'` -- already a member of UPLOAD_CATEGORIES
+// (src/shared/upload-categories.ts), already the directory
+// assets-source/team/ her portrait lives in, and already what
+// scripts/images.mjs writes public/team/*.webp from. No widening needed.
+export const CHEF_FIELDS: FieldsOf<ChefIntro> = {
+  name: { label: 'Your name', kind: 'text' },
+  role: {
+    label: 'What you are',
+    kind: 'text',
+    help: 'One short line under your name, e.g. "Chef and owner".',
+  },
+  portrait: {
+    label: 'Your photo',
+    kind: 'image',
+    category: 'team',
+    // The honest cost, in front of her rather than in a ledger she will
+    // never read. The words in this panel now publish straight to the
+    // database and are live in seconds; a NEW photo still has to be
+    // processed by the site build, which takes a couple of minutes. Both
+    // halves are true and she has no way to find out otherwise.
+    help: 'Changing your photo takes a couple of minutes to appear, unlike the words above it, which are live as soon as you publish.',
+  },
+  portraitAlt: {
+    label: 'Description of your photo',
+    kind: 'text',
+    help: 'A few words describing the photo, read aloud to anyone using a screen reader. "Chef Kamalika Anand" is enough.',
   },
 };
 

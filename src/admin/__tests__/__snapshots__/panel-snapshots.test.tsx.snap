@@ -10,6 +10,100 @@ exports[`the twelve panels, as they render today > About (story) 1`] = `
   >
     <div>
       <div
+        class="mb-6 rounded border border-gray-200 p-4"
+      >
+        <div
+          class="mb-4"
+        >
+          <label
+            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
+            for="story-chef-name"
+          >
+            Your name
+          </label>
+          <input
+            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+            id="story-chef-name"
+            type="text"
+            value="Kamalika Anand"
+          />
+        </div>
+        <div
+          class="mb-4"
+        >
+          <label
+            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
+            for="story-chef-role"
+          >
+            What you are
+          </label>
+          <input
+            aria-describedby="story-chef-role-help"
+            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+            id="story-chef-role"
+            type="text"
+            value="Chef and owner"
+          />
+          <p
+            class="mt-1 text-xs text-gray-500"
+            id="story-chef-role-help"
+          >
+            One short line under your name, e.g. "Chef and owner".
+          </p>
+        </div>
+        <div
+          class="mb-4"
+        >
+          <label
+            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
+            for="story-chef-portrait"
+          >
+            Your photo
+          </label>
+          <img
+            alt=""
+            class="mb-2 h-24 w-24 rounded border border-gray-300 object-cover"
+            src="/team/kamalika-anand.webp"
+          />
+          <input
+            accept="image/*"
+            aria-describedby="story-chef-portrait-help"
+            class="block w-full text-sm text-ink file:mr-3 file:rounded file:border-0 file:bg-brand file:px-3 file:py-1.5 file:font-['Montserrat'] file:text-xs file:uppercase file:tracking-wide file:text-ink hover:file:bg-brand-dark"
+            id="story-chef-portrait"
+            type="file"
+          />
+          <p
+            class="mt-1 text-xs text-gray-500"
+            id="story-chef-portrait-help"
+          >
+            Changing your photo takes a couple of minutes to appear, unlike the words above it, which are live as soon as you publish.
+          </p>
+        </div>
+        <div
+          class="mb-4"
+        >
+          <label
+            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
+            for="story-chef-portrait-alt"
+          >
+            Description of your photo
+          </label>
+          <input
+            aria-describedby="story-chef-portrait-alt-help"
+            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+            id="story-chef-portrait-alt"
+            type="text"
+            value="Chef Kamalika Anand"
+          />
+          <p
+            class="mt-1 text-xs text-gray-500"
+            id="story-chef-portrait-alt-help"
+          >
+            A few words describing the photo, read aloud to anyone using a screen reader. "Chef Kamalika Anand" is enough.
+          </p>
+        </div>
+      </div>
+      <div
         class="mb-4"
       >
         <label

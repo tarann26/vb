@@ -36,7 +36,7 @@ import {
   stubFetch,
 } from './dashboardFixtures';
 import { collagePhotos } from '../../content/collage';
-import type { Dish, Page } from '../../content/types';
+import type { Dish, Page, StoryContent } from '../../content/types';
 import { DRAFT_STORAGE_KEY, DRAFT_STAGED_COUNT_KEY, saveDraft } from '../drafts';
 import { LOCK_TIMEOUT_MS } from '../PublishBar';
 
@@ -1356,5 +1356,144 @@ describe('AdminApp: editing is paused while a publish request is in flight', () 
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+// Phase 4, Task 4 review: Task 1's own review found the gap this task
+// exists to close. An /edit draft saved BEFORE story.json grew a `chef`
+// byline restores through registerLoaded's own unchecked
+// `draftEntry.data as ContentTypeMap[K]` cast (register-loaded.ts) with NO
+// `chef` key at all, which validateStory (src/content/validate.ts) reports
+// as four required `chef.*` problems through its own `asRecord()` fallback
+// -- but before this task, nothing in the dashboard rendered a field any of
+// those four problems could attach to. Her only way out was Discard, losing
+// whatever ELSE she had changed in the same draft.
+//
+// Reproduced end to end, through the real dashboard: a stale draft missing
+// `chef` restores without crashing the panel (StoryForm's own defended
+// `chef` fallback -- an earlier version of this fix read `value.chef.name`
+// straight off the possibly-`chef`-less value and threw during render,
+// which SectionErrorBoundary would have caught, taking the WHOLE About
+// panel down, heading and paragraphs included -- confirmed directly against
+// that unguarded version before this test existed), shows all four problems
+// on the new fields, and filling every one of them in -- including a real
+// photo upload through the same staged-file chain every other photo field
+// uses -- clears every one and lets the draft actually publish.
+describe('AdminApp: Phase 4 review fix -- a stale /edit draft missing `chef` is fixable, not a dead end', () => {
+  beforeEach(() => {
+    FakeXHR.instances = [];
+    vi.stubGlobal('XMLHttpRequest', FakeXHR as unknown as typeof XMLHttpRequest);
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('restoring a pre-chef draft shows all four problems on their own fields, and filling them in clears every one and publishes', async () => {
+    const publishBodies: { files: { path: string; content: string; encoding: string }[] }[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url === '/api/wa') return WA_RESPONSE();
+        if (url === '/api/publish') {
+          publishBodies.push(JSON.parse(String(init?.body)) as { files: { path: string; content: string; encoding: string }[] });
+          return new Response(JSON.stringify({ sha: 'commit-1', publishId: 'p1' }), { status: 200, headers: { 'content-type': 'application/json' } });
+        }
+        if (url.startsWith('/api/build-status')) {
+          return new Response(JSON.stringify({ state: 'live', deploymentUrl: null, commitUrl: 'https://c' }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        if (url === '/build-info.json') {
+          return new Response(JSON.stringify({ sha: 'commit-1', builtAt: 'now' }), { status: 200, headers: { 'content-type': 'application/json' } });
+        }
+        if (url.includes('dishes.json')) return contentResponse(DISHES, 'sha-dishes');
+        if (url.includes('drinks.json')) return contentResponse(DRINKS, 'sha-drinks');
+        if (url.includes('press.json')) return contentResponse(PRESS, 'sha-press');
+        if (url.includes('sections.json')) return contentResponse(SECTIONS, 'sha-sections');
+        if (url.includes('site.json')) return contentResponse(SITE, 'sha-site');
+        if (url.includes('galleries.json')) return contentResponse(GALLERIES, 'sha-galleries');
+        if (url.includes('menus.json')) return contentResponse(MENUS, 'sha-menus');
+        if (url.includes('story.json')) return contentResponse(STORY, 'sha-story');
+        if (url.includes('copy.json')) return contentResponse(COPY, 'sha-copy');
+        if (url.includes('pages.json')) return contentResponse([], 'sha-pages');
+        throw new Error(`AdminApp.test.tsx: unexpected fetch to ${url}`);
+      }),
+    );
+
+    // The pre-chef draft shape: story.json's OWN heading/paragraphs
+    // untouched, no `chef` key at all -- exactly what a draft saved before
+    // Task 1 landed would still have sitting in localStorage today.
+    window.localStorage.setItem(
+      DRAFT_STORAGE_KEY,
+      JSON.stringify({
+        'story.json': { data: { heading: STORY.heading, paragraphs: STORY.paragraphs }, savedAt: Date.now() },
+      }),
+    );
+
+    const user = userEvent.setup();
+    renderDashboard('/edit/manage/story');
+    await user.click(await screen.findByRole('button', { name: 'Restore' }));
+
+    const section = await sectionByHeading('About');
+
+    // Does not crash: the heading she already had is still there, and the
+    // four new fields render, empty, rather than the whole panel
+    // disappearing behind SectionErrorBoundary.
+    expect(within(section).getByDisplayValue(STORY.heading)).toBeInTheDocument();
+    expect(within(section).getByLabelText('Your name')).toHaveValue('');
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 450));
+    });
+
+    // All four, each on its OWN field -- not swept into the paragraph
+    // banner (StoryForm's own `chef.` banner filter).
+    expect(within(section).getByText('the About section needs your name')).toBeInTheDocument();
+    expect(
+      within(section).getByText('the About section needs a short line saying who you are, e.g. "Chef and owner"'),
+    ).toBeInTheDocument();
+    expect(within(section).getByText('the About section needs a photo of you')).toBeInTheDocument();
+    expect(
+      within(section).getByText('your photo needs a short description, for people using a screen reader'),
+    ).toBeInTheDocument();
+
+    // She fills every one in -- three ordinary fields, then a real photo
+    // upload through the same staged-file chain every other photo field
+    // uses.
+    await user.type(within(section).getByLabelText('Your name'), 'Kamalika Anand');
+    await user.type(within(section).getByLabelText('What you are'), 'Chef and owner');
+    await user.type(within(section).getByLabelText('Description of your photo'), 'Chef Kamalika Anand');
+
+    const portraitInput = within(section).getByLabelText('Your photo');
+    await user.upload(portraitInput, jpegFile('kamalika.jpg'));
+    await waitFor(() => expect(FakeXHR.instances).toHaveLength(1));
+    FakeXHR.instances[0].respond(200, { path: 'assets-source/team/kamalika.jpg', contentPath: '/team/kamalika.webp' });
+    await waitFor(() => expect(within(section).getByLabelText('Your photo')).not.toBeDisabled());
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 450));
+    });
+
+    // No chef problem survives -- she is no longer stuck, and Discard is no
+    // longer her only way out.
+    expect(within(section).queryByText(/the About section needs your name/)).not.toBeInTheDocument();
+    expect(within(section).queryByText(/needs a short line saying who you are/)).not.toBeInTheDocument();
+    expect(within(section).queryByText(/needs a photo of you/)).not.toBeInTheDocument();
+    expect(within(section).queryByText(/needs a short description/)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Publish' }));
+    await user.click(screen.getByRole('button', { name: 'Yes, publish to the live site' }));
+    await waitFor(() => expect(publishBodies).toHaveLength(1));
+    const storyFile = publishBodies[0].files.find((f) => f.path === 'src/content/story.json');
+    expect(storyFile).toBeDefined();
+    const publishedStory = JSON.parse(storyFile!.content) as StoryContent;
+    expect(publishedStory.chef).toEqual({
+      name: 'Kamalika Anand',
+      role: 'Chef and owner',
+      portrait: '/team/kamalika.webp',
+      portraitAlt: 'Chef Kamalika Anand',
+    });
   });
 });

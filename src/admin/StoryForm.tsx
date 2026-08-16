@@ -15,8 +15,10 @@
 // server-side rejection), through the same debounced `problems` prop every
 // other screen in this dashboard already surfaces inline.
 import Field from './Field';
-import { STORY_HEADING_FIELD } from './fields';
+import { CHEF_FIELDS, STORY_HEADING_FIELD } from './fields';
 import { ADD_BUTTON_CLASSNAME, MOVE_BUTTON_CLASSNAME, REMOVE_BUTTON_CLASSNAME } from './RecordList';
+import { fromStagedPhoto, type StagedFile } from './staged';
+import type { ImagePreviews } from './previews';
 import type { StoryContent } from '../content/types';
 import type { ValidationProblem } from '../content/validate';
 
@@ -27,6 +29,13 @@ export interface StoryFormProps {
   // other list/form in this dashboard already documents on its own
   // `problems` prop.
   problems: ValidationProblem[];
+  // Phase 4: the byline's portrait is a real upload, so this form now needs
+  // the same two seams every other photo-carrying screen already takes.
+  // The key shape is `story.json:chef:portrait` -- file, then record, then
+  // field, exactly the convention staged.ts's own comment records for
+  // ArraySection and GalleryList.
+  stage: (key: string, file: StagedFile | null) => void;
+  previews: ImagePreviews;
 }
 
 // `paragraphs[N]` -- validateStory's own shape for a single paragraph's
@@ -44,16 +53,35 @@ function paragraphIndexOf(field: string): number | undefined {
   return found === null ? undefined : Number(found[1]);
 }
 
-function StoryForm({ value, onChange, problems }: StoryFormProps) {
+function StoryForm({ value, onChange, problems, stage, previews }: StoryFormProps) {
   const headingProblems = problems.filter((p) => p.field === 'heading');
+  const chefProblems = problems.filter((p) => p.field.startsWith('chef.'));
 
-  // The bare `paragraphs` message (validateStory's "the story needs at
-  // least one paragraph", only reachable when the list IS empty) plus any
+  // Defends against exactly the gap this task exists to close: an /edit
+  // draft saved before `chef` existed on StoryContent restores through
+  // registerLoaded's own unchecked `draftEntry.data as ContentTypeMap[K]`
+  // cast (register-loaded.ts) with NO `chef` key at all, so `value.chef` is
+  // `undefined` at runtime despite `StoryContent`'s type saying otherwise.
+  // Reading `value.chef.name` straight off `value` would throw during
+  // render -- and the only error boundary between this component and the
+  // page is per-SECTION (SectionErrorBoundary's own header comment on
+  // exactly this class of bug) -- so an unguarded read would not leave her
+  // with four fixable `chef.*` fields, it would take the WHOLE About panel
+  // down, heading and paragraphs included, which is worse than the
+  // no-form-UI gap this task is closing. validateStory
+  // (src/content/validate.ts) already treats a missing `chef` the same way,
+  // through its own `asRecord()` fallback; this mirrors that at the read
+  // boundary rather than inventing a second rule.
+  const chef = value.chef ?? { name: '', role: '', portrait: '', portraitAlt: '' };
+
+  // The bare `paragraphs` message (validateStory's "the About section needs
+  // at least one paragraph", only reachable when the list IS empty) plus any
   // indexed problem naming a paragraph this screen isn't currently
   // rendering -- the same "nowhere else for this to go" reasoning
   // RecordList's own unclaimedProblems documents.
   const banner = problems.filter((p) => {
     if (p.field === 'heading') return false;
+    if (p.field.startsWith('chef.')) return false;
     if (p.field === 'paragraphs') return true;
     const index = paragraphIndexOf(p.field);
     return index === undefined || index < 0 || index >= value.paragraphs.length;
@@ -69,6 +97,44 @@ function StoryForm({ value, onChange, problems }: StoryFormProps) {
 
   return (
     <div>
+      {/* Above the heading and the paragraphs: this is the part of the About
+          panel she can finish without reading anything, and putting it under
+          six textareas would mean scrolling past the hard part to reach the
+          easy one. */}
+      <div className="mb-6 rounded border border-gray-200 p-4">
+        <Field
+          id="story-chef-name"
+          spec={CHEF_FIELDS.name}
+          value={chef.name}
+          onChange={(next) => onChange({ ...value, chef: { ...chef, name: next } })}
+          problems={chefProblems.filter((p) => p.field === 'chef.name')}
+        />
+        <Field
+          id="story-chef-role"
+          spec={CHEF_FIELDS.role}
+          value={chef.role}
+          onChange={(next) => onChange({ ...value, chef: { ...chef, role: next } })}
+          problems={chefProblems.filter((p) => p.field === 'chef.role')}
+        />
+        <Field
+          id="story-chef-portrait"
+          spec={CHEF_FIELDS.portrait}
+          value={chef.portrait}
+          onChange={(next) => onChange({ ...value, chef: { ...chef, portrait: next ?? '' } })}
+          onStaged={(staged) => stage('story.json:chef:portrait', fromStagedPhoto(staged))}
+          previews={previews}
+          previewKey="story.json:chef:portrait"
+          problems={chefProblems.filter((p) => p.field === 'chef.portrait')}
+        />
+        <Field
+          id="story-chef-portrait-alt"
+          spec={CHEF_FIELDS.portraitAlt}
+          value={chef.portraitAlt}
+          onChange={(next) => onChange({ ...value, chef: { ...chef, portraitAlt: next } })}
+          problems={chefProblems.filter((p) => p.field === 'chef.portraitAlt')}
+        />
+      </div>
+
       <Field
         id="story-heading"
         spec={STORY_HEADING_FIELD}

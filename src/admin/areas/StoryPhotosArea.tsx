@@ -30,7 +30,7 @@ const StoryPhotosArea: React.FC<AreaProps> = ({ registry, restoreDraft, stage, p
     </SectionErrorBoundary>
     <SectionErrorBoundary name="About">
       <CollapsibleSection id="story" heading="About" locked={publishLocked}>
-        <StorySection registry={registry} restoreDraft={restoreDraft} />
+        <StorySection registry={registry} restoreDraft={restoreDraft} stage={stage} previews={previews} />
       </CollapsibleSection>
     </SectionErrorBoundary>
     <SectionErrorBoundary name="Press">
@@ -134,7 +134,17 @@ type StoryLoadState =
   | { status: 'error'; message: string }
   | { status: 'loaded'; data: StoryContent; sha: string };
 
-function StorySection({ registry, restoreDraft }: { registry: ContentRegistry; restoreDraft: DraftMap | null }) {
+function StorySection({
+  registry,
+  restoreDraft,
+  stage,
+  previews,
+}: {
+  registry: ContentRegistry;
+  restoreDraft: DraftMap | null;
+  stage: (key: string, file: StagedFile | null) => void;
+  previews: ImagePreviews;
+}) {
   const [state, setState] = useState<StoryLoadState>({ status: 'loading' });
 
   useEffect(() => {
@@ -180,6 +190,8 @@ function StorySection({ registry, restoreDraft }: { registry: ContentRegistry; r
           setState({ status: 'loaded', data: next, sha: state.sha });
         }}
         problems={problems}
+        stage={stage}
+        previews={previews}
       />
     </>
   );
