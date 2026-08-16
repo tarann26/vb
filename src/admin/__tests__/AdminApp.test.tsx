@@ -670,25 +670,38 @@ describe('AdminApp: a malformed content file costs one section, not the whole da
       }),
     );
 
-    renderDashboard('/edit/manage/story');
+    // This test deliberately trips GalleryList's own SectionErrorBoundary --
+    // React's dev-mode logging of the caught error, SectionErrorBoundary's
+    // own componentDidCatch (SectionErrorBoundary.tsx), and jsdom's separate
+    // reporting of the same underlying throw (routed to console.error too,
+    // confirmed against jsdom's own VirtualConsole.sendTo) are all noise for
+    // what this test proves, not signal. Suppressed here, scoped to this one
+    // test; the boundary firing is still proven below by real, on-screen
+    // assertions -- silencing reporting, not behaviour.
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      renderDashboard('/edit/manage/story');
 
-    // The rest of the dashboard is unaffected -- proven by reaching real,
-    // interactive content in sections that have NOTHING to do with
-    // galleries.json.
-    await screen.findByDisplayValue('Dish A');
-    expect(screen.getByDisplayValue('Drink X')).toBeInTheDocument();
-    expect(screen.getByDisplayValue('Article P')).toBeInTheDocument();
-    // Queried by display value rather than through `sectionByHeading`,
-    // deliberately: Menus lives in a different AREA from Galleries, and
-    // role queries do not reach into a hidden one. "Food Menu" is unique
-    // on this page and is the same evidence -- menus.json loaded and
-    // rendered -- without the query needing that area to be on screen.
-    expect(await screen.findByDisplayValue('Food Menu')).toBeInTheDocument();
+      // The rest of the dashboard is unaffected -- proven by reaching real,
+      // interactive content in sections that have NOTHING to do with
+      // galleries.json.
+      await screen.findByDisplayValue('Dish A');
+      expect(screen.getByDisplayValue('Drink X')).toBeInTheDocument();
+      expect(screen.getByDisplayValue('Article P')).toBeInTheDocument();
+      // Queried by display value rather than through `sectionByHeading`,
+      // deliberately: Menus lives in a different AREA from Galleries, and
+      // role queries do not reach into a hidden one. "Food Menu" is unique
+      // on this page and is the same evidence -- menus.json loaded and
+      // rendered -- without the query needing that area to be on screen.
+      expect(await screen.findByDisplayValue('Food Menu')).toBeInTheDocument();
 
-    // Galleries itself shows a named, recognizable fallback instead of
-    // silently vanishing or crashing the page.
-    expect(await screen.findByText(/Could not show Galleries/)).toHaveAttribute('role', 'alert');
-    expect(screen.queryByRole('heading', { name: 'Galleries' })).not.toBeInTheDocument();
+      // Galleries itself shows a named, recognizable fallback instead of
+      // silently vanishing or crashing the page.
+      expect(await screen.findByText(/Could not show Galleries/)).toHaveAttribute('role', 'alert');
+      expect(screen.queryByRole('heading', { name: 'Galleries' })).not.toBeInTheDocument();
+    } finally {
+      errorSpy.mockRestore();
+    }
   });
 });
 

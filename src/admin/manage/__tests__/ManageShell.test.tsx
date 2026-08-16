@@ -235,25 +235,42 @@ describe('a publish in flight pauses editing, never navigation', () => {
         return new Response(JSON.stringify({ content: '[]', sha: 'sha' }));
       }),
     );
-    const user = userEvent.setup();
-    renderDashboard('/edit/manage/menu', { wide: true });
+    // This test's own fallback response ('[]', below) is not a valid
+    // galleries.json -- unlike most tests here, it does not go through
+    // dashboardFixtures' stubFetch(), which fixtures a real one. Because
+    // every area mounts and stays mounted (this file's own top describe),
+    // Story & Photos' GalleryList mounts too and trips its
+    // SectionErrorBoundary as a side effect, though galleries has nothing to
+    // do with what this test is proving. React's dev-mode logging of the
+    // caught error, SectionErrorBoundary's own componentDidCatch
+    // (SectionErrorBoundary.tsx), and jsdom's separate reporting of the same
+    // underlying throw all land on console.error -- suppressed here, scoped
+    // to this one test, as noise rather than signal for a Publish-in-flight
+    // navigation test.
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const user = userEvent.setup();
+      renderDashboard('/edit/manage/menu', { wide: true });
 
-    const input = (await screen.findByDisplayValue('Dish A')) as HTMLInputElement;
-    await user.type(input, '!');
-    await user.click(screen.getByRole('button', { name: 'Publish' }));
-    await user.click(screen.getByRole('button', { name: 'Yes, publish to the live site' }));
-    await waitFor(() => expect(input).toBeDisabled());
+      const input = (await screen.findByDisplayValue('Dish A')) as HTMLInputElement;
+      await user.type(input, '!');
+      await user.click(screen.getByRole('button', { name: 'Publish' }));
+      await user.click(screen.getByRole('button', { name: 'Yes, publish to the live site' }));
+      await waitFor(() => expect(input).toBeDisabled());
 
-    const nav = screen.getByRole('navigation', { name: 'Areas' });
-    const numbers = within(nav).getByRole('link', { name: /^Numbers/ });
-    // Structurally safe today (the nav is <a>, and the native disabled
-    // cascade reaches form controls only) -- but structural safety is not a
-    // reason to leave it unpinned. Mutation this guards: wrap the shell in a
-    // disabled fieldset.
-    expect(numbers.closest('[disabled], [aria-disabled="true"]')).toBeNull();
+      const nav = screen.getByRole('navigation', { name: 'Areas' });
+      const numbers = within(nav).getByRole('link', { name: /^Numbers/ });
+      // Structurally safe today (the nav is <a>, and the native disabled
+      // cascade reaches form controls only) -- but structural safety is not a
+      // reason to leave it unpinned. Mutation this guards: wrap the shell in a
+      // disabled fieldset.
+      expect(numbers.closest('[disabled], [aria-disabled="true"]')).toBeNull();
 
-    await user.click(numbers);
-    expect(await screen.findByRole('heading', { name: 'Numbers' })).toBeInTheDocument();
+      await user.click(numbers);
+      expect(await screen.findByRole('heading', { name: 'Numbers' })).toBeInTheDocument();
+    } finally {
+      errorSpy.mockRestore();
+    }
   });
 });
 
@@ -275,17 +292,28 @@ describe('an area that throws does not take the shell with it', () => {
         return new Response(JSON.stringify({ content: '[]', sha: 'sha' }));
       }),
     );
-    const user = userEvent.setup();
-    renderDashboard('/edit/manage/story', { wide: true });
+    // This test deliberately trips GalleryList's own SectionErrorBoundary --
+    // React's dev-mode logging of the caught error, SectionErrorBoundary's
+    // own componentDidCatch (SectionErrorBoundary.tsx), and jsdom's separate
+    // reporting of the same underlying throw are all noise, not signal, for
+    // what this test proves; the boundary firing is still proven below by a
+    // real, on-screen assertion.
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const user = userEvent.setup();
+      renderDashboard('/edit/manage/story', { wide: true });
 
-    expect(await screen.findByText(/Could not show Galleries/)).toBeInTheDocument();
-    const nav = screen.getByRole('navigation', { name: 'Areas' });
-    AREAS.forEach((area) => {
-      expect(within(nav).getByRole('link', { name: new RegExp(`^${area.label}`) })).toBeInTheDocument();
-    });
+      expect(await screen.findByText(/Could not show Galleries/)).toBeInTheDocument();
+      const nav = screen.getByRole('navigation', { name: 'Areas' });
+      AREAS.forEach((area) => {
+        expect(within(nav).getByRole('link', { name: new RegExp(`^${area.label}`) })).toBeInTheDocument();
+      });
 
-    await clickArea(user, 'Menu');
-    expect(await screen.findByRole('heading', { name: 'Dishes' })).toBeInTheDocument();
+      await clickArea(user, 'Menu');
+      expect(await screen.findByRole('heading', { name: 'Dishes' })).toBeInTheDocument();
+    } finally {
+      errorSpy.mockRestore();
+    }
   });
 });
 
@@ -376,14 +404,24 @@ describe('a button the shell brought inside the publish form', () => {
         return new Response(JSON.stringify({ content: '[]', sha: 'sha' }));
       }),
     );
-    const user = userEvent.setup();
-    renderDashboard('/edit/manage/numbers', { wide: true });
+    // Same collateral SectionErrorBoundary trip as the "no disabled
+    // ancestor" test above -- this test's own generic '[]' fallback is not a
+    // valid galleries.json, and Story & Photos' GalleryList mounts alongside
+    // Numbers because every area mounts and stays mounted. Suppressed for
+    // the same reason: noise, not signal, for a Retry-button test.
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const user = userEvent.setup();
+      renderDashboard('/edit/manage/numbers', { wide: true });
 
-    await user.click(await screen.findByRole('button', { name: 'Retry' }));
+      await user.click(await screen.findByRole('button', { name: 'Retry' }));
 
-    expect(screen.queryByText('Publish these changes to the live site?')).not.toBeInTheDocument();
-    // And it really is still on the Numbers screen, not somewhere else.
-    expect(screen.getByRole('heading', { name: 'Numbers' })).toBeInTheDocument();
+      expect(screen.queryByText('Publish these changes to the live site?')).not.toBeInTheDocument();
+      // And it really is still on the Numbers screen, not somewhere else.
+      expect(screen.getByRole('heading', { name: 'Numbers' })).toBeInTheDocument();
+    } finally {
+      errorSpy.mockRestore();
+    }
   });
 });
 
@@ -410,26 +448,39 @@ describe('the nav says which area needs attention, and which has unsaved work', 
         return new Response(JSON.stringify({ content: '[]', sha: 'sha' }));
       }),
     );
-    renderDashboard('/edit/manage/menu', { wide: true });
+    // Same collateral SectionErrorBoundary trip as the two tests above --
+    // this test's own generic '[]' fallback is not a valid galleries.json,
+    // and Story & Photos' GalleryList mounts alongside Menu because every
+    // area mounts and stays mounted. Suppressed for the same reason: noise,
+    // not signal, for a needs-attention-marker test. (The
+    // "Could not load page copy" text this test DOES assert on is copy.json's
+    // own fetch-failure fallback, not a caught render exception -- it never
+    // reaches console.error and needs no suppression of its own.)
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      renderDashboard('/edit/manage/menu', { wide: true });
 
-    const nav = await screen.findByRole('navigation', { name: 'Areas' });
-    expect(
-      await within(nav).findByRole('img', { name: 'Hours & Wording needs attention' }),
-    ).toBeInTheDocument();
-    // And the message really is out of reach from here, which is the whole
-    // reason the marker exists. Queried through the container rather than
-    // through `queryByText`, which ignores visibility entirely: the message
-    // IS in the document, inside a hidden area, which is exactly the
-    // problem.
-    const message = screen.getByText(/Could not load page copy/);
-    expect(message.closest('[data-area]')).toHaveAttribute('hidden');
-    expect(message.closest('[data-area]')).toHaveAttribute('data-area', 'details');
-    // No other area is marked.
-    expect(within(nav).queryByRole('img', { name: 'Menu needs attention' })).not.toBeInTheDocument();
+      const nav = await screen.findByRole('navigation', { name: 'Areas' });
+      expect(
+        await within(nav).findByRole('img', { name: 'Hours & Wording needs attention' }),
+      ).toBeInTheDocument();
+      // And the message really is out of reach from here, which is the whole
+      // reason the marker exists. Queried through the container rather than
+      // through `queryByText`, which ignores visibility entirely: the message
+      // IS in the document, inside a hidden area, which is exactly the
+      // problem.
+      const message = screen.getByText(/Could not load page copy/);
+      expect(message.closest('[data-area]')).toHaveAttribute('hidden');
+      expect(message.closest('[data-area]')).toHaveAttribute('data-area', 'details');
+      // No other area is marked.
+      expect(within(nav).queryByRole('img', { name: 'Menu needs attention' })).not.toBeInTheDocument();
 
-    // Mutation this guards: narrow the observer to `childList` on direct
-    // children only -- a problem raised several levels down inside a panel
-    // stops marking its area and this goes red.
+      // Mutation this guards: narrow the observer to `childList` on direct
+      // children only -- a problem raised several levels down inside a panel
+      // stops marking its area and this goes red.
+    } finally {
+      errorSpy.mockRestore();
+    }
   });
 
   it('marks the area holding unsaved work, with a DIFFERENT marker', async () => {

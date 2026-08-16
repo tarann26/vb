@@ -281,6 +281,23 @@ describe('EditMode: the dashboard is reachable from /edit', () => {
     const event = new MouseEvent('click', { bubbles: true, cancelable: true });
     link.dispatchEvent(event);
     expect(event.defaultPrevented).toBe(false);
+
+    // The assertion above is already the proof; what follows only silences a
+    // side effect of it. Because the click's default was genuinely not
+    // prevented, jsdom schedules a real navigation attempt for this
+    // real-href anchor via its own `setTimeout(..., 0)`
+    // (HTMLHyperlinkElementUtils-impl.js) -- still pending when this test
+    // function returns, so it used to fire during whichever test ran next
+    // and print "Not implemented: navigation" there instead of here. Draining
+    // it with a same-macrotask wait, console.error suppressed only across
+    // that wait, keeps the noise attributed to (and scoped to) the test that
+    // actually causes it.
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    } finally {
+      errorSpy.mockRestore();
+    }
   });
 });
 
@@ -762,17 +779,31 @@ describe('EditMode: one malformed content file does not take down the page', () 
     // as a plain object, which throws "dishes.map is not a function".
     stubFetch({ dishesResponse: contentResponse({}, 'sha-dishes-bad') });
 
-    render(
-      <MemoryRouter>
-        <EditMode />
-      </MemoryRouter>,
-    );
+    // This test deliberately trips a real render error so SectionErrorBoundary
+    // catches it -- React's dev-mode logging of the caught error (and
+    // SectionErrorBoundary's own componentDidCatch, SectionErrorBoundary.tsx)
+    // both go to console.error, and jsdom separately reports the same throw
+    // via its virtualConsole (also routed to console.error, confirmed against
+    // jsdom's own VirtualConsole.sendTo). Suppressed here, scoped to this one
+    // test, because the failure itself is the point of the test, not a defect
+    // to surface; the boundary firing is still proven below by real, on-screen
+    // assertions -- silencing reporting, not behaviour.
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      render(
+        <MemoryRouter>
+          <EditMode />
+        </MemoryRouter>,
+      );
 
-    // The one broken section reports itself...
-    expect(await screen.findByText(/could not show menu/i)).toBeInTheDocument();
-    // ...while an unrelated section (Hero, which never touches dishes)
-    // still rendered normally.
-    expect(screen.getByRole('button', { name: COPY.hero.reserveButton })).toBeInTheDocument();
+      // The one broken section reports itself...
+      expect(await screen.findByText(/could not show menu/i)).toBeInTheDocument();
+      // ...while an unrelated section (Hero, which never touches dishes)
+      // still rendered normally.
+      expect(screen.getByRole('button', { name: COPY.hero.reserveButton })).toBeInTheDocument();
+    } finally {
+      errorSpy.mockRestore();
+    }
   });
 
   // Post-review Fix 2 (Important): the review's own measured table found
@@ -783,27 +814,37 @@ describe('EditMode: one malformed content file does not take down the page', () 
   it('sections.json parsing to an object instead of an array shows a boundary fallback for the section list, not a blanked page', async () => {
     stubFetch({ sectionsResponse: contentResponse({}, 'sha-sections-bad') });
 
-    render(
-      <MemoryRouter>
-        <EditMode />
-      </MemoryRouter>,
-    );
+    // See the dishes.json test above for why console.error is suppressed
+    // here: this test deliberately trips two real boundaries (Sections and
+    // Navbar, both below), and both React's dev logging and jsdom's own
+    // reporting of the underlying throw are noise, not signal, for what this
+    // test proves.
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      render(
+        <MemoryRouter>
+          <EditMode />
+        </MemoryRouter>,
+      );
 
-    // The one broken piece reports itself, by name -- this costs the WHOLE
-    // section list (every dynamic section lives inside the one boundary
-    // that wraps DynamicSections, so a crash in DynamicSections' own
-    // `.filter` is not further isolated per-section), which is the correct,
-    // bounded cost: not one section, but not the page either.
-    expect(await screen.findByText(/could not show sections/i)).toBeInTheDocument();
-    // Navbar ALSO reads `sections` directly (its own `enabledSectionIds`
-    // filter, NavBar.tsx), so its boundary fires too -- a real, separate
-    // consequence of the same malformed file, not a bug in this fix.
-    expect(screen.getByText(/could not show navigation/i)).toBeInTheDocument();
-    // Footer touches neither `sections` nor anything derived from it, and
-    // survives untouched -- proof this cost exactly what actually reads
-    // sections.json, not the whole page.
-    expect(screen.getByText(SITE.name)).toBeInTheDocument();
-    expect(document.body.textContent).not.toBe('');
+      // The one broken piece reports itself, by name -- this costs the WHOLE
+      // section list (every dynamic section lives inside the one boundary
+      // that wraps DynamicSections, so a crash in DynamicSections' own
+      // `.filter` is not further isolated per-section), which is the correct,
+      // bounded cost: not one section, but not the page either.
+      expect(await screen.findByText(/could not show sections/i)).toBeInTheDocument();
+      // Navbar ALSO reads `sections` directly (its own `enabledSectionIds`
+      // filter, NavBar.tsx), so its boundary fires too -- a real, separate
+      // consequence of the same malformed file, not a bug in this fix.
+      expect(screen.getByText(/could not show navigation/i)).toBeInTheDocument();
+      // Footer touches neither `sections` nor anything derived from it, and
+      // survives untouched -- proof this cost exactly what actually reads
+      // sections.json, not the whole page.
+      expect(screen.getByText(SITE.name)).toBeInTheDocument();
+      expect(document.body.textContent).not.toBe('');
+    } finally {
+      errorSpy.mockRestore();
+    }
   });
 });
 
@@ -818,37 +859,52 @@ describe('EditMode: post-review Fix 4 -- SEO, Navigation and Footer each have th
   it('a malformed site.json trips the SEO, Navigation and Footer boundaries individually -- a section that never reads site.json still renders', async () => {
     stubFetch({ siteResponse: contentResponse({}, 'sha-site-bad') });
 
-    render(
-      <MemoryRouter>
-        <EditMode />
-      </MemoryRouter>,
-    );
+    // Three boundaries fire at once here (SEO, Navigation, Footer) -- see
+    // the dishes.json test's own comment above for why console.error is
+    // suppressed rather than left to print each one's React + jsdom noise.
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      render(
+        <MemoryRouter>
+          <EditMode />
+        </MemoryRouter>,
+      );
 
-    expect(await screen.findByText(/could not show seo/i)).toBeInTheDocument();
-    expect(screen.getByText(/could not show navigation/i)).toBeInTheDocument();
-    expect(screen.getByText(/could not show footer/i)).toBeInTheDocument();
-    // FoodGallery ("Menu") reads only copy.food and dishes -- neither
-    // depends on site.json -- so it survives untouched, proving this cost
-    // exactly the sections/components that actually touch site.json, not
-    // the page.
-    expect(screen.getByText(COPY.food.heading)).toBeInTheDocument();
+      expect(await screen.findByText(/could not show seo/i)).toBeInTheDocument();
+      expect(screen.getByText(/could not show navigation/i)).toBeInTheDocument();
+      expect(screen.getByText(/could not show footer/i)).toBeInTheDocument();
+      // FoodGallery ("Menu") reads only copy.food and dishes -- neither
+      // depends on site.json -- so it survives untouched, proving this cost
+      // exactly the sections/components that actually touch site.json, not
+      // the page.
+      expect(screen.getByText(COPY.food.heading)).toBeInTheDocument();
+    } finally {
+      errorSpy.mockRestore();
+    }
   });
 
   it('a malformed copy.json trips the Navigation and Footer boundaries -- SEO does not read copy.json at all, and the page still stands', async () => {
     stubFetch({ copyResponse: contentResponse({}, 'sha-copy-bad') });
 
-    render(
-      <MemoryRouter>
-        <EditMode />
-      </MemoryRouter>,
-    );
+    // Two boundaries fire here (Navigation, Footer) -- same suppression, same
+    // reason, as the dishes.json test's own comment above.
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      render(
+        <MemoryRouter>
+          <EditMode />
+        </MemoryRouter>,
+      );
 
-    expect(await screen.findByText(/could not show navigation/i)).toBeInTheDocument();
-    expect(screen.getByText(/could not show footer/i)).toBeInTheDocument();
-    // SeoHead reads only `site`, never `copy` -- confirmed here rather than
-    // merely assumed: its own boundary must NOT have fired.
-    expect(screen.queryByText(/could not show seo/i)).not.toBeInTheDocument();
-    expect(document.body.textContent).not.toBe('');
+      expect(await screen.findByText(/could not show navigation/i)).toBeInTheDocument();
+      expect(screen.getByText(/could not show footer/i)).toBeInTheDocument();
+      // SeoHead reads only `site`, never `copy` -- confirmed here rather than
+      // merely assumed: its own boundary must NOT have fired.
+      expect(screen.queryByText(/could not show seo/i)).not.toBeInTheDocument();
+      expect(document.body.textContent).not.toBe('');
+    } finally {
+      errorSpy.mockRestore();
+    }
   });
 });
 
