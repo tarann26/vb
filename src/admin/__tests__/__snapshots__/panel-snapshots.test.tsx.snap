@@ -4697,7 +4697,7 @@ exports[`the twelve panels, as they render today > Words on the site (copy) 1`] 
             class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
             id="copy-nav.pagesLabel"
             type="text"
-            value="Experiences"
+            value="Pages"
           />
           <p
             class="mt-1 text-xs text-gray-500"

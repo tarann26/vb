@@ -112,7 +112,7 @@ describe('Navbar', () => {
   });
 });
 
-// The pages disclosure ("Experiences"), which had no test of any kind until
+// The pages disclosure (copy.nav.pagesLabel), which had no test of any kind until
 // its label was found advertising an edit affordance it could not honour
 // (see NavBar.tsx's own comment at that label, and the matching describe
 // block in src/admin/__tests__/editable-paths.test.tsx). The repair leaves
@@ -162,6 +162,33 @@ describe("Navbar's pages disclosure", () => {
     renderNav(fixtureBundle);
     expect(disclosure()).toHaveAttribute('aria-expanded', 'false');
     expect(disclosure()).toHaveAttribute('aria-haspopup', 'true');
+  });
+
+  // Final branch review, Important 1. `inNav` is an owner-editable toggle
+  // (PAGE_FIELDS.inNav), and flipping two real pages back on is exactly what
+  // `fixtureBundle` simulates -- both `grouped` (this disclosure) and the
+  // real, committed `copy.nav.links` carousel entry render in the SAME nav
+  // at once. Before `nav.pagesLabel` was renamed off "Experiences", that
+  // produced two controls in one nav sharing one accessible name -- proven
+  // in a real browser in the review (`GALLERY | MENU | EXPERIENCES | ABOUT
+  // | STORIES | VISIT US | EXPERIENCES`). This is that same collision,
+  // pinned here so a future content edit that renames `pagesLabel` back
+  // fails immediately rather than waiting for someone to notice in Chromium
+  // again.
+  it("does not reuse the Experiences carousel link's own name -- the collision the pagesLabel rename fixed", () => {
+    renderNav(fixtureBundle);
+    const experiencesLink = copy.nav.links.find((l) => l.section === 'experiences');
+    if (!experiencesLink) {
+      throw new Error('Fixture assumption broken: no Experiences carousel entry in copy.nav.links');
+    }
+    const navLinks = screen.getByTestId('desktop-nav-links');
+    // Queried by ROLE, not by text: the carousel entry is an `<a>` and the
+    // disclosure is a `<button>`, so `getAllByText` alone can't distinguish
+    // "one shared name, two controls" from "one control, checked twice".
+    const matchingLinks = within(navLinks).queryAllByRole('link', { name: experiencesLink.label });
+    const matchingButtons = within(navLinks).queryAllByRole('button', { name: experiencesLink.label });
+    expect(matchingLinks).toHaveLength(1); // the carousel link itself, still there and still named
+    expect(matchingButtons).toHaveLength(0); // the disclosure must NOT share that name
   });
 
   // The hover path, isolated: a raw mouseenter on the group wrapper, with no
