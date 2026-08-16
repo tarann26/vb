@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import worker, {
   AUTHENTICATED_PATHS,
   AUTHENTICATED_UNLIMITED,
+  CACHEABLE_PATHS,
   RATE_POLICIES,
   WA_DAILY_CAP,
   type Env,
@@ -166,6 +167,16 @@ describe('security headers on every response', () => {
       env,
     );
     expect(response.headers.get('Cache-Control')).toBe('no-store');
+  });
+
+  // The one exemption to the blanket no-store, pinned in BOTH directions:
+  // the public read path is cacheable, and nothing else became cacheable
+  // with it.
+  it('leaves the public read path cacheable and everything else no-store', async () => {
+    const cacheable = await worker.fetch(new Request(`${SITE_ORIGIN}/api/published?path=awards.json`), env);
+    expect(cacheable.headers.get('Cache-Control')).not.toBe('no-store');
+    expect(cacheable.headers.get('X-Content-Type-Options')).toBe('nosniff');
+    expect([...CACHEABLE_PATHS]).toEqual(['/api/published']);
   });
 });
 

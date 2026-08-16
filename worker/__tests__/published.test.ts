@@ -1,0 +1,152 @@
+import { describe, expect, it } from 'vitest';
+import { CONTENT_SOURCE_HEADER, handlePublished, type PublishedEnv } from '../published';
+import { D1Store } from '../d1';
+import { asD1, FakeD1 } from './fakeD1';
+
+// A Map keyed on the cache key's URL, in the same spirit as fakeD1.ts: real
+// enough to prove the caching behaviour handlePublished depends on (a miss
+// populates it, a hit short-circuits D1, a new key from a version bump is a
+// miss again) without pulling in workerd's actual Cache API, which has no
+// runtime shape in this repo's jsdom test environment.
+class FakeCache {
+  store = new Map<string, Response>();
+  deleteCalls: string[] = [];
+
+  async match(key: Request): Promise<Response | undefined> {
+    const hit = this.store.get(key.url);
+    return hit ? hit.clone() : undefined;
+  }
+
+  async put(key: Request, response: Response): Promise<void> {
+    this.store.set(key.url, response.clone());
+  }
+
+  async delete(key: Request): Promise<boolean> {
+    this.deleteCalls.push(key.url);
+    return this.store.delete(key.url);
+  }
+}
+
+const PATH = 'src/content/awards.json';
+
+function cache(): FakeCache {
+  return new FakeCache();
+}
+
+function env(fake: FakeD1): PublishedEnv {
+  return { DB: asD1(fake) };
+}
+
+function publish(fake: FakeD1, content: string, publishId: string): Promise<{ sha: null }> {
+  return new D1Store(asD1(fake)).write([{ path: PATH, content, encoding: 'utf-8' as const }], 'seed', publishId);
+}
+
+function req(query = 'path=awards.json'): Request {
+  return new Request(`https://vb.aionxxxi.uk/api/published?${query}`);
+}
+
+describe('GET /api/published', () => {
+  it('serves from D1 on a miss and labels the source', async () => {
+    const fake = new FakeD1();
+    await publish(fake, '[{"id":"a"}]', 'p1');
+
+    const response = await handlePublished(req(), env(fake), cache() as unknown as Cache);
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe('[{"id":"a"}]');
+    expect(response.headers.get(CONTENT_SOURCE_HEADER)).toBe('d1');
+  });
+
+  it('serves from the cache on the second identical request', async () => {
+    const fake = new FakeD1();
+    await publish(fake, '[{"id":"a"}]', 'p1');
+    const c = cache();
+    const e = env(fake);
+
+    await handlePublished(req(), e, c as unknown as Cache);
+    // Reset AFTER the seeding write and the first (miss) read, so what
+    // remains below reflects only the second request.
+    fake.statements = [];
+
+    const second = await handlePublished(req(), e, c as unknown as Cache);
+
+    expect(second.headers.get(CONTENT_SOURCE_HEADER)).toBe('cache');
+    expect(await second.text()).toBe('[{"id":"a"}]');
+    // Only the version read happened -- the body was never re-read from D1.
+    expect(fake.statements).toEqual(['SELECT version FROM content WHERE path = ?']);
+  });
+
+  // The spec asks for this one by name: "publishes, then reads, and asserts
+  // the new value, not the cached one."
+  it('serves the new value after a publish, with no purge call anywhere', async () => {
+    const fake = new FakeD1();
+    await publish(fake, '[{"id":"a"}]', 'p1');
+    const c = cache();
+    const e = env(fake);
+
+    const first = await handlePublished(req(), e, c as unknown as Cache);
+    expect(first.headers.get(CONTENT_SOURCE_HEADER)).toBe('d1');
+
+    const stillCached = await handlePublished(req(), e, c as unknown as Cache);
+    expect(stillCached.headers.get(CONTENT_SOURCE_HEADER)).toBe('cache');
+
+    // A publish: version 1 -> 2.
+    await publish(fake, '[{"id":"b"}]', 'p2');
+
+    const afterPublish = await handlePublished(req(), e, c as unknown as Cache);
+    expect(afterPublish.headers.get(CONTENT_SOURCE_HEADER)).toBe('d1');
+    expect(await afterPublish.text()).toBe('[{"id":"b"}]');
+    expect(c.deleteCalls).toEqual([]);
+  });
+
+  // Also asked for by name: "forces a query failure and asserts the snapshot
+  // fallback serves." An always-on `failWith` rejects the VERY FIRST query
+  // handlePublished makes (`store.version`), so this exercises that
+  // fallback specifically, not the separate one guarding `store.read` below.
+  it('falls back to the compiled snapshot when the version read fails', async () => {
+    const fake = new FakeD1();
+    fake.failWith = 'D1_ERROR: no such table: content';
+
+    const response = await handlePublished(req(), env(fake), cache() as unknown as Cache);
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe('[]');
+    expect(response.headers.get(CONTENT_SOURCE_HEADER)).toBe('snapshot');
+  });
+
+  // handlePublished has a SECOND, independent try/catch: a cache miss whose
+  // body read (`store.read`) fails, after the version read that built the
+  // cache key already succeeded. A blanket `failWith` alone can never reach
+  // this -- version is always checked first -- so `failAfter` (fakeD1.ts)
+  // lets the version read through once and fails the read that follows it.
+  it('falls back to the compiled snapshot when the body read fails after a successful version read', async () => {
+    const fake = new FakeD1();
+    await publish(fake, '[{"id":"a"}]', 'p1');
+    fake.failAfter = 1;
+    fake.failWith = 'D1_ERROR: database is locked';
+
+    const response = await handlePublished(req(), env(fake), cache() as unknown as Cache);
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe('[]');
+    expect(response.headers.get(CONTENT_SOURCE_HEADER)).toBe('snapshot');
+  });
+
+  it('404s an unknown or non-public path rather than reading anything', async () => {
+    const fake = new FakeD1();
+    const e = env(fake);
+    const c = cache();
+
+    const unknown = await handlePublished(req('path=dishes.json'), e, c as unknown as Cache);
+    expect(unknown.status).toBe(404);
+
+    const traversal = await handlePublished(
+      req(`path=${encodeURIComponent('../../etc/passwd')}`),
+      e,
+      c as unknown as Cache,
+    );
+    expect(traversal.status).toBe(404);
+
+    expect(fake.statements).toEqual([]);
+  });
+});

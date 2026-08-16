@@ -23,6 +23,17 @@ export class FakeD1 {
   // Set to a message to make every subsequent call reject -- how the
   // snapshot-fallback tests force a query failure.
   failWith: string | null = null;
+  // Lets `failWith` reject only from the Nth call onward, rather than
+  // immediately. worker/published.ts's handlePublished makes two separate
+  // reads per request -- `store.version` first, then `store.read` on a
+  // cache miss -- each guarded by its own try/catch with its own fallback.
+  // failWith alone can only ever fail the FIRST of the two (version is
+  // always checked before read is ever reached), so a test that wants to
+  // prove the read()-specific fallback -- as opposed to the version-read one
+  // -- needs version() to succeed and read() to fail in the same request.
+  // Decremented on every call while positive; failWith takes effect once it
+  // reaches zero.
+  failAfter = 0;
   // Counts invocations of `batch`, including ones called with an empty
   // statement list. `statements` alone cannot tell a caller that skipped
   // `batch` entirely from one that called it with nothing to do -- an empty
@@ -39,14 +50,23 @@ export class FakeD1 {
 
   async batch(statements: FakeStatement[]): Promise<unknown[]> {
     this.batchCalls += 1;
-    if (this.failWith) throw new Error(this.failWith);
+    if (this.shouldFailNow()) throw new Error(this.failWith as string);
     const out: unknown[] = [];
     for (const statement of statements) out.push(await statement.run());
     return out;
   }
 
+  private shouldFailNow(): boolean {
+    if (!this.failWith) return false;
+    if (this.failAfter > 0) {
+      this.failAfter -= 1;
+      return false;
+    }
+    return true;
+  }
+
   execute(statement: FakeStatement): { changes: number; row?: unknown; rows?: unknown[] } {
-    if (this.failWith) throw new Error(this.failWith);
+    if (this.shouldFailNow()) throw new Error(this.failWith as string);
     this.statements.push(statement.sql);
     const sql = statement.sql;
     const args = statement.args;

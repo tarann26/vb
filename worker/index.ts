@@ -2,7 +2,7 @@
 // only thing routed to this Worker (see wrangler.toml); every path other
 // than /api/health, POST /api/login, POST /api/publish, POST /api/undo,
 // POST /api/upload, GET /api/build-status, GET /api/analytics,
-// GET /api/content and POST/GET /api/wa replies 404.
+// GET /api/content, GET /api/published and POST/GET /api/wa replies 404.
 //
 // This Worker has no `scheduled` export and wrangler.toml declares no cron
 // triggers: publishing is instantaneous. A commit lands, Cloudflare's own
@@ -37,6 +37,7 @@ import { todayInKolkata } from './date';
 import { WA_COUNTS_KV_KEY, readWaCounts } from './wa';
 import { storeFor, partitionByStore } from './store';
 import { D1ConflictError, D1Store } from './d1';
+import { handlePublished } from './published';
 
 // Grows as later tasks need more bindings -- only what this file actually
 // reads belongs here. GITHUB_OWNER/REPO/BRANCH/TOKEN come in via GitHubEnv
@@ -53,6 +54,23 @@ export interface Env extends GitHubEnv, PagesEnv, WebAnalyticsEnv {
   // Optional so an env that predates this var (a local `wrangler dev`, an
   // older test fixture) behaves exactly like today rather than throwing.
   CONTENT_STORE?: 'github' | 'd1';
+}
+
+// `caches.default` exists in workerd and does not exist in this repo's jsdom
+// test environment (see vitest.config.ts's own list of what is and is not
+// real here). Resolved once, here, so handlePublished takes a Cache as a
+// parameter and its tests can hand it a fake instead of monkey-patching a
+// global that only sometimes exists.
+function contentCache(): Cache {
+  const global = globalThis as { caches?: { default?: Cache } };
+  return (
+    global.caches?.default ??
+    ({
+      match: async () => undefined,
+      put: async () => undefined,
+      delete: async () => false,
+    } as unknown as Cache)
+  );
 }
 
 // TWO clocks, because one cannot express what a session actually needs.
@@ -380,9 +398,23 @@ function isCrossOriginWrite(request: Request): boolean {
   return origin !== null && origin !== siteOriginOf(request);
 }
 
-function withSecurityHeaders(response: Response): Response {
+// The one route in this Worker whose response is meant to be cached. Every
+// other response here says no-store for a good reason -- the reads exist
+// precisely because their answers change -- but this one is the public read
+// path, invalidated by a versioned cache key rather than by freshness, and
+// forcing no-store on it would defeat the entire mechanism AND make the
+// Cache API refuse to store it at all.
+//
+// Named as a set rather than an `if` inside withSecurityHeaders so the
+// exemption is a list somebody has to edit, the same posture
+// AUTHENTICATED_UNLIMITED takes: a second cacheable route added later is a
+// visible decision, not a condition that quietly grew an `||`.
+export const CACHEABLE_PATHS = new Set(['/api/published']);
+
+function withSecurityHeaders(response: Response, pathname: string): Response {
   const headers = new Headers(response.headers);
   for (const [name, value] of Object.entries(SECURITY_HEADERS)) {
+    if (name === 'Cache-Control' && CACHEABLE_PATHS.has(pathname)) continue;
     headers.set(name, value);
   }
   return new Response(response.body, {
@@ -1223,7 +1255,7 @@ export default {
   // for why that is here rather than in the four `json` helpers scattered
   // across this Worker's modules.
   async fetch(request: Request, env: Env): Promise<Response> {
-    return withSecurityHeaders(await route(request, env));
+    return withSecurityHeaders(await route(request, env), new URL(request.url).pathname);
   },
 };
 
@@ -1263,6 +1295,16 @@ async function route(request: Request, env: Env): Promise<Response> {
 
   if (url.pathname === '/api/login' && request.method === 'POST') {
     return handleLogin(request, env);
+  }
+
+  // Unauthenticated by design -- this is what the public homepage reads.
+  // Deliberately not rate-limited: it makes one D1 row read, spends no KV
+  // write, and the limiter's own bookkeeping IS a KV write against a
+  // 1,000/day namespace-wide cap (see RATE_POLICIES' own reasoning). The
+  // volumetric backstop is the WAF rule in docs/cloudflare-cutover.md, the
+  // same one GET /api/wa relies on.
+  if (url.pathname === '/api/published' && request.method === 'GET') {
+    return handlePublished(request, env, contentCache());
   }
 
   // Every authenticated route goes through withSlidingSession, which pushes
