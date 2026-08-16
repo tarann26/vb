@@ -34,6 +34,15 @@ export const CONTENT_FILES = [
   'copy.json',
   'sections.json',
   'pages.json',
+  // Phase 3, Task 2 (pulled forward): experiences.json is a real, committed
+  // file on the GitHub store, exactly like the ten files above it and
+  // unlike awards.json below -- see src/admin/content.ts's own comment on
+  // why the twelfth CONTENT_FILES entry is not the same kind of exception
+  // the eleventh is. Listed here, not carved out: a name missing from this
+  // array 404s (the route below), which is the correct fixture only for a
+  // file that genuinely does not exist yet, and experiences.json has existed
+  // since Task 2.
+  'experiences.json',
 ];
 
 // awards.json is deliberately NOT in the list above, and that is not the

@@ -176,6 +176,17 @@ function stubFetch(overrides: {
       // keeps seeing the same "nothing wrong" load outcome it did before
       // this file existed.
       if (url.includes('awards.json')) return overrides.awardsResponse ?? contentResponse([], 'sha-awards');
+      // Phase 3, Task 2 (pulled forward): the twelfth content file, joining
+      // CONTENT_FILES (and therefore EditMode's own blanket load effect)
+      // now that src/admin/content.ts registers it -- the same reason
+      // pages.json and awards.json each needed a branch here when THEY
+      // joined. `EditMode.tsx`'s own `buildBundle` still hands the
+      // `experiences` section a hardcoded `EMPTY_EXPERIENCES` rather than
+      // this fetch's data (real inline editing is Task 8's), so this
+      // response is never read for its content -- only for keeping the
+      // load effect itself from throwing "Could not load experiences.json"
+      // over every test in this file, none of which is about experiences.
+      if (url.includes('experiences.json')) return contentResponse([], 'sha-experiences');
       throw new Error(`EditMode.test.tsx: unexpected fetch to ${url}${init ? ` (${init.method ?? 'GET'})` : ''}`);
     }),
   );
@@ -517,6 +528,7 @@ describe('EditMode: a 401 mid-load does not unmount the page or lose what alread
         if (url.includes('story.json')) return contentResponse(STORY, 'sha-story');
         if (url.includes('copy.json')) return contentResponse(COPY, 'sha-copy');
         if (url.includes('pages.json')) return contentResponse([], 'sha-pages');
+        if (url.includes('experiences.json')) return contentResponse([], 'sha-experiences');
         if (url.includes('press.json')) {
           pressCalls += 1;
           return pressCalls === 1 ? unauthorizedResponse() : contentResponse(PRESS, 'sha-press-2');

@@ -34,6 +34,7 @@ import type {
   Section,
   Page,
   Award,
+  Experience,
 } from '../content/types';
 
 // The nine real files under src/content/ -- the same set validateContent
@@ -70,6 +71,12 @@ export const CONTENT_FILES = [
   // seam Task 5 built working: a tenth content file's storage moved, and the
   // dashboard did not need to know.
   'awards.json',
+  // Phase 3, Task 2: the twelfth entry, and back to a real
+  // `src/content/experiences.json` blob on `main` -- unlike awards.json, this
+  // one is on the GitHub store (see the Experience type's own comment in
+  // ../content/types for why), so it behaves like every file above it, not
+  // like awards.json.
+  'experiences.json',
 ] as const;
 
 export type ContentFileName = (typeof CONTENT_FILES)[number];
@@ -117,6 +124,7 @@ export const CONTENT_FILE_LABELS: Record<ContentFileName, string> = {
   'sections.json': 'What shows on the homepage',
   'pages.json': 'Pages',
   'awards.json': 'Awards',
+  'experiences.json': 'Experiences',
 };
 
 // Maps each content file to the shape its `content` field parses into.
@@ -134,6 +142,7 @@ export interface ContentTypeMap {
   'sections.json': Section[];
   'pages.json': Page[];
   'awards.json': Award[];
+  'experiences.json': Experience[];
 }
 
 export interface LoadedContent<T> {
