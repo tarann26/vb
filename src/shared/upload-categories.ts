@@ -1,4 +1,4 @@
-// The seven directories that exist under assets-source/ today, and the only
+// The eight directories that exist under assets-source/ today, and the only
 // `category` values POST /api/upload accepts. Shared by the Worker
 // (worker/upload.ts, which is the one place that actually enforces this)
 // and the browser (src/admin/PhotoField.tsx, Task 5, which needs to know
@@ -12,6 +12,6 @@
 // whose membership can only change by a code change -- never by whatever a
 // request happens to name -- is the same posture worker/github.ts's own
 // path allowlist takes, for the same reason.
-export const UPLOAD_CATEGORIES = ['atmosphere', 'food', 'hero', 'mocktails', 'our_story', 'press', 'team'] as const;
+export const UPLOAD_CATEGORIES = ['atmosphere', 'food', 'hero', 'mocktails', 'our_story', 'press', 'team', 'experiences'] as const;
 
 export type UploadCategory = (typeof UPLOAD_CATEGORIES)[number];

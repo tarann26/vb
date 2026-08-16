@@ -21,6 +21,7 @@
 // it is the more faithful environment for what this code actually is.
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { handleUpload, uploadPath, type UploadEnv } from '../upload';
+import { UPLOAD_CATEGORIES } from '../../src/shared/upload-categories';
 import { signToken } from '../auth';
 import { derivativePath } from '../../src/shared/derivative-path';
 import { envWith, makeGitHubStub, type GitHubStub } from './githubStub';
@@ -200,6 +201,11 @@ describe('uploadPath', () => {
     expect(await uploadPath('hero', enc('x'), 'avif')).toMatch(/\.avif$/);
     expect(await uploadPath('hero', enc('x'), 'tiff')).toMatch(/\.tiff$/);
     expect(await uploadPath('hero', enc('x'), 'gif')).toMatch(/\.gif$/);
+  });
+
+  it('accepts the experiences category and refuses one that is not on the list', () => {
+    expect(UPLOAD_CATEGORIES).toContain('experiences');
+    expect(UPLOAD_CATEGORIES).not.toContain('retail');
   });
 });
 
