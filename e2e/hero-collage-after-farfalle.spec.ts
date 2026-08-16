@@ -50,6 +50,11 @@ for (const [label, width, height] of [['desktop', 1280, 900], ['mobile', 390, 84
     const target = page.locator('[data-collage-photo]');
 
     await expect(target).toHaveCount(PHOTO_COUNT);
+    // Non-vacuous: a collage collapsed to a single photo would make the walk
+    // below iterate once (or the whole test trivially true), and a boxes
+    // loop that silently found nothing wrong would not prove anything was
+    // checked.
+    expect(PHOTO_COUNT).toBeGreaterThan(1);
 
     const boxes = await target.evaluateAll((els, containerSelector) => {
       const container = document.querySelector(containerSelector);

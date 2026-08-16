@@ -37,7 +37,19 @@ export function heroCollageTree(): CollageNode {
 }
 
 export function heroCollagePhotoCount(): number {
-  return countCollagePhotos(heroCollageTree());
+  const count = countCollagePhotos(heroCollageTree());
+  // A floor, not just a derived number: a tree reduced to a single photo
+  // makes GAP_COUNT (below) zero and PHOTO_COUNT one, and every spec built
+  // on these two counts loops zero times and passes having checked nothing
+  // -- collage-divider.spec.ts's dividers, collage-reachable.spec.ts's
+  // keyboard walk, and hero-collage-after-farfalle.spec.ts's visibility walk
+  // all resolve true on an empty collage. This is the one place all of them
+  // read the count from, so it is the one place a floor covers all of them.
+  expect(
+    count,
+    'the hero collage has collapsed to a single photo -- every spec derived from this count would loop zero times and pass vacuously',
+  ).toBeGreaterThan(1);
+  return count;
 }
 
 // Every divider handle the committed tree renders -- one per gap, and a split

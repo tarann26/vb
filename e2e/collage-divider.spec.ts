@@ -72,8 +72,10 @@ test.describe('the collage’s dividers at 1440px', () => {
   // GAP_COUNT is derived (heroCollageGapCount, collage-page.ts): one gap per
   // split below its own children count minus one, summed over the whole
   // committed tree, so it stays right however many splits an add or a remove
-  // leaves behind. Asserted as a number, not just "not empty", so a walk that
-  // silently found none would not pass with no assertions run.
+  // leaves behind. heroCollagePhotoCount() (PHOTO_COUNT, above) floors the
+  // photo count above 1, and any tree with more than one photo has at least
+  // one split -- so GAP_COUNT here is guaranteed nonzero, and a walk that
+  // silently found no dividers could not pass.
   test('every handle resolves to itself under document.elementFromPoint', async ({ page }) => {
     await openCollage(page, '/edit');
     const ids = await dividerIds(page);
