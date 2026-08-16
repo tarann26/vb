@@ -6,42 +6,17 @@
 // query fails or times out, worker/published.ts serves this instead. A
 // database outage costs freshness; it never costs availability.
 //
-// PLACEHOLDER, not yet a real generation: D1 has not been seeded (Task 12
-// does that, and is the first time scripts/build-snapshot.mjs actually runs
-// against a live database). Until then, this file is written BY HAND, in the
-// exact shape the generator itself produces, from src/test/awards-seed.json
-// -- the initial Awards content a human loads into D1 in Task 12. `version:
-// 1` below matches what D1Store.write assigns the first time a path is ever
-// written (`(prior?.version ?? 0) + 1` with no prior row -- see worker/d1.ts).
-// The moment Task 12 seeds the real database and runs the generator for
-// real, this whole file is overwritten and this paragraph goes with it.
-//
-// For a public file that also lives as a real document in src/content/, this
-// would hold a build-time copy of that document's actual last-known-good
-// text. `awards.json` cannot be that: it is a D1_ONLY_PATH (worker/store.ts)
-// and has never been a file in this repository -- there is nothing under
-// src/content/ to copy from. That is also why the generator's source is D1
-// (`SELECT path, body, version FROM content`), not a walk of
-// src/content/*.json: that walk finds nothing for `awards.json` and would
-// silently leave whatever is hand-written here as the only entry ever
-// refreshed.
-//
 // Each entry also carries the `version` D1 held for that path at generation
 // time -- the same monotonic counter worker/d1.ts bumps on every write and
 // worker/published.ts's own cache key is built from. D1Store.write never
 // reuses a version number for different content and never decreases it (an
 // undo is itself a write through the same guard), so a version match against
-// the live database is proof the body is still identical. That is the
-// staleness signal this file was missing before this task: previously there
-// was nothing here that let a later check (Task 12) tell a snapshot that
-// still matches what's serving from one that has quietly gone stale --
-// once real awards exist and D1 fails, an out-of-date snapshot would still
-// answer 200, ETag-less and cache-friendly, and read to a visitor as "no
-// awards yet" rather than as a failure. `snapshotVersionFor`, below, is what
-// lets that be checked instead of merely hoped about: compare it against
-// `D1Store.version(path)` on the live database, without pulling or diffing
-// the body at all.
-export const SNAPSHOT_BUILT_AT = '2026-08-16T00:00:00.000Z';
+// the live database is proof the body is still identical -- which is what
+// lets a later check compare a cheap single-column read against this
+// snapshot instead of pulling and diffing the whole body, and tell a
+// snapshot that still matches what's serving from one that has quietly gone
+// stale.
+export const SNAPSHOT_BUILT_AT = "2026-08-16T06:29:37.568Z";
 
 interface SnapshotEntry {
   body: string;
@@ -49,24 +24,12 @@ interface SnapshotEntry {
 }
 
 const SNAPSHOT: Record<string, SnapshotEntry> = {
-  // Task 9 review: the field names below used to be `awardingBody` and a
-  // numeric `year`, matching nothing -- Task 5 hand-wrote this placeholder
-  // before the Award shape (src/content/types.ts) existed at all. Now that
-  // Task 9 has designed and validated that shape (`awardedBy`, a four-digit
-  // `year` STRING, no `image` at all rather than an always-null one -- Award
-  // ['image'] is optional, never null), this placeholder is rewritten to
-  // match it exactly, the same way src/test/awards-seed.json is -- see this
-  // file's own header comment for why the two must stay identical.
-  'awards.json': {
-    body: '[{"id":"award-1","title":"Placeholder Award Title","awardedBy":"Placeholder Awarding Body","year":"2026"},{"id":"award-2","title":"Placeholder Award Title","awardedBy":"Placeholder Awarding Body","year":"2025"},{"id":"award-3","title":"Placeholder Award Title","awardedBy":"Placeholder Awarding Body","year":"2024"}]',
-    version: 1,
-  },
+  "awards.json": {
+    "body": "[{\"id\":\"award-1\",\"title\":\"Placeholder Award Title\",\"awardedBy\":\"Placeholder Awarding Body\",\"year\":\"2026\"}]",
+    "version": 3
+  }
 };
 
-// `hasOwnProperty.call`, not `in` -- the same reason `unknownKeys` in
-// src/content/guards.ts gives: a plain object literal answers `true` for
-// `'toString' in SNAPSHOT`, and a request for `?path=toString` would
-// otherwise return a function's source as content.
 export function snapshotFor(file: string): string | null {
   return Object.prototype.hasOwnProperty.call(SNAPSHOT, file) ? SNAPSHOT[file].body : null;
 }

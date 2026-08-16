@@ -5,9 +5,10 @@ import { snapshotFor } from '../snapshot';
 import { asD1, FakeD1 } from './fakeD1';
 
 // The real compiled snapshot's body, not a hardcoded '[]' -- worker/snapshot.ts
-// (Task 8) now compiles the seed content in src/test/awards-seed.json rather
-// than an empty list, so these two assertions read the same value the module
-// under test actually returns instead of pinning stale content by hand.
+// (Task 8) compiles real content rather than an empty list (the seed
+// placeholder pre-Task-12; the live database's own content from Task 12
+// onward), so these two assertions read the same value the module under test
+// actually returns instead of pinning stale content by hand.
 const SNAPSHOT_BODY = snapshotFor('awards.json')!;
 
 // A Map keyed on the cache key's URL, in the same spirit as fakeD1.ts: real

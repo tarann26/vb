@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
 import { SNAPSHOT_BUILT_AT, snapshotFor, snapshotVersionFor } from '../snapshot';
 import { validateContent } from '../../src/content/validate';
 
@@ -40,14 +39,20 @@ describe('the compiled snapshot', () => {
     expect(version!).toBeGreaterThan(0);
   });
 
-  // The hand-written placeholder (this task's Step 3) is supposed to be the
-  // seed file in "the exact shape the generator produces" -- if someone edits
-  // src/test/awards-seed.json without updating worker/snapshot.ts to match,
-  // this is what catches the drift, since nothing else ties the two files
-  // together.
-  it('matches the committed seed exactly, until Task 12 regenerates it from D1', () => {
-    const seed = JSON.parse(readFileSync('src/test/awards-seed.json', 'utf8'));
-    const snapshot = JSON.parse(snapshotFor('awards.json')!);
-    expect(snapshot).toEqual(seed);
-  });
+  // Retired by Task 12, which is the boundary this test's own former name
+  // named: this file used to assert the compiled snapshot matched
+  // src/test/awards-seed.json BYTE FOR BYTE, so an edit to the hand-written
+  // placeholder in worker/snapshot.ts (pre-Task-12, before the generator had
+  // ever run against a live database) couldn't silently drift from the seed
+  // it was supposed to mirror. Task 12 ran `node scripts/build-snapshot.mjs`
+  // against the real, now-seeded database, and worker/snapshot.ts stopped
+  // being a hand-maintained mirror of the seed fixture the moment that
+  // happened -- it is real content now, written through the dashboard's own
+  // code path (D1Store.write, validateContent), and it will keep changing
+  // every time she publishes an edit. An exact-equality assertion against a
+  // fixture that is never touched again would fail on the very first real
+  // edit, for a reason that has nothing to do with a broken snapshot. The
+  // tests above already cover what still matters post-migration: the
+  // snapshot holds a document, that document parses and validates, and its
+  // version is a real, provable value rather than a hand-typed one.
 });

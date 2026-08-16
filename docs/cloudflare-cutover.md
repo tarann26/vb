@@ -882,3 +882,75 @@ matches on prefix only, deliberately: Cloudflare's older tokens are a bare
 would flag base64 fixtures, content hashes and much of the binary content the
 scanner reads. A check that cries wolf gets switched off, so the bare form is
 a documented blind spot rather than a noisy rule.
+
+## 19. Phase 2: the content database (D1), R2, and the `CONTENT_STORE` switch
+
+Phase 2 added a second place content can live. This section records what is
+actually bound and what is actually in it, as of Task 12 — read this before
+assuming either store's state from the code alone.
+
+**The D1 database.** `via-bianca-content`, id `7ec61770-4fb1-4458-9c34-46b92bb9702c`,
+bound as `env.DB` (`wrangler.toml`'s `[[d1_databases]]`). Free tier: 5,000,000
+rows read/day, 100,000 rows written/day, 5 GB/account, 500 MB/database, 10
+databases/account. It holds three tables — `content`, `revisions`,
+`content_meta` — created by the migration below, plus SQLite's own
+`sqlite_sequence`. As of Task 12, `content` holds one row:
+`src/content/awards.json`, the Phase 2 pilot file, seeded with one award and
+carried through one edit and one undo to prove the write path before this
+Worker was ever deployed with D1 support live. `revisions` holds one row: the
+edited body that undo left restorable, the same way any ordinary undo would.
+`content_meta` is empty — nothing writes to it yet; it exists for Phase 5 to
+use without a second migration.
+
+`src/content/awards.json` lives in D1 regardless of the switch below
+(`worker/store.ts`'s `D1_ONLY_PATHS`) — it has never been a file in this
+repository and never will be. Every other content file still reads from and
+writes to GitHub exactly as it did before Phase 2, until the switch flips.
+
+**Rebuilding the database, if it is ever dropped or recreated.** Every
+statement in the migration is `CREATE ... IF NOT EXISTS`, so re-running it is
+always safe — on a fresh database or an existing one:
+
+```bash
+npx wrangler d1 execute via-bianca-content --remote --file=worker/migrations/0001_content.sql
+```
+
+Confirmed on this database: a second run reports 0 rows read and 0 rows
+written, against 12 rows written on the first run — the idempotence the file
+depends on, not merely claimed by its own comment.
+
+**R2 is NOT bound, and there is no bucket.** This corrects an assumption an
+earlier draft of the Phase 2 plan made — `wrangler.toml` has no
+`[[r2_buckets]]` section, `worker/index.ts`'s `Env` declares no `R2` binding,
+and nothing under `worker/` reads `env.R2`. There is no bucket name to record
+because none was created: `wrangler r2 bucket create via-bianca-assets`
+returned Cloudflare error code 10042, "Please enable R2 through the Cloudflare
+Dashboard" — that activation can require billing details, and the standing
+authorization does not cover adding a billable prerequisite without the
+owner's approval. `wrangler.toml`'s own comment on this, next to the D1
+binding, is the fuller version of this paragraph.
+
+R2 was going to exist for the image derivative pipeline the spec describes as
+running "in the Worker on upload" — impossible in workerd, since
+`scripts/images.mjs` loads `sharp`'s native binding at module scope and
+workerd cannot execute native code. Three options remain, undecided, and the
+decision is owed before Phase 3 (which is also where R2's billing activation
+would need to happen, bundled with whichever option is chosen):
+
+1. Generate derivatives at build time, same as today, and upload the results
+   to R2 instead of shipping them in `public/`.
+2. Upload originals as-is and resize in the browser before the request.
+3. Buy Cloudflare Images and use its transform pipeline instead of `sharp`.
+
+**The `CONTENT_STORE` switch.** `wrangler.toml`'s `[vars]`, currently
+`CONTENT_STORE = "github"` — unset or `"github"` is the default and means
+every content file that exists today (everything except `awards.json`) reads
+from and writes to GitHub, exactly as before Phase 2 (`worker/store.ts`'s
+`storeFor`). Setting it to `"d1"` moves every one of those files to D1 at
+once, for both reads and writes — there is no per-file opt-in. Flipping it is
+one `[vars]` edit plus a redeploy (`npx wrangler deploy`); flipping it back to
+`"github"` and redeploying again is the rollback, and it is exact — GitHub
+was never stopped being written to for those files while `CONTENT_STORE` was
+unset, so nothing needs reconciling on the way back. What does not roll back
+automatically: any publish made while `CONTENT_STORE = "d1"` was live exists
+only in D1, and reverting the switch does not copy it to GitHub.
