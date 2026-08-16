@@ -134,6 +134,26 @@ import { AppRoutes } from '../App';
 // Membership) link to real, enabled pages and render as a plain `<a>`; the
 // other two (Gifting, Retail) carry no link and render as a static `<div>`
 // with a "Coming Soon" stamp.
+//
+// Phase 3, Task 5: 52109 -> 51667 (-442 bytes). The nav dropdown gives way to
+// the carousel -- a content edit (pages.json's four pages turned `inNav:
+// false`, copy.json gained an "Experiences" section link), not a code
+// change to NavBar.tsx, but the rendered nav is exactly what this test
+// measures, so the content edit still moves it. Two changes, netted:
+//
+//   -805  the disclosure `<div class="relative"><button ...>Experiences
+//         <svg ...chevron-down.../></button></div>` no longer renders at
+//         all -- `grouped` (NavBar.tsx) is false once no page carries
+//         `inNav`, and this measurement runs before any hover/click ever
+//         opens it, so the four page links it used to reveal were never in
+//         this count either, before or after.
+//   +363  one new flat `<a href="#experiences" class="...">Experiences</a>`,
+//         copy.json's new nav.links entry, rendered as a section anchor
+//         between Menu and About like every other section link.
+//
+// Measured directly, both branches, via `container.querySelector('[data-
+// testid="desktop-nav-links"]').innerHTML` before and after this task's
+// content edit, to attribute the delta rather than assume it.
 describe('homepage byte count', () => {
   it('the public homepage is unchanged', () => {
     const { container } = render(
@@ -141,6 +161,6 @@ describe('homepage byte count', () => {
         <AppRoutes />
       </MemoryRouter>,
     );
-    expect(new TextEncoder().encode(container.innerHTML).length).toBe(52109);
+    expect(new TextEncoder().encode(container.innerHTML).length).toBe(51667);
   });
 });

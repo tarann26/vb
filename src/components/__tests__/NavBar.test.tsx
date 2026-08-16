@@ -3,7 +3,9 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import Navbar from '../NavBar';
-import { copy, pages, sections } from '../../content';
+import { copy, sections } from '../../content';
+import { ContentProvider, defaultBundle, type ContentBundle } from '../../content/ContentContext';
+import type { Page } from '../../content/types';
 
 // Wrapped in a router because the nav now renders a real <Link> for every
 // page with `inNav && enabled` (NavBar.tsx's own `pageEntries`), and a Link
@@ -11,11 +13,23 @@ import { copy, pages, sections } from '../../content';
 // to render <Navbar/> bare, which worked only while pages.json was empty --
 // the moment the first page reached the nav, all four cases here died on a
 // router error rather than on anything about the nav itself.
-function renderNav() {
+//
+// `bundle` is optional: most tests below want the real, committed content
+// (no provider mounted, so `useContent()` falls back to `defaultBundle` --
+// see ContentContext.ts). The pages-disclosure block wants an EXPLICIT
+// fixture instead (Task 5 of Phase 3, "the nav dropdown gives way to the
+// carousel"): pages.json's own four `inNav` pages were retired in favour of
+// the Experiences carousel, so the real content no longer has two or more
+// `inNav` pages to exercise the grouping mechanism with. The mechanism
+// itself -- GROUP_PAGES_FROM, the open/click/hover/keyboard/Escape
+// behaviour -- is still real, working code that a future page may rejoin at
+// any time from the dashboard, so it keeps its own tests, now against a
+// fixture that states its two-page assumption explicitly instead of
+// borrowing it from content that may drift.
+function renderNav(bundle?: ContentBundle) {
+  const ui = <Navbar />;
   return render(
-    <MemoryRouter>
-      <Navbar />
-    </MemoryRouter>,
+    <MemoryRouter>{bundle ? <ContentProvider value={bundle}>{ui}</ContentProvider> : ui}</MemoryRouter>,
   );
 }
 
@@ -106,23 +120,46 @@ describe('Navbar', () => {
 // claim worth pinning: the label stops being a contentEditable, and the
 // button keeps opening by pointer AND by keyboard, and Escape keeps closing
 // it.
+//
+// Phase 3, Task 5: pages.json's own four `inNav` pages were retired in
+// favour of the Experiences carousel (a content edit -- see that task's own
+// commit message), so the real, committed content no longer has two or more
+// `inNav` pages to drive this control with. The control itself is still
+// real, working code -- NavBar.tsx was not touched, and the owner can bring
+// the dropdown back from the dashboard by switching "Show in menu" on for
+// two or more pages -- so it keeps its own coverage here, now against an
+// EXPLICIT two-page fixture that states its own assumption instead of
+// borrowing it from content that has since moved on. This is what keeps the
+// mechanism's tests from going red (or, worse, silently vacuous) the moment
+// a content decision like this one changes what pages.json happens to say
+// today.
 describe("Navbar's pages disclosure", () => {
-  // Not vacuous by construction: the disclosure only exists once two or
-  // more pages carry `inNav && enabled` (NavBar.tsx's own GROUP_PAGES_FROM).
-  // Read off the real content rather than assumed, so if pages.json ever
-  // drops below that this fails HERE, naming the reason, instead of every
-  // test below failing on a missing button.
-  const navPages = pages.filter((page) => page.inNav && page.enabled);
-  if (navPages.length < 2) {
-    throw new Error('Fixture assumption broken: fewer than two pages.json entries are in the nav, so no disclosure renders');
-  }
+  const fixturePages: Page[] = [
+    {
+      slug: 'fixture-alpha',
+      name: 'Fixture Alpha',
+      inNav: true,
+      enabled: true,
+      seo: { title: 'Fixture Alpha', description: 'A fixture page for the pages-disclosure tests.' },
+      sections: [],
+    },
+    {
+      slug: 'fixture-beta',
+      name: 'Fixture Beta',
+      inNav: true,
+      enabled: true,
+      seo: { title: 'Fixture Beta', description: 'A fixture page for the pages-disclosure tests.' },
+      sections: [],
+    },
+  ];
+  const fixtureBundle: ContentBundle = { ...defaultBundle, pages: fixturePages };
 
   function disclosure(): HTMLElement {
     return screen.getByRole('button', { name: copy.nav.pagesLabel });
   }
 
   it("shows the label from copy.json as the button's own name", () => {
-    renderNav();
+    renderNav(fixtureBundle);
     expect(disclosure()).toHaveAttribute('aria-expanded', 'false');
     expect(disclosure()).toHaveAttribute('aria-haspopup', 'true');
   });
@@ -132,7 +169,7 @@ describe("Navbar's pages disclosure", () => {
   // Mutation this guards: deleting `onMouseEnter` from that wrapper --
   // confirmed red here and green in every other test in this block.
   it('opens on hover', () => {
-    renderNav();
+    renderNav(fixtureBundle);
     fireEvent.mouseEnter(disclosure().parentElement as HTMLElement);
     expect(disclosure()).toHaveAttribute('aria-expanded', 'true');
   });
@@ -144,12 +181,12 @@ describe("Navbar's pages disclosure", () => {
   // stays green, which is exactly the split that made this defect invisible
   // for as long as it existed.
   it('opens on a click alone, with no hover first', () => {
-    renderNav();
+    renderNav(fixtureBundle);
     fireEvent.click(disclosure());
     expect(disclosure()).toHaveAttribute('aria-expanded', 'true');
 
     const group = screen.getByTestId('desktop-nav-group');
-    navPages.forEach((page) => {
+    fixturePages.forEach((page) => {
       expect(within(group).getByRole('link', { name: page.name })).toHaveAttribute('href', `/${page.slug}`);
     });
   });
@@ -168,7 +205,7 @@ describe("Navbar's pages disclosure", () => {
   // exist separately from either.
   it('stays open through a real hover-then-click interaction (a tap produces exactly this)', async () => {
     const user = userEvent.setup();
-    renderNav();
+    renderNav(fixtureBundle);
     await user.click(disclosure());
     expect(disclosure()).toHaveAttribute('aria-expanded', 'true');
     expect(screen.getByTestId('desktop-nav-group')).toBeInTheDocument();
@@ -180,7 +217,7 @@ describe("Navbar's pages disclosure", () => {
   // chevron beside it.
   it('opens from the keyboard, with the label itself as the focused control', async () => {
     const user = userEvent.setup();
-    renderNav();
+    renderNav(fixtureBundle);
     disclosure().focus();
     expect(document.activeElement).toBe(disclosure());
     await user.keyboard('{Enter}');
@@ -191,11 +228,32 @@ describe("Navbar's pages disclosure", () => {
   // `setIsGroupOpen(false)` (NavBar.tsx's Escape effect) -- confirmed red.
   it('closes on Escape', async () => {
     const user = userEvent.setup();
-    renderNav();
+    renderNav(fixtureBundle);
     fireEvent.click(disclosure());
     expect(disclosure()).toHaveAttribute('aria-expanded', 'true');
     await user.keyboard('{Escape}');
     expect(disclosure()).toHaveAttribute('aria-expanded', 'false');
     expect(screen.queryByTestId('desktop-nav-group')).not.toBeInTheDocument();
+  });
+});
+
+// The other half of Task 5's split (see the describe block above for the
+// full argument): a test that only exercised the fixture would never notice
+// if the SHIPPED site's nav actually changed -- it would go green forever
+// even if pages.json still carried its four `inNav` pages. This describes
+// the real, committed content instead, with no provider mounted (so
+// `renderNav()` falls back to `defaultBundle`, the same bundle the public
+// site renders from).
+describe("Navbar against the real, committed content", () => {
+  it('has no pages disclosure, now that no page in pages.json carries inNav', () => {
+    renderNav();
+    expect(screen.queryByRole('button', { name: copy.nav.pagesLabel })).not.toBeInTheDocument();
+  });
+
+  it('offers Experiences as a plain section link pointing at the carousel anchor', () => {
+    renderNav();
+    const desktopLinks = screen.getByTestId('desktop-nav-links');
+    const link = within(desktopLinks).getByRole('link', { name: /experiences/i });
+    expect(link).toHaveAttribute('href', '#experiences');
   });
 });

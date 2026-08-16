@@ -2,7 +2,7 @@
   {
     "slug": "catering",
     "name": "Catering",
-    "inNav": true,
+    "inNav": false,
     "enabled": true,
     "seo": {
       "title": "Catering | Via Bianca",
@@ -42,7 +42,7 @@
   {
     "slug": "cheeseboards",
     "name": "Cheeseboards",
-    "inNav": true,
+    "inNav": false,
     "enabled": true,
     "seo": {
       "title": "Cheeseboards | Via Bianca",
@@ -74,7 +74,7 @@
   {
     "slug": "cooking-class",
     "name": "Cooking Class",
-    "inNav": true,
+    "inNav": false,
     "enabled": true,
     "seo": {
       "title": "Cooking Class for Little Chefs | Via Bianca",
@@ -126,7 +126,7 @@
   {
     "slug": "membership",
     "name": "Membership",
-    "inNav": true,
+    "inNav": false,
     "enabled": true,
     "seo": {
       "title": "Membership | Via Bianca",

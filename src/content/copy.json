@@ -13,6 +13,11 @@
         "section": "food"
       },
       {
+        "href": "#experiences",
+        "label": "Experiences",
+        "section": "experiences"
+      },
+      {
         "href": "#our-story",
         "label": "About",
         "section": "ourStory"

@@ -3,7 +3,7 @@ import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import type { ImgHTMLAttributes } from 'react';
 import { defaultBundle, ContentProvider, type ContentBundle } from '../../content/ContentContext';
-import type { Copy } from '../../content/types';
+import type { Copy, Page } from '../../content/types';
 import { findCollagePhoto } from '../../content/collage';
 import { AppRoutes } from '../../App';
 import { COPY_FIELDS } from '../fields';
@@ -462,10 +462,45 @@ describe('the real element-substitution boundary: renderText returning actual el
 // string either way, so a test on the default render could never tell the
 // two apart. Same shape, and same reason, as the site.name/site.tagline
 // block just below.
+//
+// Phase 3, Task 5 retired pages.json's own four `inNav` pages in favour of
+// the Experiences carousel, so the real, committed content no longer puts
+// two or more pages in the nav and the disclosure this block is about does
+// not render from `defaultBundle.pages` alone any more. The claim under
+// test -- that THIS control's label carries no edit affordance -- has
+// nothing to do with which pages happen to be in the nav today, so
+// `renderEditing` overrides just `pages` with an explicit two-page fixture
+// (the same fixture shape src/components/__tests__/NavBar.test.tsx uses for
+// the same reason) on top of the real editing bundle, so the disclosure is
+// still on screen to make the assertion non-vacuous.
 describe('nav.pagesLabel renders with no edit affordance, even under a real editing bundle', () => {
-  function renderEditing(route: string) {
+  const fixturePages: Page[] = [
+    {
+      slug: 'fixture-alpha',
+      name: 'Fixture Alpha',
+      inNav: true,
+      enabled: true,
+      seo: { title: 'Fixture Alpha', description: 'A fixture page for the nav.pagesLabel tests.' },
+      sections: [],
+    },
+    {
+      slug: 'fixture-beta',
+      name: 'Fixture Beta',
+      inNav: true,
+      enabled: true,
+      seo: { title: 'Fixture Beta', description: 'A fixture page for the nav.pagesLabel tests.' },
+      sections: [],
+    },
+  ];
+
+  // `pages` defaults to the real, committed list -- the second test below
+  // (routes over every real page) relies on that default unchanged. Only the
+  // first test, which needs the disclosure actually on screen, passes the
+  // fixture explicitly.
+  function renderEditing(route: string, pages: Page[] = defaultBundle.pages) {
     const bundle: ContentBundle = {
       ...defaultBundle,
+      pages,
       renderText: (path, value) => <EditableText path={path} value={value} onCommit={() => {}} />,
     };
     return render(
@@ -481,7 +516,7 @@ describe('nav.pagesLabel renders with no edit affordance, even under a real edit
   // `content.renderText('nav.pagesLabel', copy.nav.pagesLabel)` in
   // NavBar.tsx -- confirmed red.
   it('the pages disclosure shows the label as plain text, with no contentEditable on it or inside it', () => {
-    const { container } = renderEditing('/');
+    const { container } = renderEditing('/', fixturePages);
 
     // Non-vacuous twice over. First: the disclosure really is on screen at
     // all (it only renders once two or more pages are in the nav), so this

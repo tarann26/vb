@@ -86,3 +86,20 @@ test('clicking a linked card navigates to its page', async ({ page }) => {
   await expect(page).toHaveURL(/\/catering$/);
   await expect(page.getByRole('heading', { name: /catering/i }).first()).toBeVisible();
 });
+
+test('the nav offers Experiences as a section link, not a dropdown', async ({ page }) => {
+  // The file's own beforeEach scrolls to #experiences for the six tests
+  // above, which is exactly the scroll-down NavBar.tsx's own `showNavbar`
+  // state treats as a reason to hide the bar (`opacity-0 -translate-y-full`
+  // once `y > 100` and still increasing). Scrolled back to the top before
+  // this test's own assertions run, so the nav is the thing actually on
+  // screen when its link gets clicked -- not fighting the same auto-hide
+  // behaviour the real site uses on scroll.
+  await page.evaluate(() => window.scrollTo(0, 0));
+  const nav = page.getByTestId('desktop-nav-links');
+  await expect(nav.getByRole('button', { name: /experiences/i })).toHaveCount(0);
+  const link = nav.getByRole('link', { name: /experiences/i });
+  await expect(link).toHaveAttribute('href', '#experiences');
+  await link.click();
+  await expect(page.locator('#experiences')).toBeInViewport();
+});
