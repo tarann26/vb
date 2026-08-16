@@ -184,6 +184,13 @@ import { AppRoutes } from '../App';
 // a change would bust for every returning visitor. 198 bytes of repeated
 // HTML for 477 bytes of new CSS and a build that exits 0 is not a close
 // call, but it should be a recorded one.
+//
+// Plan 4, Task 2: 51865 -> 52355 (+490 bytes). The About section's chef
+// byline -- a portrait `<img>` plus her name and role -- is new markup below
+// the six paragraphs, built entirely from utility classes already emitted
+// in the stylesheet (see OurStory.tsx's comment on the byline element), so
+// this delta is pure HTML with no accompanying CSS change: `dist/assets/
+// index-*.css` stays 38555 bytes, byte-identical to `main`.
 describe('homepage byte count', () => {
   it('the public homepage is unchanged', () => {
     const { container } = render(
@@ -191,6 +198,6 @@ describe('homepage byte count', () => {
         <AppRoutes />
       </MemoryRouter>,
     );
-    expect(new TextEncoder().encode(container.innerHTML).length).toBe(51865);
+    expect(new TextEncoder().encode(container.innerHTML).length).toBe(52355);
   });
 });
