@@ -51,8 +51,8 @@ export interface NavbarProps {
 // PAGE link takes you somewhere else entirely. That is a real semantic
 // split, not an arbitrary tidy-up, so the nav renders it -- five section
 // anchors stay flat, and every page collapses under one word. It also
-// scales without maintenance: when breads-and-dips and who-we-supply are
-// switched on they join the group by themselves, with no list to update.
+// scales without maintenance: the next page pages.json gains joins the
+// group by itself, with no list here to update.
 //
 // Below this many pages, a disclosure button costs more than it saves (a
 // menu that opens to reveal one item is worse than the item), so the pages

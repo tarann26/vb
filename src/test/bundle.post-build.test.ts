@@ -528,11 +528,11 @@ describe('dist/assets/ keeps admin code out of the entry chunk', () => {
 // tailwind.config.js (`@keyframes nav-in` plus `.animate-nav-in`), the
 // animated underline every nav link now carries (eleven `.after:*` rules
 // plus `.origin-left`, `.hover:after:scale-x-100`,
-// `.focus-visible:after:scale-x-100`, `.hover:text-brand`,
+// `.focus-visible:after:scale-x-100`, `.hover:text-ink`,
 // `.focus-visible:text-ink`), and the bar's scrolled/unscrolled border
 // swap (`.border-b`, `.border-t-2`, `.border-brand/15`,
 // `.border-brand/20`, `.border-transparent`, replacing
-// `.bg-transparent` and `.shadow-none`; `.hover:text-brand`,
+// `.bg-transparent` and `.shadow-none`; `.hover:text-ink`,
 // `.border-brand/15` and `.border-brand/20` are this commit's own rules
 // named by their current tokens -- the palette rename came later, so what
 // 68a70ec actually shipped for these three was arbitrary-hex utilities, not

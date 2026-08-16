@@ -8,11 +8,13 @@ import { pages, assertPages } from '../index';
 // It was not, in the end: four of Phase C's six business lines (catering,
 // cheeseboards, the Sunday cooking class and the membership booklet) had
 // complete detail already, and the owner asked for each to be its OWN page
-// reached from the nav rather than another block on the homepage. So the
-// file now carries six real pages -- four live and in the nav, two
-// (breads-and-dips, who-we-supply) `enabled: false` because their lists are
-// still outstanding, which is the same "disabled by construction" posture
-// an empty file had.
+// reached from the nav rather than another block on the homepage. The other
+// two (breads-and-dips, who-we-supply) briefly existed here too, as
+// `enabled: false` stubs while their lists were still outstanding -- but a
+// stub that never held content is not "disabled by construction", it is
+// dead weight, so both were deleted outright rather than left sitting
+// disabled indefinitely (see this repo's own commit history). The file now
+// carries four real pages, all live and in the nav.
 //
 // This test therefore stopped asserting emptiness, which had become a pin on
 // a decision that no longer held, and asserts the properties that actually

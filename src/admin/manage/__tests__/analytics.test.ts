@@ -16,15 +16,13 @@ import {
 import { ZERO_DATA_PAYLOAD } from '../../../shared/analytics-payload';
 import type { AnalyticsPayload } from '../../../shared/analytics-payload';
 
-// The six pages committed in pages.json today, as the naming table Card B
+// The four pages committed in pages.json today, as the naming table Card B
 // actually resolves against.
 const PAGES = [
   { slug: 'catering', name: 'Catering' },
   { slug: 'cheeseboards', name: 'Cheeseboards' },
   { slug: 'cooking-class', name: 'Cooking Class' },
   { slug: 'membership', name: 'Membership' },
-  { slug: 'breads-and-dips', name: 'Breads and Dips' },
-  { slug: 'who-we-supply', name: 'Who We Supply' },
 ];
 
 function payload(overrides: Partial<AnalyticsPayload> = {}): AnalyticsPayload {
