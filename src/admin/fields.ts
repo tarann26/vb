@@ -35,6 +35,7 @@ import type {
   TemplateWhatsAppButton,
   Page,
   PageSeo,
+  Award,
 } from '../content/types';
 import type { UploadCategory } from '../shared/upload-categories';
 
@@ -142,6 +143,50 @@ export const ARTICLE_FIELDS: FieldsOf<Article> = {
   // 'press' -- matches where every real press.json `image` value lives on
   // disk today (public/press/*.webp).
   image: { label: 'Photo', kind: 'image', category: 'press' },
+};
+
+// Phase 2, Task 11: awards.json's own descriptor -- the closest existing
+// shape is ARTICLE_FIELDS just above (an id-carrying record with a
+// date-shaped field and an optional photo), and this follows it field for
+// field rather than inventing a second convention for what is, to her, the
+// same kind of screen.
+//
+// `image` is `kind: 'image', category: 'press'`, not a new 'awards' upload
+// category: UPLOAD_CATEGORIES (src/shared/upload-categories.ts) is a fixed,
+// hand-maintained allowlist the Worker also enforces (worker/upload.ts), and
+// widening it is a real, separately-reviewable decision this task's own
+// brief does not ask for. 'press' is the closest existing fit in meaning, not
+// merely the closest available slot: a badge from an awarding body is the
+// same kind of third-party recognition a press logo is, and every award
+// badge lands in the same folder every press photo already does.
+//
+// Unlike Dish/Article, `Award['image']` is OPTIONAL (`string | undefined`,
+// types.ts), never required and never `null` -- there is no "leave blank to
+// remove," because PhotoField has no clear/remove action at all (it only
+// ever calls `onChange` when a NEW photo is staged, never with `null` or
+// `''`); a freshly added award simply never has the key at all until she
+// uploads one. `Required<Award>['image']` is still a plain `string` for
+// `Kind<V>`'s purposes, the identical shape DISH_FIELDS.image and
+// ARTICLE_FIELDS.image already use.
+export const AWARD_FIELDS: FieldsOf<Award> = {
+  id: {
+    label: 'ID',
+    kind: 'text',
+    help: 'A short identifier used only to tell awards apart -- changing it does not rename or relink anything else.',
+  },
+  title: { label: 'Title', kind: 'text' },
+  awardedBy: {
+    label: 'Awarding body',
+    kind: 'text',
+    help: 'Who gave you this award -- the publication, organisation or event that recognised you.',
+  },
+  year: { label: 'Year', kind: 'text', help: 'A four-digit year, e.g. 2026.' },
+  image: {
+    label: 'Badge photo',
+    kind: 'image',
+    category: 'press',
+    help: 'Optional -- leave it empty if this award has no badge to show.',
+  },
 };
 
 // ---------------------------------------------------------------------------
@@ -351,7 +396,11 @@ export const COPY_FIELDS: FieldsOf<CopyLeafShape> = {
   'press.viewAll': { label: 'View-all button', kind: 'text' },
   // Chrome only -- the Awards entries themselves are D1-backed and out of
   // scope for /edit's inline editing this phase (Copy['awards']'s own
-  // comment, src/content/types.ts); heading and intro are plain copy.json
+  // comment, src/content/types.ts). Task 11 gives them their own screen in
+  // /edit/manage instead (AWARD_FIELDS, above, and AwardsArea.tsx) -- this
+  // entry stays limited to the two copy.json strings because /edit's own
+  // page overlay is untouched, not because the records are still
+  // unreachable everywhere. Heading and intro are plain copy.json
   // text, so they get the ordinary field treatment every other section's
   // chrome does.
   'awards.heading': { label: 'Awards heading', kind: 'text' },

@@ -35,7 +35,11 @@ export type PanelId =
   | 'story'
   | 'press'
   | 'hours'
-  | 'copy';
+  | 'copy'
+  // Phase 2, Task 11: the eleventh panel, and the first one whose file is
+  // D1-backed rather than a file in this repository (content.ts's own
+  // CONTENT_FILES comment on `awards.json`).
+  | 'awards';
 
 export type AreaSlug = 'menu' | 'pages' | 'story' | 'details' | 'numbers';
 
@@ -65,6 +69,7 @@ export const PANELS: Record<PanelId, PanelDefinition> = {
   press: { id: 'press', heading: 'Press', file: 'press.json' },
   hours: { id: 'hours', heading: 'Opening hours', file: 'site.json' },
   copy: { id: 'copy', heading: 'Words on the site', file: 'copy.json' },
+  awards: { id: 'awards', heading: 'Awards', file: 'awards.json' },
 };
 
 export interface AreaDefinition {
@@ -101,7 +106,12 @@ export const AREAS: AreaDefinition[] = [
     slug: 'pages',
     label: 'Pages',
     description: 'Your six business pages, and what shows on the homepage',
-    panelIds: ['pages', 'sections'],
+    // 'awards' after 'sections': Awards is a homepage section (SectionId
+    // 'awards', src/content/types.ts) the same way the bespoke and template
+    // ones 'sections' already covers are -- this area is already "what
+    // shows on the homepage" to her, so a new sixth area for one panel
+    // would split one idea into two doors.
+    panelIds: ['pages', 'sections', 'awards'],
   },
   {
     slug: 'story',

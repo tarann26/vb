@@ -33,6 +33,7 @@ import type {
   Copy,
   Section,
   Page,
+  Award,
 } from '../content/types';
 
 // The nine real files under src/content/ -- the same set validateContent
@@ -58,6 +59,17 @@ export const CONTENT_FILES = [
   // Pages screen) so /edit's own load effect (EditMode.tsx, keyed on this
   // exact list) already fetches it and every downstream type stays total.
   'pages.json',
+  // Phase 2, Task 11: the eleventh entry, and the first one that is NOT a
+  // file in this repository at all. Every name above it names a real
+  // `src/content/<name>.json` blob on `main`; `awards.json` names a row in
+  // D1 (worker/store.ts's `D1_ONLY_PATHS`) that GET /api/content serves
+  // through `storeFor` instead of `getFileContent`. Nothing in this module,
+  // or in anything that reads `CONTENT_FILES`, can tell the difference --
+  // `fetchContent` below hits the same route with the same query shape and
+  // gets back the same `{ content, sha }` envelope either way. That is the
+  // seam Task 5 built working: a tenth content file's storage moved, and the
+  // dashboard did not need to know.
+  'awards.json',
 ] as const;
 
 export type ContentFileName = (typeof CONTENT_FILES)[number];
@@ -104,6 +116,7 @@ export const CONTENT_FILE_LABELS: Record<ContentFileName, string> = {
   'copy.json': 'Words on the site',
   'sections.json': 'What shows on the homepage',
   'pages.json': 'Pages',
+  'awards.json': 'Awards',
 };
 
 // Maps each content file to the shape its `content` field parses into.
@@ -120,6 +133,7 @@ export interface ContentTypeMap {
   'copy.json': Copy;
   'sections.json': Section[];
   'pages.json': Page[];
+  'awards.json': Award[];
 }
 
 export interface LoadedContent<T> {
@@ -129,6 +143,19 @@ export interface LoadedContent<T> {
   // is refused with a 409 rather than silently overwriting a newer one.
   sha: string;
 }
+
+// A 404 from GET /api/content, distinguished from every other failure this
+// function can throw. Plain `Error` for nine of the ten real files always
+// meant something is actually wrong (a missing repo file is a bug); for
+// `awards.json` (Phase 2, Task 11) a 404 means "no award has ever been
+// published" -- worker/index.ts's `handleGetContent` answers exactly this
+// for a D1 path with no row yet, and that is the ordinary, expected state of
+// a brand-new restaurant's Awards panel on its first visit, not a failure. A
+// subclass, not a string match on the message above: matching text this
+// module itself composed would be this module reading its own output back
+// as if it were a wire contract. Exported so a caller (AwardsArea.tsx) can
+// `instanceof`-check it and render an empty list instead of an error banner.
+export class ContentNotFoundError extends Error {}
 
 // GET /api/content?path=src/content/<name>.json -- authenticated the same
 // way every other admin route is (a verified vb_session cookie); a missing
@@ -154,7 +181,9 @@ export async function fetchContent<K extends ContentFileName>(name: K): Promise<
     // status is what a developer greps for and the reason is what tells
     // anyone what to actually do, and there is no cost to carrying both.
     const base = `could not load ${name} (status ${response.status})`;
-    throw new Error(typeof detail === 'string' && detail.trim() ? `${base}: ${detail}` : base);
+    const message = typeof detail === 'string' && detail.trim() ? `${base}: ${detail}` : base;
+    if (response.status === 404) throw new ContentNotFoundError(message);
+    throw new Error(message);
   }
   const body = (await response.json()) as { content: string; sha: string };
   let data: ContentTypeMap[K];

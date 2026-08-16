@@ -23,6 +23,7 @@ import {
 } from '../publish';
 import type { StagedFile } from '../staged';
 import type { DraftMap } from '../drafts';
+import type { ContentFileName } from '../content';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -102,6 +103,44 @@ describe('buildPublishRequest', () => {
     };
     const plan = expectOk(buildPublishRequest(entries, {}));
     expect(plan.files[0].baseSha).toBe('site-sha');
+  });
+
+  // Phase 2, Task 11: `sha: ''` is what AwardsArea.tsx registers when
+  // `fetchContent('awards.json')` 404s -- no award has ever been published,
+  // so there is no prior D1 row for a `baseSha` to name. worker/d1.ts's own
+  // write guard reads any DEFINED `baseSha` against a path with no row yet
+  // as "someone deleted this" and refuses with a 409 no retry can clear
+  // (there is nothing to reconcile against, because nothing was ever
+  // written) -- omitting the field entirely is what lets a brand-new
+  // document's first write through.
+  //
+  // Mutation-provable: reverting the ternary in buildPublishRequest back to
+  // a bare `baseSha: entry.sha` makes this fail immediately -- the assertion
+  // below reads `undefined` and would instead see `''`.
+  it("a content file loaded from a 404 (sha: '') omits baseSha instead of sending an empty string", () => {
+    const entries: ContentEntries = {
+      'awards.json': { data: [{ id: 'a', title: 'First Award', awardedBy: 'Body', year: '2026' }], initial: [], sha: '' },
+    };
+    const plan = expectOk(buildPublishRequest(entries, {}));
+    expect(plan.files).toHaveLength(1);
+    expect(plan.files[0].baseSha).toBeUndefined();
+    // `JSON.stringify` drops any key whose value is `undefined` -- the same
+    // guarantee undo.ts's own `?? undefined` comment relies on for its
+    // identical reason -- so this is what actually matters: the SERVER never
+    // sees a `baseSha` key at all for this file, not merely an empty one.
+    expect(JSON.stringify(plan.files[0])).not.toContain('baseSha');
+  });
+
+  // The sibling case, pinned so the fix above cannot be "always omit
+  // baseSha" in disguise: a REAL sha (every file other than a brand-new
+  // awards.json) still gets it, unconditionally -- unchanged from the
+  // "never omits baseSha" test above.
+  it('a real, non-empty sha is still sent -- the omission is specific to the empty-string sentinel, not general', () => {
+    const entries: ContentEntries = {
+      'awards.json': { data: [{ id: 'a' }], initial: [], sha: 'a-real-d1-sha256-hex' },
+    };
+    const plan = expectOk(buildPublishRequest(entries, {}));
+    expect(plan.files[0].baseSha).toBe('a-real-d1-sha256-hex');
   });
 
   it('a clean content file is not included at all', () => {
@@ -576,6 +615,68 @@ describe('reconcileAfterConflict', () => {
     const impl = vi.fn();
     await reconcileAfterConflict(result.current, {}, impl);
     expect(impl).not.toHaveBeenCalled();
+  });
+
+  // Phase 2, Task 11: the case this function's own header comment named as
+  // unreachable until Awards had an editable panel -- a SINGLE publish
+  // request touching a D1 path (awards.json) and a GitHub path (dishes.json)
+  // together, retried after her own prior write already landed on the D1
+  // side. Traced end to end, not merely reasoned about: this is the exact
+  // shape `buildPublishRequest` (below) now produces once both files are
+  // dirty in the same registry, handed to the exact function PublishBar
+  // calls on every 'conflict'/'server-error' response.
+  //
+  // Mutation-provable: change the `JSON.stringify(...) === ...` comparison
+  // this function's own body uses to `true` unconditionally (i.e. "always
+  // reconcile") and this test stops being able to prove anything -- it
+  // still passes, which is why the SIBLING test above ("a genuine mismatch
+  // ... is left untouched") is what actually catches that mutation, not
+  // this one. This test's own job is different: prove the D1 file
+  // specifically -- not just any file -- reconciles correctly alongside a
+  // GitHub one in the SAME call, which no test before Task 11 could set up
+  // at all (there was no second real D1 path to combine with one).
+  it('a mixed D1 (awards.json) + GitHub (dishes.json) retry: the file that already landed reconciles, the one that is still genuinely stale does not', async () => {
+    const { result } = renderHook(() => useContentRegistry());
+    const publishedAward = [{ id: 'award-1', title: 'Best New Restaurant', awardedBy: 'City Eats', year: '2025' }];
+    const originalDish = [{ id: 'd1', name: 'Farfalle', description: '', image: '/food/farfalle.webp', tags: [] }];
+    const sentDish = [{ id: 'd1', name: 'Farfalle (her edit)', description: '', image: '/food/farfalle.webp', tags: [] }];
+
+    // awards.json: registered from a 404 (no award ever published, `sha:
+    // ''` -- content.ts's own sentinel), then she adds her first award,
+    // which is what buildPublishRequest actually sends -- and her own prior
+    // attempt already committed it to D1 (the scenario worker/index.ts's
+    // own handlePublish comment names: a retry's D1 leg reaches a now-stale
+    // baseSha for a file that in fact already landed).
+    act(() => result.current.register('awards.json', [], ''));
+    act(() => result.current.updateData('awards.json', publishedAward));
+    // dishes.json: a genuinely UNRELATED, real edit in the same request --
+    // and a DIFFERENT value is live server-side (an unrelated developer
+    // edit, or another tab), so its retry must stay refused. Both files
+    // must actually be DIRTY (data !== initial) before this reconciles
+    // anything, the same as a real buildPublishRequest snapshot -- a file
+    // registered and never edited is never dirty by definition (isDirty's
+    // own contract), so a register-only setup here would prove nothing
+    // about reconciliation at all.
+    act(() => result.current.register('dishes.json', originalDish, 'stale-dishes-sha'));
+    act(() => result.current.updateData('dishes.json', sentDish));
+
+    const fetchImpl = vi.fn(async (file: ContentFileName) =>
+      file === 'awards.json'
+        ? { data: publishedAward, sha: 'd1-sha-from-my-own-prior-write' }
+        : { data: [{ id: 'd1', name: 'Farfalle (a different edit)', description: '', image: '/food/farfalle.webp', tags: [] }], sha: 'someone-elses-dishes-sha' },
+    );
+
+    await act(async () => {
+      await reconcileAfterConflict(result.current, { 'awards.json': publishedAward, 'dishes.json': sentDish }, fetchImpl);
+    });
+
+    const awards = result.current.getEntries()['awards.json']!;
+    expect(awards.sha).toBe('d1-sha-from-my-own-prior-write');
+    expect(isDirty(awards)).toBe(false); // her own write, correctly recognised as already landed
+
+    const dishes = result.current.getEntries()['dishes.json']!;
+    expect(dishes.sha).toBe('stale-dishes-sha'); // untouched -- a genuine conflict, not fast-forwarded over
+    expect(isDirty(dishes)).toBe(true);
   });
 });
 

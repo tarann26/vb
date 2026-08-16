@@ -240,6 +240,7 @@ describe('requestUndo: status in, meaning out', () => {
   it('200 without a sha field at all is a server error, not a silent success', async () => {
     await expect(requestUndo({ sha: 'commit-1', publishId: null }, respondWith(200, {}) as unknown as typeof fetch)).resolves.toEqual({
       status: 'server-error',
+      partial: false,
     });
   });
 
@@ -257,19 +258,62 @@ describe('requestUndo: status in, meaning out', () => {
         { sha: 'commit-1', publishId: null },
         respondWith(409, { message: 'Something else has been published since.' }) as unknown as typeof fetch,
       ),
-    ).resolves.toEqual({ status: 'conflict' });
+    ).resolves.toEqual({ status: 'conflict', partial: false });
     await expect(
       requestUndo(
         { sha: 'commit-1', publishId: null },
         respondWith(409, { message: 'there is nothing to put back' }) as unknown as typeof fetch,
       ),
-    ).resolves.toEqual({ status: 'conflict' });
+    ).resolves.toEqual({ status: 'conflict', partial: false });
   });
 
   it('502 is a server error', async () => {
     await expect(
       requestUndo({ sha: 'commit-1', publishId: null }, respondWith(502) as unknown as typeof fetch),
-    ).resolves.toEqual({ status: 'server-error' });
+    ).resolves.toEqual({ status: 'server-error', partial: false });
+  });
+
+  // Phase 2, Task 11: worker/index.ts's own `handleUndo` can report
+  // `partial: true` on either of these two statuses -- the D1 half of a
+  // mixed undo (Awards plus a GitHub file) landed before the GitHub half
+  // refused or failed. Pinned as its own pair of cases, not merely inferred
+  // from the plain-409/502 tests above: `partial` is read from the SAME
+  // response body as `message`, and a caller that read the wrong field, or
+  // read it with `==` against a truthy string instead of `=== true`, would
+  // still pass every test above while failing these.
+  //
+  // Mutation this guards: deleting the `readPartial` calls in requestUndo
+  // and hardcoding `partial: false` everywhere makes both of these fail,
+  // reading `false` where the server said `true`.
+  it('409 with partial: true is read through, not dropped', async () => {
+    await expect(
+      requestUndo(
+        { sha: 'commit-1', publishId: 'pub-1' },
+        respondWith(409, { message: 'Something else has been published since.', partial: true }) as unknown as typeof fetch,
+      ),
+    ).resolves.toEqual({ status: 'conflict', partial: true });
+  });
+
+  it('502 with partial: true is read through, not dropped', async () => {
+    await expect(
+      requestUndo(
+        { sha: 'commit-1', publishId: 'pub-1' },
+        respondWith(502, { message: 'boom', partial: true }) as unknown as typeof fetch,
+      ),
+    ).resolves.toEqual({ status: 'server-error', partial: true });
+  });
+
+  // A malformed value for `partial` itself (not a boolean at all) reads as
+  // `false` -- the same "the server didn't clearly say so" posture every
+  // other malformed-body case in this module already takes, never a guess
+  // in the more alarming direction.
+  it('a non-boolean partial value reads as false, not as true', async () => {
+    await expect(
+      requestUndo(
+        { sha: 'commit-1', publishId: 'pub-1' },
+        respondWith(409, { message: 'conflict', partial: 'yes' }) as unknown as typeof fetch,
+      ),
+    ).resolves.toEqual({ status: 'conflict', partial: false });
   });
 
   it('a thrown fetch is a network error', async () => {

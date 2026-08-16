@@ -30,7 +30,7 @@ import Footer from '../components/Footer';
 import SeoHead from '../components/SeoHead';
 import { useSession } from './session';
 import Login from './Login';
-import { CONTENT_FILES, fetchContent } from './content';
+import { CONTENT_FILES, ContentNotFoundError, fetchContent } from './content';
 import type { ContentFileName, ContentTypeMap } from './content';
 import { useContentRegistry } from './publish';
 import type { ContentEntries, ContentRegistry } from './publish';
@@ -832,6 +832,25 @@ const EditMode: React.FC = () => {
           if (isUnauthorized(error)) {
             setSignOutNotice(SIGN_OUT_NOTICE);
             logOut();
+            return;
+          }
+          // Phase 2, Task 11: `awards.json` is the first CONTENT_FILES entry
+          // that can genuinely 404 (content.ts's own ContentNotFoundError,
+          // and its own comment on why -- a D1 row, not a repository file,
+          // and 404 until the very first award is ever published). This
+          // blanket prefetch has no per-file awareness at all otherwise --
+          // every one of the other ten always exists, so a 404 here has only
+          // ever meant a real failure before now. Registered the same empty,
+          // sha-`''` sentinel AwardsArea.tsx's own load effect uses, not
+          // recorded as an error: this page has no Awards editing surface of
+          // its own to show a banner ABOUT (Copy['awards']'s own comment,
+          // types.ts) -- the fetch only happens at all because this effect
+          // walks the whole list, not because anything downstream reads the
+          // result. Registering rather than leaving the entry unset also
+          // keeps `loadedOrErroredCount` below from counting this file as
+          // still loading forever, which an outright skip would.
+          if (file === 'awards.json' && error instanceof ContentNotFoundError) {
+            registry.register(file, [], '');
             return;
           }
           const message = error instanceof Error ? error.message : String(error);

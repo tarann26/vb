@@ -105,11 +105,18 @@ describe('fetchContent', () => {
   // shells out to for the import-graph check), so a real content file added
   // or removed under src/content/ without updating CONTENT_FILES fails this
   // for the right reason.
-  it('CONTENT_FILES lists exactly the real *.json files under src/content/', () => {
+  // Phase 2, Task 11: `awards.json` is the one deliberate exception --
+  // content.ts's own header comment on `CONTENT_FILES` explains why it names
+  // a D1 row, not a file `git ls-files` could ever see. Listed alongside
+  // `real` explicitly, not folded into the derivation above, so this test
+  // still catches its original defect (a real file added to or removed from
+  // src/content/ without a matching CONTENT_FILES update) while accepting
+  // the one name that is correctly present without a file behind it.
+  it('CONTENT_FILES lists exactly the real *.json files under src/content/, plus awards.json (D1-only, no file)', () => {
     const real = gitLsFiles('src/content')
       .filter((f) => f.endsWith('.json'))
       .map((f) => f.slice('src/content/'.length));
-    expect([...CONTENT_FILES].sort()).toEqual(real.sort());
+    expect([...CONTENT_FILES].sort()).toEqual([...real, 'awards.json'].sort());
   });
 });
 

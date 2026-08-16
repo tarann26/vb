@@ -111,6 +111,10 @@ function stubFetch(overrides: {
   pressResponse?: Promise<Response> | Response;
   copyResponse?: Promise<Response> | Response;
   sectionsResponse?: Promise<Response> | Response;
+  // Phase 2, Task 11: lets a test drive awards.json's own genuine 404 (the
+  // ordinary, expected state until the first award is ever published)
+  // without a second copy of this whole stub function.
+  awardsResponse?: Promise<Response> | Response;
   // Task 5: publishing from /edit reuses publish.ts's own requestPublish/
   // trackPublish unchanged (already exhaustively covered against a fake
   // clock in publish.test.ts) -- these three overrides let a Task 5 test
@@ -163,6 +167,15 @@ function stubFetch(overrides: {
       // is about pages) keeps seeing exactly the same "nothing wrong"
       // load outcome it did before this file existed.
       if (url.includes('pages.json')) return contentResponse([], 'sha-pages');
+      // Phase 2, Task 11: the eleventh content file, joining CONTENT_FILES
+      // (and therefore EditMode's own blanket load effect) from this task
+      // onward, the same way pages.json's own comment just above describes
+      // for the tenth. Empty, matching that same precedent -- this page has
+      // no Awards editing surface of its own (fields.ts's own comment on
+      // why), so every existing test here, none of which is about awards,
+      // keeps seeing the same "nothing wrong" load outcome it did before
+      // this file existed.
+      if (url.includes('awards.json')) return overrides.awardsResponse ?? contentResponse([], 'sha-awards');
       throw new Error(`EditMode.test.tsx: unexpected fetch to ${url}${init ? ` (${init.method ?? 'GET'})` : ''}`);
     }),
   );
@@ -437,6 +450,38 @@ describe('EditMode: a 401 mid-load does not unmount the page or lose what alread
     expect(alert).toHaveTextContent(/press\.json/);
     // ...and the loading banner is gone, not stuck forever.
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+
+  // Phase 2, Task 11: awards.json's own 404 is the one CONTENT_FILES entry
+  // that can genuinely, ordinarily 404 -- no award has ever been published
+  // -- and this page has no Awards editing surface to show an error ABOUT
+  // (fields.ts's own comment). Before EditMode.tsx's own fix, this looked
+  // exactly like the genuine failure the sibling test just above covers:
+  // the SAME generic "Could not load" alert, for a file whose only fault is
+  // not existing yet.
+  //
+  // Mutation-provable: deleting the `file === 'awards.json' && error
+  // instanceof ContentNotFoundError` branch from EditMode.tsx's own load
+  // effect turns this red on the first assertion, with an alert reading
+  // "Could not load awards.json" where none should be.
+  it("awards.json's own 404 (no award ever published) shows no error and does not stall the loading banner", async () => {
+    stubFetch({ awardsResponse: new Response(JSON.stringify({ message: 'That file does not exist yet.' }), { status: 404 }) });
+
+    render(
+      <MemoryRouter>
+        <EditMode />
+      </MemoryRouter>,
+    );
+
+    // The rest of the page still renders, same as any other file's own
+    // independent load.
+    expect(await screen.findByRole('button', { name: COPY.hero.reserveButton })).toBeInTheDocument();
+    // Give every other load effect the same settling window the sibling
+    // test above relies on implicitly (its own `findByRole('alert')` await)
+    // -- here there is deliberately nothing to find, so this waits on the
+    // loading banner clearing instead, the positive half of the same fact.
+    await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 });
 

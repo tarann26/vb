@@ -99,6 +99,21 @@ export function stubFetch(dishesResponse: Promise<Response> | Response = content
       if (url.includes('story.json')) return contentResponse(STORY, 'sha-story');
       if (url.includes('copy.json')) return contentResponse(COPY, 'sha-copy');
       if (url.includes('pages.json')) return contentResponse([], 'sha-pages');
+      // Phase 2, Task 11: awards.json, matching pages.json's own precedent
+      // just above -- an empty list with a real sha, not a 404. A missing
+      // branch here does not answer 404 (AwardsArea.tsx's own empty-list
+      // case, which this fixture could arguably leave untested) -- this
+      // `stubFetch` throws on anything unhandled, which AwardsArea reads as
+      // a genuine load FAILURE (its role="alert"/"needs attention" path),
+      // not as the empty-document state. That is exactly the shift
+      // e2e/edit-backend.ts's own header comment warns about for the e2e
+      // fixture: a name missing here silently shows an error banner over
+      // content another test is asserting on, and Task 11's own dashboard
+      // tests (AdminApp.test.tsx's "marks the folded section as needing
+      // attention" among them) confirmed it directly -- a second, unrelated
+      // "needs attention" marker for Awards, not present before this file
+      // existed.
+      if (url.includes('awards.json')) return contentResponse([], 'sha-awards');
       throw new Error(`dashboardFixtures: unexpected fetch to ${url}`);
     }),
   );

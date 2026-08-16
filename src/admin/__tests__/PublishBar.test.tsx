@@ -1742,6 +1742,76 @@ describe('PublishBar: undo my last publish', () => {
       expect(alert).not.toHaveTextContent('Nothing was lost');
     });
 
+    // Phase 2, Task 11: a mixed undo (Awards' D1 half plus a GitHub file) is
+    // reachable now that Awards has an editable panel -- worker/index.ts's
+    // own `handleUndo` runs the D1 leg first and reports `partial: true` on
+    // any refusal reached after it landed. Before this task, `partial` was
+    // parsed nowhere on the client, so this exact response used to fall into
+    // the SAME generic sentence as an ordinary 500 -- "Nothing was put
+    // back," false the moment the D1 half already succeeded.
+    //
+    // Mutation-provable: deleting `partial: result.status === 'server-error'
+    // ? result.partial : undefined` from performUndo (PublishBar.tsx) and
+    // hardcoding `undefined` makes this fail -- the alert reads "Nothing was
+    // put back" instead of naming the part that already landed.
+    it('a 500 on the undo AFTER the D1 half already landed says so, not "nothing was put back"', async () => {
+      rememberPublish(RECORD);
+      vi.stubGlobal('fetch', undoFetch(async () => jsonResponse(500, { message: 'boom', partial: true })));
+      render(<Harness reload={vi.fn()} />);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Undo my last publish' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Yes, undo it' }));
+
+      const alert = await screen.findByRole('alert');
+      expect(alert).toHaveTextContent("Part of that change is already back. Couldn't reach the server for the rest — try again in a minute.");
+      expect(alert).not.toHaveTextContent('Nothing was put back');
+    });
+
+    // The 409 sibling of the case above -- worker/index.ts's own
+    // "Something else has been published since" refusal, reached after the
+    // D1 half already restored.
+    it('a 409 on the undo AFTER the D1 half already landed names the part that is already back', async () => {
+      rememberPublish(RECORD);
+      vi.stubGlobal(
+        'fetch',
+        undoFetch(async () => jsonResponse(409, { message: 'Something else has been published since.', partial: true })),
+      );
+      render(<Harness reload={vi.fn()} />);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Undo my last publish' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Yes, undo it' }));
+
+      const alert = await screen.findByRole('alert');
+      expect(alert).toHaveTextContent(
+        'Part of that change is already back — the rest may be too, possibly from another tab or device of your own. Reload to see what your site looks like now.',
+      );
+      expect(alert).not.toHaveTextContent('Your site may already be back to how it was.');
+    });
+
+    // The false-negative direction matters just as much: a `partial` that is
+    // absent (an ordinary, non-mixed undo -- the overwhelming majority) or
+    // explicitly `false` must still read exactly as it always has. Pinned
+    // directly rather than only inferred from the pre-existing 500/409 tests
+    // above, since those predate this field and would not notice `partial`
+    // being read backwards (defaulting a MISSING flag to `true`).
+    it('a 409 with no partial flag at all still reads as an ordinary conflict', async () => {
+      rememberPublish(RECORD);
+      vi.stubGlobal(
+        'fetch',
+        undoFetch(async () => jsonResponse(409, { message: 'Something else has been published since.' })),
+      );
+      render(<Harness reload={vi.fn()} />);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Undo my last publish' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Yes, undo it' }));
+
+      const alert = await screen.findByRole('alert');
+      expect(alert).toHaveTextContent(
+        'Something else has been published since — possibly from another tab or device of your own. Your site may already be back to how it was. Reload to see what it looks like now.',
+      );
+      expect(alert).not.toHaveTextContent('Part of that change is already back');
+    });
+
     // Review finding (Minor): `flow` is component state and nothing reloads
     // the page after a refused undo, so without handlePublish's own
     // setFlow('publish') the NEXT publish -- a brand-new change she just

@@ -1,4 +1,5 @@
-// A DOM baseline for each of the ten dashboard panels, taken BEFORE their
+// A DOM baseline for each dashboard panel (ten, then eleven from Phase 2
+// Task 11's Awards panel onward), taken BEFORE their
 // implementations are carried out of AdminApp.tsx and into the five area
 // modules, and asserted unchanged afterwards.
 //

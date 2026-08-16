@@ -237,7 +237,28 @@ export function buildPublishRequest(entries: ContentEntries, staged: Record<stri
       path: `src/content/${file}`,
       content: JSON.stringify(entry.data),
       encoding: 'utf-8',
-      baseSha: entry.sha,
+      // `entry.sha === ''` names one specific state: `awards.json` (Phase 2,
+      // Task 11), freshly loaded from a 404 because no award has ever been
+      // published (AwardsArea.tsx's own load effect registers exactly this
+      // -- `sha: ''` -- for that case; see content.ts's ContentNotFoundError).
+      // No other content file's registry entry is ever `''`: every one of
+      // the other ten always exists, so `fetchContent` always hands back a
+      // real GitHub blob sha, and D1's own sha256 (worker/d1.ts) is a
+      // 64-character hex string that is never empty either. Sending `''`
+      // through as `baseSha` would still be a DEFINED value on the wire, and
+      // worker/d1.ts's write guard reads any defined baseSha against a row
+      // that does not exist yet as "the file existed and something deleted
+      // it" -- `D1ConflictError`, 409, "someone else changed
+      // src/content/awards.json while you were editing", on her very FIRST
+      // award, from a single click, no retry involved. Omitting the field
+      // entirely (`undefined`) is what tells that guard "no prior value is
+      // claimed" and lets a brand-new document's first write through
+      // unconditionally, the same as it always has for a real file's first
+      // ever edit. Every OTHER dirty file still gets its real `sha` here,
+      // unconditionally -- this is not a general "omit when falsy" rule, it
+      // is the one sentinel this module hands out for the one state that
+      // needs it.
+      baseSha: entry.sha === '' ? undefined : entry.sha,
     };
   });
 
@@ -450,17 +471,48 @@ export async function refreshBaseShas(
 // worker/index.ts's own comment on handlePublish's write step).
 //
 // Fix round 1 review found that this function CANNOT reach that case today,
-// and this paragraph corrects the claim rather than leaving it standing:
+// and that paragraph corrected the claim rather than leaving it standing:
 // `contentSnapshots` is keyed by `ContentFileName` (content.ts's
 // `CONTENT_FILES`), and `awards.json` -- the only D1-only path
-// (worker/store.ts's D1_ONLY_PATHS) -- is not in that list (Awards has no
-// editable panel this phase; see fields.ts). It can therefore never appear
-// in a snapshot this function is handed, and a single publish request
-// touching both a D1 path and a GitHub path is unreachable under either
-// CONTENT_STORE setting today regardless. Task 11 (the Awards dashboard
-// panel) is what will first make the mixed-publish case reachable.
+// (worker/store.ts's D1_ONLY_PATHS) -- was not in that list (Awards had no
+// editable panel yet; see fields.ts). It could therefore never appear in a
+// snapshot this function is handed, and a single publish request touching
+// both a D1 path and a GitHub path was unreachable under either
+// CONTENT_STORE setting regardless.
 //
-// What this DOES do today, and is kept for: any GitHub-only publish whose
+// Task 11 (the Awards dashboard panel, content.ts's own CONTENT_FILES entry)
+// is what makes it reachable, and this paragraph is the verification that
+// promise asked for -- traced, not assumed: `contentSnapshots` is built by
+// `buildPublishRequest` (below) from `dirtyContentFiles(entries)`, with no
+// filtering by store; a dirty `awards.json` now lands in it exactly the way
+// a dirty `dishes.json` does. This function's own body, above, reads
+// `contentSnapshots` by key and calls the injected `fetchContentImpl` (real
+// default: `fetchContent`, content.ts) for each one -- neither knows or
+// cares which store answered, because GET /api/content already erased that
+// distinction before either function runs (content.ts's own header comment).
+// So the retry-misattribution case this function exists for is closed for
+// `awards.json` by the exact same code path that already closed it for
+// every GitHub file, with nothing D1-specific added: a mixed publish (one
+// dirty `awards.json`, one dirty GitHub file) that 409s because her own
+// prior write already moved `awards.json`'s D1 baseSha reaches this
+// function with BOTH files in `contentSnapshots`; each is re-read and
+// compared independently, so the file that genuinely landed (`awards.json`)
+// is reconciled and the file that did not (if any) is correctly left dirty
+// -- see this file's own new "a mixed D1 + GitHub retry" test below for this
+// traced end to end, not merely reasoned about.
+//
+// A second, DIFFERENT defect sits next to this one and is not something
+// `reconcileAfterConflict` can fix, because the D1 write never happens for
+// it to reconcile: `awards.json`'s very FIRST publish, before any row for
+// it exists in D1 at all, must send no `baseSha` for that file (`undefined`,
+// never `''`) or worker/d1.ts's own write guard reads a DEFINED-but-wrong
+// baseSha against no prior row as "someone deleted this file" and refuses
+// with a 409 that no retry can ever clear -- there is no earlier committed
+// value to reconcile against, because nothing was ever written. Fixed in
+// `buildPublishRequest`, below, not here; see that function's own comment.
+//
+// What this function ALSO does, independent of the above: any GitHub-only
+// publish whose
 // response reported `conflict` or `server-error` after the commit in fact
 // landed -- a redundant retry racing its own prior success, or a failure
 // response for a write that otherwise went through. The 409/502 the client

@@ -90,6 +90,7 @@ import AreaHome from './AreaHome';
 import AreaNotFound from './AreaNotFound';
 import MenuArea from '../areas/MenuArea';
 import PagesArea from '../areas/PagesArea';
+import AwardsArea from '../areas/AwardsArea';
 import StoryPhotosArea from '../areas/StoryPhotosArea';
 import DetailsArea from '../areas/DetailsArea';
 import NumbersArea from '../areas/NumbersArea';
@@ -398,7 +399,17 @@ function renderArea(slug: AreaSlug, active: boolean, areaProps: AreaProps): Reac
     case 'menu':
       return <MenuArea {...areaProps} />;
     case 'pages':
-      return <PagesArea {...areaProps} />;
+      return (
+        <>
+          <PagesArea {...areaProps} />
+          {/* Phase 2, Task 11: Awards renders here, not as a sixth AreaSlug
+              -- manage/areas.ts's own `panelIds` already places the 'awards'
+              PanelId inside the 'pages' area, and this switch dispatches by
+              AreaSlug, one level up. No new case, so the `never`
+              exhaustiveness check below is untouched. */}
+          <AwardsArea {...areaProps} />
+        </>
+      );
     case 'story':
       return <StoryPhotosArea {...areaProps} />;
     case 'details':

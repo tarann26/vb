@@ -219,11 +219,21 @@ export function describesAddedPhoto(paths: string[]): boolean {
 // POST /api/undo. Same discriminated-union shape requestPublish returns, and
 // branched on STATUS alone -- never on message text.
 
+// `partial`, on the two statuses that can follow a D1 write that already
+// landed (worker/index.ts's own `handleUndo`, Task 5's review finding):
+// `true` when the D1 half of a mixed undo (Awards plus a GitHub file, now
+// reachable since Task 11 gave Awards an editable panel) put its half back
+// before the GitHub half refused or failed. Read only by PublishBar's own
+// undo copy -- see that file's own comment for why "nothing was put back"
+// stops being an honest sentence the moment this is `true`. Defaults to
+// `false` (never `undefined`) so a caller can read it unconditionally rather
+// than treating "the server didn't say" and "the server said no" as the same
+// thing.
 export type UndoRequestResult =
   | { status: 'success'; sha: string | null }
-  | { status: 'conflict' }
+  | { status: 'conflict'; partial: boolean }
   | { status: 'unauthenticated' }
-  | { status: 'server-error' }
+  | { status: 'server-error'; partial: boolean }
   | { status: 'network-error' };
 
 // Takes only the two identifiers, not a whole UndoRecord -- `at`/`paths`
@@ -264,11 +274,34 @@ export async function requestUndo(
     } catch {
       // falls through to server-error
     }
-    return { status: 'server-error' };
+    // A 200 with an unreadable body -- the server is reporting the whole
+    // request succeeded, so there is no refused half to be partial about;
+    // `false` here says "not partial," not "unknown."
+    return { status: 'server-error', partial: false };
   }
   if (response.status === 401) return { status: 'unauthenticated' };
   // 409 covers both the stale-sha refusal and "this commit cannot be put
-  // back" -- one status, one meaning, no new parsing rule.
-  if (response.status === 409) return { status: 'conflict' };
-  return { status: 'server-error' };
+  // back" -- one status, one meaning, no new parsing rule. `partial` is a
+  // second, independent field on the SAME body (worker/index.ts's own
+  // `json(409, { message, partial })`) -- reading it is not a second
+  // branch on message text, it is the one flag this codebase already
+  // reserves for exactly this question.
+  if (response.status === 409) return { status: 'conflict', partial: await readPartial(response) };
+  return { status: 'server-error', partial: await readPartial(response) };
+}
+
+// Every non-200, non-401, non-409 response, plus 409 itself, can carry a
+// `partial` flag in its JSON body (worker/index.ts's `handleUndo`) -- read
+// with the same never-throw posture as everything else in this module: a
+// body that fails to parse, or simply omits the field, means "the server
+// didn't say," and `false` is the correct, honest reading of that -- never
+// `true` guessed defensively, which would tell her a D1 write happened when
+// this function has no actual evidence it did.
+async function readPartial(response: Response): Promise<boolean> {
+  try {
+    const body = (await response.json()) as { partial?: unknown };
+    return body.partial === true;
+  } catch {
+    return false;
+  }
 }

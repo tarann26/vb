@@ -120,7 +120,6 @@ type BarState =
   | { phase: 'build-failed'; commitUrl: string | null; sha: string }
   | { phase: 'stalled'; commitUrl: string | null; sha: string }
   | { phase: 'mismatch' }
-  | { phase: 'conflict' }
   // Fix round 1 review, Minor 2: a 409/502 whose files `reconcileAfterConflict`
   // (publish.ts) confirmed ALL actually landed -- the committed content now
   // matches exactly what this attempt sent, for every file it touched -- is
@@ -138,7 +137,20 @@ type BarState =
   // written specially for a failed undo -- was dead code that read as if it
   // were live. What she actually reads is picked from `flow` at render time,
   // the same as every other sentence that differs between the two.
-  | { phase: 'server-error' }
+  //
+  // `partial`, on 'conflict' and 'server-error' both: `true` only ever
+  // reaches these two from `performUndo` (undo.ts's own `requestUndo`
+  // result, itself read from worker/index.ts's `handleUndo` response) --
+  // `resultToBarState`, the PUBLISH-side mapping just below, never sets it,
+  // so it is always `undefined` for a publish. Optional rather than a
+  // required `boolean` for exactly that reason: a publish's own conflict/
+  // server-error genuinely has no such fact to report (reconcileAfterConflict
+  // already tells the true story for that flow -- see this bar's own
+  // 'already-saved' case above), so there is nothing dishonest about the
+  // field being absent there, only about it being FALSE when the server
+  // said otherwise.
+  | { phase: 'conflict'; partial?: boolean }
+  | { phase: 'server-error'; partial?: boolean }
   | { phase: 'network-error' }
   // `notice` carries the EXACT sentence also handed to `onUnauthenticated`
   // (see that prop's own comment, and PRE_PUBLISH/POST_PUBLISH_
@@ -837,11 +849,22 @@ const PublishBar: React.FC<PublishBarProps> = ({
       // "pressing undo twice" unreachable rather than merely refused.
       clearUndoRecord();
       setUndoRecord(null);
-      setState({ phase: 'conflict' });
+      // `result.partial`: worker/index.ts's own `handleUndo` runs the D1 leg
+      // BEFORE the GitHub guard that can produce this 409 (its own step 2a
+      // comment) -- a mixed undo (Awards plus a GitHub file, reachable now
+      // that Task 11 gives Awards an editable panel) can therefore have
+      // already put the D1 half back before this refusal, and PublishStatus
+      // below reads this to say so rather than the plain "may already be
+      // back" sentence a GitHub-only conflict gets.
+      setState({ phase: 'conflict', partial: result.partial });
       return;
     }
     if (result.status !== 'success') {
-      setState({ phase: 'server-error' });
+      // `network-error` carries no `partial` field at all (nothing was
+      // ever sent for the server to act on) -- only narrow to it when the
+      // status is actually 'server-error', the one case that can follow a
+      // D1 write that already landed.
+      setState({ phase: 'server-error', partial: result.status === 'server-error' ? result.partial : undefined });
       return;
     }
 
@@ -1433,26 +1456,45 @@ function PublishStatus({
       // the request that just landed), so the fix is not asserting either:
       // naming the real possibility without accusing her of losing her own
       // work to a stranger.
+      // `state.partial`: only ever `true` on an UNDO, and only when the D1
+      // half of a mixed undo (Awards plus a GitHub file) already landed
+      // before this 409 fired -- see performUndo's own comment on where
+      // that fact comes from. "Your site may already be back to how it
+      // was" -- the plain conflict sentence below -- is speculation for
+      // that case; this one is not, so it gets its own, more certain
+      // sentence rather than sharing the hedge.
       return (
         <p role="alert" className="mt-3 font-['Montserrat'] text-sm text-red-600">
-          {undoing
-            ? 'Something else has been published since — possibly from another tab or device of your own. Your site may already be back to how it was. Reload to see what it looks like now.'
-            : 'This may already be published — from another tab or device, including one of your own. Reload to see the latest, then make your change again.'}
+          {undoing && state.partial
+            ? 'Part of that change is already back — the rest may be too, possibly from another tab or device of your own. Reload to see what your site looks like now.'
+            : undoing
+              ? 'Something else has been published since — possibly from another tab or device of your own. Your site may already be back to how it was. Reload to see what it looks like now.'
+              : 'This may already be published — from another tab or device, including one of your own. Reload to see the latest, then make your change again.'}
         </p>
       );
     case 'server-error':
-    case 'network-error':
+    case 'network-error': {
       // The second half differs by flow and is the load-bearing part:
       // "nothing was lost" answers the publish question ("is my work gone?"),
       // and answers the wrong question entirely for an undo, where what she
       // needs to know is that the change she wanted removed is still up.
+      //
+      // `state.phase === 'server-error' && state.partial`: 'network-error'
+      // carries no such field (the request never reached the server, so
+      // nothing there could have landed) -- narrowed explicitly rather than
+      // read off `state` directly, since this case label covers both phases
+      // and only one of them has the property at all.
+      const partialUndo = undoing && state.phase === 'server-error' && state.partial;
       return (
         <p role="alert" className="mt-3 font-['Montserrat'] text-sm text-red-600">
-          {undoing
-            ? "Couldn't reach the server that stores your changes. Nothing was put back — try again in a minute."
-            : "Couldn't reach the server that stores your changes. Nothing was lost — try again in a minute."}
+          {partialUndo
+            ? "Part of that change is already back. Couldn't reach the server for the rest — try again in a minute."
+            : undoing
+              ? "Couldn't reach the server that stores your changes. Nothing was put back — try again in a minute."
+              : "Couldn't reach the server that stores your changes. Nothing was lost — try again in a minute."}
         </p>
       );
+    }
     case 'unauthenticated':
       return (
         <p role="alert" className="mt-3 font-['Montserrat'] text-sm text-red-600">
