@@ -119,13 +119,27 @@ describe('revisions', () => {
     expect(mine.map((r) => r.body)).not.toContain('v0');
   });
 
+  // Both paths write past REVISION_DEPTH here, deliberately -- with only two
+  // quiet.json writes (well under the depth), pruning never engages for it
+  // at all, and the test would pass whether or not the DELETE is scoped by
+  // path. Both paths must actually get pruned, independently, for this to
+  // exercise anything.
   it('prunes per path, so a busy file cannot evict a quiet one', async () => {
-    await store.write([file('src/content/quiet.json', 'q1')], 'x', 'q');
-    await store.write([file('src/content/quiet.json', 'q2')], 'x', 'q2');
+    for (let i = 0; i <= REVISION_DEPTH + 3; i += 1) {
+      await store.write([file('src/content/quiet.json', `q${i}`)], 'x', `q${i}`);
+    }
     for (let i = 0; i <= REVISION_DEPTH + 5; i += 1) {
       await store.write([file('src/content/busy.json', `b${i}`)], 'x', `b${i}`);
     }
-    expect(fake.revisions.filter((r) => r.path === 'src/content/quiet.json')).toHaveLength(1);
+    const quiet = fake.revisions.filter((r) => r.path === 'src/content/quiet.json');
+    const busy = fake.revisions.filter((r) => r.path === 'src/content/busy.json');
+    // Each path pruned to its own REVISION_DEPTH -- not to 0 (busy wiping
+    // quiet's history) and not to more than 20 (quiet's DELETE never firing
+    // because busy's writes are the ones triggering it).
+    expect(quiet).toHaveLength(REVISION_DEPTH);
+    expect(busy).toHaveLength(REVISION_DEPTH);
+    expect(quiet.map((r) => r.body)).toContain(`q${REVISION_DEPTH + 2}`);
+    expect(quiet.map((r) => r.body)).not.toContain('q0');
   });
 });
 
@@ -137,8 +151,16 @@ describe('undo', () => {
     expect((await store.read('src/content/awards.json'))!.content).toBe('v1');
   });
 
-  it('reports nothing restored for a publish id with no revisions', async () => {
+  // `results.map(...)` on an empty array is `[]` regardless, so asserting
+  // only the return value here cannot tell "undo returned early" from "undo
+  // ran write([]) and that happened to produce the same answer" -- write([])
+  // is a no-op that also returns []. batchCalls is the observable that
+  // actually distinguishes them: the early return in `undo` skips `write`
+  // entirely, so `batch` is never invoked; without it, `write([])` still
+  // calls `this.db.batch([])` once.
+  it('reports nothing restored for a publish id with no revisions, without touching write at all', async () => {
     expect(await store.undo('never-happened')).toEqual([]);
+    expect(fake.batchCalls, 'undo called write/batch for a publish with no revisions').toBe(0);
   });
 
   it('is itself revisioned, so the state before the undo is not lost', async () => {
@@ -146,5 +168,55 @@ describe('undo', () => {
     await store.write([file('src/content/awards.json', 'v2')], 'second', 'p2');
     await store.undo('p2');
     expect(fake.revisions.some((r) => r.publish_id === 'undo:p2' && r.body === 'v2')).toBe(true);
+  });
+
+  // The distinction the schema comment on `revisions.publish_id` calls
+  // load-bearing: "the newest revision of each path" and "the group one
+  // publish_id wrote" agree whenever no path gets written a second time
+  // before the undo -- which is all the tests above ever exercise, since
+  // each of them writes a given path at most twice total. They diverge
+  // exactly when a path is written by publish A, then written AGAIN by a
+  // later publish B that doesn't touch every path A did, and someone then
+  // undoes A. "By publish_id" restores A's whole group to A's own prior
+  // values. "Newest revision per path" would instead, for any path A and B
+  // share, reach for the newest row on that path -- the one B's write
+  // created, holding B's prior (== A's result), not A's prior. That is the
+  // "silently mixes two publishes together" the schema comment warns about:
+  // undoing A would leave the shared path at A's OWN output instead of
+  // reverting it.
+  //
+  // menu.json is included specifically because it is NOT shared with p2:
+  // under either query it lands in the same place, which is exactly why a
+  // test using only one path (as every test above does) cannot tell the two
+  // queries apart. The assertion that actually distinguishes them is on
+  // awards.json.
+  it('restores the group one publish wrote, not "the newest revision of every path it touched"', async () => {
+    // Establish priors for both paths, so p1's write below creates revision
+    // rows at all (a path's first-ever write has no prior and revisions
+    // this store).
+    await store.write(
+      [file('src/content/awards.json', 'awards-v0'), file('src/content/menu.json', 'menu-v0')],
+      'baseline',
+      'p0',
+    );
+    // p1 touches both paths together.
+    await store.write(
+      [file('src/content/awards.json', 'awards-v1'), file('src/content/menu.json', 'menu-v1')],
+      'first',
+      'p1',
+    );
+    // p2 touches only awards.json -- menu.json is untouched from here on.
+    await store.write([file('src/content/awards.json', 'awards-v2')], 'second', 'p2');
+
+    expect(await store.undo('p1')).toEqual(
+      expect.arrayContaining(['src/content/awards.json', 'src/content/menu.json']),
+    );
+    // The path p1 and p2 both wrote: undoing p1 must land on p1's OWN prior
+    // (v0), not p2's prior (v1, which is a "newest per path" read of the
+    // same row p2's write produced).
+    expect((await store.read('src/content/awards.json'))!.content).toBe('awards-v0');
+    // The path only p1 wrote: both queries happen to agree here, which is
+    // exactly why this path alone could never have caught the bug.
+    expect((await store.read('src/content/menu.json'))!.content).toBe('menu-v0');
   });
 });

@@ -23,6 +23,14 @@ export class FakeD1 {
   // Set to a message to make every subsequent call reject -- how the
   // snapshot-fallback tests force a query failure.
   failWith: string | null = null;
+  // Counts invocations of `batch`, including ones called with an empty
+  // statement list. `statements` alone cannot tell a caller that skipped
+  // `batch` entirely from one that called it with nothing to do -- an empty
+  // `batch([])` executes zero statements and so leaves `statements`
+  // unchanged either way. That distinction is exactly what proves whether
+  // D1Store.undo's early return on "no revisions" is doing anything: without
+  // it, `undo` still calls `write([])`, which still calls `batch([])`.
+  batchCalls = 0;
 
   prepare(sql: string) {
     const normalized = sql.replace(/\s+/g, ' ').trim();
@@ -30,6 +38,7 @@ export class FakeD1 {
   }
 
   async batch(statements: FakeStatement[]): Promise<unknown[]> {
+    this.batchCalls += 1;
     if (this.failWith) throw new Error(this.failWith);
     const out: unknown[] = [];
     for (const statement of statements) out.push(await statement.run());
@@ -79,6 +88,17 @@ export class FakeD1 {
       // against a number that matches no path -- see worker/d1.ts's own
       // comment on why the bind is three values, not two.
       const path = args[0] as string;
+      // The inner subquery's own `path = ?` (args[1]) must be the same path
+      // as the outer one (args[0]) -- they are the same column compared to
+      // the same value twice, not two independent parameters. A caller that
+      // bound anything else there (including the old two-argument bind,
+      // which left this slot holding REVISION_DEPTH) is reproducing the
+      // exact arity bug this fake exists to catch, so it fails loudly here
+      // instead of silently keeping every revision (`path !== args[1]` would
+      // otherwise match nothing and prune nothing).
+      if (args[1] !== path) {
+        throw new Error(`FakeD1: DELETE FROM revisions bound mismatched paths (${String(args[0])} vs ${String(args[1])})`);
+      }
       const keep = args[2] as number;
       const mine = this.revisions.filter((r) => r.path === path).sort((a, b) => b.id - a.id);
       const survivors = new Set(mine.slice(0, keep).map((r) => r.id));

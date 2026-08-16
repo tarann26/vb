@@ -152,12 +152,17 @@ export class D1Store implements ContentStore {
           // Three placeholders, three values: SQLite parameters are
           // positional, and the inner subquery's `path = ?` cannot see the
           // outer query's bound value -- it needs its own, so `entry.path`
-          // is bound twice. A two-argument bind here would leave LIMIT
-          // unbound (NULL) and compare the inner `path` against
-          // REVISION_DEPTH instead, which matches no row: the subquery
-          // would return nothing, `NOT IN (empty set)` would be true for
-          // every revision, and this statement would delete the path's
-          // entire history on every write instead of pruning to 20.
+          // is bound twice. A two-argument bind here is an arity mismatch
+          // against this three-placeholder SQL: most D1/SQLite drivers
+          // reject that outright ("Incorrect number of bindings supplied")
+          // before the statement runs at all, and if a driver let it
+          // through, LIMIT would receive NULL and SQLite raises "datatype
+          // mismatch" on `LIMIT NULL" rather than returning rows. Either way
+          // this fails loudly on every write that touches an existing path
+          // -- not the silent, unbounded deletion an unguarded
+          // `NOT IN (empty set)` reading might suggest, since that reading
+          // only applies once LIMIT already holds a valid integer, which an
+          // unbound third parameter cannot supply.
           .bind(entry.path, entry.path, REVISION_DEPTH),
       );
     }
