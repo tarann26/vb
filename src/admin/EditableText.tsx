@@ -35,7 +35,7 @@ function displayTextFor(value: string): string {
 // The two appearances. See the className comment at the bottom of this file
 // for why they differ and why the paused one is a strict subset.
 const EDITABLE_CLASSNAME =
-  'inline-block min-h-[1em] min-w-[1ch] cursor-text rounded-sm outline-dashed outline-1 outline-offset-2 outline-brand/50 focus:bg-brand/10 focus:outline-2 focus:outline-brand';
+  'inline-block min-h-[1em] min-w-[1ch] cursor-text rounded-sm outline-dashed outline-1 outline-offset-2 outline-accent/50 focus:bg-accent/10 focus:outline-2 focus:outline-accent';
 const LOCKED_CLASSNAME = 'inline-block min-h-[1em] min-w-[1ch] rounded-sm';
 
 // Strips any ZWSP the placeholder above may have left behind before a value

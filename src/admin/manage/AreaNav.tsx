@@ -44,12 +44,12 @@ export interface AreaNavProps {
   activeSlug: string;
 }
 
-// The current item is marked with `aria-current="page"` and a sage left
+// The current item is marked with `aria-current="page"` and an accent left
 // rule. Never by removing it from the list, and never by disabling its link:
 // a list that changes length depending on where you are is a list you cannot
 // learn, and a disabled current item is a control that looks broken.
 const SIDEBAR_ITEM = 'block border-l-2 py-2 pl-3 pr-2 transition';
-const SIDEBAR_CURRENT = 'border-brand bg-brand/10';
+const SIDEBAR_CURRENT = 'border-accent bg-accent/10';
 const SIDEBAR_IDLE = 'border-transparent hover:border-brand/40 hover:bg-brand/5';
 
 // A full-width tap target on the phone home. Generous vertical padding is
@@ -109,7 +109,7 @@ const AreaNav: React.FC<AreaNavProps> = ({ variant, activeSlug, problemSlugs = [
                     <span
                       role="img"
                       aria-label={`${area.label} has unpublished changes`}
-                      className="h-2 w-2 rounded-full bg-brand"
+                      className="h-2 w-2 rounded-full bg-accent"
                     />
                   )}
                   {!sidebar && (

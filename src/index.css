@@ -140,17 +140,6 @@ img[loading="lazy"]:not([src]) {
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
 }
 
-/* Better focus indicators. Unused today (no className references
-   `focus-ring` anywhere in src/), but the retired green's own decimal RGB
-   triple doesn't match the palette guard's hex-text search, so it would
-   otherwise sit here indefinitely as dead, stale CSS. Updated to the brand
-   surface colour's own decimal triple for consistency with the rest of
-   this file, in case the class is ever wired up. */
-.focus-ring:focus {
-  outline: none;
-  box-shadow: 0 0 0 3px rgba(200, 216, 232, 0.5);
-}
-
 /* Accessibility improvements */
 @media (prefers-reduced-motion: reduce) {
   *,

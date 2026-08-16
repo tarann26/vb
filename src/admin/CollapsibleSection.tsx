@@ -136,7 +136,7 @@ const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({ id, heading, lo
           aria-expanded={open}
           aria-controls={panelId}
           onClick={toggle}
-          className="flex w-full items-center justify-between gap-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand"
+          className="flex w-full items-center justify-between gap-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
         >
           <span>{heading}</span>
           <ChevronDown

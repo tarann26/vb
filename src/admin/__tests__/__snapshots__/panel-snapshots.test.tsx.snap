@@ -54,7 +54,7 @@ exports[`the ten panels, as they render today > Dishes (dishes) 1`] = `
               </label>
               <input
                 aria-describedby="dishes-field-id-0-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
                 id="dishes-field-id-0"
                 type="text"
                 value="a"
@@ -76,7 +76,7 @@ exports[`the ten panels, as they render today > Dishes (dishes) 1`] = `
                 Name
               </label>
               <input
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
                 id="dishes-field-name-0"
                 type="text"
                 value="Dish A"
@@ -92,7 +92,7 @@ exports[`the ten panels, as they render today > Dishes (dishes) 1`] = `
                 Description
               </label>
               <textarea
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
                 id="dishes-field-description-0"
               >
                 Dish A, described.
@@ -130,7 +130,7 @@ exports[`the ten panels, as they render today > Dishes (dishes) 1`] = `
               </label>
               <input
                 aria-describedby="dishes-field-tags-0-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
                 id="dishes-field-tags-0"
                 type="text"
                 value=""
@@ -188,7 +188,7 @@ exports[`the ten panels, as they render today > Dishes (dishes) 1`] = `
               </label>
               <input
                 aria-describedby="dishes-field-id-1-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
                 id="dishes-field-id-1"
                 type="text"
                 value="b"
@@ -210,7 +210,7 @@ exports[`the ten panels, as they render today > Dishes (dishes) 1`] = `
                 Name
               </label>
               <input
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
                 id="dishes-field-name-1"
                 type="text"
                 value="Dish B"
@@ -226,7 +226,7 @@ exports[`the ten panels, as they render today > Dishes (dishes) 1`] = `
                 Description
               </label>
               <textarea
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
                 id="dishes-field-description-1"
               >
                 Dish B, described.
@@ -264,7 +264,7 @@ exports[`the ten panels, as they render today > Dishes (dishes) 1`] = `
               </label>
               <input
                 aria-describedby="dishes-field-tags-1-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
                 id="dishes-field-tags-1"
                 type="text"
                 value=""
@@ -342,7 +342,7 @@ exports[`the ten panels, as they render today > Drinks (drinks) 1`] = `
               </label>
               <input
                 aria-describedby="drinks-field-id-0-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
                 id="drinks-field-id-0"
                 type="text"
                 value="x"
@@ -364,7 +364,7 @@ exports[`the ten panels, as they render today > Drinks (drinks) 1`] = `
                 Name
               </label>
               <input
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
                 id="drinks-field-name-0"
                 type="text"
                 value="Drink X"
@@ -380,7 +380,7 @@ exports[`the ten panels, as they render today > Drinks (drinks) 1`] = `
                 Description
               </label>
               <textarea
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
                 id="drinks-field-description-0"
               >
                 Drink X, described.
@@ -396,7 +396,7 @@ exports[`the ten panels, as they render today > Drinks (drinks) 1`] = `
                 Category
               </label>
               <select
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
                 id="drinks-field-category-0"
               >
                 <option
@@ -483,7 +483,7 @@ exports[`the ten panels, as they render today > Drinks (drinks) 1`] = `
               </label>
               <input
                 aria-describedby="drinks-field-id-1-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
                 id="drinks-field-id-1"
                 type="text"
                 value="y"
@@ -505,7 +505,7 @@ exports[`the ten panels, as they render today > Drinks (drinks) 1`] = `
                 Name
               </label>
               <input
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
                 id="drinks-field-name-1"
                 type="text"
                 value="Drink Y"
@@ -521,7 +521,7 @@ exports[`the ten panels, as they render today > Drinks (drinks) 1`] = `
                 Description
               </label>
               <textarea
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
                 id="drinks-field-description-1"
               >
                 Drink Y, described.
@@ -537,7 +537,7 @@ exports[`the ten panels, as they render today > Drinks (drinks) 1`] = `
                 Category
               </label>
               <select
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
                 id="drinks-field-category-1"
               >
                 <option
@@ -676,7 +676,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
               </label>
               <input
                 aria-describedby="gallery-atmosphere-0-alt-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
                 id="gallery-atmosphere-0-alt"
                 type="text"
                 value="The dining room laid for service"
@@ -760,7 +760,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
               </label>
               <input
                 aria-describedby="gallery-atmosphere-1-alt-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
                 id="gallery-atmosphere-1-alt"
                 type="text"
                 value="Via Bianca's signage on N-Block Market"
@@ -844,7 +844,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
               </label>
               <input
                 aria-describedby="gallery-atmosphere-2-alt-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
                 id="gallery-atmosphere-2-alt"
                 type="text"
                 value="Warm evening light across the restaurant"
@@ -928,7 +928,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
               </label>
               <input
                 aria-describedby="gallery-atmosphere-3-alt-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
                 id="gallery-atmosphere-3-alt"
                 type="text"
                 value="Hand-painted ceiling detail"
@@ -1012,7 +1012,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
               </label>
               <input
                 aria-describedby="gallery-atmosphere-4-alt-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
                 id="gallery-atmosphere-4-alt"
                 type="text"
                 value="The antique mirror by the entrance"
@@ -1096,7 +1096,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
               </label>
               <input
                 aria-describedby="gallery-atmosphere-5-alt-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
                 id="gallery-atmosphere-5-alt"
                 type="text"
                 value="Painted board on the dining room wall"
@@ -1180,7 +1180,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
               </label>
               <input
                 aria-describedby="gallery-atmosphere-6-alt-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
                 id="gallery-atmosphere-6-alt"
                 type="text"
                 value="The main room seen from the doorway"
@@ -1257,7 +1257,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
               </label>
               <input
                 aria-describedby="gallery-atmosphere-7-alt-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
                 id="gallery-atmosphere-7-alt"
                 type="text"
                 value="A set table with linen and glassware"
@@ -1351,7 +1351,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
               </label>
               <input
                 aria-describedby="gallery-ourStory-0-alt-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
                 id="gallery-ourStory-0-alt"
                 type="text"
                 value="Cutting fresh pasta by hand"
@@ -1435,7 +1435,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
               </label>
               <input
                 aria-describedby="gallery-ourStory-1-alt-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
                 id="gallery-ourStory-1-alt"
                 type="text"
                 value="A finished plate at the pass"
@@ -1519,7 +1519,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
               </label>
               <input
                 aria-describedby="gallery-ourStory-2-alt-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
                 id="gallery-ourStory-2-alt"
                 type="text"
                 value="Working dough by hand"
@@ -1603,7 +1603,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
               </label>
               <input
                 aria-describedby="gallery-ourStory-3-alt-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
                 id="gallery-ourStory-3-alt"
                 type="text"
                 value="The wood-fired oven at full heat"
@@ -1687,7 +1687,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
               </label>
               <input
                 aria-describedby="gallery-ourStory-4-alt-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
                 id="gallery-ourStory-4-alt"
                 type="text"
                 value="Shaping pasta in the pastificio"
@@ -1764,7 +1764,7 @@ exports[`the ten panels, as they render today > Galleries (galleries) 1`] = `
               </label>
               <input
                 aria-describedby="gallery-ourStory-5-alt-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
                 id="gallery-ourStory-5-alt"
                 type="text"
                 value="Filling fresh pasta"
@@ -2104,7 +2104,7 @@ exports[`the ten panels, as they render today > Menu PDFs (menus) 1`] = `
           </label>
           <input
             aria-describedby="menu-0-id-help"
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
             id="menu-0-id"
             type="text"
             value="food"
@@ -2126,7 +2126,7 @@ exports[`the ten panels, as they render today > Menu PDFs (menus) 1`] = `
             Label
           </label>
           <input
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
             id="menu-0-label"
             type="text"
             value="Food Menu"
@@ -2150,7 +2150,7 @@ exports[`the ten panels, as they render today > Menu PDFs (menus) 1`] = `
           <input
             accept="application/pdf"
             aria-describedby="menu-0-file-current"
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
             id="menu-0-file"
             type="file"
           />
@@ -2170,7 +2170,7 @@ exports[`the ten panels, as they render today > Menu PDFs (menus) 1`] = `
           </label>
           <input
             aria-describedby="menu-1-id-help"
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
             id="menu-1-id"
             type="text"
             value="drinks"
@@ -2192,7 +2192,7 @@ exports[`the ten panels, as they render today > Menu PDFs (menus) 1`] = `
             Label
           </label>
           <input
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
             id="menu-1-label"
             type="text"
             value="Drinks Menu"
@@ -2216,7 +2216,7 @@ exports[`the ten panels, as they render today > Menu PDFs (menus) 1`] = `
           <input
             accept="application/pdf"
             aria-describedby="menu-1-file-current"
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
             id="menu-1-file"
             type="file"
           />
@@ -2266,7 +2266,7 @@ exports[`the ten panels, as they render today > Opening hours (hours) 1`] = `
               </label>
               <input
                 aria-describedby="field-days-0-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
                 id="field-days-0"
                 type="text"
                 value="Mo, Tu"
@@ -2289,7 +2289,7 @@ exports[`the ten panels, as they render today > Opening hours (hours) 1`] = `
               </label>
               <input
                 aria-describedby="field-opens-0-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
                 id="field-opens-0"
                 type="text"
                 value="12:00"
@@ -2312,7 +2312,7 @@ exports[`the ten panels, as they render today > Opening hours (hours) 1`] = `
               </label>
               <input
                 aria-describedby="field-closes-0-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
                 id="field-closes-0"
                 type="text"
                 value="23:00"
@@ -2357,7 +2357,7 @@ exports[`the ten panels, as they render today > Our Story (story) 1`] = `
           Heading
         </label>
         <input
-          class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+          class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
           id="story-heading"
           type="text"
           value="About"
@@ -2399,7 +2399,7 @@ exports[`the ten panels, as they render today > Our Story (story) 1`] = `
               Paragraph 1
             </label>
             <textarea
-              class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+              class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
               id="story-paragraph-0"
             >
               Welcome to Via Bianca, a love letter to Italy. The interiors that are inspired by Puglia, its whitewashed streets, sunlit kitchens, and soulful food, we bring you more than a menu; we bring you a moment. One that's heartfelt, full of flavour, and kneaded with love.
@@ -2448,7 +2448,7 @@ exports[`the ten panels, as they render today > Our Story (story) 1`] = `
               Paragraph 2
             </label>
             <textarea
-              class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+              class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
               id="story-paragraph-1"
             >
               Born from my journey through the homes and kitchens of Puglia, Le Marche, and Emilia-Romagna, Via Bianca is a tribute to the Italian way of life; slow, simple, and deeply satisfying. After years spent training in iconic kitchens across India and Italy, I didn't just return with recipes but with a dream of a place where people gather, stories simmer, and pasta is made with heart and a whole lot of love and attention.
@@ -2497,7 +2497,7 @@ exports[`the ten panels, as they render today > Our Story (story) 1`] = `
               Paragraph 3
             </label>
             <textarea
-              class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+              class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
               id="story-paragraph-2"
             >
               At Via Bianca, we serve up age-old classics alongside rare regional dishes, and take pride in the little things- like a great cup of coffee or a perfectly blistered pizza crust. From Spaghetti all'Assassina to Corzetti, affogatos to aperitivos, you'll find seasonal plates inspired by the ingredients we love, and a menu that is a slow dance between tradition and surprise.
@@ -2546,7 +2546,7 @@ exports[`the ten panels, as they render today > Our Story (story) 1`] = `
               Paragraph 4
             </label>
             <textarea
-              class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+              class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
               id="story-paragraph-3"
             >
               Here, we believe in good food, relaxed meals, shared bites, and memories made around the table. So slow down, stay awhile. Let Italy come to you, one plate at a time.
@@ -2595,7 +2595,7 @@ exports[`the ten panels, as they render today > Our Story (story) 1`] = `
               Paragraph 5
             </label>
             <textarea
-              class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+              class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
               id="story-paragraph-4"
             >
               Created by emotion and travel, we hope that you fall in love with Italy, the same way I did.
@@ -2637,7 +2637,7 @@ exports[`the ten panels, as they render today > Our Story (story) 1`] = `
               Paragraph 6
             </label>
             <textarea
-              class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+              class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
               id="story-paragraph-5"
             >
               Buon appetito e divertiti, Chef Kamalika Anand
@@ -2731,7 +2731,7 @@ exports[`the ten panels, as they render today > Press (press) 1`] = `
               </label>
               <input
                 aria-describedby="press-field-id-0-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
                 id="press-field-id-0"
                 type="text"
                 value="p"
@@ -2753,7 +2753,7 @@ exports[`the ten panels, as they render today > Press (press) 1`] = `
                 Title
               </label>
               <input
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
                 id="press-field-title-0"
                 type="text"
                 value="Article P"
@@ -2769,7 +2769,7 @@ exports[`the ten panels, as they render today > Press (press) 1`] = `
                 Publication
               </label>
               <input
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
                 id="press-field-publication-0"
                 type="text"
                 value="Times"
@@ -2785,7 +2785,7 @@ exports[`the ten panels, as they render today > Press (press) 1`] = `
                 Published on
               </label>
               <input
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
                 id="press-field-date-0"
                 type="date"
                 value="2026-01-01"
@@ -2801,7 +2801,7 @@ exports[`the ten panels, as they render today > Press (press) 1`] = `
                 Excerpt
               </label>
               <textarea
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
                 id="press-field-excerpt-0"
               >
                 An excerpt.
@@ -2818,7 +2818,7 @@ exports[`the ten panels, as they render today > Press (press) 1`] = `
               </label>
               <input
                 aria-describedby="press-field-url-0-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
                 id="press-field-url-0"
                 type="text"
                 value=""
@@ -2897,7 +2897,7 @@ exports[`the ten panels, as they render today > Press (press) 1`] = `
               </label>
               <input
                 aria-describedby="press-field-id-1-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
                 id="press-field-id-1"
                 type="text"
                 value="q"
@@ -2919,7 +2919,7 @@ exports[`the ten panels, as they render today > Press (press) 1`] = `
                 Title
               </label>
               <input
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
                 id="press-field-title-1"
                 type="text"
                 value="Article Q"
@@ -2935,7 +2935,7 @@ exports[`the ten panels, as they render today > Press (press) 1`] = `
                 Publication
               </label>
               <input
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
                 id="press-field-publication-1"
                 type="text"
                 value="Times"
@@ -2951,7 +2951,7 @@ exports[`the ten panels, as they render today > Press (press) 1`] = `
                 Published on
               </label>
               <input
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
                 id="press-field-date-1"
                 type="date"
                 value="2026-01-01"
@@ -2967,7 +2967,7 @@ exports[`the ten panels, as they render today > Press (press) 1`] = `
                 Excerpt
               </label>
               <textarea
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
                 id="press-field-excerpt-1"
               >
                 An excerpt.
@@ -2984,7 +2984,7 @@ exports[`the ten panels, as they render today > Press (press) 1`] = `
               </label>
               <input
                 aria-describedby="press-field-url-1-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
                 id="press-field-url-1"
                 type="text"
                 value=""
@@ -3452,7 +3452,7 @@ exports[`the ten panels, as they render today > Words on the site (copy) 1`] = `
             Wordmark
           </label>
           <input
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
             id="copy-nav.wordmark"
             type="text"
             value="Via Bianca"
@@ -3470,7 +3470,7 @@ exports[`the ten panels, as they render today > Words on the site (copy) 1`] = `
             Instagram link label
           </label>
           <input
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
             id="copy-nav.instagramLabel"
             type="text"
             value="Follow Via Bianca on Instagram"
@@ -3488,7 +3488,7 @@ exports[`the ten panels, as they render today > Words on the site (copy) 1`] = `
             Menu button label
           </label>
           <input
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
             id="copy-nav.menuLabel"
             type="text"
             value="Menu"
@@ -3507,7 +3507,7 @@ exports[`the ten panels, as they render today > Words on the site (copy) 1`] = `
           </label>
           <input
             aria-describedby="copy-nav.pagesLabel-help"
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
             id="copy-nav.pagesLabel"
             type="text"
             value="Experiences"
@@ -3540,7 +3540,7 @@ exports[`the ten panels, as they render today > Words on the site (copy) 1`] = `
             Hero logo name
           </label>
           <input
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
             id="copy-hero.logoName"
             type="text"
             value="Via Bianca"
@@ -3558,7 +3558,7 @@ exports[`the ten panels, as they render today > Words on the site (copy) 1`] = `
             Hero logo tagline
           </label>
           <input
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
             id="copy-hero.logoTagline"
             type="text"
             value="Pastificio & Ristorante"
@@ -3576,7 +3576,7 @@ exports[`the ten panels, as they render today > Words on the site (copy) 1`] = `
             Reservations label
           </label>
           <input
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
             id="copy-hero.reservationsLabel"
             type="text"
             value="For reservations"
@@ -3594,7 +3594,7 @@ exports[`the ten panels, as they render today > Words on the site (copy) 1`] = `
             Reserve button
           </label>
           <input
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
             id="copy-hero.reserveButton"
             type="text"
             value="Reserve a Table"
@@ -3621,7 +3621,7 @@ exports[`the ten panels, as they render today > Words on the site (copy) 1`] = `
             Gallery heading
           </label>
           <input
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
             id="copy-atmosphere.heading"
             type="text"
             value="Atmosfera"
@@ -3648,7 +3648,7 @@ exports[`the ten panels, as they render today > Words on the site (copy) 1`] = `
             Menu heading
           </label>
           <input
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
             id="copy-food.heading"
             type="text"
             value="Hand-crafted Pastas & Wood-Fired Classics"
@@ -3675,7 +3675,7 @@ exports[`the ten panels, as they render today > Words on the site (copy) 1`] = `
             Drinks heading
           </label>
           <input
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
             id="copy-drinks.heading"
             type="text"
             value="Drinks"
@@ -3693,7 +3693,7 @@ exports[`the ten panels, as they render today > Words on the site (copy) 1`] = `
             Drinks intro
           </label>
           <textarea
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
             id="copy-drinks.intro"
           >
             Our bar pours a full Italian programme alongside our zero-proof mocktails: prosecco spritzes, rosé and classic cocktails from the bar team, and a wine list running from everyday Chianti to a Barolo DOCG and a Brunello di Montalcino.
@@ -3720,7 +3720,7 @@ exports[`the ten panels, as they render today > Words on the site (copy) 1`] = `
             Stories heading
           </label>
           <input
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
             id="copy-press.heading"
             type="text"
             value="Latest Stories"
@@ -3738,7 +3738,7 @@ exports[`the ten panels, as they render today > Words on the site (copy) 1`] = `
             Stories intro
           </label>
           <textarea
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
             id="copy-press.intro"
           >
             Discover what food critics and culinary experts are saying about Via Bianca's authentic Italian experience and Chef Kamalika's innovative approach to traditional cuisine.
@@ -3757,7 +3757,7 @@ exports[`the ten panels, as they render today > Words on the site (copy) 1`] = `
           </label>
           <input
             aria-describedby="copy-press.readArticle-help"
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
             id="copy-press.readArticle"
             type="text"
             value="Read Article"
@@ -3781,7 +3781,7 @@ exports[`the ten panels, as they render today > Words on the site (copy) 1`] = `
             View-all button
           </label>
           <input
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
             id="copy-press.viewAll"
             type="text"
             value="View All Stories"
@@ -3808,7 +3808,7 @@ exports[`the ten panels, as they render today > Words on the site (copy) 1`] = `
             Visit heading
           </label>
           <input
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
             id="copy-visit.heading"
             type="text"
             value="Visit Us"
@@ -3826,7 +3826,7 @@ exports[`the ten panels, as they render today > Words on the site (copy) 1`] = `
             Navigate button
           </label>
           <input
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
             id="copy-visit.navigateButton"
             type="text"
             value="Navigate"
@@ -3844,7 +3844,7 @@ exports[`the ten panels, as they render today > Words on the site (copy) 1`] = `
             Map title
           </label>
           <input
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
             id="copy-visit.mapTitle"
             type="text"
             value="Via Bianca Location - N-Block Market, Greater Kailash I"
@@ -3871,7 +3871,7 @@ exports[`the ten panels, as they render today > Words on the site (copy) 1`] = `
             Footer hours heading
           </label>
           <input
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
             id="copy-footer.hoursHeading"
             type="text"
             value="Opening Hours"
@@ -3890,7 +3890,7 @@ exports[`the ten panels, as they render today > Words on the site (copy) 1`] = `
           </label>
           <input
             aria-describedby="copy-footer.followLabel-help"
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
             id="copy-footer.followLabel"
             type="text"
             value="Follow Us:"
@@ -3919,7 +3919,7 @@ exports[`the ten panels, as they render today > Words on the site (copy) 1`] = `
             Footer reservations label
           </label>
           <input
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
             id="copy-footer.reservationsLabel"
             type="text"
             value="For Reservations:"
@@ -3937,7 +3937,7 @@ exports[`the ten panels, as they render today > Words on the site (copy) 1`] = `
             Copyright suffix
           </label>
           <input
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
             id="copy-footer.rightsSuffix"
             type="text"
             value=". All rights reserved."
@@ -3955,7 +3955,7 @@ exports[`the ten panels, as they render today > Words on the site (copy) 1`] = `
             Footer Instagram label
           </label>
           <input
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
             id="copy-footer.instagramLabel"
             type="text"
             value="Follow Via Bianca on Instagram"
@@ -3973,7 +3973,7 @@ exports[`the ten panels, as they render today > Words on the site (copy) 1`] = `
             Footer LinkedIn label
           </label>
           <input
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
             id="copy-footer.linkedinLabel"
             type="text"
             value="Connect with Via Bianca on LinkedIn"
@@ -4000,7 +4000,7 @@ exports[`the ten panels, as they render today > Words on the site (copy) 1`] = `
             Stories page title
           </label>
           <input
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
             id="copy-blogsPage.title"
             type="text"
             value="Via Bianca Stories"
@@ -4018,7 +4018,7 @@ exports[`the ten panels, as they render today > Words on the site (copy) 1`] = `
             Stories page subtitle
           </label>
           <input
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
             id="copy-blogsPage.subtitle"
             type="text"
             value="Press & Articles"
@@ -4036,7 +4036,7 @@ exports[`the ten panels, as they render today > Words on the site (copy) 1`] = `
             Stories page heading
           </label>
           <input
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
             id="copy-blogsPage.heading"
             type="text"
             value="All Stories"
@@ -4054,7 +4054,7 @@ exports[`the ten panels, as they render today > Words on the site (copy) 1`] = `
             Stories page intro
           </label>
           <textarea
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
             id="copy-blogsPage.intro"
           >
             Discover the complete collection of articles, reviews, and features about Via Bianca's culinary journey and authentic Italian dining experience.
@@ -4072,7 +4072,7 @@ exports[`the ten panels, as they render today > Words on the site (copy) 1`] = `
             Back link
           </label>
           <input
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
             id="copy-blogsPage.back"
             type="text"
             value="← Back to Home"
@@ -4090,7 +4090,7 @@ exports[`the ten panels, as they render today > Words on the site (copy) 1`] = `
             Previous button
           </label>
           <input
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
             id="copy-blogsPage.previous"
             type="text"
             value="Previous"
@@ -4108,7 +4108,7 @@ exports[`the ten panels, as they render today > Words on the site (copy) 1`] = `
             Next button
           </label>
           <input
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
             id="copy-blogsPage.next"
             type="text"
             value="Next"
@@ -4135,7 +4135,7 @@ exports[`the ten panels, as they render today > Words on the site (copy) 1`] = `
             404 heading
           </label>
           <input
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
             id="copy-notFound.heading"
             type="text"
             value="Page not found"
@@ -4153,7 +4153,7 @@ exports[`the ten panels, as they render today > Words on the site (copy) 1`] = `
             404 back link
           </label>
           <input
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
             id="copy-notFound.back"
             type="text"
             value="Back to home"

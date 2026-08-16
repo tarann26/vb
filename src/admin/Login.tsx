@@ -98,7 +98,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, notice }) => {
           value={password}
           onChange={(event) => setPassword(event.target.value)}
           required
-          className="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-brand focus:outline-none"
+          className="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none"
         />
 
         {error && (
