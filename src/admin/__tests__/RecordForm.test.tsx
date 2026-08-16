@@ -2,10 +2,22 @@ import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import RecordForm from '../RecordForm';
-import { ARTICLE_FIELDS, DISH_FIELDS, SITE_FIELDS } from '../fields';
+import { ARTICLE_FIELDS, DISH_FIELDS, EXPERIENCE_FIELDS, SITE_FIELDS } from '../fields';
 import type { FieldsOf } from '../fields';
+import { validateContent } from '../../content/validate';
 import type { ValidationProblem } from '../../content/validate';
-import type { Article, Dish } from '../../content/types';
+import type { Article, Dish, Experience } from '../../content/types';
+
+function experience(overrides: Partial<Experience> = {}): Experience {
+  return {
+    id: 'gifting',
+    title: 'Gifting',
+    description: 'Hampers for every occasion.',
+    image: '/experiences/gifting.webp',
+    comingSoon: true,
+    ...overrides,
+  };
+}
 
 function dish(overrides: Partial<Dish> = {}): Dish {
   return { id: 'bruschetta', name: 'Bruschetta', description: 'Toast, tomato, basil.', image: '/food/bruschetta.webp', tags: [], ...overrides };
@@ -209,9 +221,10 @@ describe('RecordForm: the real SITE_FIELDS descriptor (dotted bare keys, readonl
 // Article's `date` is the one remaining `kind: 'date'` field in this
 // dashboard, and it is REQUIRED -- clearing it must report the empty string
 // and keep the key, so validateContent can then say "this article needs a
-// real date". Every field now takes RecordForm's single generic set path
-// (`{ ...value, [key]: next }`); this pins that a date field goes through it
-// intact rather than being special-cased into a deletion the way the retired
+// real date". ARTICLE_FIELDS.date carries no `optional: true`, so it stays on
+// RecordForm's plain generic set path (`{ ...value, [key]: next }`); this
+// pins that a date field is unaffected by the `optional`-only deletion path
+// below, rather than being special-cased into a deletion the way the retired
 // scheduling field once was.
 describe('RecordForm: clearing a required date field empties it and keeps the key', () => {
   it("clearing Article's own `date` reports '' and does NOT delete the key", () => {
@@ -223,5 +236,67 @@ describe('RecordForm: clearing a required date field empties it and keeps the ke
     expect(onChange).toHaveBeenCalledWith({ ...record, date: '' });
     const published = onChange.mock.calls[0][0] as Article;
     expect(published).toHaveProperty('date', '');
+  });
+});
+
+// The owner-facing dead end the final branch review found (Important 2):
+// EXPERIENCE_FIELDS.link is `optional: true`, so clearing "Opens page" must
+// now delete the key rather than commit `link: ''`. Reproduced against the
+// same shape the review walked in the real dashboard -- an item that already
+// has a real link, cleared back out -- and against `validateExperience`
+// itself, not just RecordForm's own output, so this fails if either the
+// deletion or the validator's `!== undefined` gate regresses.
+describe('RecordForm: clearing an `optional: true` field deletes the key, not just its value', () => {
+  it('clearing a filled-in "Opens page" box removes the `link` key entirely', () => {
+    const onChange = vi.fn();
+    const record = experience({ comingSoon: false, link: '/catering' });
+    render(<RecordForm fields={EXPERIENCE_FIELDS} index={0} value={record} onChange={onChange} problems={[]} />);
+    fireEvent.change(screen.getByLabelText(EXPERIENCE_FIELDS.link.label), { target: { value: '' } });
+
+    const published = onChange.mock.calls[0][0] as Experience;
+    expect('link' in published).toBe(false);
+    // Not merely absent from this one assertion's view -- genuinely gone
+    // from the object RecordForm reported, the same distinction this file's
+    // own `withField` comment draws against `{ ...value, link: undefined }`.
+    expect(Object.keys(published)).not.toContain('link');
+  });
+
+  it('typing into a coming-soon item\'s empty "Opens page" box and clearing it back out leaves no `link` key', () => {
+    // The exact gesture the review reproduced against `mockEditBackend`:
+    // Gifting starts coming-soon with no `link` at all (`blankExperience`'s
+    // own shape), she types a page, then deletes what she typed.
+    const onChange = vi.fn();
+    let record = experience({ comingSoon: true });
+    expect('link' in record).toBe(false);
+    const { rerender } = render(
+      <RecordForm fields={EXPERIENCE_FIELDS} index={0} value={record} onChange={onChange} problems={[]} />,
+    );
+    const input = screen.getByLabelText(EXPERIENCE_FIELDS.link.label);
+    fireEvent.change(input, { target: { value: '/x' } });
+    record = onChange.mock.calls[0][0] as Experience;
+    expect(record.link).toBe('/x');
+    rerender(<RecordForm fields={EXPERIENCE_FIELDS} index={0} value={record} onChange={onChange} problems={[]} />);
+
+    fireEvent.change(screen.getByLabelText(EXPERIENCE_FIELDS.link.label), { target: { value: '' } });
+    const final = onChange.mock.calls[1][0] as Experience;
+    expect('link' in final).toBe(false);
+  });
+
+  it('the record clearing produces raises no `link` problem from the real validator, on either side of the pair rule', () => {
+    // The bug's own symptom, reproduced through the actual validator rather
+    // than RecordForm's output alone: before this fix, a coming-soon item
+    // with `link: ''` failed BOTH the blank-link check and the pair rule at
+    // once. This asserts the cleared record -- comingSoon true, no `link`
+    // key -- raises neither.
+    const cleared = experience({ comingSoon: true });
+    const problems = validateContent('experiences.json', [cleared]);
+    expect(problems.filter((p) => p.field.endsWith('.link'))).toEqual([]);
+
+    // And the mirror case the pair rule exists for -- comingSoon false with
+    // a real link -- is also clean, so this isn't passing by only ever
+    // exercising the coming-soon half.
+    const linked = experience({ comingSoon: false, link: '/catering' });
+    const linkedProblems = validateContent('experiences.json', [linked]);
+    expect(linkedProblems.filter((p) => p.field.endsWith('.link'))).toEqual([]);
   });
 });

@@ -80,10 +80,27 @@ type Kind<V> =
 // gives for splitting out the 'select' branch in the first place: a bare
 // optional field would let `kind: 'image'` compile with no `category` at
 // all, silently reproducing the exact gap this change exists to close.
+// `optional: true` marks a field whose KEY may be legitimately absent from
+// the record (`link?: string` on Experience, `image?: string` on Award) --
+// never a field that is merely allowed to hold an empty-looking value while
+// still being required (Article's own `date`, kept present-but-blank by
+// RecordForm.test.tsx's own pinned case). RecordForm reads this to decide
+// what "she cleared the box" should commit: for an ordinary field it stays
+// `{ ...value, [key]: '' }`, matching every kind that has always worked this
+// way; for an `optional` one, RecordForm deletes the key instead, so the
+// record round-trips to the exact shape a fresh, never-filled-in item would
+// have (`blankExperience`'s own `{ ..., comingSoon: true }`, no `link` key
+// at all) rather than to a `''` that reads as present-but-invalid. Present on
+// all three branches below (not just the plain one) because `image`-kind
+// fields can be optional too -- Award's badge is the other real example,
+// even though PhotoField itself never emits a blank value for it today (see
+// AWARD_FIELDS.image's own comment) -- marking it here keeps the descriptor
+// honest about the type it describes rather than only covering the one
+// shape that happens to be reachable right now.
 export type FieldSpec<V = unknown> =
-  | { label: string; kind: Exclude<Kind<V>, 'select' | 'image'>; help?: string }
-  | { label: string; kind: Extract<Kind<V>, 'select'>; options: readonly V[]; help?: string }
-  | { label: string; kind: Extract<Kind<V>, 'image'>; category: UploadCategory; help?: string };
+  | { label: string; kind: Exclude<Kind<V>, 'select' | 'image'>; help?: string; optional?: true }
+  | { label: string; kind: Extract<Kind<V>, 'select'>; options: readonly V[]; help?: string; optional?: true }
+  | { label: string; kind: Extract<Kind<V>, 'image'>; category: UploadCategory; help?: string; optional?: true };
 
 // `Required<T>` makes an optional content field (e.g. `Drink.image`, which
 // is nullable) required *in the descriptor* -- the dashboard still needs a
@@ -188,11 +205,19 @@ export const AWARD_FIELDS: FieldsOf<Award> = {
     help: 'Who gave you this award -- the publication, organisation or event that recognised you.',
   },
   year: { label: 'Year', kind: 'text', help: 'A four-digit year, e.g. 2026.' },
+  // `optional: true` for the same reason EXPERIENCE_FIELDS.link now carries
+  // it -- Award['image'] is a genuinely optional key (the comment above this
+  // descriptor already establishes that). PhotoField has no clear/remove
+  // control today, so nothing in this dashboard can actually commit a blank
+  // value here yet and this flag is inert in practice; it is set anyway so
+  // the descriptor doesn't silently drift back into the same trap the day a
+  // remove action is added to PhotoField.
   image: {
     label: 'Badge photo',
     kind: 'image',
     category: 'press',
     help: 'Optional -- leave it empty if this award has no badge to show.',
+    optional: true,
   },
 };
 
@@ -224,10 +249,23 @@ export const EXPERIENCE_FIELDS: FieldsOf<Experience> = {
   // site-relative slug path, and Experiences.tsx degrades an unresolvable
   // one to a coming-soon card, so a wrong value here is caught before
   // publish and harmless if it somehow lands.
+  // `optional: true` (FieldSpec's own comment above has the full reasoning):
+  // without it, clearing this box committed `link: ''` -- a key RecordForm's
+  // old plain `{ ...value, [key]: next }` path always wrote, present but
+  // blank -- which validateExperience then read as BOTH "needs a page, or
+  // leave it blank" (the pattern test on a blank string) AND, once she also
+  // has `comingSoon: true`, "is marked coming soon, so it cannot open a page
+  // yet" (the pair rule, which only excuses `undefined`, never `''`). Two
+  // contradictory errors on a box she has already emptied, with no UI action
+  // that clears either one -- reproduced directly against `mockEditBackend`.
+  // With this flag, the same gesture now deletes the key, exactly matching
+  // `blankExperience`'s own no-`link` shape, so the box being empty and the
+  // key being absent are finally the same state.
   link: {
     label: 'Opens page',
     kind: 'text',
     help: 'Leave this blank for a coming-soon item. Otherwise a page on this site, like /catering.',
+    optional: true,
   },
   comingSoon: {
     label: 'Coming soon',

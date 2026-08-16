@@ -84,6 +84,48 @@ function belongsToAnotherIndex(field: string, index: number): boolean {
   return found !== undefined && found !== index;
 }
 
+// What "she cleared the box" means for an `optional: true` field (fields.ts'
+// own comment on that flag has the full reasoning): an empty string (every
+// text/textarea kind) or `null` (the shape PhotoField would emit if it ever
+// grew a remove action) both read as "nothing here", the same as a key that
+// was never set. `undefined` is included too so a future kind that emits it
+// directly doesn't need its own case.
+function isBlankFieldValue(next: unknown): boolean {
+  return next === undefined || next === null || (typeof next === 'string' && next.trim().length === 0);
+}
+
+// The single write path every field in this form commits through. For an
+// ordinary field this is exactly the old `{ ...value, [key]: next }` --
+// unchanged, which is what RecordForm.test.tsx's "clearing a required date
+// field ... does NOT delete the key" case pins. For a field the descriptor
+// marks `optional: true`, a blank `next` deletes the key instead of writing
+// it: `{ ...value, [key]: undefined }` would leave the key PRESENT with an
+// `undefined` value (`'link' in result` stays true), which is not the same
+// state as never having had one, even though the two can look identical once
+// something naively checks truthiness. `blankExperience` (ExperiencesArea.tsx)
+// omits `link` entirely for exactly this reason -- deleting here is what
+// makes "she emptied the box" and "she never filled it in" the same object
+// shape, so validateExperience's own `item.link !== undefined` branches
+// treat them identically instead of the emptied one tripping both halves of
+// its pair rule.
+//
+// `T` is generic over every record RecordForm renders (Dish, Award,
+// Experience, Hours rows, ...), none of which are known here to have `key`
+// as an optional property -- `delete` on a plain `T[K]` is therefore not
+// something tsc will allow without help. The cast to `Record<string,
+// unknown>` is that help: it is scoped to this one function, only reached at
+// all when the descriptor itself has already asserted (via `optional: true`)
+// that removing this key is a valid state for T, so the cast documents a
+// guarantee the caller made rather than papering over one nothing checked.
+function withField<T extends object, K extends keyof T>(value: T, key: K, next: T[K], optional: boolean | undefined): T {
+  if (optional && isBlankFieldValue(next)) {
+    const clone = { ...value } as Record<string, unknown>;
+    delete clone[key as string];
+    return clone as T;
+  }
+  return { ...value, [key]: next };
+}
+
 function RecordForm<T extends object>({
   fields,
   index,
@@ -134,7 +176,7 @@ function RecordForm<T extends object>({
         id={idFor(String(key))}
         spec={spec}
         value={current}
-        onChange={(next) => onChange({ ...value, [key]: next })}
+        onChange={(next) => onChange(withField(value, key, next as T[K], spec.optional))}
         problems={fieldProblems}
         // Bound with this field's own key (e.g. "image"), never a
         // pre-formed compound key -- see this component's own onStaged
