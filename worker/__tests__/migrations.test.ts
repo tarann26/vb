@@ -52,4 +52,23 @@ describe('the D1 migrations', () => {
   it('makes path the primary key of content, so one document cannot exist twice', () => {
     expect(sql()).toMatch(/path\s+TEXT\s+PRIMARY KEY/i);
   });
+
+  // Pruning and undo both read "newest revisions for this path" -- exactly
+  // what (path, id DESC) serves. The group restore reads by publish_id
+  // instead. Nothing above this test pins either index's name or column
+  // list, so a later edit could drop one, reorder its columns, or flip
+  // DESC to ASC and every existing assertion would still pass.
+  it('declares both revisions indexes with the columns their access patterns need', () => {
+    const text = sql();
+
+    const byPath = text.match(/CREATE INDEX IF NOT EXISTS revisions_by_path ON revisions\s*\(([\s\S]*?)\);/i);
+    expect(byPath, 'no CREATE INDEX for revisions_by_path').not.toBeNull();
+    // The DESC matters: pruning and undo both want the newest rows for a
+    // path first, and an ascending index does not serve that read.
+    expect(byPath![1].replace(/\s+/g, ' ').trim()).toBe('path, id DESC');
+
+    const byPublish = text.match(/CREATE INDEX IF NOT EXISTS revisions_by_publish ON revisions\s*\(([\s\S]*?)\);/i);
+    expect(byPublish, 'no CREATE INDEX for revisions_by_publish').not.toBeNull();
+    expect(byPublish![1].replace(/\s+/g, ' ').trim()).toBe('publish_id');
+  });
 });
