@@ -455,6 +455,47 @@ describe('AdminApp: the real "Pages" screen', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// A NOTE ON WHY THIS CASE COUNTS ROWS RATHER THAN `getAllByLabelText`.
+//
+// It is not style. This case, written the obvious way, cost 2.5s of a 5s
+// budget on an idle machine and TIMED OUT under `npm run test:deploy` --
+// which packs the surviving files onto workers differently from `npm test`,
+// so the same work lands on a busier core. That refused a production deploy.
+//
+// What it was actually spending the time on is nothing asynchronous. It is
+// two synchronous `getAllByLabelText` sweeps, ~650ms EACH, measured. The
+// cause is jsdom 25's label resolution, and it is quadratic in the size of
+// the whole mounted document:
+//
+//   * `getAllByLabelText` reads `.labels` on every element in its container.
+//   * jsdom builds `input.labels` (helpers/form-controls.js) by iterating
+//     the ENTIRE document tree from the root and reading `.control` on
+//     every node it passes.
+//   * `HTMLLabelElement.control` (nodes/HTMLLabelElement-impl.js) resolves
+//     a `for=` attribute by iterating the ENTIRE document tree AGAIN,
+//     comparing `id` attributes -- there is no id index in that path.
+//
+// So one `.labels` read costs (document nodes x labels-with-`for`) node
+// visits. This dashboard has ~1170 elements and 172 `label[for]`, because
+// ManageShell deliberately mounts all five areas at once and keeps them
+// mounted (see its own header comment -- unmounting an area would re-fetch
+// and overwrite her unpublished edits, which is a far worse bug than a slow
+// test). Measured: ~600ms per sweep scoped to one section, ~3400ms scoped
+// to the whole screen. jsdom caches the resulting live NodeList per element
+// but invalidates it on any DOM mutation, so the sweep before the click and
+// the sweep after it BOTH pay in full.
+//
+// The rewrite below asserts strictly more than the original did -- a new
+// ROW, named as the blank one, with a blank Title on that row -- and costs
+// ~390ms instead of ~1650ms, because the only label query left is scoped to
+// a single <li> instead of the whole section. The timeout was NOT raised.
+//
+// The same pattern is still present elsewhere in this file (the "Add a
+// dish" case is ~2.3s for the same reason). Left alone deliberately: they
+// pass, and `npm run gate` now runs `test:deploy` itself, so the next one to
+// tip over is caught before a push rather than by Cloudflare.
+// ---------------------------------------------------------------------------
 describe('AdminApp: the real "Experiences" screen', () => {
   it('"Add a coming-soon item" on the real, mounted screen adds an item she can then edit', async () => {
     stubFetch();
@@ -463,12 +504,24 @@ describe('AdminApp: the real "Experiences" screen', () => {
     const section = await sectionByHeading('Experiences');
     await within(section).findByDisplayValue('Catering');
 
-    const before = within(section).getAllByLabelText('Title').length;
+    // One Remove button per record, and only per record -- RecordList names
+    // it `Remove ${itemLabel(item)}`, and nothing else inside this section
+    // renders a control whose accessible name starts with "Remove".
+    const rows = () => within(section).getAllByRole('button', { name: /^Remove / });
+    const before = rows().length;
     await user.click(within(section).getByRole('button', { name: 'Add a coming-soon item' }));
 
-    const titles = within(section).getAllByLabelText('Title');
-    expect(titles).toHaveLength(before + 1);
-    expect((titles[titles.length - 1] as HTMLInputElement).value).toBe('');
+    const after = rows();
+    expect(after).toHaveLength(before + 1);
+    // The appended row is the BLANK one, not a copy of an existing item:
+    // `itemLabel` falls back to "Untitled item" exactly when `title` is ''.
+    // Asserting this is what makes "the last row" mean "the new row" rather
+    // than assuming it from ordering.
+    const newRow = after[after.length - 1].closest('li');
+    expect(after[after.length - 1]).toHaveAccessibleName('Remove Untitled item');
+    // ...and it is a real, editable field of hers, reached the way she
+    // reaches it -- by its label -- scoped to that one row.
+    expect(within(newRow as HTMLElement).getByLabelText('Title')).toHaveValue('');
   });
 });
 
