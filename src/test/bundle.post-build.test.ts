@@ -658,18 +658,31 @@ describe('dist/assets/ keeps admin code out of the entry chunk', () => {
 // and that was simply run and found to pass.
 //
 // So neither rule was bought. Both went inline instead, the escape hatch this
-// file has pointed at since Plan 6 and the same one CollageTile.tsx's gradient,
+// file has pointed at since Plan 6 and the same one CollageTile.tsx's gradient
+// (that file has since been deleted whole, along with the grid machinery),
 // CollapsibleSection.tsx's fieldset reset and the publish panel's 72px offset
 // took: `style={{ cursor: 'move' }}` on the handle and `style={{ opacity: 0.5 }}`
-// on the row being dragged. Identical pixels, no rule, and `style-src` allows it
-// on purpose (src/test/hosting.test.ts). Reusing a shipped opacity utility was
-// considered and rejected on the pixels rather than the bytes: the four that
-// ship are 0, 20, 90 and 100, and 90 is not a visible change while 20 is a block
-// she can no longer read. There is no shipped cursor rule to reuse at all
-// (`cursor-pointer` and `cursor-text` are the two, and neither means "this
-// moves"). The handle's user-select and padding utilities ARE classes, because
-// those rules already exist -- and the user-select one is not decoration, since
-// without it a slow drag selects the kind label instead of starting a drag.
+// on the row being dragged. The second of those is not even a new shape here --
+// CollapsibleSection.tsx already ships `opacity: locked ? 0.6 : undefined` on
+// its own fieldset, which is the same conditional inline opacity for the same
+// reason. Identical pixels, no rule, and `style-src` allows it on purpose
+// (src/test/hosting.test.ts, whose own count of components doing this was one
+// short before this commit and is right again after it -- do not re-derive a
+// headcount from a comment, grep for it).
+//
+// Reusing a shipped opacity utility was considered and rejected on the pixels
+// rather than the bytes: the UNPREFIXED ones that ship are 0, 20, 90 and 100,
+// and 90 is no change she would notice while 20 is a block she can no longer
+// read. Read "unprefixed" literally in both of the next two sentences. The
+// sheet does carry `.disabled:opacity-50` and `.disabled:opacity-60`, and it
+// carries `.disabled:cursor-not-allowed` as well as the unprefixed
+// `.cursor-pointer` and `.cursor-text` -- none of which can dim or re-point a
+// list row, because a `<li>` is not a disabled form control. So there is no
+// reusable rule for either property, which is what makes both of them genuinely
+// new rather than a lookup somebody skipped. The handle's user-select and
+// padding utilities ARE classes, because those rules already exist -- and the
+// user-select one is not decoration, since without it a slow drag selects the
+// kind label instead of starting a drag.
 //
 // What that leaves is a whole sub-plan at zero: the Posts panel, PostList, the
 // block fields, the picker, the toolbar and the drag handle. Four of its files

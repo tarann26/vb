@@ -90,17 +90,21 @@ function claimsKey(block: Block, kind: BlockKind, key: string | undefined): bool
 // over it is the only thing that says it can be dragged at all.
 //
 // THE CURSOR IS AN INLINE STYLE, NOT A UTILITY CLASS, and that is a byte
-// decision rather than a style preference. The move-cursor utility has no rule
-// in this stylesheet, and neither has any half-strength opacity utility (the
-// four that ship are 0, 20, 90 and 100) -- measured, both of them, by a
+// decision rather than a style preference. No UNPREFIXED move-cursor rule is in
+// this stylesheet, and no unprefixed half-strength opacity rule either -- the
+// unprefixed opacity utilities that ship are 0, 20, 90 and 100. Read that word
+// literally: the sheet does carry a `:disabled`-gated half-strength rule and a
+// `:disabled` cursor rule, and neither can dim or re-point anything here,
+// because this row is not a disabled form control. Both were measured by a
 // rule-level diff against a worktree build of the parent commit: the class
 // version of this handle and its dimmed row costs +48 bytes and two new rules
 // against 107 bytes of headroom, leaving 59 for whoever comes next. So both
 // take the escape hatch this repository has documented for this exact ceiling
-// since Plan 6 (CollageTile.tsx's inline gradient, CollapsibleSection.tsx's
-// fieldset reset, the publish panel's 72px offset): the pixels are identical
-// and the stylesheet does not move a byte. `style-src` allows inline styles on
-// purpose and src/test/hosting.test.ts says why.
+// since Plan 6 (CollageTile.tsx's inline gradient, since deleted;
+// CollapsibleSection.tsx's fieldset reset, which also ships an inline
+// conditional opacity of its own; the publish panel's 72px offset): the pixels
+// are identical and the stylesheet does not move a byte. `style-src` allows
+// inline styles on purpose and src/test/hosting.test.ts says why.
 //
 // The user-select utility below is a real class because it ALREADY has a rule,
 // so it costs nothing -- and it is not optional: without it a slow drag selects
@@ -111,6 +115,14 @@ function claimsKey(block: Block, kind: BlockKind, key: string | undefined): bool
 // user reorders with the Up/Down buttons, which are real buttons with real
 // names and are not going anywhere. A `role="button"` here would announce a
 // third control that does nothing without a pointer.
+//
+// IT IS ALSO ON HER PHONE, WHERE A DRAG CANNOT WORK AT ALL, and that is a
+// decision rather than an oversight. Measured at 390px: 34.94 by 32, a small
+// grey dot grid to the left of the kind label. Taking it off small screens
+// means a breakpoint-prefixed display utility, which is a new rule against the
+// same 107 bytes this whole comment is about, spent to remove something that
+// costs her one glance. She reorders by Up and Down there, which is why those
+// buttons were never allowed to become optional.
 const HANDLE_CLASSNAME = 'select-none px-3 py-1 text-gray-500';
 
 // Read off the handle itself by e2e/block-editor.spec.ts, which is the only
@@ -120,9 +132,11 @@ const HANDLE_STYLE = { cursor: 'move' };
 
 // The block in flight, dimmed. Once the pointer has left the row this is the
 // only thing telling her which block she has hold of. Inline for the same
-// reason the cursor is, and 0.5 rather than one of the four opacity utilities
-// that do ship: 0.9 is not a visible change and 0.2 is a block she can no
-// longer read.
+// reason the cursor is, and 0.5 rather than one of the four unprefixed opacity
+// utilities that do ship: 0.9 is no change she would notice and 0.2 is a block
+// she can no longer read. Both halves are proven in the browser -- the row
+// dims, and it stops being dimmed once the drop lands, which is the half a
+// version that dimmed and never cleared would have passed.
 const DRAGGING_STYLE = { opacity: 0.5 };
 
 export default function BlockList({
@@ -186,15 +200,31 @@ export default function BlockList({
 
       {/* A POSITIONAL key on the <li>, deliberately, and it is the opposite
           call from RecordList's `key={item.id}`. A block carries no id and its
-          identity IS its position: moving one is exactly what Up/Down and
-          Task 8's drag handle do, and React should re-render both. PostBody.tsx
-          (5A, Task 6) argues the other side at length for CollagePhoto, where a
+          identity IS its position: moving one is exactly what Up/Down and the
+          drag handle do, and React should re-render both. PostBody.tsx (5A,
+          Task 6) argues the other side at length for CollagePhoto, where a
           positional identity was wrong because a photo survives a swap and a
-          staged replacement has to follow it. A block does not survive
-          anything -- but a staged PHOTO inside one does, which is why
-          `onStaged`'s key below is `blocks[<index>].src`: reordering blocks
-          after staging a photo and before publishing would misattribute it.
-          Task 10 owns the test for that. */}
+          staged replacement has to follow it.
+
+          A KNOWN DEFECT LIVES HERE, AND THE DRAG HANDLE WIDENED IT. Say this
+          plainly rather than as a note about keying, because it is the one
+          thing on this screen that can damage her work without telling her.
+
+          A block does not survive a reorder, but a staged PHOTO inside one
+          does, and `onStaged`'s key below is `blocks[<index>].src` -- a
+          POSITION. So she picks a photo for the fourth block, moves that block
+          to the top before publishing, and the photo she picked is attached to
+          whichever block is fourth now. Nothing on screen says so. The first
+          she sees of it is the published post.
+
+          Older than the drag handle: Up and Down could always do this. What
+          the handle changed is the cost of reaching it. Four positions used to
+          be six deliberate clicks and is now one gesture, so a defect that
+          needed persistence is now one an ordinary edit runs into.
+
+          Not fixed here on purpose. The fix is a stable key per staged photo,
+          which reaches the shared staged-file collector rather than this
+          component, and Task 10 owns it as a named deliverable. */}
       <ul>
         {safe.map((block, index) => {
           const kind = kindOf(block);
@@ -248,6 +278,11 @@ export default function BlockList({
                       // browsers -- so this is deliberately the block's own
                       // position as a plain string rather than anything a paste
                       // could act on.
+                      //
+                      // NOTHING TESTS THIS LINE. The browser spec runs Chromium,
+                      // which starts the drag without it, so the one browser
+                      // this exists for is the one nobody has run. If drag ever
+                      // reads as dead in Firefox, start here.
                       event.dataTransfer.setData('text/plain', String(index));
                       event.dataTransfer.effectAllowed = 'move';
                     }}
@@ -260,6 +295,15 @@ export default function BlockList({
                     // purpose). The same cheap-attribute reasoning `data-panel`
                     // follows, and it costs no CSS rule.
                     data-drag-handle={index}
+                    // The only `title` in src/, and it is here rather than
+                    // anywhere else for a reason this file can defend: every
+                    // other control on this dashboard says what it is in text or
+                    // in an aria-label, and this one is a single glyph with
+                    // neither. It reaches exactly one person -- somebody on a
+                    // mouse who hovers and waits -- and that is the only person
+                    // who can use the handle at all. It reaches no screen reader
+                    // (the element is aria-hidden, deliberately) and no phone.
+                    // Not an accessibility affordance and not counted as one.
                     title="Drag to move this block"
                   >
                     ⠿
@@ -331,6 +375,13 @@ export default function BlockList({
                     own.filter((entry) => entry.target.key === key).map((entry) => entry.problem)
                   }
                   previews={previews}
+                  // THE POSITIONAL STAGED-PHOTO KEY, which the <ul> above calls
+                  // a known defect and explains in full. A photo staged here
+                  // follows the INDEX, not the block, so any reorder between
+                  // picking it and publishing attaches it to a different block.
+                  // The drag handle made that reorder a single gesture. Task 10
+                  // owns the fix, which belongs in the shared staged-file
+                  // collector rather than in this line.
                   onStaged={(key, staged) => onStaged(`blocks[${index}].${key}`, staged)}
                   previewKeyPrefix={`${previewKeyPrefix}:blocks[${index}]`}
                 />

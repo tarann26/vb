@@ -5,10 +5,12 @@
 // src/admin/blocks/__tests__/BlockList.test.tsx says so in its own describe
 // name. Everything about whether a drag WORKS is here.
 //
-// Playwright's dragTo drives real pointer events and Chromium synthesises the
-// HTML5 drag sequence from them, which is the same path the owner's own mouse
-// takes. That is the whole point of running this in a browser rather than
-// firing a dragStart handler and calling it proof.
+// It drives `page.mouse` and nothing else. Chromium generates the whole HTML5
+// drag sequence from that pointer input, which is the same path the owner's own
+// mouse takes, and it is the reason removing `draggable` or removing
+// `preventDefault` reddens cases here that no dispatched DragEvent could notice.
+// `locator.dragTo` is deliberately NOT used and cannot be: see startDragging
+// below, which carries the measurements.
 //
 // Runs against `npm run dev` (playwright.config.ts's webServer.command), NOT
 // against dist/ -- so no build in this task has any bearing on what this spec
@@ -103,9 +105,19 @@ async function kindsOf(post: Locator): Promise<string[]> {
 //
 // Split in two so a test can assert on the mid-flight state, which is the only
 // moment the dragged row is dimmed.
+// Nothing type-checks this directory (tsconfig.json references app, node and
+// worker only), so a `!` on boundingBox would fail as "Cannot read properties of
+// null" fifty lines from anything that names a handle. Read once, checked once,
+// and the message says which handle and what was wrong with it.
+async function boxOf(handle: Locator, what: string): Promise<{ x: number; y: number; width: number; height: number }> {
+  const box = await handle.boundingBox();
+  if (box === null) throw new Error(`${what} has no box: the handle is not being rendered, or it is not on screen`);
+  return box;
+}
+
 async function startDragging(page: Page, handle: Locator): Promise<void> {
   await handle.scrollIntoViewIfNeeded();
-  const box = (await handle.boundingBox())!;
+  const box = await boxOf(handle, 'the handle the drag starts on');
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.down();
   // Still on the handle. This is the move `dragTo` never makes.
@@ -116,7 +128,7 @@ async function dropOnto(page: Page, handle: Locator): Promise<void> {
   // Safe to scroll now: the drag is already under way, so the browser follows the
   // pointer rather than losing the gesture.
   await handle.scrollIntoViewIfNeeded();
-  const box = (await handle.boundingBox())!;
+  const box = await boxOf(handle, 'the handle the drag is dropped onto');
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 10 });
   // A second move over the target, because `dragover` is what the drop depends on
   // and one move is one dragover.
