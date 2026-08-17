@@ -101,36 +101,68 @@ describe('cloudflare hosting config', () => {
   // pattern and zone -- since that's the thing whose absence (or whose zone
   // silently drifting to the wrong domain) is what would actually let
   // navigator.sendBeacon('/api/wa') succeed against HTML.
+  // The site is now served on more than one hostname (the real domain plus
+  // the pre-cutover test host), and `wrangler deploy` REPLACES the Worker's
+  // whole route list with exactly what's in this file -- see wrangler.toml's
+  // own comment. A route hand-added in the dashboard for one hostname
+  // survives only until the next deploy of this file, then vanishes without
+  // a word, and POST /api/login on that hostname goes back to a 405 from the
+  // static site. That is exactly what happened to viabiancarestaurant.com:
+  // this test's old single-object regex could not even see a second route,
+  // so it had nothing to say about the hostname that broke.
+  function parseRoutes(wrangler: string): { pattern: string; zoneName: string }[] {
+    const routesArray = wrangler.match(/routes\s*=\s*\[([\s\S]*?)\]/);
+    expect(routesArray).not.toBeNull();
+    const entries = [...routesArray![1].matchAll(/\{([^}]*)\}/g)].map((m) => m[1]);
+    expect(entries.length).toBeGreaterThan(0);
+    return entries.map((entry) => {
+      const pattern = entry.match(/pattern\s*=\s*"([^"]+)"/);
+      const zoneName = entry.match(/zone_name\s*=\s*"([^"]+)"/);
+      expect(pattern).not.toBeNull();
+      expect(zoneName).not.toBeNull();
+      return { pattern: pattern![1], zoneName: zoneName![1] };
+    });
+  }
+
   it('routes /api/* to the Worker on the site\'s real zone, not just the Pages catch-all', () => {
     const wrangler = readFileSync('wrangler.toml', 'utf8');
-    const routesBlock = wrangler.match(/routes\s*=\s*\[\s*\{([^}]*)\}\s*\]/);
-    expect(routesBlock).not.toBeNull();
-
-    const pattern = routesBlock![1].match(/pattern\s*=\s*"([^"]+)"/);
-    const zoneName = routesBlock![1].match(/zone_name\s*=\s*"([^"]+)"/);
-    expect(pattern).not.toBeNull();
-    expect(zoneName).not.toBeNull();
+    const routes = parseRoutes(wrangler);
 
     // Derived from site.json's own seo.url, not a second hardcoded literal
     // of the domain -- so this test fails if the two ever drift apart,
     // rather than each independently agreeing with a typo.
     const domain = new URL(site.seo.url).host;
-    expect(pattern![1]).toBe(`${domain}/api/*`);
+    expect(routes.some((r) => r.pattern === `${domain}/api/*`)).toBe(true);
 
-    // `zone_name` is the ZONE the route is registered in, which is not always
-    // the site's own host: a site served from a subdomain (e.g. the
+    // `zone_name` is the ZONE a route is registered in, which is not always
+    // that route's own host: a site served from a subdomain (e.g. the
     // vb.aionxxxi.uk test host used before the real domain was bought) lives
     // inside the aionxxxi.uk zone, and Cloudflare rejects a route whose
     // zone_name is not a real zone on the account. An earlier version of this
     // test asserted `zoneName === domain`, which silently encoded "the site is
-    // always at its zone apex" -- true of viabiancadelhi.com, false the moment
-    // a subdomain was used, and it failed a correct configuration.
+    // always at its zone apex" -- true of viabiancarestaurant.com, false the
+    // moment a subdomain was used, and it failed a correct configuration.
     //
-    // The property actually worth pinning is unchanged: the route is scoped to
-    // the zone that CONTAINS the site's host, so it cannot drift to some other
-    // domain and quietly stop covering /api/*.
-    const zone = zoneName![1];
-    expect(domain === zone || domain.endsWith(`.${zone}`)).toBe(true);
+    // The property actually worth pinning is unchanged, and now applied to
+    // EVERY route rather than just the first: each one is scoped to the zone
+    // that CONTAINS its own pattern's host, so no single route can drift to
+    // some other domain and quietly stop covering /api/*.
+    for (const { pattern, zoneName } of routes) {
+      const host = pattern.split('/')[0];
+      expect(host === zoneName || host.endsWith(`.${zoneName}`)).toBe(true);
+    }
+
+    // The assertion whose absence let the real breakage through: a route
+    // existing at all, and being scoped to the right zone, says nothing
+    // about whether EVERY hostname the site actually answers on has one. A
+    // hostname with no /api/* route here is exactly the silent 405 that hit
+    // viabiancarestaurant.com. This test cannot discover served hostnames by
+    // itself -- update this list whenever a hostname is added.
+    const SERVED_HOSTNAMES = ['viabiancarestaurant.com', 'vb.aionxxxi.uk'];
+    for (const host of SERVED_HOSTNAMES) {
+      const route = routes.find((r) => r.pattern === `${host}/api/*`);
+      expect(route, `no /api/* route for hostname "${host}" -- this is the silent 405`).toBeDefined();
+    }
   });
 
   // Scoped to the /assets/* block specifically, not matched against the
