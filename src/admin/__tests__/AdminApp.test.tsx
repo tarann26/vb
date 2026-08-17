@@ -159,6 +159,54 @@ async function sectionByHeading(name: string): Promise<HTMLElement> {
   return section as HTMLElement;
 }
 
+// A whole-PANEL `getByLabelText` is what has now nearly refused a production
+// deploy twice from this one file. The mechanics are written out in full in
+// the long note above the "Experiences" case below; the short version is
+// that jsdom 25 resolves `input.labels` by walking the entire document, and
+// `label.control` walks it again per label, so ONE such query costs
+// (elements in the container x elements in the document). Measured here:
+// 265ms against the About panel, 981ms against the Galleries panel.
+//
+// These two helpers are the cure at the call site. Neither of them gives up
+// the label -> control association -- that is the thing these tests are
+// supposed to prove, because it is how Bani finds a field at all. They just
+// stop paying for it across a panel when the answer can only live in one
+// small block.
+//
+// `fieldBlock` finds the ONE <div> that Field.tsx (and PhotoField.tsx, which
+// renders its own identical shell) wraps around a single field's <label>,
+// its control and its error region. Finding it by the label's TEXT is a
+// plain string match over the panel with no `.labels` resolution anywhere,
+// and a `getByLabelText` scoped to the returned block then sweeps four
+// elements instead of four hundred: 265ms becomes ~2ms.
+//
+// It is deliberately strict about uniqueness -- two fields sharing a label
+// inside one panel would make "the block" meaningless, so it throws rather
+// than picking one.
+function fieldBlock(container: HTMLElement, label: string): HTMLElement {
+  const labels = within(container).getAllByText(label, { selector: 'label' });
+  if (labels.length !== 1) {
+    throw new Error(`expected exactly one "${label}" field in this panel, found ${labels.length}`);
+  }
+  const block = labels[0].parentElement;
+  if (!block) throw new Error(`the "${label}" label is not inside a field block`);
+  return block;
+}
+
+// `photoPickers` is for the one case that genuinely has to count EVERY photo
+// field in a panel, where scoping to a block is not available. It reads the
+// same association from the control's side instead: each PhotoField renders
+// `<input type="file" id={id}>` alongside its own `<label for={id}>` in the
+// same block, so an id/`for` match plus the label's text proves exactly what
+// `getAllByLabelText` proves -- and costs one indexed selector match per
+// control rather than a document walk per element in the panel.
+function photoPickers(container: HTMLElement, label: string): HTMLInputElement[] {
+  return Array.from(container.querySelectorAll<HTMLInputElement>('input[type="file"]')).filter((input) => {
+    const own = input.parentElement?.querySelector('label');
+    return own?.htmlFor === input.id && own?.textContent?.trim() === label;
+  });
+}
+
 // The identical fake XHR double PhotoField.test.tsx/PdfField.test.tsx each
 // define -- needed here for Task 9's own wiring tests, which have to prove
 // a REAL upload reaches the shared collector through the whole real chain,
@@ -214,12 +262,26 @@ describe('AdminApp: Add, Remove and Reorder, exercised through the real componen
     const section = await dishesSection();
     await within(section).findByDisplayValue('Dish A');
 
-    expect(within(section).getAllByLabelText(DISH_FIELDS.name.label)).toHaveLength(2);
+    // Rows counted by each record's `Remove <name>` button, which is an
+    // `aria-label` and needs no label resolution at all -- the same
+    // conversion the "Experiences" case below documents at length, and for
+    // the same reason: the two `getAllByLabelText` sweeps this replaces were
+    // 193ms and 333ms of this case's ~700ms. Nothing else in the Dishes
+    // panel renders a control whose accessible name starts with "Remove".
+    const rows = () => within(section).getAllByRole('button', { name: /^Remove / });
+    expect(rows()).toHaveLength(2);
     await user.click(within(section).getByRole('button', { name: 'Add a dish' }));
 
-    const nameInputs = within(section).getAllByLabelText(DISH_FIELDS.name.label);
-    expect(nameInputs).toHaveLength(3);
-    expect(nameInputs[2]).toHaveValue('');
+    const after = rows();
+    expect(after).toHaveLength(3);
+    // The appended row is the BLANK one, not a third copy of an existing
+    // dish: MenuArea's `itemLabel` falls back to "Untitled dish" exactly
+    // when `name` is ''. This is what makes "the last row" mean "the new
+    // row" rather than assuming it from ordering.
+    expect(after[2]).toHaveAccessibleName('Remove Untitled dish');
+    const newRow = after[2].closest('li');
+    expect(newRow).not.toBeNull();
+    expect(within(newRow as HTMLElement).getByLabelText(DISH_FIELDS.name.label)).toHaveValue('');
   });
 
   it('"Remove Dish A" drops only that record, leaving Dish B intact', async () => {
@@ -605,7 +667,13 @@ describe('AdminApp: the new prose, gallery, menus and copy screens all render, f
     expect(photos.length).toBeGreaterThan(0);
     // One PhotoField per collage photo, on top of the atmosphere and
     // ourStory rows this screen already renders.
-    const pickers = within(section).getAllByLabelText('Photo');
+    //
+    // Counted through `photoPickers`, not `getAllByLabelText('Photo')`: that
+    // one query was 981ms of this case's 1066ms, measured -- the Galleries
+    // panel is the biggest in the dashboard, and it is the single most
+    // expensive label sweep left in this file. See photoPickers' own comment
+    // for why the association it checks is the same one.
+    const pickers = photoPickers(section, 'Photo');
     expect(pickers.length).toBe(GALLERIES.atmosphere.length + GALLERIES.ourStory.length + photos.length);
   });
 
@@ -1438,46 +1506,69 @@ describe('AdminApp: Phase 4 review fix -- a stale /edit draft missing `chef` is 
 
     const section = await sectionByHeading('About');
 
+    // Every label query below is scoped to the one field block it can
+    // possibly be answered by, not to this whole panel -- see fieldBlock's
+    // own comment. Written the obvious way, this case did SIX whole-panel
+    // `getByLabelText` sweeps at ~265ms each and ran at 4.4s of the 5000ms
+    // budget on an idle machine, which timed out under
+    // `npm run test:deploy` and refused a production build.
+    const nameField = fieldBlock(section, 'Your name');
+    const roleField = fieldBlock(section, 'What you are');
+    const portraitField = fieldBlock(section, 'Your photo');
+    const portraitAltField = fieldBlock(section, 'Description of your photo');
+
     // Does not crash: the heading she already had is still there, and the
     // four new fields render, empty, rather than the whole panel
     // disappearing behind SectionErrorBoundary.
     expect(within(section).getByDisplayValue(STORY.heading)).toBeInTheDocument();
-    expect(within(section).getByLabelText('Your name')).toHaveValue('');
+    expect(within(nameField).getByLabelText('Your name')).toHaveValue('');
 
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 450));
     });
 
     // All four, each on its OWN field -- not swept into the paragraph
-    // banner (StoryForm's own `chef.` banner filter).
-    expect(within(section).getByText('the About section needs your name')).toBeInTheDocument();
+    // banner (StoryForm's own `chef.` banner filter). Asserted INSIDE each
+    // field's own block, which is what makes "on its own field" a claim
+    // rather than a hope: the panel-wide version this replaces would have
+    // passed just as happily with all four messages sitting in the banner.
+    expect(within(nameField).getByText('the About section needs your name')).toBeInTheDocument();
     expect(
-      within(section).getByText('the About section needs a short line saying who you are, e.g. "Chef and owner"'),
+      within(roleField).getByText('the About section needs a short line saying who you are, e.g. "Chef and owner"'),
     ).toBeInTheDocument();
-    expect(within(section).getByText('the About section needs a photo of you')).toBeInTheDocument();
+    expect(within(portraitField).getByText('the About section needs a photo of you')).toBeInTheDocument();
     expect(
-      within(section).getByText('your photo needs a short description, for people using a screen reader'),
+      within(portraitAltField).getByText('your photo needs a short description, for people using a screen reader'),
     ).toBeInTheDocument();
 
     // She fills every one in -- three ordinary fields, then a real photo
     // upload through the same staged-file chain every other photo field
     // uses.
-    await user.type(within(section).getByLabelText('Your name'), 'Kamalika Anand');
-    await user.type(within(section).getByLabelText('What you are'), 'Chef and owner');
-    await user.type(within(section).getByLabelText('Description of your photo'), 'Chef Kamalika Anand');
+    await user.type(within(nameField).getByLabelText('Your name'), 'Kamalika Anand');
+    await user.type(within(roleField).getByLabelText('What you are'), 'Chef and owner');
+    await user.type(within(portraitAltField).getByLabelText('Description of your photo'), 'Chef Kamalika Anand');
 
-    const portraitInput = within(section).getByLabelText('Your photo');
+    const portraitInput = within(portraitField).getByLabelText('Your photo');
     await user.upload(portraitInput, jpegFile('kamalika.jpg'));
     await waitFor(() => expect(FakeXHR.instances).toHaveLength(1));
     FakeXHR.instances[0].respond(200, { path: 'assets-source/team/kamalika.jpg', contentPath: '/team/kamalika.webp' });
-    await waitFor(() => expect(within(section).getByLabelText('Your photo')).not.toBeDisabled());
+    // Re-read through the label on every poll, exactly as before -- what is
+    // gone is the whole-panel sweep this used to pay on every one of them
+    // (~830ms across the poll loop, measured). React keeps the block's <div>
+    // across re-renders, so the scope stays valid while the field inside it
+    // goes from disabled to enabled.
+    await waitFor(() => expect(within(portraitField).getByLabelText('Your photo')).not.toBeDisabled());
 
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 450));
     });
 
     // No chef problem survives -- she is no longer stuck, and Discard is no
-    // longer her only way out.
+    // longer her only way out. Deliberately still scoped to the WHOLE panel,
+    // not to the four blocks above: "gone from its own field" would also be
+    // true of a message that merely moved into the paragraph banner, and
+    // that is not gone. `queryByText` resolves no labels, so the panel-wide
+    // scope costs nothing here.
     expect(within(section).queryByText(/the About section needs your name/)).not.toBeInTheDocument();
     expect(within(section).queryByText(/needs a short line saying who you are/)).not.toBeInTheDocument();
     expect(within(section).queryByText(/needs a photo of you/)).not.toBeInTheDocument();
