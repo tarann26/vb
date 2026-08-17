@@ -965,9 +965,20 @@ deploy of unrelated code.
 
     node scripts/build-snapshot.mjs        # worker/snapshot.ts -- the Worker's outage fallback
     node scripts/sync-story-fallback.mjs   # src/content/story.json -- the browser's first-paint fallback
+    npx wrangler deploy                    # ships the Worker itself -- see below
 
 `build-snapshot.mjs` refuses to write an empty snapshot;
 `sync-story-fallback.mjs` refuses to write a body it cannot parse or that
-has no paragraphs or no chef block. Both failures are loud, because a
-silently-stale fallback serves HTTP 200 and reads to a visitor as "this is
-the content", not as a failure.
+has no heading, no paragraphs, or an incomplete chef block. Both failures
+are loud, because a silently-stale fallback serves HTTP 200 and reads to a
+visitor as "this is the content", not as a failure.
+
+`npx wrangler deploy` is not optional, and belongs on this list for the same
+reason the two scripts above do: it is the third of three artefacts a
+content-routing change touches, and it is the one Cloudflare Pages' own
+frontend build does not ship for you. Skipping it after adding a path to
+`D1_ONLY_PATHS` (`worker/store.ts`) or `PUBLIC_FILES` (`worker/published.ts`)
+leaves the live Worker serving its previous build -- `GET
+/api/published?path=<new file>` 404s against production while the frontend
+already expects it to work. The site does not break (the compiled-in
+fallback still renders), but the feature is inert until this runs.

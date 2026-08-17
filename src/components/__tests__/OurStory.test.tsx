@@ -119,6 +119,24 @@ describe('OurStory', () => {
       // Still renders the rest of the page -- a missing byline is not a
       // missing story.
       expect(screen.getByText(story.paragraphs[0])).toBeInTheDocument();
+      // A blank `<img src="">` resolves to the current page URL and
+      // browsers re-request it -- skip the tag entirely rather than render
+      // one with nothing to show.
+      expect(screen.queryByTestId('chef-portrait')).not.toBeInTheDocument();
+    });
+
+    // Same guard, isolated: a chef block that IS present but whose portrait
+    // is blank (the shape validateStory would reject, but this component's
+    // own defence should not depend on that) must not render a broken
+    // <img src="">.
+    it('does not render a portrait img when chef.portrait is blank', () => {
+      render(
+        <ContentProvider value={bundleWithChef({ name: 'X', role: 'Y', portrait: '', portraitAlt: '' })}>
+          <OurStory />
+        </ContentProvider>,
+      );
+      expect(screen.queryByTestId('chef-portrait')).not.toBeInTheDocument();
+      expect(screen.getByText('X')).toBeInTheDocument();
     });
 
     // The portrait is the last thing on the page's eighth section. Eager

@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { SNAPSHOT_BUILT_AT, snapshotFor, snapshotVersionFor } from '../snapshot';
 import { validateContent } from '../../src/content/validate';
 
@@ -7,11 +9,44 @@ describe('the compiled snapshot', () => {
     expect(snapshotFor('awards.json')).not.toBeNull();
   });
 
+  it('holds story.json (Phase 4, the second D1-only path)', () => {
+    expect(snapshotFor('story.json')).not.toBeNull();
+  });
+
   // A corrupt snapshot is worse than none: it would serve broken content at
   // exactly the moment nobody can look at the database to find out why.
   it('parses, and passes the same validator the write path runs', () => {
     const parsed = JSON.parse(snapshotFor('awards.json')!);
     expect(validateContent('awards.json', parsed)).toEqual([]);
+  });
+
+  it('story.json parses, and passes the same validator the write path runs', () => {
+    const parsed = JSON.parse(snapshotFor('story.json')!);
+    expect(validateContent('story.json', parsed)).toEqual([]);
+  });
+
+  // "Parses and validates" cannot catch every corruption -- a paragraph
+  // with its real prose swapped for wrong text still parses and still
+  // validates, because validateStory checks shape (blank? trailing
+  // ellipsis?), not content. worker/__tests__/published.test.ts's fallback
+  // test compares the served body against `snapshotFor('story.json')`,
+  // which is this exact value -- so that test can catch published.ts
+  // serving the WRONG thing, but it structurally cannot catch this
+  // snapshot's own body being wrong, because both sides of that
+  // comparison come from the same place. This test gives the snapshot's
+  // story.json body a genuinely independent thing to be checked against:
+  // src/content/story.json, the committed fallback file that
+  // scripts/sync-story-fallback.mjs keeps in step with this generated
+  // file before a deploy that matters. Unlike awards.json (see the retired
+  // byte-for-byte test's comment below), story.json still has a real
+  // committed source of truth outside this generated one, so this
+  // assertion does not go stale the way that one did -- it fails exactly
+  // when the two are supposed to agree and don't, whether the drift is a
+  // stale snapshot, a stale committed file, or (proven live before this
+  // test was written) a hand-corrupted snapshot body.
+  it("story.json's body matches the committed fallback file, byte for byte", () => {
+    const committed = readFileSync(join(process.cwd(), 'src', 'content', 'story.json'), 'utf-8');
+    expect(snapshotFor('story.json')).toBe(committed);
   });
 
   it('does not answer for inherited object properties', () => {
@@ -34,6 +69,13 @@ describe('the compiled snapshot', () => {
   // worker/d1.ts's `(prior?.version ?? 0) + 1`).
   it('records the D1 version its body was captured at', () => {
     const version = snapshotVersionFor('awards.json');
+    expect(version).not.toBeNull();
+    expect(Number.isInteger(version)).toBe(true);
+    expect(version!).toBeGreaterThan(0);
+  });
+
+  it("records story.json's D1 version its body was captured at", () => {
+    const version = snapshotVersionFor('story.json');
     expect(version).not.toBeNull();
     expect(Number.isInteger(version)).toBe(true);
     expect(version!).toBeGreaterThan(0);

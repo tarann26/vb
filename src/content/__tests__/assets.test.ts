@@ -159,6 +159,21 @@ describe('content assets', () => {
     expect(paths).toContain('/menus/food-menu.pdf'); // parked SignatureMocktails.tsx
   });
 
+  // The test above proves /team/kamalika-anand.webp is DISCOVERED somewhere
+  // in the walk -- it does not prove story.json is the one still pointing
+  // at it. press.json and ChefGallery.tsx are independent referrers, so
+  // repointing story.json's own chef.portrait to a different real file
+  // leaves the test above green (the string is still found, just from the
+  // other two places) and leaves it.each(paths) green too (the new path is
+  // a valid, existing file). Neither catches a drifted portrait in THIS
+  // document. This test reads story.json directly and pins its own field,
+  // independent of who else references the photo.
+  it("story.json's own chef.portrait still points at the real chef photo", () => {
+    const storyPath = join(CONTENT_DIR, 'story.json');
+    const story = JSON.parse(readFileSync(storyPath, 'utf-8')) as { chef: { portrait: string } };
+    expect(story.chef.portrait).toBe('/team/kamalika-anand.webp');
+  });
+
   it.each(paths)('%s exists in public/ with exact case', (path) => {
     expect(onDisk.has(decodeURIComponent(path))).toBe(true);
   });

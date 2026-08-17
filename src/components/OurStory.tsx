@@ -88,13 +88,21 @@ const OurStory: React.FC<OurStoryProps> = ({ fetchImpl = fetch }: OurStoryProps 
                 short lines fits a 390px viewport, which
                 e2e/about-byline.spec.ts measures rather than assumes. */}
             <div data-testid="chef-byline" className="mt-10 flex items-center gap-4 border-t border-gray-200 pt-8">
-              <img
-                data-testid="chef-portrait"
-                src={chef.portrait}
-                alt={chef.portraitAlt}
-                loading="lazy"
-                className="h-24 w-24 shrink-0 rounded-full object-cover"
-              />
+              {/* chef.portrait is blank only via the `?? {...}` fallback
+                  above (no chef at all) or a fetch that somehow slipped past
+                  fetchStory's shape check -- neither reachable today, but an
+                  <img src=""> resolves to the CURRENT PAGE URL and browsers
+                  re-request it, which is worth skipping for a one-line
+                  guard. */}
+              {chef.portrait && (
+                <img
+                  data-testid="chef-portrait"
+                  src={chef.portrait}
+                  alt={chef.portraitAlt}
+                  loading="lazy"
+                  className="h-24 w-24 shrink-0 rounded-full object-cover"
+                />
+              )}
               <div>
                 <p className="font-['Montserrat'] text-lg font-bold text-ink">{chef.name}</p>
                 <p className="font-['Open_Sans'] text-sm font-semibold uppercase tracking-wide text-accent">
