@@ -36,7 +36,7 @@ describe('SectionList: human names, not SectionIds', () => {
 
   it('every section gets a human name, and every id is covered', () => {
     renderList();
-    ['Hero', 'About', 'Atmosfera', 'Menu', 'Drinks', 'Experiences', 'Stories', 'Awards', 'Visit Us'].forEach((name) => {
+    ['Hero', 'About', 'Atmosfera', 'Menu', 'Drinks', 'Experiences', 'Blog', 'Awards', 'Visit Us'].forEach((name) => {
       expect(screen.getByText(name)).toBeInTheDocument();
     });
   });

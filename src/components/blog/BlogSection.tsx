@@ -23,7 +23,7 @@
 import { Link } from 'react-router-dom';
 import { useContent } from '../../content/ContentContext';
 import { usePosts } from './use-posts';
-import { sortedPosts } from './posts';
+import { EMPTY_POSTS_MESSAGE, sortedPosts } from './posts';
 import PostCard from './PostCard';
 
 // Three, matching what BlogTeaser showed before it and what a three-across
@@ -48,10 +48,11 @@ export default function BlogSection() {
         </div>
 
         {shown.length === 0 ? (
-          // The same honest empty state BlogIndex renders, word for word, so
-          // the two surfaces do not describe one situation two ways.
+          // The same honest empty state BlogIndex renders -- EMPTY_POSTS_MESSAGE
+          // (posts.ts) is the one place this sentence is written, so the two
+          // surfaces cannot drift into describing one situation two ways.
           <p className={`text-center font-['Open_Sans'] text-gray-600`}>
-            Nothing here yet — the first post is on its way.
+            {EMPTY_POSTS_MESSAGE}
           </p>
         ) : (
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 mb-12">

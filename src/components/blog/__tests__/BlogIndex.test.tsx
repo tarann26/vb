@@ -9,6 +9,7 @@ import BlogIndex from '../BlogIndex';
 // that file's own comment on why the split happened), which is where this
 // import actually resolves.
 import { ContentProvider, defaultBundle } from '../../../content/ContentContext';
+import { EMPTY_POSTS_MESSAGE } from '../posts';
 import type { Post } from '../../../content/types';
 
 function post(n: number): Post {
@@ -119,9 +120,14 @@ describe('BlogIndex', () => {
     expect(screen.queryAllByRole('button', { name: /^\d+$/ })).toHaveLength(0);
   });
 
+  // Fix round 1, Finding 1: asserts the exact, imported EMPTY_POSTS_MESSAGE
+  // rather than a loose regex, for the same reason BlogSection.test.tsx's
+  // sibling case does -- checking both surfaces against the SAME constant is
+  // what makes a re-inlined, un-imported string in either one fail its own
+  // test.
   it('says so plainly when there are no posts yet, rather than rendering an empty grid', () => {
     const { container } = renderIndex([]);
-    expect(screen.getByText(/nothing here yet/i)).toBeInTheDocument();
+    expect(screen.getByText(EMPTY_POSTS_MESSAGE)).toBeInTheDocument();
     expect(cardHeadings(container)).toHaveLength(0);
   });
 

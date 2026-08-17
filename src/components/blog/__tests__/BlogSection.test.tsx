@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router-dom';
 import BlogSection from '../BlogSection';
 import { ContentProvider, defaultBundle } from '../../../content/ContentContext';
 import { copy } from '../../../content';
+import { EMPTY_POSTS_MESSAGE } from '../posts';
 import type { Post } from '../../../content/types';
 
 function post(overrides: Partial<Post> & Pick<Post, 'slug' | 'title' | 'date'>): Post {
@@ -111,10 +112,16 @@ describe('BlogSection', () => {
   // section renders on the homepage regardless of what sections.json says
   // about the others -- so an empty grid under a heading is the shape that
   // reads as broken.
+  // Fix round 1, Finding 1: asserts the exact, imported EMPTY_POSTS_MESSAGE
+  // rather than a loose regex -- a loose `/on its way/i` stays green even if
+  // this component's own copy of the sentence drifts from BlogIndex's.
+  // Checking against the SAME constant BlogIndex.test.tsx checks against
+  // means a re-inlined, un-imported string here fails this exact assertion,
+  // which is the "cannot drift" property the shared export is for.
   it('says something honest when there are no posts at all', () => {
     renderSection({ posts: [] });
     expect(document.querySelectorAll('article')).toHaveLength(0);
-    expect(screen.getByText(/on its way/i)).toBeInTheDocument();
+    expect(screen.getByText(EMPTY_POSTS_MESSAGE)).toBeInTheDocument();
   });
 
   it('paints the committed posts while the database fetch is pending', () => {

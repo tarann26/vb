@@ -449,7 +449,7 @@ describe('AdminApp: the real "Homepage sections" screen', () => {
     stubFetch();
     renderDashboard('/edit/manage/pages');
     const section = await sectionByHeading('What shows on the homepage');
-    expect(within(section).getAllByText(/^(Hero|About|Atmosfera|Menu|Drinks|Stories|Awards|Visit Us)$/)).toHaveLength(8);
+    expect(within(section).getAllByText(/^(Hero|About|Atmosfera|Menu|Drinks|Blog|Awards|Visit Us)$/)).toHaveLength(8);
   });
 
   it('reordering the real screen calls through to a genuine onReorder, visible in the rendered order', async () => {
@@ -461,7 +461,7 @@ describe('AdminApp: the real "Homepage sections" screen', () => {
 
     await user.click(within(section).getByRole('button', { name: 'Move Hero down' }));
 
-    const HUMAN_NAMES = ['Hero', 'About', 'Atmosfera', 'Menu', 'Drinks', 'Stories', 'Awards', 'Visit Us'];
+    const HUMAN_NAMES = ['Hero', 'About', 'Atmosfera', 'Menu', 'Drinks', 'Blog', 'Awards', 'Visit Us'];
     const namesInOrder = within(section)
       .getAllByRole('listitem')
       .map((li) => HUMAN_NAMES.find((name) => li.textContent?.startsWith(name)));

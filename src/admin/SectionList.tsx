@@ -69,7 +69,15 @@ const SECTION_NAMES: Record<SectionId, { name: string; anchor: string | null }> 
   food: { name: 'Menu', anchor: '#menu' },
   drinks: { name: 'Drinks', anchor: null },
   experiences: { name: 'Experiences', anchor: '#experiences' },
-  press: { name: 'Stories', anchor: '#blogs' },
+  // Fix round 1, Finding 2: this used to say 'Stories', matching the live
+  // nav's old label -- Task 11 (Phase 5B) moved the nav to 'Blog' when the
+  // section behind this id became the blog (BlogSection.tsx) and left this
+  // map unsynced, so the one screen where she reorders the homepage named a
+  // section the homepage itself called something else. No analytics key
+  // depends on this map (unlike SECTION_LABELS.press, EditMode.tsx, which
+  // stays 'Press' on purpose -- see that file's own comment), so there is
+  // nothing this rename forks.
+  press: { name: 'Blog', anchor: '#blogs' },
   awards: { name: 'Awards', anchor: '#awards' },
   visit: { name: 'Visit Us', anchor: '#visit' },
 };

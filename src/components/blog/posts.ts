@@ -13,6 +13,16 @@ import type { Post, PostType } from '../../content/types';
 // which is why its last row always had one card sitting alone.
 export const POSTS_PER_PAGE = 9;
 
+// Fix round 1, Finding 1: BlogSection's own header comment used to claim its
+// empty state matched BlogIndex's "word for word" -- true when written, and
+// unguarded: nothing compared the two strings, and both surfaces' own tests
+// only assert a loose regex (`/on its way/i`, `/nothing here yet/i`), so a
+// silent re-wording of either one stayed green. One exported constant, both
+// components importing it, makes "the two surfaces do not describe one
+// situation two ways" a property of the code rather than a claim about it --
+// there is no longer a second string for either to drift from.
+export const EMPTY_POSTS_MESSAGE = 'Nothing here yet — the first post is on its way.';
+
 // A total Record over PostType, so a fourth type is a `tsc -b` failure here
 // rather than a blank badge on every one of its cards.
 export const POST_TYPE_LABELS: Record<PostType, string> = {

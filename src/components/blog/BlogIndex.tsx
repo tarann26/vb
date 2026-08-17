@@ -12,7 +12,7 @@ import { useCanonical } from '../useCanonical';
 import NavBar from '../NavBar';
 import Footer from '../Footer';
 import PostCard from './PostCard';
-import { pageCount, pageOf } from './posts';
+import { EMPTY_POSTS_MESSAGE, pageCount, pageOf } from './posts';
 import { usePosts } from './use-posts';
 
 // `copy.blogsPage.heading`/`.intro` are the two blogsPage.* leaves still
@@ -70,9 +70,11 @@ export default function BlogIndex() {
             // An honest empty state rather than an empty grid. A restaurant
             // with no posts yet is the ordinary first state (assertPosts and
             // validatePosts both accept an empty list on purpose), and a
-            // silent blank area reads as a broken page.
+            // silent blank area reads as a broken page. EMPTY_POSTS_MESSAGE
+            // (posts.ts) is shared with BlogSection's own empty state, so the
+            // two surfaces cannot drift into describing one situation two ways.
             <p className={`text-center font-['Open_Sans'] text-gray-600`}>
-              Nothing here yet — the first post is on its way.
+              {EMPTY_POSTS_MESSAGE}
             </p>
           ) : (
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 mb-12">
