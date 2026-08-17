@@ -187,7 +187,19 @@ function dotsNeeded(filePath: string): number {
 // exactly this -- straight through. Confirmed directly: that version left
 // this exact line green across all 21 tests in this file's previous
 // revision.
-const SAFE_CONTENT_SUBMODULES = ['types', 'validate', 'guards', 'context', 'collage'];
+//
+// `markdown` joins the list for Task 7, and it qualifies more plainly than
+// anything already on it: `content/markdown.ts` imports NOTHING AT ALL --
+// zero import statements, no JSON, no react, so no transitive path to
+// `src/content/index.ts` can exist (confirmed by reading it, and by its own
+// header, which says the property is deliberate because the Cloudflare Worker
+// bundles this module). The dashboard reads `isSafeHref` out of it so the
+// toolbar's link button refuses an unusable target with the same judgement
+// the parser and the write boundary make, rather than a fourth copy of that
+// judgement. Pinned in the case below, not merely added here: this list has
+// already carried an entry (`placement`) that nothing asserted, so the suite
+// stayed green with it present or absent alike.
+const SAFE_CONTENT_SUBMODULES = ['types', 'validate', 'guards', 'context', 'collage', 'markdown'];
 
 function importsContentSnapshot(source: string, filePath: string): boolean {
   const dots = dotsNeeded(filePath);
@@ -329,7 +341,7 @@ describe('importsContentSnapshot catches every import form, at the right depth',
     expect(importsContentSnapshot(`import type { Dish } from '../content/types';`, AT_DEPTH_1)).toBe(false);
   });
 
-  it('does not match the validate/guards/context/collage modules, which import no JSON', () => {
+  it('does not match the validate/guards/context/collage/markdown modules, which import no JSON', () => {
     expect(importsContentSnapshot(`import { validateContent } from '../content/validate';`, AT_DEPTH_1)).toBe(false);
     expect(importsContentSnapshot(`import { assertSections } from '../content/guards';`, AT_DEPTH_1)).toBe(false);
     // Post-review Fix 5: `context` holds a real runtime `createContext` call
@@ -347,6 +359,20 @@ describe('importsContentSnapshot catches every import form, at the right depth',
     // asserting it, so 1844 tests stayed green with the entry present or
     // absent alike -- exactly the change this file exists to catch.
     expect(importsContentSnapshot(`import { setCollagePhotoSrc } from '../content/collage';`, AT_DEPTH_1)).toBe(false);
+    // `markdown` is the strongest case on the list: the module has zero
+    // import statements, so there is no path to the snapshot to have. The
+    // dashboard's link button reads `isSafeHref` from it.
+    expect(importsContentSnapshot(`import { isSafeHref } from '../content/markdown';`, AT_DEPTH_1)).toBe(false);
+  });
+
+  // The half the pin above cannot state on its own: `markdown` is on the safe
+  // list because of a property of the real file, and that property is
+  // checkable. If somebody ever gives `content/markdown.ts` an import, this
+  // reddens and the entry has to be re-argued rather than silently inherited.
+  it('the real content/markdown module still imports nothing at all', () => {
+    const source = readFileSync('src/content/markdown.ts', 'utf8');
+    const importLines = source.split('\n').filter((line) => /^\s*(?:import|export\s*\*)\b/.test(line));
+    expect(importLines).toEqual([]);
   });
 
   // The direct-JSON-import fix must not overreach into flagging the four

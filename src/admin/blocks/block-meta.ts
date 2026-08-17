@@ -7,6 +7,15 @@
 // Her words, not the model's. "numberList" and "bulletList" are programmer
 // names for two things she thinks of as a numbered list and a bulleted list;
 // "citation" is a word a chef has no reason to know.
+//
+// A WARNING FOR ANYONE WRITING A TEST AGAINST THESE STRINGS, carried from
+// Task 6's review and applied here because it had been proposed twice and
+// written down nowhere: `getByText(BLOCK_KIND_LABELS.x)` against a mounted
+// BlockList ALWAYS matches twice -- once on the picker button that adds that
+// kind, once on the strip over a block of that kind. It is structural, not a
+// fixture accident, and it has already broken two tests. Scope the query to
+// the block's own `<li>` (or to the picker) instead of asking the whole
+// screen.
 import type { BlockKind } from '../../content/types';
 
 export const BLOCK_KIND_LABELS: Record<BlockKind, string> = {

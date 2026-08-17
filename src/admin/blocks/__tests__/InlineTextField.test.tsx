@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import InlineTextField from '../InlineTextField';
@@ -79,5 +79,216 @@ describe('InlineTextField', () => {
     );
     expect(screen.getAllByRole('alert')).toHaveLength(1);
     expect(screen.getByRole('alert')).toHaveTextContent('first complaint second complaint');
+  });
+});
+
+// window.prompt is "not implemented" in jsdom and printing that stack is the
+// noise a review already had fixed once (window.scrollTo, stubbed in
+// setup.ts) -- noise in a passing suite is what hides the next real error. It
+// is spied per-test rather than stubbed globally in setup.ts, because its
+// RETURN VALUE is this feature's input and a global stub would have to pick
+// one answer for every test in the repository.
+function promptWith(answer: string | null) {
+  return vi.spyOn(window, 'prompt').mockReturnValue(answer);
+}
+
+function renderField(value: string, onChange = vi.fn()) {
+  render(<InlineTextField id="f" label="Words" value={value} onChange={onChange} problems={[]} />);
+  const area = screen.getByLabelText('Words') as HTMLTextAreaElement;
+  return { area, onChange };
+}
+
+function select(area: HTMLTextAreaElement, start: number, end: number) {
+  area.focus();
+  area.setSelectionRange(start, end);
+}
+
+describe('the formatting toolbar', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('wraps the selection in bold markers and leaves the rest alone', async () => {
+    const user = userEvent.setup();
+    const { area, onChange } = renderField('Rest the dough for an hour.');
+    select(area, 9, 14);
+    await user.click(screen.getByRole('button', { name: 'Bold' }));
+    expect(onChange).toHaveBeenCalledWith('Rest the **dough** for an hour.');
+  });
+
+  it('wraps the selection in emphasis markers', async () => {
+    const user = userEvent.setup();
+    const { area, onChange } = renderField('Rest the dough for an hour.');
+    select(area, 9, 14);
+    await user.click(screen.getByRole('button', { name: 'Italic' }));
+    expect(onChange).toHaveBeenCalledWith('Rest the *dough* for an hour.');
+  });
+
+  // With nothing selected the markers still go in, around an empty middle, so
+  // she can turn bold ON and then type. A toolbar that did nothing without a
+  // selection is a button that appears broken.
+  it('with nothing selected, inserts the markers and puts the caret between them', async () => {
+    const user = userEvent.setup();
+    const { area, onChange } = renderField('Rest the dough.');
+    select(area, 15, 15);
+    await user.click(screen.getByRole('button', { name: 'Bold' }));
+    expect(onChange).toHaveBeenCalledWith('Rest the dough.****');
+  });
+
+  // The selection has to survive the round trip, or the second click of a
+  // bold-then-italic pair applies to the wrong characters. This is the one
+  // claim in the file that is about the textarea's own state rather than the
+  // string, and jsdom implements setSelectionRange faithfully -- unlike
+  // layout, which is why this is not an e2e test.
+  it('keeps the same words selected afterwards, so a second marker lands correctly', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    const { rerender } = render(
+      <InlineTextField id="f" label="Words" value="Rest the dough." onChange={onChange} problems={[]} />,
+    );
+    const area = screen.getByLabelText('Words') as HTMLTextAreaElement;
+    select(area, 9, 14);
+    await user.click(screen.getByRole('button', { name: 'Bold' }));
+    rerender(
+      <InlineTextField id="f" label="Words" value="Rest the **dough**." onChange={onChange} problems={[]} />,
+    );
+    expect(area.selectionStart).toBe(11);
+    expect(area.selectionEnd).toBe(16);
+    expect(area.value.slice(area.selectionStart, area.selectionEnd)).toBe('dough');
+  });
+
+  it('a link wraps the selection and takes the target she typed', async () => {
+    const user = userEvent.setup();
+    promptWith('https://example.com/a');
+    const { area, onChange } = renderField('See the piece here.');
+    select(area, 4, 13);
+    await user.click(screen.getByRole('button', { name: 'Link' }));
+    expect(onChange).toHaveBeenCalledWith('See [the piece](https://example.com/a) here.');
+  });
+
+  it('a link with nothing selected gets placeholder words she can then replace', async () => {
+    const user = userEvent.setup();
+    promptWith('/catering');
+    const { area, onChange } = renderField('Read more: ');
+    select(area, 11, 11);
+    await user.click(screen.getByRole('button', { name: 'Link' }));
+    expect(onChange).toHaveBeenCalledWith('Read more: [this](/catering)');
+  });
+
+  it('cancelling the prompt changes nothing at all', async () => {
+    const user = userEvent.setup();
+    promptWith(null);
+    const { area, onChange } = renderField('See the piece here.');
+    select(area, 4, 13);
+    await user.click(screen.getByRole('button', { name: 'Link' }));
+    expect(onChange).not.toHaveBeenCalled();
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  // Pressing OK on an empty box is not the same act as pressing Cancel, and
+  // she should be told so. Added because mutation 3 of this task's table
+  // (treating `''` as Cancel) survived every other case in this file.
+  it('pressing OK with nothing in the box is refused, not treated as cancelling', async () => {
+    const user = userEvent.setup();
+    promptWith('');
+    const { area, onChange } = renderField('See the piece here.');
+    select(area, 4, 13);
+    await user.click(screen.getByRole('button', { name: 'Link' }));
+    expect(onChange).not.toHaveBeenCalled();
+    expect(screen.getByRole('alert')).toHaveTextContent(/will not work as a link/);
+  });
+
+  // The security half, and every payload here is one isSafeHref was hardened
+  // against. Refused BEFORE it reaches the text: validatePosts would refuse
+  // it too, at publish, minutes later and one screen away -- both boundaries
+  // exist and neither replaces the other.
+  it.each([
+    ['javascript:alert(1)'],
+    ['data:text/html,<script>alert(1)</script>'],
+    ['vbscript:msgbox(1)'],
+    ['//evil.example/x'],
+    ['/\\evil.example'],
+    ['/press/../../etc/passwd'],
+    ['example.com'],
+    ['https:// evil.example'],
+  ])('refuses %s before it reaches the text', async (target) => {
+    const user = userEvent.setup();
+    promptWith(target);
+    const { area, onChange } = renderField('See the piece here.');
+    select(area, 4, 13);
+    await user.click(screen.getByRole('button', { name: 'Link' }));
+    expect(onChange).not.toHaveBeenCalled();
+    expect(screen.getByRole('alert')).toHaveTextContent(/will not work as a link/);
+  });
+
+  // Accepted, and asserted beside the refusals rather than left implicit. A
+  // percent-encoded backslash is not decoded before parsing, so it stays on
+  // this origin -- refusing it would be over-strict against real content, and
+  // that was a deliberate call when isSafeHref was hardened.
+  it.each([['https://example.com/a'], ['/catering'], ['/press/%5Cx.webp']])(
+    'accepts %s',
+    async (target) => {
+      const user = userEvent.setup();
+      promptWith(target);
+      const { area, onChange } = renderField('See the piece here.');
+      select(area, 4, 13);
+      await user.click(screen.getByRole('button', { name: 'Link' }));
+      expect(onChange).toHaveBeenCalledWith(`See [the piece](${target}) here.`);
+      expect(screen.queryByRole('alert')).toBeNull();
+    },
+  );
+
+  it('the refusal message clears once she supplies a usable target', async () => {
+    const user = userEvent.setup();
+    const spy = promptWith('javascript:alert(1)');
+    const { area } = renderField('See the piece here.');
+    select(area, 4, 13);
+    await user.click(screen.getByRole('button', { name: 'Link' }));
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+    spy.mockReturnValue('https://example.com/a');
+    await user.click(screen.getByRole('button', { name: 'Link' }));
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  // The error region for a VALIDATION problem and the one for a refused link
+  // are different things and must not collide -- two role="alert" nodes in
+  // one field is the "two names for one thing" defect this project has
+  // already fixed twice.
+  it('a refused link and a validation problem are one alert region each', async () => {
+    const user = userEvent.setup();
+    promptWith('javascript:alert(1)');
+    render(
+      <InlineTextField
+        id="f"
+        label="Words"
+        value="x"
+        onChange={vi.fn()}
+        problems={[{ field: '[0].blocks[0].text', message: 'this paragraph needs some words' }]}
+      />,
+    );
+    const area = screen.getByLabelText('Words') as HTMLTextAreaElement;
+    select(area, 0, 1);
+    await user.click(screen.getByRole('button', { name: 'Link' }));
+    const alerts = screen.getAllByRole('alert');
+    expect(alerts).toHaveLength(2);
+    expect(alerts.map((el) => el.textContent)).toEqual([
+      expect.stringContaining('will not work as a link'),
+      'this paragraph needs some words',
+    ]);
+  });
+
+  // The refusal is announced, not described: it carries no id and the textarea
+  // does not point at it, so it cannot collide with the validation region's
+  // `-error` id. Pinned here rather than left to a comment, because "wire it
+  // into aria-describedby" is the plausible-looking change that would break it.
+  it('the refusal is not wired into aria-describedby', async () => {
+    const user = userEvent.setup();
+    promptWith('javascript:alert(1)');
+    const { area } = renderField('See the piece here.');
+    select(area, 4, 13);
+    await user.click(screen.getByRole('button', { name: 'Link' }));
+    const refusal = screen.getByRole('alert');
+    expect(refusal).not.toHaveAttribute('id');
+    expect(area).not.toHaveAttribute('aria-describedby');
   });
 });
