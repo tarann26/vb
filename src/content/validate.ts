@@ -29,7 +29,16 @@ import {
   isTemplateType,
   isUrlSafeSlug,
   unknownKeys,
+  BLOCK_KEYS,
+  POST_KEYS,
+  isBlockKind,
+  isPostType,
 } from './guards';
+// Phase 5. `rawLinkTargets`, NOT `parseInline` -- see validateInlineLinks
+// below, and markdown.ts's own header. This module is bundled into the
+// Worker, and markdown.ts imports nothing, holds no JSX and touches no DOM,
+// so the chain stays clean (worker/__tests__/bundle.test.ts).
+import { isSafeHref, rawLinkTargets } from './markdown';
 // The hero collage's own data structure. The rules below are the same ones
 // `assertCollageTree` (./guards) fails the BUILD on, written for her instead
 // of for a developer -- see `collageTreeProblems` for the split, and this
@@ -1180,6 +1189,237 @@ function validateExperiences(data: unknown): ValidationProblem[] {
   return data.flatMap((item, i) => validateExperience(item, i, seenIds));
 }
 
+// ---------------------------------------------------------------------------
+// posts.json (Phase 5)
+
+const POST_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+// The one rule in this file that reads INSIDE a content string. See
+// src/content/markdown.ts's own header for why rawLinkTargets and not a walk
+// over parseInline's AST: the parser refuses an unsafe target by keeping the
+// whole run literal, so the AST never contains one, so a rule built on it
+// could not fire -- proven by markdown.test.ts's own mutation, which showed
+// an AST-walk implementation returning the two safe targets and silently
+// losing `javascript:alert(1)`. Two boundaries, deliberately checking two
+// different things -- she is told at PUBLISH time about a link the reader
+// would have silently seen as brackets.
+function validateInlineLinks(text: unknown, field: string, subject: string): ValidationProblem[] {
+  if (typeof text !== 'string') return [];
+  return rawLinkTargets(text)
+    .filter((href) => !isSafeHref(href))
+    .map((href) =>
+      problem(
+        field,
+        `"${href}" will not work as a link in ${subject} -- use a full web address starting with https:// or a page on this site starting with /`,
+      ),
+    );
+}
+
+// Every text field carries inline markdown, so every text field goes through
+// the same two checks: it is present, and any link inside it is usable.
+function validateInlineText(
+  value: unknown,
+  field: string,
+  subject: string,
+  what: string,
+): ValidationProblem[] {
+  if (isBlank(value)) return [problem(field, `${subject} needs ${what}`)];
+  return validateInlineLinks(value, field, subject);
+}
+
+function validateInlineList(
+  value: unknown,
+  field: string,
+  subject: string,
+  what: string,
+): ValidationProblem[] {
+  if (!Array.isArray(value)) return [problem(field, `${subject} needs ${what}`)];
+  const items = value as unknown[];
+  if (items.length === 0) return [problem(field, `${subject} needs at least one ${what}`)];
+  return items.flatMap((item, i) => validateInlineText(item, `${field}[${i}]`, subject, what));
+}
+
+function validateBlock(raw: unknown, field: string, subject: string): ValidationProblem[] {
+  const block = asRecord(raw);
+  if (!isBlockKind(block.kind)) {
+    return [
+      problem(
+        `${field}.kind`,
+        `${subject} contains a "${String(block.kind)}" block, which this site does not have -- remove it and add one from the list instead`,
+      ),
+    ];
+  }
+  const kind = block.kind;
+  const problems: ValidationProblem[] = unknownKeys(block, BLOCK_KEYS[kind]).map((key) =>
+    problem(
+      `${field}.${key}`,
+      `a ${kind} block in ${subject} carries "${key}", which this site does not use -- reload this page, decline any draft it offers to restore, and make the edit again`,
+    ),
+  );
+
+  switch (kind) {
+    case 'paragraph':
+      problems.push(...validateInlineText(block.text, `${field}.text`, subject, 'some words in this paragraph'));
+      break;
+    case 'heading':
+      problems.push(...validateInlineText(block.text, `${field}.text`, subject, 'a heading'));
+      break;
+    case 'bulletList':
+    case 'numberList':
+      problems.push(...validateInlineList(block.items, `${field}.items`, subject, 'list item'));
+      break;
+    case 'image':
+      if (isBlank(block.src)) {
+        problems.push(problem(`${field}.src`, `an image block in ${subject} needs a photo`));
+      } else if (isUnsafeAssetPath(block.src)) {
+        problems.push(problem(`${field}.src`, `an image block in ${subject} needs a photo on this site, starting with /`));
+      }
+      if (isBlank(block.alt)) {
+        problems.push(
+          problem(
+            `${field}.alt`,
+            `an image block in ${subject} needs a description, read aloud to anyone using a screen reader`,
+          ),
+        );
+      }
+      // The caption is genuinely optional -- a photo that speaks for itself
+      // needs no words under it -- so it is link-checked but never required.
+      problems.push(...validateInlineLinks(block.caption, `${field}.caption`, subject));
+      break;
+    case 'gallery': {
+      const images: unknown[] = Array.isArray(block.images) ? (block.images as unknown[]) : [];
+      if (images.length === 0) {
+        problems.push(problem(`${field}.images`, `a gallery in ${subject} needs at least one photo`));
+      } else {
+        images.forEach((entry, i) => {
+          const image = asRecord(entry);
+          if (isBlank(image.src)) {
+            problems.push(problem(`${field}.images[${i}].src`, `a gallery photo in ${subject} needs a photo`));
+          } else if (isUnsafeAssetPath(image.src)) {
+            problems.push(
+              problem(
+                `${field}.images[${i}].src`,
+                `a gallery photo in ${subject} needs a photo on this site, starting with /`,
+              ),
+            );
+          }
+          if (typeof image.alt !== 'string') {
+            problems.push(problem(`${field}.images[${i}].alt`, `a gallery photo in ${subject} needs a description`));
+          }
+        });
+      }
+      break;
+    }
+    case 'quote':
+      problems.push(...validateInlineText(block.text, `${field}.text`, subject, 'the words being quoted'));
+      problems.push(...validateInlineLinks(block.attribution, `${field}.attribution`, subject));
+      break;
+    case 'ingredients':
+      if (isBlank(block.heading)) problems.push(problem(`${field}.heading`, `the ingredients in ${subject} need a heading`));
+      problems.push(...validateInlineList(block.items, `${field}.items`, subject, 'ingredient'));
+      break;
+    case 'steps':
+      if (isBlank(block.heading)) problems.push(problem(`${field}.heading`, `the steps in ${subject} need a heading`));
+      problems.push(...validateInlineList(block.items, `${field}.items`, subject, 'step'));
+      break;
+    case 'citation':
+      if (isBlank(block.publication)) {
+        problems.push(problem(`${field}.publication`, `a citation in ${subject} needs the name of the publication`));
+      }
+      // `null` is the real "there is no online copy" value, matching
+      // Article['url'] and the committed press.json entries that carry it.
+      // Anything else that is not a usable link is refused.
+      if (block.url !== null && isUnsafeExternalUrl(block.url)) {
+        problems.push(
+          problem(
+            `${field}.url`,
+            `a citation in ${subject} needs a full web address starting with https://, or no link at all`,
+          ),
+        );
+      }
+      if (!POST_DATE_PATTERN.test(String(block.date ?? ''))) {
+        problems.push(problem(`${field}.date`, `a citation in ${subject} needs a date like 2026-03-04`));
+      }
+      break;
+    default: {
+      const _exhaustive: never = kind;
+      return _exhaustive;
+    }
+  }
+  return problems;
+}
+
+function validatePost(raw: unknown, index: number, seenIds: Set<string>, seenSlugs: Set<string>): ValidationProblem[] {
+  const post = asRecord(raw);
+  const problems: ValidationProblem[] = [];
+  const subject = `"${String(post.title ?? 'this post')}"`;
+
+  if (isBlank(post.id)) {
+    problems.push(problem(`[${index}].id`, `the post at position ${index} needs an id`));
+  } else if (seenIds.has(post.id as string)) {
+    problems.push(problem(`[${index}].id`, `two posts share the id "${String(post.id)}"`));
+  } else {
+    seenIds.add(post.id as string);
+  }
+
+  if (isBlank(post.slug)) {
+    problems.push(problem(`[${index}].slug`, `${subject} needs a web address`));
+  } else {
+    const slug = (post.slug as string).trim();
+    if (!SLUG_PATTERN.test(slug)) {
+      problems.push(
+        problem(
+          `[${index}].slug`,
+          `"${slug}" is not a web-safe address -- use letters a-z, numbers and hyphens only, e.g. "spaghetti-all-assassina"`,
+        ),
+      );
+    } else if (RESERVED_PAGE_SLUGS.has(slug)) {
+      problems.push(problem(`[${index}].slug`, `"${slug}" is already used by the site itself -- choose a different address`));
+    } else if (seenSlugs.has(slug)) {
+      problems.push(problem(`[${index}].slug`, `"${slug}" is already used by another post`));
+    } else {
+      seenSlugs.add(slug);
+    }
+  }
+
+  if (!isPostType(post.type)) {
+    problems.push(problem(`[${index}].type`, `${subject} must be a recipe, a story or a mention`));
+  }
+  if (isBlank(post.title)) problems.push(problem(`[${index}].title`, `the post at position ${index} needs a title`));
+  if (isBlank(post.excerpt)) problems.push(problem(`[${index}].excerpt`, `${subject} needs a short summary for its card`));
+  if (isBlank(post.image)) {
+    problems.push(problem(`[${index}].image`, `${subject} needs a photo for its card`));
+  } else if (isUnsafeAssetPath(post.image)) {
+    problems.push(problem(`[${index}].image`, `${subject} needs a photo on this site, starting with /`));
+  }
+  if (!POST_DATE_PATTERN.test(String(post.date ?? ''))) {
+    problems.push(problem(`[${index}].date`, `${subject} needs a date like 2026-03-04`));
+  }
+
+  if (!Array.isArray(post.blocks)) {
+    problems.push(problem(`[${index}].blocks`, `${subject} needs a list of blocks`));
+  } else if ((post.blocks as unknown[]).length === 0) {
+    // Unlike posts.json as a whole, an individual post genuinely needs
+    // content: a post with nothing in it renders a title, a date and a blank
+    // page, which is worse than not publishing it.
+    problems.push(problem(`[${index}].blocks`, `${subject} has nothing in it yet -- add a paragraph before publishing it`));
+  } else {
+    problems.push(
+      ...(post.blocks as unknown[]).flatMap((block, b) => validateBlock(block, `[${index}].blocks[${b}]`, subject)),
+    );
+  }
+
+  problems.push(...validateKnownKeys(post, POST_KEYS, `[${index}]`, String(post.title ?? 'this post')));
+  return problems;
+}
+
+function validatePosts(data: unknown): ValidationProblem[] {
+  if (!Array.isArray(data)) return [problem('', 'expected a list of posts')];
+  const seenIds = new Set<string>();
+  const seenSlugs = new Set<string>();
+  return (data as unknown[]).flatMap((post, i) => validatePost(post, i, seenIds, seenSlugs));
+}
+
 // Review finding, carried forward from Task 5 rather than closed here: this
 // RULES table is keyed by BASENAME (worker/index.ts's handlePublish calls
 // `validateContent(basename(f.path), parsed)`), not by the full
@@ -1233,6 +1473,15 @@ function validateExperiences(data: unknown): ValidationProblem[] {
 // only lets it also spell one such write "experiences.json" and have it
 // pass content validation instead of being refused outright.
 
+// Same basename hole as awards.json and experiences.json above, and the same
+// accurate limit: this entry also makes `assets-source/<category>/posts.json`
+// validate and commit, because RULES is keyed on basename
+// (worker/index.ts's handlePublish calls validateContent(basename(f.path),
+// parsed)) and ASSET_PATH (worker/github.ts) matches that path. What limits
+// it: the route is authenticated, and an authenticated session can already
+// commit arbitrary bytes to assets-source/<category>/ through the same
+// request shape, so this grants that session nothing it did not already have.
+
 // ---------------------------------------------------------------------------
 
 const RULES: Record<string, (data: unknown) => ValidationProblem[]> = {
@@ -1248,6 +1497,7 @@ const RULES: Record<string, (data: unknown) => ValidationProblem[]> = {
   'pages.json': validatePages,
   'awards.json': validateAwards,
   'experiences.json': validateExperiences,
+  'posts.json': validatePosts,
 };
 
 // The single entry point a Worker's publish route calls before it ever

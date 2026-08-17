@@ -429,3 +429,104 @@ describe('reserved page slugs', () => {
     ).toThrow(/collides with an existing route/);
   });
 });
+
+import { BLOCK_KINDS, POST_KEYS, assertPosts, isBlockKind } from '../guards';
+
+// A fixture that is NOT the committed content. Phase 4's root cause was two
+// fixtures equal to production data, which cannot tell a real binding from a
+// hardcoded copy of that same data. Nothing in src/content/posts.json is
+// slugged "a-test-post" or titled "A test post".
+const A_POST = {
+  id: 'test-1',
+  slug: 'a-test-post',
+  type: 'recipe',
+  title: 'A test post',
+  date: '2026-01-02',
+  excerpt: 'A test excerpt.',
+  image: '/food/tielle.webp',
+  blocks: [{ kind: 'paragraph', text: 'A test paragraph.' }],
+};
+
+describe('BLOCK_KINDS', () => {
+  // Spelled out as a literal rather than derived from the type or from
+  // Object.keys of the same object the guard uses -- deriving both sides of
+  // an equality from one constant asserts nothing (areas.test.tsx:31 makes
+  // the identical argument for the panel ids).
+  it('is exactly the ten kinds the spec names', () => {
+    expect([...BLOCK_KINDS].sort()).toEqual(
+      [
+        'bulletList',
+        'citation',
+        'gallery',
+        'heading',
+        'image',
+        'ingredients',
+        'numberList',
+        'paragraph',
+        'quote',
+        'steps',
+      ].sort(),
+    );
+  });
+
+  it('isBlockKind refuses a kind that is not one of them', () => {
+    expect(isBlockKind('paragraph')).toBe(true);
+    expect(isBlockKind('video')).toBe(false);
+    expect(isBlockKind(42)).toBe(false);
+  });
+});
+
+describe('POST_KEYS', () => {
+  it('names every field a post has and nothing else', () => {
+    expect(Object.keys(POST_KEYS).sort()).toEqual(
+      ['blocks', 'date', 'excerpt', 'id', 'image', 'slug', 'title', 'type'].sort(),
+    );
+  });
+});
+
+describe('assertPosts', () => {
+  it('accepts a well-formed list and returns it', () => {
+    const posts = assertPosts([A_POST]);
+    expect(posts).toHaveLength(1);
+    expect(posts[0].slug).toBe('a-test-post');
+    expect(posts[0].blocks[0].kind).toBe('paragraph');
+  });
+
+  // Each refusal is pinned to its OWN message. Phase 4's tenth plan defect
+  // was a bare toThrow() that could not distinguish the guard under test
+  // from a different guard downstream, so its mutation passed for the wrong
+  // reason.
+  it.each([
+    ['a non-array', {}, /expected an array of posts/],
+    ['an entry that is not an object', [null], /entry \[0\] is not an object/],
+    ['a missing id', [{ ...A_POST, id: '' }], /entry \[0\] needs an id/],
+    ['a duplicate id', [A_POST, A_POST], /duplicate id "test-1"/],
+    ['a slug that is not URL-safe', [{ ...A_POST, slug: 'A Test Post' }], /is not a URL-safe slug/],
+    ['a duplicate slug', [A_POST, { ...A_POST, id: 'test-2' }], /duplicate slug "a-test-post"/],
+    ['an unknown post type', [{ ...A_POST, type: 'essay' }], /"essay" is not a post type/],
+    ['a blank title', [{ ...A_POST, title: '  ' }], /needs a title/],
+    ['a blank image', [{ ...A_POST, image: '' }], /needs an image/],
+    ['blocks that are not an array', [{ ...A_POST, blocks: 'nope' }], /needs a list of blocks/],
+    ['an unknown block kind', [{ ...A_POST, blocks: [{ kind: 'video', src: 'x' }] }], /"video" is not a block kind/],
+    ['a block carrying a key its kind does not have', [{ ...A_POST, blocks: [{ kind: 'paragraph', text: 'x', align: 'left' }] }], /carries "align"/],
+    // Added after running this task's own mutation 4 (drop the post-level
+    // `unknownKeys(record, POST_KEYS)` block) and watching NOTHING go red.
+    // The brief disclosed the row as a miss; this is the fix. The
+    // BLOCK-level unknown-key case above was already covered -- the
+    // POST-level one was not, which is the same `publishAt` field whose
+    // absence from one end and presence at the other is what
+    // DISH_KEYS' own comment records this project already paying for.
+    ['a post carrying a key the type does not have', [{ ...A_POST, publishAt: '2026-01-01' }], /carries "publishAt"/],
+  ])('refuses %s', (_name, raw, pattern) => {
+    expect(() => assertPosts(raw)).toThrow(pattern);
+  });
+
+  // An empty list is LEGAL and this is deliberate: a restaurant with no
+  // posts yet is the ordinary first state, not a failure, and Task 8's index
+  // renders an empty state for it. The same call that makes dishes.json
+  // refuse an empty list (the menu genuinely needs a dish) would be wrong
+  // here.
+  it('accepts an empty list', () => {
+    expect(assertPosts([])).toEqual([]);
+  });
+});

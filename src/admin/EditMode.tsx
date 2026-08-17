@@ -85,6 +85,7 @@ import type {
   Copy,
   Page,
   Experience,
+  Post,
   TemplateContent,
 } from '../content/types';
 
@@ -249,6 +250,25 @@ const EMPTY_PAGES: Page[] = [];
 // shows the same six cards the live homepage does, rather than a carousel
 // that looks broken.
 const EMPTY_EXPERIENCES: Experience[] = [];
+
+// Phase 5A, Task 3/4. UNLIKE every other EMPTY_* above, this one is NOT a
+// short-lived pre-fetch fallback: it is what /edit's bundle holds
+// permanently, because `posts.json` is deliberately absent from
+// CONTENT_FILES until 5B adds its Manage panel (see that list's own
+// comment in ./content, and content.test.ts's inverse assertion). No fetch
+// puts posts into `entries`, so `pick` cannot be used here and this
+// constant is the only value available to this file -- src/admin/ may not
+// import the build-time snapshot (module header above).
+//
+// That is honest TODAY because /edit renders no post surface at all. It
+// stops being honest the moment one exists: 5A's Task 9 turns the
+// homepage's press section into the blog, and /edit renders the homepage.
+// READ THIS BEFORE WRITING THAT TASK -- shipping it against this constant
+// reproduces Phase 3's EMPTY_EXPERIENCES defect exactly (a section
+// rendering zero cards in /edit while the live homepage showed six). The
+// fix is the same one Phase 3 took: register posts.json in CONTENT_FILES
+// alongside its panel, then read it through `pick` like every file above.
+const EMPTY_POSTS: Post[] = [];
 
 const EMPTY_COPY: Copy = {
   nav: { wordmark: '', links: [], instagramLabel: '', menuLabel: '', pagesLabel: '' },
@@ -653,6 +673,10 @@ export function buildBundle(
     // that already put every OTHER file's real data into `entries` -- so the
     // fix is this one `pick`, not a new fetch path.
     experiences: pick(entries, 'experiences.json', EMPTY_EXPERIENCES),
+    // Phase 5A: not a `pick`, and deliberately so -- see EMPTY_POSTS' own
+    // comment above for why there is nothing in `entries` to pick from, and
+    // for what Task 9 has to change before /edit renders a post surface.
+    posts: EMPTY_POSTS,
     // Plan 7, Task 5, Step 1: a section-content path needs sections.json
     // loaded, never copy.json -- gating both kinds on `copyLoaded` alone
     // (the pre-Task-5 shape) would have shown a contentEditable affordance

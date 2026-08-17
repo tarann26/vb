@@ -1,5 +1,18 @@
 import { createElement, useContext } from 'react';
-import { site, galleries, dishes, drinks, press, story, menus, copy, sections, pages, experiences } from './index';
+import {
+  site,
+  galleries,
+  dishes,
+  drinks,
+  press,
+  story,
+  menus,
+  copy,
+  sections,
+  pages,
+  experiences,
+  posts,
+} from './index';
 import type { ContentBundle, EditableTextPath, EditableImagePath } from './types';
 import {
   ContentReactContext,
@@ -65,6 +78,7 @@ export const defaultBundle: ContentBundle = {
   sections,
   pages,
   experiences,
+  posts,
   renderText: (_path, value) => value,
   // createElement, not JSX: this file is .ts rather than .tsx (see the
   // module-level comment above ContentBundle for why), and .ts is not

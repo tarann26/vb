@@ -1281,3 +1281,168 @@ describe('story.json chef intro', () => {
     );
   });
 });
+
+describe('posts.json', () => {
+  // A fixture that differs from src/content/posts.json in EVERY field it
+  // asserts on. Phase 4's root cause was two fixtures equal to the real
+  // committed content, which cannot distinguish a real binding from a
+  // hardcoded copy of that same data -- the assertion passes either way and
+  // looks perfectly reasonable while doing so.
+  const VALID_POST = {
+    id: 'fixture-1',
+    slug: 'a-fixture-post',
+    type: 'recipe',
+    title: 'A fixture post',
+    date: '2026-03-04',
+    excerpt: 'A fixture excerpt.',
+    image: '/food/tielle.webp',
+    blocks: [{ kind: 'paragraph', text: 'A fixture paragraph.' }],
+  };
+
+  it('accepts a well-formed post', () => {
+    expect(validateContent('posts.json', [VALID_POST])).toEqual([]);
+  });
+
+  it('accepts an empty list -- a restaurant with no posts yet is not an error', () => {
+    expect(validateContent('posts.json', [])).toEqual([]);
+  });
+
+  it('refuses anything that is not a list', () => {
+    expect(validateContent('posts.json', { posts: [] })).toEqual([
+      { field: '', message: 'expected a list of posts' },
+    ]);
+  });
+
+  it.each([
+    ['a blank title', { title: '  ' }, '[0].title'],
+    ['a blank excerpt', { excerpt: '' }, '[0].excerpt'],
+    ['a blank image', { image: '' }, '[0].image'],
+    ['an off-site image', { image: 'https://evil.example/x.webp' }, '[0].image'],
+    ['a protocol-relative image', { image: '//evil.example/x.webp' }, '[0].image'],
+    ['a traversing image', { image: '/press/../../etc/passwd' }, '[0].image'],
+    ['an unknown post type', { type: 'essay' }, '[0].type'],
+    ['a slug with spaces', { slug: 'a fixture post' }, '[0].slug'],
+    ['a slug in capitals', { slug: 'A-Fixture-Post' }, '[0].slug'],
+    ['a slug that is a reserved route', { slug: 'edit' }, '[0].slug'],
+    ['a date that is not YYYY-MM-DD', { date: '4 March 2026' }, '[0].date'],
+    ['blocks that are not a list', { blocks: 'nope' }, '[0].blocks'],
+    ['a post with no blocks at all', { blocks: [] }, '[0].blocks'],
+  ])('refuses %s', (_name, override, field) => {
+    const problems = validateContent('posts.json', [{ ...VALID_POST, ...override }]);
+    expect(problems.map((p) => p.field)).toContain(field);
+  });
+
+  it('refuses a duplicate slug, naming the SECOND one', () => {
+    const problems = validateContent('posts.json', [VALID_POST, { ...VALID_POST, id: 'fixture-2' }]);
+    expect(problems.map((p) => p.field)).toContain('[1].slug');
+  });
+
+  it('refuses a duplicate id, naming the second one', () => {
+    const problems = validateContent('posts.json', [VALID_POST, { ...VALID_POST, slug: 'another-post' }]);
+    expect(problems.map((p) => p.field)).toContain('[1].id');
+  });
+
+  it('refuses a key the Post type does not have, the way every other record here does', () => {
+    const problems = validateContent('posts.json', [{ ...VALID_POST, publishAt: '2026-04-01' }]);
+    expect(problems.map((p) => p.field)).toContain('[0].publishAt');
+  });
+
+  describe('blocks', () => {
+    const withBlocks = (blocks: unknown[]) => validateContent('posts.json', [{ ...VALID_POST, blocks }]);
+
+    it('refuses an unknown block kind', () => {
+      expect(withBlocks([{ kind: 'video', src: '/x.mp4' }]).map((p) => p.field)).toContain('[0].blocks[0].kind');
+    });
+
+    it('refuses a key the block kind does not have', () => {
+      expect(withBlocks([{ kind: 'paragraph', text: 'x', align: 'left' }]).map((p) => p.field)).toContain(
+        '[0].blocks[0].align',
+      );
+    });
+
+    it.each([
+      ['an empty paragraph', { kind: 'paragraph', text: '   ' }, '[0].blocks[0].text'],
+      ['an empty heading', { kind: 'heading', text: '' }, '[0].blocks[0].text'],
+      ['a bullet list with no items', { kind: 'bulletList', items: [] }, '[0].blocks[0].items'],
+      ['a numbered list with a blank item', { kind: 'numberList', items: ['a', ' '] }, '[0].blocks[0].items[1]'],
+      ['an image with no source', { kind: 'image', src: '', alt: 'a', caption: '' }, '[0].blocks[0].src'],
+      ['an off-site image', { kind: 'image', src: 'https://evil.example/x.webp', alt: 'a', caption: '' }, '[0].blocks[0].src'],
+      ['an image with no description', { kind: 'image', src: '/food/tielle.webp', alt: '', caption: '' }, '[0].blocks[0].alt'],
+      ['a gallery with no images', { kind: 'gallery', images: [] }, '[0].blocks[0].images'],
+      ['a gallery image with an unsafe source', { kind: 'gallery', images: [{ src: '//evil.example/x.webp', alt: 'a' }] }, '[0].blocks[0].images[0].src'],
+      ['an empty quote', { kind: 'quote', text: '', attribution: 'Someone' }, '[0].blocks[0].text'],
+      ['ingredients with no heading', { kind: 'ingredients', heading: '', items: ['Flour'] }, '[0].blocks[0].heading'],
+      ['steps with no items', { kind: 'steps', heading: 'Method', items: [] }, '[0].blocks[0].items'],
+      ['a citation with no publication', { kind: 'citation', publication: '', url: null, date: '2026-01-01' }, '[0].blocks[0].publication'],
+      ['a citation with an unsafe link', { kind: 'citation', publication: 'X', url: 'javascript:alert(1)', date: '2026-01-01' }, '[0].blocks[0].url'],
+    ])('refuses %s', (_name, block, field) => {
+      expect(withBlocks([block]).map((p) => p.field)).toContain(field);
+    });
+
+    // A citation with no online copy is a real citation -- press.json's own
+    // committed entries prove it. `null`, not `''`.
+    it('accepts a citation with no link', () => {
+      expect(withBlocks([{ kind: 'citation', publication: 'X', url: null, date: '2026-01-01' }])).toEqual([]);
+    });
+  });
+
+  // Conflict 12. This is the ONLY rule in this file that inspects a URL
+  // living INSIDE a content string, and it is why validate.ts imports
+  // rawLinkTargets rather than walking parseInline's AST: the parser
+  // ERASES an unsafe target by keeping the run literal, so an AST walk
+  // could never find one and this rule would be structurally incapable of
+  // firing while looking entirely reasonable.
+  describe('markdown links inside block text', () => {
+    const withText = (text: string) =>
+      validateContent('posts.json', [{ ...VALID_POST, blocks: [{ kind: 'paragraph', text }] }]);
+
+    it.each([
+      'Click [here](javascript:alert(1)) now',
+      'Click [here](data:text/html,x) now',
+      'Click [here](vbscript:msgbox(1)) now',
+      'Click [here](//evil.example/x) now',
+      'Click [here](/press/../../etc/passwd) now',
+    ])('refuses %s', (text) => {
+      const problems = withText(text);
+      expect(problems.map((p) => p.field)).toContain('[0].blocks[0].text');
+      expect(problems.map((p) => p.message).join(' ')).toContain('will not work as a link');
+    });
+
+    it.each([
+      'See [the piece](https://example.com/a).',
+      'See [our catering page](/catering).',
+      'No links here at all.',
+    ])('accepts %s', (text) => {
+      expect(withText(text)).toEqual([]);
+    });
+
+    // The other text-bearing fields, so the rule is not quietly
+    // paragraph-only. Every one of these is a field she can type a link
+    // into from the 5B editor.
+    it('checks list items, quote text, quote attribution, image captions, ingredients and steps too', () => {
+      const bad = '[x](javascript:alert(1))';
+      const problems = validateContent('posts.json', [
+        {
+          ...VALID_POST,
+          blocks: [
+            { kind: 'bulletList', items: [bad] },
+            { kind: 'quote', text: bad, attribution: bad },
+            { kind: 'image', src: '/food/tielle.webp', alt: 'A dish', caption: bad },
+            { kind: 'ingredients', heading: 'Ingredients', items: [bad] },
+            { kind: 'steps', heading: 'Method', items: [bad] },
+          ],
+        },
+      ]);
+      expect(problems.map((p) => p.field).sort()).toEqual(
+        [
+          '[0].blocks[0].items[0]',
+          '[0].blocks[1].attribution',
+          '[0].blocks[1].text',
+          '[0].blocks[2].caption',
+          '[0].blocks[3].items[0]',
+          '[0].blocks[4].items[0]',
+        ].sort(),
+      );
+    });
+  });
+});

@@ -272,6 +272,84 @@ export interface Experience {
   comingSoon: boolean;
 }
 
+// ---------------------------------------------------------------------------
+// Phase 5. A post is a list of typed blocks.
+//
+// Three types, and they differ in what the reader is being given rather than
+// in shape: a Recipe is something to cook, a Story is something to read, and
+// a Mention is somebody else writing about the restaurant. The spec's own
+// words: "Mention covers press coverage: publication, date, an excerpt in her
+// own words, and a citation with a link." That is why a Mention's citation is
+// a BLOCK rather than four fields on Post -- a Mention with two citations is
+// a real thing (a piece syndicated twice), and a Recipe with a citation
+// (adapted from a cookbook) is also a real thing. Putting it on the post
+// would make the first unspellable and the second dishonest.
+export type PostType = 'recipe' | 'story' | 'mention';
+
+// Text fields on a block hold markdown restricted to INLINE syntax -- bold,
+// emphasis, links, inline code. src/content/markdown.ts parses it to an AST
+// and src/components/blog/Inline.tsx renders that AST as React elements. No
+// block field ever holds markup, and nothing in this codebase turns one into
+// markup: src/test/html-sinks.test.ts fails the build if any shipped module
+// so much as names a parsing sink.
+export type InlineText = string;
+
+// The ten kinds, paired with their own content shape. `Block` below is
+// DERIVED from this map -- a mapped type distributed over its own keys, not
+// ten hand-written union members -- for exactly the reason
+// TemplateContentMap's own comment (below) spells out at length: a
+// hand-written union leaves every downstream `switch (block.kind)` narrowing
+// over the OLD union when an eleventh kind is added, so the exhaustiveness
+// check that was supposed to catch it compiles cleanly and the new kind
+// silently renders nothing. Confirmed there by direct experiment; re-confirmed
+// as this task's mutation 2 and not re-litigated here.
+//
+// `heading` carries no level. Every heading inside a post body is an <h2>
+// under the post's own <h1> -- a level field would let her produce an <h4>
+// under an <h2> with nothing between them, which is a real accessibility
+// defect and buys a distinction she has no reason to want.
+interface BlockContentMap {
+  paragraph: { text: InlineText };
+  heading: { text: InlineText };
+  bulletList: { items: InlineText[] };
+  numberList: { items: InlineText[] };
+  image: { src: string; alt: string; caption: InlineText };
+  gallery: { images: GalleryImage[] };
+  quote: { text: InlineText; attribution: InlineText };
+  ingredients: { heading: string; items: InlineText[] };
+  steps: { heading: string; items: InlineText[] };
+  // `url` is nullable, matching Article['url'] -- press.json's own committed
+  // entries prove a real citation sometimes has no online copy, and a
+  // citation with no link is still a citation.
+  citation: { publication: string; url: string | null; date: string };
+}
+
+export type BlockKind = keyof BlockContentMap;
+
+export type Block = { [K in BlockKind]: { kind: K } & BlockContentMap[K] }[BlockKind];
+
+// `image` is the CARD image -- what the index, the homepage section and (in
+// 5C) the Open Graph tag use. Required, for the reason Experience['image'] is
+// required and Award['image'] is not: a card with no photo is an empty
+// rectangle, and every surface that lists posts is a grid of cards.
+//
+// `slug` is the URL, addressed at /blog/<slug>, and is checked for URL-safety
+// and uniqueness by assertPosts (build time) and validatePosts (write
+// boundary) -- the same two-ended treatment Page['slug'] already gets.
+//
+// `date` is "YYYY-MM-DD", the same shape Article['date'] uses and the same
+// shape src/content/article-date.ts's formatArticleDate reads.
+export interface Post {
+  id: string;
+  slug: string;
+  type: PostType;
+  title: string;
+  date: string;
+  excerpt: string;
+  image: string;
+  blocks: Block[];
+}
+
 // Plan 7, Task 1: the homepage's section list stops being seven fixed ids
 // and becomes a list of two kinds -- bespoke sections rendered by name (the
 // same seven above, unchanged) and template sections rendered by TYPE, with
@@ -538,6 +616,12 @@ export interface ContentBundle {
   // for why), present on ContentBundle from this task onward so the
   // rendering surface Task 3 adds needs no further plumbing here.
   experiences: Experience[];
+  // Phase 5. Every post, in posts.json order -- committed JSON on the GitHub
+  // store in 5A (see the Post interface's own comment on why the card image
+  // being required is what decides that), read by /blog, /blog/:slug and the
+  // homepage's own blog section. Present on ContentBundle from this task
+  // onward so the rendering surfaces Tasks 7-9 add need no further plumbing.
+  posts: Post[];
   // default: (_, v) => v -- see ContentContext.ts's defaultBundle.
   renderText(path: EditableTextPath, value: string): ReactNode;
   // default: (_, p) => createElement('img', p) -- see ContentContext.ts's defaultBundle.

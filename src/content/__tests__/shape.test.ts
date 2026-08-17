@@ -343,3 +343,38 @@ describe('gallery image required fields are non-blank', () => {
     },
   );
 });
+
+import { posts } from '../index';
+import { BLOCK_KEYS, POST_KEYS } from '../guards';
+
+describe('posts.json shape', () => {
+  it('every committed post carries exactly the keys Post declares', () => {
+    posts.forEach((post) => {
+      expect(unknownKeys(post as unknown as object, POST_KEYS)).toEqual([]);
+    });
+  });
+
+  it('every committed block carries exactly the keys its kind declares', () => {
+    posts.flatMap((p) => p.blocks).forEach((block) => {
+      expect(unknownKeys(block as unknown as object, BLOCK_KEYS[block.kind])).toEqual([]);
+    });
+  });
+
+  // The migration's own claim, asserted rather than described. Three posts,
+  // all mentions, each with a citation carrying a real link. If a fourth
+  // appears here without the user's ruling on the nine invented press
+  // entries (see the plan's conflict 5), this is where it is caught.
+  it('is the three real press mentions, each with a working citation', () => {
+    expect(posts.map((p) => p.slug)).toEqual([
+      'bw-hotelier-regional-flair',
+      'delhi-royale-pastificio-ristorante',
+      'restaurant-india-cordon-bleu-debut',
+    ]);
+    expect(posts.every((p) => p.type === 'mention')).toBe(true);
+    posts.forEach((post) => {
+      const citation = post.blocks.find((b) => b.kind === 'citation');
+      expect(citation).toBeDefined();
+      expect(citation && citation.kind === 'citation' && citation.url).toMatch(/^https:\/\//);
+    });
+  });
+});

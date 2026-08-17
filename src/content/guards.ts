@@ -31,6 +31,10 @@ import type {
   Article,
   Award,
   Experience,
+  Post,
+  PostType,
+  Block,
+  BlockKind,
 } from './types';
 
 // ---------------------------------------------------------------------------
@@ -108,6 +112,69 @@ export const EXPERIENCE_KEYS: Record<keyof Experience, true> = {
   image: true,
   link: true,
   comingSoon: true,
+};
+
+// Phase 5. The ten block kinds, as a Record so a kind added to
+// BlockContentMap (types.ts) without an entry here is a compile error --
+// the same SECTION_ID_SET / GALLERY_LAYOUT_SET idiom, for the same reason
+// those two have it: three separate places have to agree on this list (this
+// guard, validate.ts's owner-facing check, and 5B's block picker), and the
+// cost of them disagreeing is a block she can insert that renders nothing.
+const BLOCK_KIND_SET: Record<BlockKind, true> = {
+  paragraph: true,
+  heading: true,
+  bulletList: true,
+  numberList: true,
+  image: true,
+  gallery: true,
+  quote: true,
+  ingredients: true,
+  steps: true,
+  citation: true,
+};
+export const BLOCK_KINDS = Object.keys(BLOCK_KIND_SET) as BlockKind[];
+
+export function isBlockKind(value: unknown): value is BlockKind {
+  return typeof value === 'string' && (BLOCK_KINDS as readonly string[]).includes(value);
+}
+
+const POST_TYPE_SET: Record<PostType, true> = { recipe: true, story: true, mention: true };
+export const POST_TYPES = Object.keys(POST_TYPE_SET) as PostType[];
+
+export function isPostType(value: unknown): value is PostType {
+  return typeof value === 'string' && (POST_TYPES as readonly string[]).includes(value);
+}
+
+export const POST_KEYS: Record<keyof Post, true> = {
+  id: true,
+  slug: true,
+  type: true,
+  title: true,
+  date: true,
+  excerpt: true,
+  image: true,
+  blocks: true,
+};
+
+// Per-kind key sets, the same two consumers every other *_KEYS set here has:
+// assertPosts below (build time) and validatePosts (write boundary). `kind`
+// is listed in each, because it is a real key on every block and
+// unknownKeys() would otherwise report the discriminant itself as unknown.
+//
+// Typed as a TOTAL record over BlockKind, so a kind added without a key set
+// fails `tsc -b` at this line rather than reaching the validator as an
+// unchecked shape.
+export const BLOCK_KEYS: Record<BlockKind, Record<string, true>> = {
+  paragraph: { kind: true, text: true },
+  heading: { kind: true, text: true },
+  bulletList: { kind: true, items: true },
+  numberList: { kind: true, items: true },
+  image: { kind: true, src: true, alt: true, caption: true },
+  gallery: { kind: true, images: true },
+  quote: { kind: true, text: true, attribution: true },
+  ingredients: { kind: true, heading: true, items: true },
+  steps: { kind: true, heading: true, items: true },
+  citation: { kind: true, publication: true, url: true, date: true },
 };
 
 export const BESPOKE_SECTION_KEYS: Record<keyof BespokeSection, true> = {
@@ -657,6 +724,104 @@ export function assertExperiences(raw: unknown): Experience[] {
     if (link !== undefined) result.link = link;
     return result;
   });
+}
+
+// Phase 5's import-time guard, the same idiom as assertExperiences above: it
+// rebuilds each entry from named keys so a stray key in a hand-edited
+// posts.json can never reach runtime, and throws with a
+// "content/posts.json: ..." prefixed message naming the offending index.
+//
+// An EMPTY list is legal, unlike dishes.json's (a menu genuinely needs a
+// dish). A restaurant with no posts yet is the ordinary first state and
+// Task 8's index renders an empty state for it -- making that unrepresentable
+// would mean the blog cannot exist until it has content, which is backwards.
+//
+// Deliberately does NOT check that `image` or a block's `src` resolves under
+// public/. src/content/__tests__/assets.test.ts already walks every .json
+// here and does exactly that, with exact case, for every asset-shaped string
+// in the tree -- a second check would drift, and this one has no filesystem.
+export function assertPosts(raw: unknown): Post[] {
+  if (!Array.isArray(raw)) {
+    throw new Error('content/posts.json: expected an array of posts');
+  }
+  const seenIds = new Set<string>();
+  const seenSlugs = new Set<string>();
+  return raw.map((entry, i) => {
+    if (!entry || typeof entry !== 'object') {
+      throw new Error(`content/posts.json: entry [${i}] is not an object`);
+    }
+    const record = entry as Record<string, unknown>;
+    const { id, slug, type, title, date, excerpt, image, blocks } = record;
+
+    if (typeof id !== 'string' || id.trim().length === 0) {
+      throw new Error(`content/posts.json: entry [${i}] needs an id`);
+    }
+    if (seenIds.has(id)) throw new Error(`content/posts.json: duplicate id "${id}" at [${i}]`);
+    seenIds.add(id);
+
+    if (!isUrlSafeSlug(slug)) {
+      throw new Error(`content/posts.json: "${String(slug)}" is not a URL-safe slug at [${i}]`);
+    }
+    if (seenSlugs.has(slug)) throw new Error(`content/posts.json: duplicate slug "${slug}" at [${i}]`);
+    seenSlugs.add(slug);
+
+    if (!isPostType(type)) throw new Error(`content/posts.json: "${String(type)}" is not a post type at [${i}]`);
+    if (typeof title !== 'string' || title.trim().length === 0) {
+      throw new Error(`content/posts.json: "${id}" needs a title`);
+    }
+    if (typeof date !== 'string' || date.trim().length === 0) {
+      throw new Error(`content/posts.json: "${id}" needs a date`);
+    }
+    if (typeof excerpt !== 'string' || excerpt.trim().length === 0) {
+      throw new Error(`content/posts.json: "${id}" needs an excerpt`);
+    }
+    if (typeof image !== 'string' || image.trim().length === 0) {
+      throw new Error(`content/posts.json: "${id}" needs an image`);
+    }
+    if (!Array.isArray(blocks)) throw new Error(`content/posts.json: "${id}" needs a list of blocks`);
+
+    const unknownPostKeys = unknownKeys(record, POST_KEYS);
+    if (unknownPostKeys.length > 0) {
+      throw new Error(`content/posts.json: "${id}" carries "${unknownPostKeys[0]}", which this site does not use`);
+    }
+
+    return {
+      id,
+      slug,
+      type,
+      title,
+      date,
+      excerpt,
+      image,
+      blocks: blocks.map((block, b) => assertBlock(block, `${id}[${b}]`)),
+    };
+  });
+}
+
+// Deliberately stops at the discriminant and the key set. Field-level shape
+// is the write boundary's job (validatePosts), which produces a sentence SHE
+// can act on rather than a build failure. This guard's contract is narrower
+// and deliberately so: the discriminant is real and no stray key survives,
+// which is what makes the cast below safe and what keeps a hand-edited file
+// from reaching a renderer that destructures a field that is not there.
+// Duplicating the field checks here would create exactly the
+// two-lists-that-drift problem validateKnownKeys' own comment (validate.ts)
+// records this project already paying for once.
+function assertBlock(raw: unknown, context: string): Block {
+  if (!raw || typeof raw !== 'object') {
+    throw new Error(`content/posts.json: block ${context} is not an object`);
+  }
+  const record = raw as Record<string, unknown>;
+  if (!isBlockKind(record.kind)) {
+    throw new Error(`content/posts.json: "${String(record.kind)}" is not a block kind at ${context}`);
+  }
+  const unknown = unknownKeys(record, BLOCK_KEYS[record.kind]);
+  if (unknown.length > 0) {
+    throw new Error(
+      `content/posts.json: block ${context} carries "${unknown[0]}", which a ${record.kind} block does not use`,
+    );
+  }
+  return record as unknown as Block;
 }
 
 // galleries.json's `heroCollage` is a tree of splits and photos, and the JSON

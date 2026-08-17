@@ -9,6 +9,7 @@ import copyRaw from './copy.json';
 import sectionsRaw from './sections.json';
 import pagesRaw from './pages.json';
 import experiencesRaw from './experiences.json';
+import postsRaw from './posts.json';
 import type {
   SiteContent,
   Galleries,
@@ -21,6 +22,7 @@ import type {
   Section,
   Page,
   Experience,
+  Post,
 } from './types';
 import {
   assertHours,
@@ -30,6 +32,7 @@ import {
   assertCollageTree,
   assertDrinkCategory,
   assertExperiences,
+  assertPosts,
   narrowSectionId,
 } from './guards';
 
@@ -79,6 +82,13 @@ export const pages: Page[] = assertPages(pagesRaw);
 // comment (guards.ts) for why a page toggled off must not throw at import
 // time and block every subsequent publish.
 export const experiences: Experience[] = assertExperiences(experiencesRaw);
+
+// Phase 5. Parsed through assertPosts for the same reason experiences is:
+// the JSON module's inferred type widens `type` and every block's `kind` to
+// plain `string`, so a type annotation alone cannot narrow it and a blind
+// cast would wave through an unknown block kind straight into a renderer
+// that has no branch for it.
+export const posts: Post[] = assertPosts(postsRaw);
 
 const copyWithNarrowedNavSections = {
   ...copyRaw,

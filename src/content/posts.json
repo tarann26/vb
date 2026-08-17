@@ -1,0 +1,65 @@
+[
+  {
+    "id": "bw-hotelier-regional-flair",
+    "slug": "bw-hotelier-regional-flair",
+    "type": "mention",
+    "title": "Via Bianca Brings Regional Italian Flair to Delhi's Dining Scene",
+    "date": "2024-12-15",
+    "excerpt": "Chef Kamalika Anand's latest venture showcases authentic Puglian cuisine with handcrafted pastas and zero-proof cocktails.",
+    "image": "/press/hotelier.webp",
+    "blocks": [
+      {
+        "kind": "paragraph",
+        "text": "Chef Kamalika Anand's latest venture showcases authentic Puglian cuisine with handcrafted pastas and zero-proof cocktails."
+      },
+      {
+        "kind": "citation",
+        "publication": "BW Hotelier",
+        "url": "https://www.bwhotelier.com/article/via-bianca-brings-regional-italian-flair-to-delhis-dining-scene-558510",
+        "date": "2024-12-15"
+      }
+    ]
+  },
+  {
+    "id": "delhi-royale-pastificio-ristorante",
+    "slug": "delhi-royale-pastificio-ristorante",
+    "type": "mention",
+    "title": "Via Bianca Pastificio & Ristorante Delhi",
+    "date": "2024-12-10",
+    "excerpt": "A deep dive into the authentic Italian dining experience that's capturing hearts in Greater Kailash.",
+    "image": "/press/royale.webp",
+    "blocks": [
+      {
+        "kind": "paragraph",
+        "text": "A deep dive into the authentic Italian dining experience that's capturing hearts in Greater Kailash."
+      },
+      {
+        "kind": "citation",
+        "publication": "Delhi Royale",
+        "url": "https://www.delhiroyale.in/post/via-bianca-pastificio-ristorante-delhi",
+        "date": "2024-12-10"
+      }
+    ]
+  },
+  {
+    "id": "restaurant-india-cordon-bleu-debut",
+    "slug": "restaurant-india-cordon-bleu-debut",
+    "type": "mention",
+    "title": "Le Cordon Bleu Alum Chef Kamalika Anand Debuts Via Bianca in Delhi",
+    "date": "2024-12-05",
+    "excerpt": "From Michelin-starred kitchens to Delhi's dining scene, Chef Kamalika brings her expertise to Via Bianca.",
+    "image": "/press/restaurantindia.webp",
+    "blocks": [
+      {
+        "kind": "paragraph",
+        "text": "From Michelin-starred kitchens to Delhi's dining scene, Chef Kamalika brings her expertise to Via Bianca."
+      },
+      {
+        "kind": "citation",
+        "publication": "Restaurant India",
+        "url": "https://www.restaurantindia.in/news/le-cordon-bleu-alum-chef-kamalika-anand-debuts-via-bianca-in-delhi.n12908",
+        "date": "2024-12-05"
+      }
+    ]
+  }
+]
