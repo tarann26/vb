@@ -1,6 +1,6 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`the twelve panels, as they render today > About (story) 1`] = `
+exports[`the thirteen panels, as they render today > About (story) 1`] = `
 <div
   id="section-panel-story"
 >
@@ -412,7 +412,7 @@ exports[`the twelve panels, as they render today > About (story) 1`] = `
 </div>
 `;
 
-exports[`the twelve panels, as they render today > Awards (awards) 1`] = `
+exports[`the thirteen panels, as they render today > Awards (awards) 1`] = `
 <div
   id="section-panel-awards"
 >
@@ -433,7 +433,7 @@ exports[`the twelve panels, as they render today > Awards (awards) 1`] = `
 </div>
 `;
 
-exports[`the twelve panels, as they render today > Dishes (dishes) 1`] = `
+exports[`the thirteen panels, as they render today > Dishes (dishes) 1`] = `
 <div
   id="section-panel-dishes"
 >
@@ -723,7 +723,7 @@ exports[`the twelve panels, as they render today > Dishes (dishes) 1`] = `
 </div>
 `;
 
-exports[`the twelve panels, as they render today > Drinks (drinks) 1`] = `
+exports[`the thirteen panels, as they render today > Drinks (drinks) 1`] = `
 <div
   id="section-panel-drinks"
 >
@@ -1027,7 +1027,7 @@ exports[`the twelve panels, as they render today > Drinks (drinks) 1`] = `
 </div>
 `;
 
-exports[`the twelve panels, as they render today > Experiences (experiences) 1`] = `
+exports[`the thirteen panels, as they render today > Experiences (experiences) 1`] = `
 <div
   id="section-panel-experiences"
 >
@@ -2099,7 +2099,7 @@ exports[`the twelve panels, as they render today > Experiences (experiences) 1`]
 </div>
 `;
 
-exports[`the twelve panels, as they render today > Galleries (galleries) 1`] = `
+exports[`the thirteen panels, as they render today > Galleries (galleries) 1`] = `
 <div
   id="section-panel-galleries"
 >
@@ -3586,7 +3586,7 @@ exports[`the twelve panels, as they render today > Galleries (galleries) 1`] = `
 </div>
 `;
 
-exports[`the twelve panels, as they render today > Menu PDFs (menus) 1`] = `
+exports[`the thirteen panels, as they render today > Menu PDFs (menus) 1`] = `
 <div
   id="section-panel-menus"
 >
@@ -3732,7 +3732,7 @@ exports[`the twelve panels, as they render today > Menu PDFs (menus) 1`] = `
 </div>
 `;
 
-exports[`the twelve panels, as they render today > Opening hours (hours) 1`] = `
+exports[`the thirteen panels, as they render today > Opening hours (hours) 1`] = `
 <div
   id="section-panel-hours"
 >
@@ -3843,7 +3843,7 @@ exports[`the twelve panels, as they render today > Opening hours (hours) 1`] = `
 </div>
 `;
 
-exports[`the twelve panels, as they render today > Pages (pages) 1`] = `
+exports[`the thirteen panels, as they render today > Pages (pages) 1`] = `
 <div
   id="section-panel-pages"
 >
@@ -3858,7 +3858,24 @@ exports[`the twelve panels, as they render today > Pages (pages) 1`] = `
 </div>
 `;
 
-exports[`the twelve panels, as they render today > Press (press) 1`] = `
+exports[`the thirteen panels, as they render today > Posts (posts) 1`] = `
+<div
+  id="section-panel-posts"
+>
+  <fieldset
+    aria-busy="false"
+    style="border: 0px; padding: 0px; margin: 0px; min-inline-size: 0;"
+  >
+    <p
+      class="mb-10 font-['Montserrat'] text-sm text-gray-500"
+    >
+      Your blog posts will be editable here.
+    </p>
+  </fieldset>
+</div>
+`;
+
+exports[`the thirteen panels, as they render today > Press (press) 1`] = `
 <div
   id="section-panel-press"
 >
@@ -4212,7 +4229,7 @@ exports[`the twelve panels, as they render today > Press (press) 1`] = `
 </div>
 `;
 
-exports[`the twelve panels, as they render today > What shows on the homepage (sections) 1`] = `
+exports[`the thirteen panels, as they render today > What shows on the homepage (sections) 1`] = `
 <div
   id="section-panel-sections"
 >
@@ -4706,7 +4723,7 @@ exports[`the twelve panels, as they render today > What shows on the homepage (s
 </div>
 `;
 
-exports[`the twelve panels, as they render today > Words on the site (copy) 1`] = `
+exports[`the thirteen panels, as they render today > Words on the site (copy) 1`] = `
 <div
   id="section-panel-copy"
 >

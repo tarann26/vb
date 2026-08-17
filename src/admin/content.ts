@@ -35,10 +35,11 @@ import type {
   Page,
   Award,
   Experience,
+  Post,
 } from '../content/types';
 
-// The eleven real files under src/content/, plus awards.json (D1-backed, not
-// a file on disk at all -- see its own entry below) -- twelve in total, the
+// The twelve real files under src/content/, plus awards.json (D1-backed, not
+// a file on disk at all -- see its own entry below) -- thirteen in total, the
 // same set validateContent (src/content/validate.ts) recognises and
 // commitFiles (worker/github.ts) allows; see worker/__tests__/github.test.ts's
 // "still accepts the real content file" block for that list's own authority.
@@ -78,6 +79,19 @@ export const CONTENT_FILES = [
   // ../content/types for why), so it behaves like every file above it, not
   // like awards.json.
   'experiences.json',
+  // Phase 5B, Task 3: the thirteenth entry, and a real
+  // `src/content/posts.json` blob -- on the GitHub store when this lands and
+  // on D1 from Task 9 onward, which is exactly the journey story.json took
+  // and exactly why nothing in this module has to know. `fetchContent` below
+  // hits the same route with the same query shape and gets back the same
+  // `{ content, sha }` envelope either way.
+  //
+  // Registered here TOGETHER with its Manage panel (manage/areas.ts's
+  // PANELS.posts) and not before: `areas.test.tsx` asserts this list and the
+  // panel list are the same set, in both directions, so the two are one
+  // change. 5A deliberately kept this file out and carried an exception in
+  // content.test.ts for the whole of that sub-plan; that exception is gone.
+  'posts.json',
 ] as const;
 
 export type ContentFileName = (typeof CONTENT_FILES)[number];
@@ -126,6 +140,7 @@ export const CONTENT_FILE_LABELS: Record<ContentFileName, string> = {
   'pages.json': 'Pages',
   'awards.json': 'Awards',
   'experiences.json': 'Experiences',
+  'posts.json': 'Posts',
 };
 
 // Maps each content file to the shape its `content` field parses into.
@@ -144,6 +159,7 @@ export interface ContentTypeMap {
   'pages.json': Page[];
   'awards.json': Award[];
   'experiences.json': Experience[];
+  'posts.json': Post[];
 }
 
 export interface LoadedContent<T> {

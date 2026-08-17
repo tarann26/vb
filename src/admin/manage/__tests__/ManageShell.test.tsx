@@ -109,6 +109,27 @@ describe.each([
     });
   });
 
+  // Phase 5B, Task 3. The pattern here is the one that fixed this file's own
+  // Cloudflare-build timeout, and it is used deliberately rather than
+  // copied: findByRole with a NAME filter polls a role-and-name sweep over
+  // the whole ~1200-element shell every 50ms, two thirds of the cost being
+  // jsdom getComputedStyle, and burns most of its own budget on the single
+  // thread React needs to commit the render it is waiting for. So: wait on a
+  // cheap attribute -- 0.6ms -- and then assert the expensive thing ONCE.
+  //
+  // Never raise a timeout to make this green. Both dashboard timeouts this
+  // project has had were fixed by making the query cheap.
+  it('the Story & Photos area carries a Posts panel', async () => {
+    stubFetch();
+    renderDashboard('/edit/manage/story', { wide });
+
+    await waitFor(() => {
+      expect(document.querySelector('[data-panel="posts"]')).not.toBeNull();
+    });
+    expect(screen.getByRole('heading', { name: PANELS.posts.heading })).toBeInTheDocument();
+    expect(document.getElementById('section-panel-posts')).not.toBeNull();
+  });
+
   it('a slug that matches no area shows the not-found screen, inside the shell, with the nav still there', async () => {
     stubFetch();
     renderDashboard('/edit/manage/not-a-thing', { wide });

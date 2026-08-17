@@ -297,7 +297,7 @@ describe('commitFiles', () => {
     // Every content file this Worker's validateContent (Task 2) actually
     // recognises must still be a legal commitFiles path -- the allowlist
     // tightened in response to Minor 4 must not accidentally start
-    // rejecting one of the eleven real files it exists to allow.
+    // rejecting one of the twelve real files it exists to allow.
     //
     // Two files are worth naming, because both are D1-backed (worker/store.ts's
     // D1_ONLY_PATHS) and yet they show up here in opposite ways. awards.json
@@ -324,6 +324,13 @@ describe('commitFiles', () => {
       'menus.json',
       // Plan 7, Task 1: the tenth real content file.
       'pages.json',
+      // Phase 5B: CONTENT_PATH (/^src\/content\/[a-z0-9-]+\.json$/) already
+      // matched this path before it was ever registered, so this row is an
+      // assertion rather than a fix. It stays after Task 9 moves the live
+      // copy to D1, exactly as story.json did: this allowlist is a security
+      // boundary on which paths commitFiles will touch at all, not a map of
+      // which store owns a path's live traffic.
+      'posts.json',
       'press.json',
       'sections.json',
       'site.json',

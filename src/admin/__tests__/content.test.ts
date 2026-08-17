@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { CONTENT_FILES, fetchContent } from '../content';
 
 function stubFetch(handler: () => Promise<Response>) {
@@ -112,39 +112,18 @@ describe('fetchContent', () => {
   // still catches its original defect (a real file added to or removed from
   // src/content/ without a matching CONTENT_FILES update) while accepting
   // the one name that is correctly present without a file behind it.
-  // Phase 5: `posts.json` is the SECOND deliberate exception, and it is the
-  // opposite shape to awards.json's. awards.json is a name with no file;
-  // posts.json is a FILE with no name -- it exists under src/content/ and is
-  // compiled into the bundle, but it is deliberately NOT in CONTENT_FILES,
-  // because CONTENT_FILES is what areas.test.tsx requires a Manage panel
-  // for, and the Posts panel is sub-plan 5B's. Registering it here without
-  // that panel turns areas.test.tsx red for a reason that has nothing to do
-  // with this file.
   //
-  // THIS EXCEPTION HAS AN EXPIRY. 5B's first task adds the Posts panel,
-  // registers posts.json in CONTENT_FILES, and deletes this exception and
-  // the inverse assertion below in the same commit. If you are reading this
-  // after the Posts panel exists, the exception is stale -- remove it.
-  it('CONTENT_FILES lists exactly the real *.json files under src/content/, plus awards.json (D1-only, no file), minus posts.json (no panel yet)', () => {
+  // Phase 5B, Task 3: `posts.json`'s exception is GONE, and its inverse
+  // assertion with it. 5A kept the file out of CONTENT_FILES because that
+  // list is what areas.test.tsx requires a Manage panel for, and the Posts
+  // panel did not exist yet. It does now, so posts.json is an ordinary
+  // registered file and this derivation covers it with no carve-out. If you
+  // are re-adding a filter here, something has gone backwards.
+  it('CONTENT_FILES lists exactly the real *.json files under src/content/, plus awards.json (D1-only, no file)', () => {
     const real = gitLsFiles('src/content')
       .filter((f) => f.endsWith('.json'))
-      .map((f) => f.slice('src/content/'.length))
-      .filter((f) => f !== 'posts.json');
+      .map((f) => f.slice('src/content/'.length));
     expect([...CONTENT_FILES].sort()).toEqual([...real, 'awards.json'].sort());
-  });
-
-  // The inverse assertion, so the exception above cannot be half-undone. A
-  // later agent that registers posts.json in CONTENT_FILES without adding
-  // the panel gets a failure HERE, naming the coupling, instead of a
-  // confusing red in areas.test.tsx about panel completeness.
-  //
-  // The `existsSync` half is what stops the exception above from silently
-  // becoming a no-op: a filter for a name that no longer exists subtracts
-  // nothing and the first test would stay green forever while describing a
-  // file that had been deleted.
-  it('posts.json is deliberately absent from CONTENT_FILES until its Manage panel exists', () => {
-    expect([...CONTENT_FILES]).not.toContain('posts.json');
-    expect(existsSync('src/content/posts.json')).toBe(true);
   });
 });
 

@@ -43,6 +43,15 @@ export const CONTENT_FILES = [
   // file that genuinely does not exist yet, and experiences.json has existed
   // since Task 2.
   'experiences.json',
+  // Phase 5B, Task 3: posts.json joined src/admin/content.ts's CONTENT_FILES,
+  // so EditMode's blanket load effect now fetches it and the route below has
+  // to answer. A name missing from this array is answered 404, which paints a
+  // "Could not load posts.json" banner ABOVE the real page content -- i.e. it
+  // shifts everything every spec in this suite is about to measure, including
+  // four already on the flake watchlist. It stays listed after Task 9 moves
+  // the live copy to D1: realContentJson reads the committed file, which
+  // still exists as the first-paint fallback.
+  'posts.json',
 ];
 
 // awards.json is deliberately NOT in the list above, and that is not the

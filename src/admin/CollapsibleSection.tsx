@@ -105,7 +105,17 @@ const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({ id, heading, lo
   const panelId = `section-panel-${id}`;
 
   return (
-    <section className={open ? 'mb-10' : 'mb-2'}>
+    // A cheap, stable hook for a test to wait on. Every dashboard test that
+    // needs a panel currently finds it by role AND accessible name over the
+    // whole shell, which polls a getComputedStyle sweep every 50ms and starves
+    // the render it is waiting for -- the root cause of both timeouts this
+    // project has had, one of which failed a Cloudflare build. A `[data-panel]`
+    // lookup is 0.6ms. The expensive assertion still happens; it just happens
+    // ONCE, after this attribute says the panel is mounted.
+    //
+    // A data attribute rather than a class: it costs no CSS rule, and the
+    // stylesheet has 107 bytes of headroom.
+    <section data-panel={id} className={open ? 'mb-10' : 'mb-2'}>
       <h2 className={`${open ? 'mb-4' : ''} ${HEADING_CLASSNAME}`}>
         {/* `type="button"`, and that is not cosmetic: on /edit/manage this
             renders inside the one <form> PublishBar's Publish button

@@ -7,9 +7,10 @@
 //  1. A panel silently DROPPED (or duplicated) while its implementation is
 //     carried into an area module. `AREAS` says which panels exist; the
 //     render below says which ones the dashboard actually mounts. Neither on
-//     its own is evidence. Twelve now, not ten -- Phase 2, Task 11 added
+//     its own is evidence. Thirteen now, not ten -- Phase 2, Task 11 added
 //     `awards` and Phase 3, Task 8 added `experiences` to the `pages` area,
-//     neither touching the five-area shape this file's own title names.
+//     and Phase 5B, Task 3 added `posts` to the `story` area, none of them
+//     touching the five-area shape this file's own title names.
 //  2. A panel id silently RENAMED. `open-sections.ts` builds its
 //     localStorage key as `vb:section-open:v1:<id>`, and
 //     `CollapsibleSection` publishes that id as `aria-controls`
@@ -21,14 +22,15 @@
 // is the only other place those ids are covered end to end and which this
 // work rewrites.
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { render, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import AdminApp from '../../AdminApp';
 import { AREAS, PANELS, areaForFile, findArea, panelForFile, slugFromPathname } from '../areas';
 import type { PanelId } from '../areas';
-import { CONTENT_FILES } from '../../content';
+import { CONTENT_FILES, CONTENT_FILE_LABELS } from '../../content';
 
-// The twelve ids, spelled out as a literal rather than derived from `PANELS` --
+// The thirteen ids, spelled out as a literal rather than derived from `PANELS` --
 // deriving both sides of an equality from the same constant asserts nothing.
 // This list is what the dashboard has rendered since folding landed, and the
 // stored fold state on every device she has ever used is keyed on it.
@@ -47,6 +49,10 @@ const EXPECTED_PANEL_IDS = [
   'awards',
   // Phase 3, Task 8: the twelfth panel.
   'experiences',
+  // Phase 5B, Task 3: the thirteenth panel. Registered together with
+  // posts.json in CONTENT_FILES, because the two assertions below require
+  // each other -- see the plan's conflict scan row C2.
+  'posts',
 ];
 
 // Every panel below renders its heading and its `aria-controls` panel id in
@@ -96,6 +102,51 @@ describe('AREAS covers every dashboard panel exactly once', () => {
     expect([...files].sort()).toEqual([...CONTENT_FILES].sort());
   });
 
+  // The Posts panel goes in "Story & Photos", after Press. It is the same
+  // kind of thing to her as press coverage is -- words about the restaurant
+  // -- and a sixth area for one panel would split one idea into two doors,
+  // the same reasoning that put Awards inside "Pages" rather than beside it.
+  it('the Posts panel is the last one in Story & Photos', () => {
+    expect(findArea('story')?.panelIds).toEqual(['galleries', 'story', 'press', 'posts']);
+  });
+
+  // A SOURCE-level pin, and it says so rather than pretending to be a
+  // behavioural one. `PostsArea.tsx` is the first panel in this dashboard to
+  // paint its heading from `PANELS.posts.heading` instead of a literal, which
+  // is what finally gives that constant a reader whose change she can see.
+  // Nothing rendered can prove it: the literal `"Posts"` and the constant
+  // hold the SAME string, so every DOM assertion passes identically under
+  // both -- confirmed by running exactly that mutation (Step 8 #4). Reading
+  // the file is the only assertion that can tell two identical strings apart.
+  // `src/admin/__tests__/content.test.ts` already reads source in this suite,
+  // so this is a precedent rather than a new kind of test.
+  it('PostsArea paints its heading from PANELS, not a literal of its own', () => {
+    const source = readFileSync('src/admin/areas/PostsArea.tsx', 'utf8');
+    expect(source).toContain('PANELS.posts.heading');
+    expect(source).not.toContain('heading="Posts"');
+  });
+
+  // content.ts's own comment on CONTENT_FILE_LABELS states this as a fact --
+  // "Every string here is the heading the dashboard already uses for the panel
+  // that owns that file" -- so that the publish confirmation, the status strip
+  // and the undo description name the same things the panels do rather than
+  // inventing a second vocabulary. Nothing asserted it. Two hand-maintained
+  // constants that must agree, in two different modules, is exactly the shape
+  // that drifts.
+  //
+  // It is also the only thing in `npm run gate` that pins a panel HEADING's
+  // value. panel-snapshots.test.tsx looks like it does, and does not: the
+  // heading is part of its own test NAME, so a rename moves the snapshot KEY
+  // and vitest writes the new one rather than comparing -- green locally, red
+  // only under CI, where writing is refused. Verified by running exactly that
+  // mutation (Step 8 #3): `PANELS.posts.heading` -> 'Postz' left all 83 cases
+  // in the four candidate files green, and failed only with CI=true.
+  it('every panel heading is the same word CONTENT_FILE_LABELS gives its file', () => {
+    (Object.keys(PANELS) as PanelId[]).forEach((id) => {
+      expect(PANELS[id].heading).toBe(CONTENT_FILE_LABELS[PANELS[id].file]);
+    });
+  });
+
   it('maps a content file back to the area and panel that edits it', () => {
     expect(areaForFile('site.json')?.slug).toBe('details');
     expect(panelForFile('site.json')?.id).toBe('hours');
@@ -122,8 +173,8 @@ describe('slugFromPathname', () => {
   });
 });
 
-describe('the dashboard renders exactly the twelve frozen panel ids', () => {
-  it('every aria-controls value is section-panel-<id>, for those twelve ids and no others', async () => {
+describe('the dashboard renders exactly the thirteen frozen panel ids', () => {
+  it('every aria-controls value is section-panel-<id>, for those thirteen ids and no others', async () => {
     stubFetchFailingContent();
     const { container } = render(
       <MemoryRouter initialEntries={['/edit/manage']}>

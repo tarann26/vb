@@ -1,6 +1,7 @@
 // A DOM baseline for each dashboard panel (ten, then eleven from Phase 2
-// Task 11's Awards panel onward, then twelve from Phase 3 Task 8's
-// Experiences panel onward), taken BEFORE their
+// Task 11's Awards panel onward, twelve from Phase 3 Task 8's
+// Experiences panel onward, thirteen from Phase 5B Task 3's Posts panel),
+// taken BEFORE their
 // implementations are carried out of AdminApp.tsx and into the five area
 // modules, and asserted unchanged afterwards.
 //
@@ -69,7 +70,7 @@ async function snapshotPanel(id: PanelId): Promise<HTMLElement> {
   return panel;
 }
 
-describe('the twelve panels, as they render today', () => {
+describe('the thirteen panels, as they render today', () => {
   (Object.keys(PANELS) as PanelId[]).forEach((id) => {
     it(`${PANELS[id].heading} (${id})`, async () => {
       expect(await snapshotPanel(id)).toMatchSnapshot();

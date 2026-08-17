@@ -93,6 +93,7 @@ import PagesArea from '../areas/PagesArea';
 import AwardsArea from '../areas/AwardsArea';
 import ExperiencesArea from '../areas/ExperiencesArea';
 import StoryPhotosArea from '../areas/StoryPhotosArea';
+import PostsArea from '../areas/PostsArea';
 import DetailsArea from '../areas/DetailsArea';
 import NumbersArea from '../areas/NumbersArea';
 import type { AreaProps } from '../areas/area-props';
@@ -414,7 +415,18 @@ function renderArea(slug: AreaSlug, active: boolean, areaProps: AreaProps): Reac
         </>
       );
     case 'story':
-      return <StoryPhotosArea {...areaProps} />;
+      return (
+        <>
+          <StoryPhotosArea {...areaProps} />
+          {/* Phase 5B: the Posts panel renders here, not as a sixth
+              AreaSlug -- manage/areas.ts's own panelIds already places the
+              'posts' PanelId inside the 'story' area, and this switch
+              dispatches by AreaSlug, one level up. No new case, so the
+              `never` exhaustiveness check below is untouched. Same shape
+              Awards and Experiences already take inside 'pages'. */}
+          <PostsArea {...areaProps} />
+        </>
+      );
     case 'details':
       return <DetailsArea {...areaProps} />;
     case 'numbers':

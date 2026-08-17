@@ -15,7 +15,7 @@ import EditMode, { buildBundle } from '../EditMode';
 import { AppRoutes } from '../../App';
 import type { ContentEntries, ContentRegistry } from '../publish';
 import { loadDraft, saveDraft } from '../drafts';
-import type { Article, Copy, Dish, Drink, Experience, Galleries, MenuFile, Section, SiteContent, StoryContent } from '../../content/types';
+import type { Article, Copy, Dish, Drink, Experience, Galleries, MenuFile, Post, Section, SiteContent, StoryContent } from '../../content/types';
 // Real, committed files for galleries/story/menus/copy -- the same choice
 // AdminApp.test.tsx already makes (see that file's own comment): each has
 // real structural shape a hand-typed fixture would have to reproduce, and
@@ -192,6 +192,18 @@ function stubFetch(overrides: {
       // the load effect from throwing "Could not load experiences.json"
       // over every test in this file, none of which is about experiences.
       if (url.includes('experiences.json')) return contentResponse([], 'sha-experiences');
+      // Phase 5B, Task 3: the thirteenth content file, joining CONTENT_FILES
+      // (and therefore EditMode's own blanket load effect) now that
+      // src/admin/content.ts registers it -- the same reason pages.json,
+      // awards.json and experiences.json each needed a branch here when THEY
+      // joined. Empty, matching that same precedent: /edit renders no post
+      // surface until Task 11, so no test in this file is about posts, and an
+      // empty list keeps every existing case seeing the same "nothing wrong"
+      // load outcome. Without this branch the stub THROWS, which EditMode
+      // reads as a genuine load failure and paints "Could not load
+      // posts.json" over every test in the file. The `pick` wiring itself is
+      // covered directly against `buildBundle` at the end of this file.
+      if (url.includes('posts.json')) return contentResponse([], 'sha-posts');
       throw new Error(`EditMode.test.tsx: unexpected fetch to ${url}${init ? ` (${init.method ?? 'GET'})` : ''}`);
     }),
   );
@@ -551,6 +563,8 @@ describe('EditMode: a 401 mid-load does not unmount the page or lose what alread
         if (url.includes('copy.json')) return contentResponse(COPY, 'sha-copy');
         if (url.includes('pages.json')) return contentResponse([], 'sha-pages');
         if (url.includes('experiences.json')) return contentResponse([], 'sha-experiences');
+        // Phase 5B, Task 3, same reason as the shared stub above.
+        if (url.includes('posts.json')) return contentResponse([], 'sha-posts');
         if (url.includes('press.json')) {
           pressCalls += 1;
           return pressCalls === 1 ? unauthorizedResponse() : contentResponse(PRESS, 'sha-press-2');
@@ -2349,5 +2363,67 @@ describe('Phase 3, Task 8 review fix round 1: buildBundle reads experiences.json
     const bundle = buildBundle({}, registry, vi.fn());
 
     expect(bundle.experiences).toEqual([]);
+  });
+});
+
+// Phase 5B, Task 3: the same binding, for posts.json. `bundle.posts` was a
+// hardcoded `EMPTY_POSTS` for the whole of 5A, which was honest only because
+// /edit rendered no post surface at all; Task 11 gives it one, and an empty
+// preview against real posts live is Phase 3's EMPTY_EXPERIENCES defect
+// verbatim.
+//
+// Written as IDENTITY plus a non-zero length rather than `toEqual`, and that
+// is the point of the case: reverting `pick` to `posts: EMPTY_POSTS` is
+// caught, and so is a copy (`posts: [...pick(...)]`), which `toEqual` would
+// pass. The length assertion is what stops a fixture of `[]` from making the
+// identity check vacuous -- `[] toBe []` would be true of the fallback too if
+// the fallback were the same reference, and a present-but-empty fixture is
+// exactly the shape that makes an absence test unfalsifiable.
+describe('Phase 5B, Task 3: buildBundle reads posts.json through pick', () => {
+  const POSTS_DATA: Post[] = [
+    {
+      id: 'first',
+      slug: 'first',
+      type: 'story',
+      title: 'A first post',
+      date: '2026-08-01',
+      excerpt: 'An excerpt.',
+      image: '/press/hotelier.webp',
+      blocks: [{ kind: 'paragraph', text: 'Words.' }],
+    },
+  ];
+
+  it('a loaded posts.json flows through to bundle.posts by reference, not the empty fallback and not a copy', () => {
+    const entries: ContentEntries = {
+      'posts.json': { data: POSTS_DATA, initial: POSTS_DATA, sha: 'sha-posts' },
+    };
+    const registry: ContentRegistry = {
+      register: vi.fn(),
+      updateData: vi.fn(),
+      getEntries: () => entries,
+      version: 0,
+      markPublished: vi.fn(),
+    };
+
+    const bundle = buildBundle(entries, registry, vi.fn());
+
+    // Mutation this guards: reverting `posts: pick(entries, 'posts.json',
+    // EMPTY_POSTS)` to the hardcoded `posts: EMPTY_POSTS` -- confirmed red.
+    expect(bundle.posts.length).toBeGreaterThan(0);
+    expect(bundle.posts).toBe(POSTS_DATA);
+  });
+
+  it('before posts.json has loaded, bundle.posts is the empty fallback, not undefined or a crash', () => {
+    const registry: ContentRegistry = {
+      register: vi.fn(),
+      updateData: vi.fn(),
+      getEntries: () => ({}),
+      version: 0,
+      markPublished: vi.fn(),
+    };
+
+    const bundle = buildBundle({}, registry, vi.fn());
+
+    expect(bundle.posts).toEqual([]);
   });
 });

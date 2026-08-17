@@ -251,31 +251,10 @@ const EMPTY_PAGES: Page[] = [];
 // that looks broken.
 const EMPTY_EXPERIENCES: Experience[] = [];
 
-// Phase 5A, Task 3/4. UNLIKE every other EMPTY_* above, this one is NOT a
-// short-lived pre-fetch fallback: it is what /edit's bundle holds
-// permanently, because `posts.json` is deliberately absent from
-// CONTENT_FILES until 5B adds its Manage panel (see that list's own
-// comment in ./content, and content.test.ts's inverse assertion). No fetch
-// puts posts into `entries`, so `pick` cannot be used here and this
-// constant is the only value available to this file -- src/admin/ may not
-// import the build-time snapshot (module header above).
-//
-// That is honest for the whole of 5A, because /edit renders no post surface
-// at all -- an empty value behind nothing on screen tells nobody anything
-// false. It stops being honest the moment a surface exists, and the reason
-// this comment survives rather than being deleted is that the ruling which
-// keeps it honest was made deliberately: 5A's Task 9 does NOT swap the
-// homepage's press section for the blog. An empty preview in the dashboard
-// against three posts live is Phase 3's EMPTY_EXPERIENCES defect verbatim
-// (a carousel drawing zero cards in /edit while the homepage showed six),
-// and it protects a maintainer at the owner's expense. The swap waits for
-// 5B.
-//
-// SO: whoever builds the /edit-visible blog surface owns this constant. The
-// fix is the one Phase 3 took -- register posts.json in CONTENT_FILES
-// alongside its Manage panel (5B's first task, which also retires
-// content.test.ts's exception and its inverse assertion), then read it here
-// through `pick` like every file above. Do not add the surface without it.
+// The pre-fetch fallback for posts, the same shape every EMPTY_* above it
+// is: what /edit renders for the one frame before GET /api/content answers.
+// It stopped being a permanent value in Task 3, when posts.json joined
+// CONTENT_FILES and `pick` became available -- see the bundle field below.
 const EMPTY_POSTS: Post[] = [];
 
 const EMPTY_COPY: Copy = {
@@ -681,10 +660,16 @@ export function buildBundle(
     // that already put every OTHER file's real data into `entries` -- so the
     // fix is this one `pick`, not a new fetch path.
     experiences: pick(entries, 'experiences.json', EMPTY_EXPERIENCES),
-    // Phase 5A: not a `pick`, and deliberately so -- see EMPTY_POSTS' own
-    // comment above for why there is nothing in `entries` to pick from, and
-    // for what 5B has to change before /edit renders a post surface at all.
-    posts: EMPTY_POSTS,
+    // Phase 5B, Task 3: a `pick` at last. `posts.json` is registered in
+    // CONTENT_FILES now, so the blanket fetch effect below already puts its
+    // real data into `entries` and this reads it the way every file above it
+    // does. Before this, /edit held a permanently empty list, which was
+    // honest only because /edit rendered no post surface at all -- and
+    // Task 11 is about to give it one. An empty preview against real posts
+    // live is Phase 3's EMPTY_EXPERIENCES defect verbatim: a carousel drawing
+    // zero cards in /edit while the homepage showed six, which cost a full
+    // fix round.
+    posts: pick(entries, 'posts.json', EMPTY_POSTS),
     // Plan 7, Task 5, Step 1: a section-content path needs sections.json
     // loaded, never copy.json -- gating both kinds on `copyLoaded` alone
     // (the pre-Task-5 shape) would have shown a contentEditable affordance

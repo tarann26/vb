@@ -1,4 +1,4 @@
-// The five areas of /edit/manage, and the ten existing panels that live in
+// The five areas of /edit/manage, and the thirteen panels that live in
 // them. THE single source of truth: the sidebar, the phone home list, the
 // route matching, the status strip's per-area unsaved dot and every test
 // read the constant below rather than enumerating five of anything a second
@@ -42,7 +42,11 @@ export type PanelId =
   | 'awards'
   // Phase 3, Task 8: the twelfth panel, and back to a real committed file
   // (content.ts's own CONTENT_FILES comment on `experiences.json`).
-  | 'experiences';
+  | 'experiences'
+  // Phase 5B, Task 3: the thirteenth panel. Registered in the same commit as
+  // `posts.json`'s CONTENT_FILES entry -- `file` below is typed
+  // ContentFileName, so this id is not even spellable before that lands.
+  | 'posts';
 
 export type AreaSlug = 'menu' | 'pages' | 'story' | 'details' | 'numbers';
 
@@ -74,6 +78,7 @@ export const PANELS: Record<PanelId, PanelDefinition> = {
   copy: { id: 'copy', heading: 'Words on the site', file: 'copy.json' },
   awards: { id: 'awards', heading: 'Awards', file: 'awards.json' },
   experiences: { id: 'experiences', heading: 'Experiences', file: 'experiences.json' },
+  posts: { id: 'posts', heading: 'Posts', file: 'posts.json' },
 };
 
 export interface AreaDefinition {
@@ -123,8 +128,22 @@ export const AREAS: AreaDefinition[] = [
   {
     slug: 'story',
     label: 'Story & Photos',
-    description: 'Photo galleries, your story, and press coverage',
-    panelIds: ['galleries', 'story', 'press'],
+    // Four words for four panels, and it is LENGTH-BUDGETED -- this string
+    // renders under the label on the 390px phone home list (AreaNav.tsx's
+    // `list` variant), where e2e/dashboard-sections.spec.ts:430 requires all
+    // five rows to fit one 844px screen without scrolling. A third wrapped
+    // line here pushes the Numbers row 10px below the fold and fails that
+    // spec, which `npm run gate` does not run. Measured, not guessed: the
+    // 56-character 'Photo galleries, your story, press coverage and your
+    // blog' failed at 854px; this 47-character version passes. Keep any
+    // rewording at or under two lines at 390px, and re-run that spec.
+    description: 'Photo galleries, your story, press and your blog',
+    // 'posts' last: it is the newest thing on this screen and the one she
+    // will be looking for deliberately rather than stumbling into, and
+    // panelIds[0] is the panel an area opens by itself on her first ever
+    // visit (open-sections.ts's hasSeededArea/markAreaSeeded) -- which
+    // should stay Galleries, the panel that was there before.
+    panelIds: ['galleries', 'story', 'press', 'posts'],
   },
   {
     slug: 'details',
