@@ -16,7 +16,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { site } from '../content';
+import { site, assertPages } from '../content';
 
 afterEach(() => {
   vi.doUnmock('../content');
@@ -130,5 +130,14 @@ describe('/:slug never shadows a live static route, even with a colliding page i
     // (Navbar/Footer) -- proven by the presence of the nav, not NotFound's
     // own text.
     expect(screen.queryByText(/page not found/i)).not.toBeInTheDocument();
+  });
+
+  it('a page slugged "blog" cannot shadow the blog routes -- and cannot exist at all', () => {
+    // The second half is the real guarantee: assertPages (guards.ts) and
+    // validatePage (validate.ts) both refuse it, so this collision is
+    // unreachable rather than merely lost. Task 1 is what made that true.
+    expect(() =>
+      assertPages([{ slug: 'blog', name: 'Blog', inNav: false, enabled: true, seo: { title: 'T', description: 'D' }, sections: [] }]),
+    ).toThrow(/collides with an existing route/);
   });
 });

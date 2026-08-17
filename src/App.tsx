@@ -12,6 +12,7 @@ import Awards from './components/Awards';
 import VisitUs from './components/VisitUs';
 import Footer from './components/Footer';
 import BlogsPage from './components/BlogsPage';
+import PostPage from './components/blog/PostPage';
 import SeoHead from './components/SeoHead';
 import PageSeoHead from './components/PageSeoHead';
 import NotFound from './components/NotFound';
@@ -146,6 +147,7 @@ export function AppRoutes() {
     <Routes>
       <Route path="/" element={<HomePage />} />
       <Route path="/blogs" element={<BlogsPage />} />
+      <Route path="/blog/:slug" element={<PostPage />} />
       <Route
         path="/edit"
         element={
