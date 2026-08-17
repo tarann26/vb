@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import InlineTextField from '../InlineTextField';
 
@@ -157,6 +157,54 @@ describe('the formatting toolbar', () => {
     expect(area.value.slice(area.selectionStart, area.selectionEnd)).toBe('dough');
   });
 
+  // The variant test, and it is the one a review had to write from outside
+  // because no in-file case could see the difference: it re-renders BEFORE the
+  // new value arrives. An effect that fires on every render consumes the
+  // pending range against the stale string, clamps it (11,15 = "ugh.") and then
+  // loses the caret entirely when the real value lands (19,19 = ""). An effect
+  // that waits for its own value holds the range and lands it.
+  //
+  // No focus assertion anywhere -- the claim is about a selection, which jsdom
+  // implements faithfully, and the earlier verdict that this was unfalsifiable
+  // was wrong about the direction, not about the tooling.
+  it('holds the selection through a re-render that arrives before the new value', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    const { rerender } = render(
+      <InlineTextField id="f" label="Words" value="Rest the dough." onChange={onChange} problems={[]} />,
+    );
+    const area = screen.getByLabelText('Words') as HTMLTextAreaElement;
+    select(area, 9, 14);
+    await user.click(screen.getByRole('button', { name: 'Bold' }));
+    // An unrelated prop moves and the value does NOT: the interleaving React 18
+    // batching hides behind this component's real caller chain today, and which
+    // is the whole reason the effect must decide for itself rather than trust
+    // the render order.
+    rerender(
+      <InlineTextField
+        id="f"
+        label="Words"
+        help="Some guidance."
+        value="Rest the dough."
+        onChange={onChange}
+        problems={[]}
+      />,
+    );
+    rerender(
+      <InlineTextField
+        id="f"
+        label="Words"
+        help="Some guidance."
+        value="Rest the **dough**."
+        onChange={onChange}
+        problems={[]}
+      />,
+    );
+    expect(area.selectionStart).toBe(11);
+    expect(area.selectionEnd).toBe(16);
+    expect(area.value.slice(area.selectionStart, area.selectionEnd)).toBe('dough');
+  });
+
   it('a link wraps the selection and takes the target she typed', async () => {
     const user = userEvent.setup();
     promptWith('https://example.com/a');
@@ -274,6 +322,83 @@ describe('the formatting toolbar', () => {
     expect(alerts.map((el) => el.textContent)).toEqual([
       expect.stringContaining('will not work as a link'),
       'this paragraph needs some words',
+    ]);
+  });
+
+  // A target that isSafeHref accepts but that would not survive being written
+  // into the text. Measured by a review: this one passes isSafeHref, and once
+  // embedded, rawLinkTargets -- the reader the write boundary uses -- reports
+  // `javascript:alert(1)` instead, so publishing would be refused naming a
+  // target she never typed. Nothing unsafe renders (parseInline builds no link
+  // node), which is why this is about being told the truth now rather than
+  // about safety.
+  it('refuses a target that would not read back as the target she gave', async () => {
+    const user = userEvent.setup();
+    promptWith('https://ok.example/x](javascript:alert(1)');
+    const { area, onChange } = renderField('See the piece here.');
+    select(area, 4, 13);
+    await user.click(screen.getByRole('button', { name: 'Link' }));
+    expect(onChange).not.toHaveBeenCalled();
+    expect(screen.getByRole('alert')).toHaveTextContent(/will not work as a link/);
+  });
+
+  // Parentheses inside a target are ordinary -- a Wikipedia article title is
+  // the everyday case -- and the round-trip check above must not cost her
+  // those. Asserted beside the refusal rather than left implicit, the same way
+  // the `/%5C` acceptance is.
+  it('accepts a target with balanced brackets in it', async () => {
+    const user = userEvent.setup();
+    const target = 'https://example.com/wiki/Tielle_(dish)';
+    promptWith(target);
+    const { area, onChange } = renderField('See the piece here.');
+    select(area, 4, 13);
+    await user.click(screen.getByRole('button', { name: 'Link' }));
+    expect(onChange).toHaveBeenCalledWith(`See [the piece](${target}) here.`);
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  // The bound on the refusal's life, and the half a review measured to be
+  // missing: it used to end only on a successful insert, which is a bound she
+  // may never reach.
+  it('the refusal ends at her next keystroke in the box', async () => {
+    const user = userEvent.setup();
+    promptWith('javascript:alert(1)');
+    const { area } = renderField('See the piece here.');
+    select(area, 4, 13);
+    await user.click(screen.getByRole('button', { name: 'Link' }));
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+    await user.type(area, '!');
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  // The other half of that choice, pinned because it is the one a later reader
+  // would "fix": Cancel does NOT clear it. Pressing Escape on a second attempt
+  // is not her saying she has read the sentence, and she need never press Link
+  // again -- so clearing there would bound nothing while letting a stray Escape
+  // wipe advice she has not finished reading.
+  it('cancelling a second attempt leaves the refusal standing', async () => {
+    const user = userEvent.setup();
+    const spy = promptWith('javascript:alert(1)');
+    const { area } = renderField('See the piece here.');
+    select(area, 4, 13);
+    await user.click(screen.getByRole('button', { name: 'Link' }));
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+    spy.mockReturnValue(null);
+    await user.click(screen.getByRole('button', { name: 'Link' }));
+    expect(screen.getByRole('alert')).toHaveTextContent(/will not work as a link/);
+  });
+
+  // The three buttons are a named group, so a screen reader meets "Formatting
+  // for Words" rather than a bare "Bold, button" with nothing tying it to the
+  // field it acts on. `group` and not `toolbar`: see the component's own
+  // comment -- toolbar promises arrow-key navigation this does not implement.
+  it('names the three buttons as a group belonging to this field', () => {
+    render(<InlineTextField id="f" label="Heading" value="x" onChange={vi.fn()} problems={[]} />);
+    const group = screen.getByRole('group', { name: 'Formatting for Heading' });
+    expect(within(group).getAllByRole('button').map((button) => button.textContent)).toEqual([
+      'Bold',
+      'Italic',
+      'Link',
     ]);
   });
 

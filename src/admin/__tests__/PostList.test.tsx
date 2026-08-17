@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import PostList, { type PostListProps } from '../PostList';
@@ -403,6 +403,61 @@ describe('every problem the partition can produce is reachable from the count', 
     expect(screen.getAllByText(message)).toHaveLength(1);
     await user.click(screen.getByRole('button', { name: 'Take me to the first one' }));
     expect(document.activeElement).toHaveAttribute('role', 'alert');
+    expect(focusedProblemText()).toContain(message);
+  });
+});
+
+// The seventeenth shape, and like the fifteenth it gets its own case rather
+// than a row in the table above -- for a stronger reason: a refused link has no
+// ValidationProblem field and no validator message at all, so a row would have
+// nothing to drive renderList with and nothing to assert.
+//
+// It is here because a review measured both of the things InlineTextField's own
+// comment used to claim, and both were false. "After the textarea, so a real
+// validation problem still wins" is true only inside one field:
+// FIRST_PROBLEM_SELECTOR is queried with querySelector, which answers in
+// document order across the whole panel, so a refusal on post ONE beats a title
+// problem on post TWO. And "it only exists moments after she clicked Link" was
+// false outright -- it cleared on a successful insert and on nothing else.
+//
+// Both halves are pinned: that a live refusal wins the jump (the honest,
+// now-bounded imprecision) and that it stops winning the moment she types,
+// which is what makes the bound real.
+describe('a link refusal is reachable while it lasts, and lasts exactly as long as it is about something', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('beats a later post’s problem while it is up, and gives the jump back once she types', async () => {
+    const user = userEvent.setup();
+    // Spied per-test, never globally: jsdom has no prompt, and its RETURN VALUE
+    // is what this case is about.
+    vi.spyOn(window, 'prompt').mockReturnValue('javascript:alert(1)');
+    const message = 'this post needs a title';
+    renderList({ problems: [{ field: '[1].title', message }] });
+
+    // Baseline. The count is about post two's title, and that is where it sends
+    // her -- without this the assertions below could pass on a button that
+    // never worked.
+    await user.click(screen.getByRole('button', { name: 'Take me to the first one' }));
+    expect(focusedProblemText()).toContain(message);
+
+    // A refusal on post ONE's paragraph, which is earlier in document order
+    // than post two's title.
+    const group = screen.getByRole('group', { name: 'Formatting for Words' });
+    await user.click(within(group).getByRole('button', { name: 'Link' }));
+    const refusal = screen.getByText(/will not work as a link/);
+    expect(refusal).toHaveAttribute('role', 'alert');
+
+    // The imprecision, stated as a fact rather than as a comment.
+    await user.click(screen.getByRole('button', { name: 'Take me to the first one' }));
+    expect(document.activeElement).toBe(refusal);
+
+    // The bound. Her next keystroke in that box ends the refusal, and the count
+    // and the destination agree again.
+    await user.type(screen.getByLabelText('Words'), '!');
+    expect(screen.queryByText(/will not work as a link/)).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Take me to the first one' }));
     expect(focusedProblemText()).toContain(message);
   });
 });
