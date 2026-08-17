@@ -5,7 +5,15 @@ compatibility_date = "2026-01-01"
 # Same-origin: /api/* must be served by this Worker, not by the SPA catch-all in
 # public/_redirects. A cross-origin Worker would drop the SameSite=Strict session
 # cookie on every fetch and make sendBeacon('/api/wa') a silent no-op.
-routes = [{ pattern = "vb.aionxxxi.uk/api/*", zone_name = "aionxxxi.uk" }]
+# Both hostnames, and the list is the whole truth: `wrangler deploy` REPLACES a
+# Worker's routes with exactly what is here, so a route added by hand in the
+# dashboard survives until the next deploy and then disappears without a word.
+# That is not hypothetical -- it happened to viabiancarestaurant.com on the 5B
+# deploy, and /edit login on that host went back to 405 until this line existed.
+routes = [
+  { pattern = "vb.aionxxxi.uk/api/*", zone_name = "aionxxxi.uk" },
+  { pattern = "viabiancarestaurant.com/api/*", zone_name = "viabiancarestaurant.com" },
+]
 
 [vars]
 GITHUB_OWNER = "tarann26"
