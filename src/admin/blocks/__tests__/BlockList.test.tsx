@@ -74,6 +74,21 @@ describe('BlockList', () => {
     expect(screen.queryByText('numberList')).toBeNull();
   });
 
+  // Two blocks whose fields would collide if either label were the other's.
+  // The per-kind cases in BlockFields.test.tsx render one block at a time and
+  // structurally cannot see this: getByLabelText throws on a duplicate, so a
+  // shared label reads as a broken query rather than as the ambiguity it is --
+  // and a `<label for>` click or a screen reader cannot tell the two apart
+  // either. The same argument the positional block labels rest on.
+  it('no two controls on one post share a label', () => {
+    const { container } = renderList({
+      blocks: [EVERY_BLOCK.heading, EVERY_BLOCK.ingredients, EVERY_BLOCK.steps, EVERY_BLOCK.paragraph],
+    });
+    const labels = [...container.querySelectorAll('label')].map((el) => el.textContent ?? '');
+    const duplicated = labels.filter((label, i) => labels.indexOf(label) !== i);
+    expect(duplicated, `these labels appear more than once: ${[...new Set(duplicated)].join(', ')}`).toEqual([]);
+  });
+
   it('Up is omitted on the first block and Down on the last', () => {
     renderList();
     expect(screen.queryByRole('button', { name: 'Move Heading block 1 up' })).toBeNull();
@@ -287,6 +302,25 @@ describe('BlockList reads a restored draft defensively', () => {
       problems: [{ field: '[0].blocks[0].kind', message }],
     });
     expect(messageHits(container, message)).toBe(1);
+  });
+
+  // ...and only one of the two at a time. Validation is debounced, so the
+  // standing sentence is what she reads in the window before the validator's
+  // own message arrives; once it has arrived, it names the kind she actually
+  // has and the standing one would be a second sentence about one thing.
+  it('an unrecognised block shows one instruction, never two', () => {
+    const unknown = { kind: 'wonky' } as unknown as Block;
+    const message = 'this post contains a "wonky" block, which this site does not have';
+    const { container, unmount } = renderList({ blocks: [unknown] });
+    expect(messageHits(container, UNKNOWN_BLOCK_MESSAGE)).toBe(1);
+    unmount();
+
+    const settled = renderList({
+      blocks: [unknown],
+      problems: [{ field: '[0].blocks[0].kind', message }],
+    });
+    expect(messageHits(settled.container, message)).toBe(1);
+    expect(messageHits(settled.container, UNKNOWN_BLOCK_MESSAGE)).toBe(0);
   });
 
   it('a block that is not an object at all does not take the panel down', () => {

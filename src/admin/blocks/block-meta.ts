@@ -55,8 +55,15 @@ export const BLOCK_KIND_HELP: Record<BlockKind, string> = {
 export const UNKNOWN_BLOCK_LABEL = 'Unknown';
 
 // The one sentence she can act on when a block turns out to be something this
-// site cannot show. The validator's own message names the kind; this one says
-// what to do about it, and is on screen whether or not validation has run
-// yet (it is debounced, so there is a window where it has not).
+// site cannot show, for the window before validation has run -- it is
+// debounced, so that window is real. Once validateBlock's own message arrives
+// it names the kind she actually has, so BlockList shows this one only while
+// that message is absent and she never reads two at once.
+//
+// The advice is the validator's advice, word for word from
+// validate.ts's isBlockKind branch ("remove it and add one from the list
+// instead"). An earlier version said "add a paragraph or a photo in its place",
+// which is concrete but disagrees with the sentence that replaces it a moment
+// later -- two names for one thing, the defect InlineTextField exists to avoid.
 export const UNKNOWN_BLOCK_MESSAGE =
-  'This is not something this site can show. Remove it, then add a paragraph or a photo in its place.';
+  'This is not something this site can show. Remove it, and add one from the list instead.';

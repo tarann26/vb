@@ -7,7 +7,9 @@
 // reason that file's own comment gives: a retyped Tailwind string is a new
 // class to the content scanner and ships a duplicate rule.
 import BlockFields from './BlockFields';
+import BlockProblemMessage from './BlockProblemMessage';
 import { blockProblemOf, type BlockProblemTarget } from './block-problems';
+import { swapAt } from './reorder';
 import { BLOCK_KIND_LABELS, UNKNOWN_BLOCK_LABEL, UNKNOWN_BLOCK_MESSAGE } from './block-meta';
 import { MOVE_BUTTON_CLASSNAME, REMOVE_BUTTON_CLASSNAME } from '../RecordList';
 import { BLOCK_KEYS, isBlockKind } from '../../content/guards';
@@ -33,8 +35,6 @@ interface PlacedProblem {
   problem: ValidationProblem;
   target: BlockProblemTarget;
 }
-
-const BLOCK_MESSAGE_CLASSNAME = "mb-3 font-['Montserrat'] text-sm text-red-600";
 
 // `kind` comes out of localStorage through registerLoaded's unchecked cast
 // (sections/register-loaded.ts), so the type's promise of a BlockKind is not a
@@ -111,11 +111,7 @@ export default function BlockList({
   );
 
   function swap(index: number, otherIndex: number): void {
-    const next = [...safe];
-    const moved = next[index];
-    next[index] = next[otherIndex];
-    next[otherIndex] = moved;
-    onChange(next);
+    onChange(swapAt(safe, index, otherIndex));
   }
 
   return (
@@ -124,7 +120,6 @@ export default function BlockList({
         <div
           role="alert"
           aria-label="Problems with this post’s content"
-          tabIndex={-1}
           className="mb-4 rounded border border-red-300 bg-red-50 p-3 text-sm text-red-700"
         >
           <ul className="list-disc pl-5">
@@ -200,18 +195,19 @@ export default function BlockList({
                 </div>
               </div>
 
-              {kind === undefined && (
-                <p role="alert" tabIndex={-1} className={BLOCK_MESSAGE_CLASSNAME}>
-                  {UNKNOWN_BLOCK_MESSAGE}
-                </p>
+              {/* Only while nothing else is saying it. Once validation has
+                  run, validateBlock's own message is in `unplaced` below and
+                  names the kind she actually has ("contains a \"wonky\"
+                  block") -- two sentences for one thing, disagreeing on what to
+                  add in its place, is the defect InlineTextField exists to
+                  avoid one level down. This one is for the window BEFORE that
+                  message arrives, which is real: validation is debounced. */}
+              {kind === undefined && unplaced.length === 0 && (
+                <BlockProblemMessage>{UNKNOWN_BLOCK_MESSAGE}</BlockProblemMessage>
               )}
 
-              {/* `tabIndex={-1}` so PostList's "take me to the first one" can
-                  put focus here; never in the tab order. */}
               {unplaced.map((entry, i) => (
-                <p key={i} role="alert" tabIndex={-1} className={BLOCK_MESSAGE_CLASSNAME}>
-                  {entry.problem.message}
-                </p>
+                <BlockProblemMessage key={i}>{entry.problem.message}</BlockProblemMessage>
               ))}
 
               {kind !== undefined && (

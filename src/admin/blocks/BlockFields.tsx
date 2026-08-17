@@ -12,6 +12,9 @@
 import Field from '../Field';
 import PhotoField from '../PhotoField';
 import InlineTextField from './InlineTextField';
+import BlockProblemMessage from './BlockProblemMessage';
+import { BLOCK_KIND_LABELS } from './block-meta';
+import { swapAt } from './reorder';
 import { MOVE_BUTTON_CLASSNAME, REMOVE_BUTTON_CLASSNAME, ADD_BUTTON_CLASSNAME } from '../RecordList';
 import type React from 'react';
 import type { FieldSpec } from '../fields';
@@ -45,13 +48,34 @@ export interface BlockFieldsProps {
 // Ad-hoc specs, declared once at module scope rather than rebuilt per render.
 // `satisfies` rather than a type annotation so the literal keeps its narrow
 // `kind`, which is what lets Field<string>'s generic resolve.
+// The help text INSTRUCTS before it explains, which is the whole difference
+// between a field she fills in and a field she skips: the first version said
+// only what the description is used for, which tells her why the box is there
+// and nothing about what to type in it.
 const ALT_SPEC = {
   label: 'Photo description',
   kind: 'text',
-  help: 'Read aloud to anyone using a screen reader, and shown if the photo fails to load.',
+  help: 'Say what is in the photo, in a few words. Anyone who cannot see it hears this instead.',
 } satisfies FieldSpec<string>;
 
-const HEADING_SPEC = { label: 'Heading', kind: 'text' } satisfies FieldSpec<string>;
+// One per kind, and neither of them is "Heading" -- which is what the heading
+// BLOCK's own field is called. A post with a Heading block and an Ingredients
+// block would otherwise put two controls named "Heading" on one screen, the
+// same ambiguity the positional block labels exist to remove, and a screen
+// reader reading the label alone cannot tell those two apart. A single shared
+// "Heading for this list" fixed that pair and left the next one: ingredients
+// and steps are two different lists and would have shared it in turn (found by
+// this task's own duplicate-label scan, not by reading).
+//
+// The noun comes from BLOCK_KIND_LABELS rather than being typed again here, so
+// a kind renamed on its strip is renamed inside its fields in the same edit.
+const LIST_HEADING_SPECS = {
+  ingredients: {
+    label: `Heading for the ${BLOCK_KIND_LABELS.ingredients.toLocaleLowerCase('en')}`,
+    kind: 'text',
+  },
+  steps: { label: `Heading for the ${BLOCK_KIND_LABELS.steps.toLocaleLowerCase('en')}`, kind: 'text' },
+} satisfies Record<'ingredients' | 'steps', FieldSpec<string>>;
 
 const PUBLICATION_SPEC = { label: 'Publication', kind: 'text' } satisfies FieldSpec<string>;
 
@@ -77,7 +101,6 @@ const CITATION_URL_SPEC = {
 } satisfies FieldSpec<string | null>;
 
 const ROW_BUTTONS_CLASSNAME = 'mb-3 flex flex-wrap items-center gap-2';
-const LIST_MESSAGE_CLASSNAME = "mb-3 font-['Montserrat'] text-sm text-red-600";
 
 // "Add an ingredient", never "Add a ingredient". RecordList's own Add button
 // is `Add a ${noun}` unconditionally and so already ships "Add a award" and
@@ -87,6 +110,12 @@ const LIST_MESSAGE_CLASSNAME = "mb-3 font-['Montserrat'] text-sm text-red-600";
 // match an old one is the wrong way round. Fixing RecordList's own is a
 // change to five committed labels and two snapshots, so it stays its own
 // task.
+//
+// Spelling, not sound, and that is a real limit rather than an oversight: the
+// four nouns this has today (Item, Ingredient, Step, photo) are all decided
+// correctly by the first letter, but a noun beginning with a soft "u" ("Unit")
+// or a silent "h" would come out as "Add an unit". Whoever adds an eleventh
+// list noun in a later task should read this line rather than extend it.
 function addLabel(noun: string): string {
   const lower = noun.toLocaleLowerCase('en');
   return `Add ${/^[aeiou]/.test(lower) ? 'an' : 'a'} ${lower}`;
@@ -167,14 +196,9 @@ export default function BlockFields({
             when no per-item field exists to carry it. Same reasoning as
             RecordList's unclaimedProblems: the one message the validator
             produces for an empty list must not be the one message this
-            component drops.
-
-            `tabIndex={-1}` so PostList's "take me to the first one" can put
-            focus here; it is not in the tab order. */}
+            component drops. */}
         {problemsFor('items').map((problem, i) => (
-          <p key={i} role="alert" tabIndex={-1} className={LIST_MESSAGE_CLASSNAME}>
-            {problem.message}
-          </p>
+          <BlockProblemMessage key={i}>{problem.message}</BlockProblemMessage>
         ))}
         <button type="button" onClick={() => commit([...safe, ''])} className={ADD_BUTTON_CLASSNAME}>
           {addLabel(noun)}
@@ -270,7 +294,7 @@ export default function BlockFields({
         <>
           <Field<string>
             id={`${idPrefix}-heading`}
-            spec={HEADING_SPEC}
+            spec={LIST_HEADING_SPECS.ingredients}
             value={block.heading ?? ''}
             onChange={(next) => onChange({ ...block, heading: next })}
             problems={problemsFor('heading')}
@@ -283,7 +307,7 @@ export default function BlockFields({
         <>
           <Field<string>
             id={`${idPrefix}-heading`}
-            spec={HEADING_SPEC}
+            spec={LIST_HEADING_SPECS.steps}
             value={block.heading ?? ''}
             onChange={(next) => onChange({ ...block, heading: next })}
             problems={problemsFor('heading')}
@@ -385,9 +409,7 @@ export default function BlockFields({
           </div>
         ))}
         {problemsFor('images').map((problem, i) => (
-          <p key={i} role="alert" tabIndex={-1} className={LIST_MESSAGE_CLASSNAME}>
-            {problem.message}
-          </p>
+          <BlockProblemMessage key={i}>{problem.message}</BlockProblemMessage>
         ))}
         <button type="button" onClick={() => commit([...safe, { src: '', alt: '' }])} className={ADD_BUTTON_CLASSNAME}>
           Add a photo
@@ -395,12 +417,4 @@ export default function BlockFields({
       </>
     );
   }
-}
-
-function swapAt<T>(items: T[], index: number, otherIndex: number): T[] {
-  const next = [...items];
-  const moved = next[index];
-  next[index] = next[otherIndex];
-  next[otherIndex] = moved;
-  return next;
 }

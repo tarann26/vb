@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { BLOCK_KIND_HELP, BLOCK_KIND_LABELS, UNKNOWN_BLOCK_LABEL, UNKNOWN_BLOCK_MESSAGE } from '../block-meta';
 import { BLOCK_KINDS } from '../../../content/guards';
+import { validateContent } from '../../../content/validate';
 
 describe('every block kind has words she can read', () => {
   // Derived from BLOCK_KINDS (itself checked exhaustive against the union at
@@ -37,10 +38,17 @@ describe('every block kind has words she can read', () => {
   });
 
   // It has to tell her what to DO, because it is the only thing on screen for
-  // a block that has no fields to show. Asserted as the two words that make it
-  // an instruction rather than a diagnosis.
-  it('the unrecognised-kind message tells her to remove it and what to put back', () => {
+  // a block that has no fields to show, and it has to give the SAME advice as
+  // the message that replaces it once validation has run -- two sentences for
+  // one thing, disagreeing on what to do, is the defect InlineTextField exists
+  // to avoid one level down. Both halves asserted against validate.ts's own
+  // words rather than described.
+  it('the unrecognised-kind message tells her to remove it, and agrees with the validator', () => {
     expect(UNKNOWN_BLOCK_MESSAGE).toContain('Remove it');
-    expect(UNKNOWN_BLOCK_MESSAGE).toContain('paragraph');
+    expect(UNKNOWN_BLOCK_MESSAGE.toLocaleLowerCase('en')).toContain('add one from the list instead');
+    const fromValidator = validateContent('posts.json', [
+      { id: 'a', slug: 'a', type: 'story', title: 'T', date: '2026-03-04', excerpt: 'e', image: '/food/x.webp', blocks: [{ kind: 'wonky' }] },
+    ]).find((problem) => problem.field === '[0].blocks[0].kind');
+    expect(fromValidator?.message).toContain('add one from the list instead');
   });
 });

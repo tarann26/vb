@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import PostList, { type PostListProps } from '../PostList';
 import { POST_FIELDS } from '../fields';
 import { NO_IMAGE_PREVIEWS } from '../previews';
-import type { Post } from '../../content/types';
+import type { Block, Post } from '../../content/types';
 import type { ValidationProblem } from '../../content/validate';
 
 // Fixtures that differ from src/content/posts.json in EVERY field asserted
@@ -288,5 +288,121 @@ describe('PostList says how much is wrong, and takes her to it', () => {
     const summary = screen.getByRole('status', { name: 'What still needs fixing' });
     await user.click(screen.getByRole('button', { name: 'Take me to the first one' }));
     expect(summary.contains(document.activeElement)).toBe(false);
+  });
+});
+
+// The guard the convention was missing, and the reason it exists rather than a
+// second sentence in a comment: the first version of this button matched
+// `[role="alert"][tabindex="-1"]`, so a region's reachability depended on its
+// author having remembered one attribute -- and the review found the convention
+// already broken by RecordForm's own banner, which this panel has mounted since
+// Task 4 and which is the only place a same-index problem naming a key no
+// control renders can go. She was told one thing needed fixing, offered a way to
+// reach it, and the button silently did nothing.
+//
+// One row per shape the partition can produce, so the table IS the partition.
+// A shape added to validate.ts with nowhere reachable to land fails here.
+const GUARD_POSTS: Post[] = [
+  {
+    id: 'guard-a',
+    slug: 'a-guard-post',
+    type: 'recipe',
+    title: 'A guard post',
+    date: '2026-03-04',
+    excerpt: 'A guard excerpt.',
+    image: '/food/tielle.webp',
+    blocks: [
+      { kind: 'paragraph', text: 'A guard paragraph.' },
+      { kind: 'numberList', items: ['A guard step'] },
+      { kind: 'bulletList', items: [] },
+      { kind: 'gallery', images: [] },
+    ],
+  },
+];
+
+// Whatever she landed on, plus whatever that thing points at. A control carries
+// no text of its own and names its error region through aria-describedby; a
+// message region carries the words itself. One helper covers both, so the table
+// below does not have to know which shape each row produces.
+function focusedProblemText(): string {
+  const active = document.activeElement as HTMLElement | null;
+  if (active === null) return '';
+  const described = (active.getAttribute('aria-describedby') ?? '')
+    .split(' ')
+    .filter((id) => id !== '')
+    .map((id) => document.getElementById(id)?.textContent ?? '')
+    .join(' ');
+  return `${active.textContent ?? ''} ${described}`;
+}
+
+describe('every problem the partition can produce is reachable from the count', () => {
+  const SHAPES: [string, string][] = [
+    ['a scalar field she can edit', '[0].title'],
+    ['a photo field', '[0].image'],
+    // The finding. validateKnownKeys' output for a key no control renders --
+    // its own comment says "She cannot edit this key -- no control renders
+    // it" -- which lands in RecordForm's own banner and nowhere else.
+    ['a key this site does not use', '[0].level'],
+    ['the whole file', ''],
+    ['a post that is not rendered', '[9].slug'],
+    ['a block of a post that is not rendered', '[9].blocks[0].text'],
+    ['a block field she can edit', '[0].blocks[0].text'],
+    ['one item of a list inside a block', '[0].blocks[1].items[0]'],
+    ['the block list itself', '[0].blocks'],
+    ['a block she has since removed', '[0].blocks[9].text'],
+    ['a key no field of a block has', '[0].blocks[0].level'],
+    ['a list inside a block with nothing in it', '[0].blocks[2].items'],
+    ['a photo grid with nothing in it', '[0].blocks[3].images'],
+  ];
+
+  it.each(SHAPES)('takes her to %s', async (_what, field) => {
+    const user = userEvent.setup();
+    const message = `something is wrong with ${field || 'the whole file'}`;
+    renderList({ items: GUARD_POSTS, problems: [{ field, message }] });
+
+    // On screen exactly once first: a shape she cannot reach is one failure and
+    // a shape that is not displayed at all is a different, worse one, and
+    // without this the focus assertion below could pass on neither.
+    expect(screen.getAllByText(message)).toHaveLength(1);
+
+    await user.click(screen.getByRole('button', { name: 'Take me to the first one' }));
+
+    // Focus landed on something that can hold a problem -- not on the button
+    // she pressed (which is where a silent no-op leaves it) and not on <body>
+    // (whose textContent contains every message on the page and would make the
+    // assertion below meaningless).
+    const active = document.activeElement as HTMLElement;
+    expect(
+      ['INPUT', 'TEXTAREA', 'SELECT'].includes(active.tagName) || active.getAttribute('role') === 'alert',
+      `focus went to <${active.tagName.toLowerCase()}> "${(active.textContent ?? '').slice(0, 40)}"`,
+    ).toBe(true);
+    expect(focusedProblemText()).toContain(message);
+  });
+
+  // The fifteenth shape, and it gets its own fixture rather than a row in the
+  // table above, because a block whose kind this site does not have carries a
+  // STANDING sentence of its own until validation replaces it -- so a post
+  // containing one has an alert on screen that the count above has not counted,
+  // and it would win the "first in document order" race for every row after it.
+  //
+  // That is a real, bounded imprecision rather than a fixture problem, and
+  // keeping it out of the table is what says so: for the 400ms before
+  // validation lands she can be taken to the unrecognised block instead of to
+  // the newer problem. Both are things she has to fix, the window is one
+  // debounce long, and the alternative -- counting a message the validator has
+  // not produced -- would make the number disagree with what Publish will
+  // refuse.
+  it('takes her to a block whose kind this site does not have', async () => {
+    const user = userEvent.setup();
+    const message = 'this post contains a "wonky" block, which this site does not have';
+    const withUnknown: Post[] = [
+      { ...GUARD_POSTS[0], blocks: [{ kind: 'paragraph', text: 'A guard paragraph.' }, { kind: 'wonky' } as unknown as Block] },
+    ];
+    renderList({ items: withUnknown, problems: [{ field: '[0].blocks[1].kind', message }] });
+
+    expect(screen.getAllByText(message)).toHaveLength(1);
+    await user.click(screen.getByRole('button', { name: 'Take me to the first one' }));
+    expect(document.activeElement).toHaveAttribute('role', 'alert');
+    expect(focusedProblemText()).toContain(message);
   });
 });

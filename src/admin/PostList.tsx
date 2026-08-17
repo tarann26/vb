@@ -86,17 +86,32 @@ function problemCountSentence(count: number): string {
 // Two shapes, because there are two ways a problem appears on this screen: a
 // CONTROL whose own error region it points at (Field, PhotoField and
 // InlineTextField all build `aria-describedby` ending in `-error` when, and
-// only when, they have a problem to show), or one of the message regions that
-// carry a problem no control could -- this component's own banner, BlockList's,
-// and the per-block and empty-list messages inside it, each of which carries
-// `tabIndex={-1}` so that it can be focused without joining the tab order.
+// only when, they have a problem to show), or ANY region announcing itself as
+// an alert -- this component's own banner, RecordForm's, BlockList's, and the
+// per-block and empty-list messages inside it.
+//
+// The control comes first for a field problem, and that ordering is not an
+// accident of this selector: Field renders label, control, help, error in that
+// order, so the control precedes its own message and she lands in the box she
+// has to type in rather than on the sentence about it.
+//
+// `[role="alert"]`, and NOT `[role="alert"][tabindex="-1"]`, which is what the
+// first version of this had. That version made every region's reachability
+// depend on its author having remembered one attribute, and the review found
+// the convention already broken by a component this panel has mounted since
+// Task 4: RecordForm's own banner (RecordForm.tsx) has no tabindex, and it is
+// the only place a same-index problem naming a key no control renders can go --
+// validateKnownKeys' output, the shape this file's own partition comment
+// below names. So she was told one thing needed fixing, offered a way to reach
+// it, and the button did nothing. Matching the ROLE means a region is reachable
+// because of what it is, not because somebody remembered a convention.
 //
 // Queried from the DOM rather than computed from `problems`, deliberately:
 // mapping a problem's `field` string back to a DOM id would be a fourth
 // independent copy of the id scheme (RecordForm's, BlockList's, PhotoField's),
 // and the thing that needs finding is "the first one SHE can see", which is a
 // fact about what rendered.
-const FIRST_PROBLEM_SELECTOR = '[aria-describedby*="-error"], [role="alert"][tabindex="-1"]';
+const FIRST_PROBLEM_SELECTOR = '[aria-describedby*="-error"], [role="alert"]';
 
 export default function PostList({
   items,
@@ -172,7 +187,26 @@ export default function PostList({
   const listRef = useRef<HTMLDivElement>(null);
 
   function goToFirstProblem(): void {
-    listRef.current?.querySelector<HTMLElement>(FIRST_PROBLEM_SELECTOR)?.focus();
+    const target = listRef.current?.querySelector<HTMLElement>(FIRST_PROBLEM_SELECTOR);
+    if (target === null || target === undefined) return;
+    // A <div> or <p> is not focusable, and `.focus()` on one is a silent
+    // no-op -- which is exactly how the first version of this button came to
+    // do nothing at all for a problem only RecordForm's banner could carry.
+    // Made focusable HERE, at the moment she asks to be taken there, rather
+    // than by every component that renders a message region remembering to
+    // declare it: a region rendered by a component that has never heard of
+    // this button is reachable anyway, and there is one mechanism instead of a
+    // convention plus a mechanism.
+    //
+    // `tabindex="-1"` is programmatic focus only, never the tab order, so
+    // nothing about tabbing through the panel changes. Written through the DOM
+    // rather than through React, the same escape hatch PublishBar.tsx's own
+    // `document.activeElement.blur()` takes and for the same reason -- React
+    // never sets this attribute on these elements, so it never reconciles it
+    // away, and the alternative is a prop threaded through four components
+    // that have no other reason to know about it.
+    if (!target.hasAttribute('tabindex')) target.setAttribute('tabindex', '-1');
+    target.focus();
   }
 
   return (
@@ -183,8 +217,11 @@ export default function PostList({
         // interrupt her to read a new count each time. The problems it counts
         // are each announced by their own alert where they land.
         //
-        // No `tabIndex` here, which is what keeps FIRST_PROBLEM_SELECTOR from
-        // matching this region and sending her to the summary she just clicked.
+        // `role="status"` is also what keeps FIRST_PROBLEM_SELECTOR from
+        // matching this region and sending her to the summary she just
+        // clicked. Pinned by a test (`never sends her to the summary itself`),
+        // because the selector now matches every alert region and this is the
+        // one region that must stay out of it.
         <div
           role="status"
           aria-label="What still needs fixing"
@@ -201,7 +238,6 @@ export default function PostList({
         <div
           role="alert"
           aria-label="Problems with the whole list of posts"
-          tabIndex={-1}
           className="mb-4 rounded border border-red-300 bg-red-50 p-3 text-sm text-red-700"
         >
           <ul className="list-disc pl-5">

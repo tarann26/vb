@@ -274,13 +274,17 @@ describe('each kind renders its own fields', () => {
     });
   });
 
-  it('ingredients and steps each have a heading and their own noun', () => {
+  // Their headings are named after the block they belong to, not both "Heading"
+  // and not both the same thing -- BlockList.test.tsx's duplicate-label scan is
+  // what enforces that across a whole post; this pins the actual words.
+  it('ingredients and steps each have their own heading and their own noun', () => {
     const { unmount } = renderFields(EVERY_BLOCK.ingredients);
-    expect(screen.getByLabelText('Heading')).toHaveValue('What you need');
+    expect(screen.getByLabelText('Heading for the ingredients')).toHaveValue('What you need');
     expect(screen.getByLabelText('Ingredient 1')).toHaveValue('400g 00 flour');
     expect(screen.getByRole('button', { name: 'Add an ingredient' })).toBeInTheDocument();
     unmount();
     renderFields(EVERY_BLOCK.steps);
+    expect(screen.getByLabelText('Heading for the method')).toHaveValue('How to make it');
     expect(screen.getByLabelText('Step 1')).toHaveValue('Make a well');
     expect(screen.getByRole('button', { name: 'Add a step' })).toBeInTheDocument();
   });
