@@ -529,6 +529,43 @@ describe('assertPosts', () => {
   it('accepts an empty list', () => {
     expect(assertPosts([])).toEqual([]);
   });
+
+  // The asymmetry a review found and this closes: validatePost runs the full
+  // asset-path check on `image` and this guard checked only that the string
+  // was non-empty. Both boundaries now ask isSiteRelativePath the same
+  // question, which is the same shared-primitive treatment assertBlock's own
+  // `src` check already gets -- and it matters because the exposed path is a
+  // DIRECT COMMIT to posts.json, which is the only way a post is authored
+  // today, and because scripts/sync-posts-fallback.mjs writes this file from
+  // a database row.
+  //
+  // isSiteRelativePath, not a pattern: '/' followed by a backslash resolves
+  // to somebody else's host, and so does '/' followed by a tab followed by
+  // '//host'. Naming the dangerous characters one at a time is how the old
+  // check came to be wrong.
+  it.each([
+    ['an off-site card image', 'https://evil.example/x.webp'],
+    ['a protocol-relative card image', '//evil.example/x.webp'],
+    ['a backslash card image', '/\\evil.example/x.webp'],
+    ['a traversing card image', '/press/../../etc/passwd'],
+    ['a bare filename', 'hotelier.webp'],
+  ])('refuses %s', (_name, image) => {
+    expect(() => assertPosts([{ ...A_POST, image }])).toThrow(/photo on this site/);
+  });
+
+  // A percent-encoded backslash is NOT decoded before parsing, so it stays
+  // on this origin and is accepted. Asserted beside the refusals rather than
+  // left implicit: refusing it would be over-strict against real content,
+  // and it was a deliberate call when isSafeHref was hardened.
+  it('accepts a percent-encoded backslash, which stays on this origin', () => {
+    expect(assertPosts([{ ...A_POST, image: '/press/%5Chotelier.webp' }])[0].image).toBe(
+      '/press/%5Chotelier.webp',
+    );
+  });
+
+  it('still accepts the ordinary case', () => {
+    expect(assertPosts([{ ...A_POST, image: '/press/hotelier.webp' }])[0].image).toBe('/press/hotelier.webp');
+  });
 });
 
 import { validateContent } from '../validate';
@@ -678,6 +715,25 @@ describe('assertBlock and the write boundary refuse the same broken blocks', () 
       'delhi-royale-pastificio-ristorante',
       'restaurant-india-cordon-bleu-debut',
     ]);
+  });
+});
+
+// Task 2 of Phase 5B, the last guard asymmetry: assertPosts checked only
+// that `image` was a non-empty string, while validatePost already ran the
+// full isUnsafeAssetPath check on the same field. Both ends now ask
+// isSiteRelativePath the same question. This table pairs them the same way
+// the block-level table above does -- one row, both boundaries asserted in
+// the same test -- because a row that only reached one end would look like
+// coverage without being any.
+describe('assertPosts and the write boundary refuse the same unsafe card image', () => {
+  it.each([
+    ['an off-site card image', { image: 'https://evil.example/x.webp' }, '[0].image'],
+    ['a protocol-relative card image', { image: '//evil.example/x.webp' }, '[0].image'],
+    ['a backslash card image', { image: '/\\evil.example/x.webp' }, '[0].image'],
+    ['a traversing card image', { image: '/press/../../etc/passwd' }, '[0].image'],
+  ])('refuses %s', (_name, override, field) => {
+    expect(() => assertPosts([{ ...A_POST, ...override }])).toThrow(/photo on this site/);
+    expect(validateContent('posts.json', [{ ...A_POST, ...override }]).map((p) => p.field)).toContain(field);
   });
 });
 

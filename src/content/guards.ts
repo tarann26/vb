@@ -785,6 +785,22 @@ export function assertPosts(raw: unknown): Post[] {
     if (typeof image !== 'string' || image.trim().length === 0) {
       throw new Error(`content/posts.json: "${id}" needs an image`);
     }
+    // The same question validatePost asks of this field, asked here too --
+    // and asked through isSiteRelativePath (./markdown) rather than a pattern
+    // of its own, so the two boundaries cannot come to disagree about what a
+    // path on this site is. They disagreed once, and the shape they
+    // disagreed about was '/' followed by a backslash, which a browser
+    // fetches from somebody else's host.
+    //
+    // This guard runs at IMPORT time, which is what makes it worth having
+    // rather than leaving to the write boundary: a bad value reaching
+    // src/content/posts.json -- by a direct commit, which is how posts are
+    // authored today, or by scripts/sync-posts-fallback.mjs writing a
+    // database row into the file -- breaks `tsc -b` and blocks every later
+    // deploy, including the one that would fix it.
+    if (!isSiteRelativePath(image)) {
+      throw new Error(`content/posts.json: "${id}" needs a photo on this site, starting with /`);
+    }
     if (!Array.isArray(blocks)) throw new Error(`content/posts.json: "${id}" needs a list of blocks`);
 
     const unknownPostKeys = unknownKeys(record, POST_KEYS);
