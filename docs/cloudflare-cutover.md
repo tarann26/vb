@@ -1143,3 +1143,118 @@ the nine fabricated `press.json` entries above, and `public/press/hotelier.webp`
 — a social-card screenshot whose headline is baked into the pixels, cropped
 mid-descender, with the same headline then repeated as the post's own
 heading. Wrong asset, pre-existing this phase, waiting on her.
+
+### Phase 5B: the block editor, and posts on D1
+
+**`src/content/posts.json` is now a D1 document with a committed fallback**,
+exactly like `src/content/story.json`. `worker/store.ts`'s `D1_ONLY_PATHS` and
+`worker/published.ts`'s `PUBLIC_FILES` both name it. The live copy is the row;
+the file is what first paint, a crawler, a reader with JS off and
+`src/content/__tests__/assets.test.ts`'s asset walk all see.
+
+**A push to `main` is no longer the whole deploy.** From this phase on:
+
+    node scripts/build-snapshot.mjs        # worker/snapshot.ts -- the Worker's outage fallback
+    node scripts/sync-posts-fallback.mjs   # src/content/posts.json -- the browser's first-paint fallback
+    node scripts/sync-story-fallback.mjs   # unchanged, still needed
+    npx wrangler deploy                    # ships the Worker itself
+
+Skipping `wrangler deploy` leaves `GET /api/published?path=posts.json` 404ing
+against production while the frontend already expects it. The site does not
+break — the compiled-in fallback renders — but publishing a post changes
+nothing anybody can see, and every test is green.
+
+**Adding a post is now something she does herself**, from
+`/edit/manage/story` → Posts. A photo uploads into `assets-source/posts/`
+(the ninth upload category) and `npm run images` writes
+`public/posts/<name>.webp` at build time. R2 is still not enabled.
+
+**A post published between deploys is live immediately but absent from
+`sitemap.xml`** until `sync-posts-fallback.mjs` runs and the site rebuilds.
+`plugins/sitemap.ts` reads the committed file at build time. That is a
+freshness cost on discovery, not a correctness one.
+
+**One pin narrowed, and it is worth knowing.**
+`src/content/__tests__/shape.test.ts` pins the three migrated press mentions
+against the committed file, which is what makes a fourth post appearing
+without a decision on the nine unmigrated `press.json` entries fail the
+build. It now guards the **fallback** rather than the live copy: a fourth post
+published through the editor is live at once and fails nothing, and only
+becomes a build failure after `sync-posts-fallback.mjs` is run. The pin still
+does its job for the committed artefact, which is what it was always about.
+
+**The staged-photo-after-reorder risk did not ship as a gap — Task 10 closed
+it.** A block carried no id, so a picked photo was staged under the block's
+*position*: React key, preview key and staged-file key all pointed at
+wherever she'd dragged the block away from. `BlockList.tsx` now names each
+block in a `WeakMap` keyed on the block object itself, not its index — the
+same object survives a reorder, so the photo she picked for it does too.
+`BlockFields.tsx` carries the matching fix one level down, for a photo staged
+into a gallery block and then bumped by removing an earlier tile. Both are
+proven end to end in `BlockList.test.tsx`: pick a photo, move the block,
+pick a second photo, publish — each block still names the photo she picked
+for it.
+
+**The parser can no longer hang.** `parseNodes` used to backtrack
+exponentially on an unclosed `[` — 24 brackets took 906ms and 30 took about
+two minutes, and it was a hang rather than a throw, so the root error boundary
+could not catch it. It was unreachable while the only authoring path was a
+committed file; the toolbar's textarea is what put a keystroke in front of it.
+Fixed with a memo on both outcomes, a 32-level depth cap and a constant-time
+refusal: 50 000 brackets now parse at 0–4ms.
+
+**The CSS ceiling is unchanged at 38700, and the build sits at 38593 — the
+same number Phase 5A left.** The plan for this phase called for the
+ceiling's first raise since Phase 3, budgeting two new rules — `cursor-move`
+on the drag handle, `opacity-50` on the row in flight — at 38641 against a
+raised 38800. Measured against a worktree checkout of the true parent commit,
+all eight tasks including drag-to-reorder came out byte-identical: 38593 →
+38593, zero rules added, zero removed, same content hash. The handle and the
+dragged row use inline `style` instead of a class — `style={{ cursor: 'move'
+}}` and `style={{ opacity: 0.5 }}` — the same escape hatch
+`CollapsibleSection.tsx`'s fieldset reset already uses, and `style-src`
+allows it on purpose (`src/test/hosting.test.ts`). The 38641-against-38800
+pair never shipped; the raise was never needed. `src/test/bundle.post-build.test.ts`'s
+comment carries the full arithmetic. Everything else in this phase spent
+zero — four files (`PostList`, `BlockList`, `BlockFields`, `InlineTextField`)
+import `RecordList`'s and `Field.tsx`'s own exported class bindings rather
+than retyping the strings.
+
+**Still the owner's call, unresolved by this phase:**
+
+- the nine fabricated `press.json` entries — twelve entries, three real, and
+  the other nine carry `url: null`, publications that read as invented, and
+  images borrowed from elsewhere (**six from `/food/`, two from
+  `/mocktails/`, and one from `/team/kamalika-anand.webp`**, the chef
+  portrait). Moving any of them is now a data edit through the Posts panel,
+  not a code change;
+- `public/press/hotelier.webp` is the wrong asset for its post — a social
+  card whose headline is baked into the pixels, cropped mid-descender by the
+  card's 2:1 box, with the same headline then repeated as the post's own
+  heading. One path she can change from the Posts panel.
+
+**A known trap, left in place on purpose: the Press panel still writes to a
+file nothing renders reads.** `/edit/manage` shows both a "Posts" panel and a
+"Press" panel side by side. Posts is the real one — `App.tsx` now maps the
+homepage's `press` section to `<BlogSection />`, and `NewsPress.tsx` (the
+component that used to render `press.json`) is parked and mounted nowhere.
+The Press panel is still fully wired: she can edit an article, publish it,
+watch the request succeed, and nothing on the site will change. It stayed
+because retiring it costs more than it looks: `PanelId` is a frozen union
+with a test asserting exactly thirteen ids (`src/admin/manage/__tests__/areas.test.tsx`),
+and the panel lives inside the `story` area, whose description is one of five
+that together fill the 390px home list's 844px screen at an exact
+244-character total with zero margin — verified for real only by
+`e2e/dashboard-sections.spec.ts:430`, the jsdom sum being a proxy for it.
+Touching the area that holds Press moves that math, and the only check that
+would catch a miscalculation is Playwright, not the gate. Recording it here
+so whoever retires `press.json` next finds the reason
+before finding the trap.
+
+**Also still pending and explicitly out of this phase:** the
+`viabiancadelhi.com` cutover. The Worker route must move with the site in the
+same change (the session cookie is `SameSite=Strict` with no `Domain=`, so it
+is host-only), the Web Analytics tag is bound to the `aionxxxi.uk` zone, six
+hostnames are hardcoded, and a nameserver switch that drops MX kills email on
+the domain silently. Screenshot GoDaddy's record list before touching
+anything.
