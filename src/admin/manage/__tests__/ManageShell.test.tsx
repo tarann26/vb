@@ -134,7 +134,39 @@ describe.each([
     if (wide) {
       // There is no home screen on a laptop -- the sidebar IS the home,
       // permanently -- so the bare URL redirects to the first area.
-      await screen.findByRole('heading', { name: 'Dishes' });
+      //
+      // The WAIT is for the first area's container to lose `hidden`, which is
+      // the redirect's own DOM effect; the heading is then asserted once,
+      // afterwards. Waiting on the heading query directly is what refused a
+      // Cloudflare build, and for the same reason 8e29ded already fixed one
+      // case in the Experiences panel for: the query is the expensive thing.
+      //
+      // This case is the slowest in the file because it is the only one that
+      // needs TWO commits -- the shell mounting, then the redirect landing --
+      // and by the time the second arrives every area's fetch has resolved,
+      // so the document has gone from 184 elements to 1198. A role+name
+      // sweep over that costs 8-30ms here and 100-180ms on a loaded builder,
+      // and `waitFor` re-runs it every 50ms, so it was spending ~60% of its
+      // own 1000ms budget inside the query -- synchronously, on the one
+      // thread React needs to commit the redirect it is waiting for. Measured
+      // on this machine: 112-227ms to resolve while polling the heading,
+      // 30-46ms while polling the container. Under a load that reproduces the
+      // builder it timed out roughly one run in eight, and did so at 1184f5a
+      // just as readily as here -- the added Phase 5 tests changed the
+      // scheduling, not the cost.
+      //
+      // Nothing is waited for more loosely than before. `hidden` comes off in
+      // the same commit that makes the area active, and the Dishes heading
+      // has been in that subtree since the shell's first render, so the
+      // heading is queryable in the same tick the gate opens -- the wait is
+      // cheaper, not weaker, and the assertion below is still the same
+      // role+name one, still refusing to look inside a hidden subtree.
+      await waitFor(() => {
+        const firstArea = document.querySelector(`[data-area="${AREAS[0].slug}"]`);
+        expect(firstArea).not.toBeNull();
+        expect(firstArea).not.toHaveAttribute('hidden');
+      });
+      expect(screen.getByRole('heading', { name: 'Dishes' })).toBeInTheDocument();
       expect(screen.getByRole('navigation', { name: 'Areas' })).toBeInTheDocument();
     } else {
       expect(await screen.findByRole('heading', { name: /What would you like to change/ })).toBeInTheDocument();
