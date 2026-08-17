@@ -105,6 +105,23 @@ describe('each block renders its own shape', () => {
     expect(container.querySelector('figcaption')).toBeNull();
   });
 
+  // The case above supplies caption: '' -- a PRESENT empty string. A real
+  // caption-less image (dd224e6 made `caption` optional at the type; nothing
+  // requires posts.json to carry the key at all) has the key ABSENT, not
+  // empty, and `block.caption` is `undefined` there, not `''`. The two
+  // `?? ''` guards in Figure/BlockView exist precisely for this shape, and
+  // the case above cannot exercise them: `'' ?? ''` and `undefined ?? ''`
+  // both evaluate to `''`, so a fixture that only ever supplies `''` leaves
+  // `?? ''` indistinguishable from no guard at all. Dropping the guard
+  // (`block.caption as string`) throws `TypeError: Cannot read properties of
+  // undefined (reading 'trim')` here, during render -- a white-screen crash
+  // on content validatePosts explicitly accepts.
+  it('an image with the caption key entirely absent renders no figcaption, and does not throw', () => {
+    const { container } = renderBlock({ kind: 'image', src: '/food/tielle.webp', alt: 'A tielle' });
+    expect(container.querySelector('figcaption')).toBeNull();
+    expect(container.querySelector('img')?.getAttribute('src')).toBe('/food/tielle.webp');
+  });
+
   it('gallery renders one img per image, each with its own alt', () => {
     const { container } = renderBlock(EVERY_BLOCK.gallery);
     const imgs = [...container.querySelectorAll('img')];
@@ -123,6 +140,17 @@ describe('each block renders its own shape', () => {
     expect(container.querySelector('cite')).toBeNull();
   });
 
+  // Same landmine as the image case above, on the other `?? ''` guard: an
+  // absent key, not a present empty string. `block.attribution` is
+  // `undefined` here. Dropping the guard (`(block.attribution as
+  // string).trim()`) throws the same `TypeError: Cannot read properties of
+  // undefined (reading 'trim')`.
+  it('a quote with the attribution key entirely absent renders no cite, and does not throw', () => {
+    const { container } = renderBlock({ kind: 'quote', text: 'Just the words.' });
+    expect(container.querySelector('cite')).toBeNull();
+    expect(container.querySelector('blockquote')?.textContent).toContain('Just the words.');
+  });
+
   it('ingredients is a heading and an unordered list', () => {
     const { container } = renderBlock(EVERY_BLOCK.ingredients);
     expect(container.querySelector('h3')?.textContent).toBe('What you need');
@@ -136,17 +164,23 @@ describe('each block renders its own shape', () => {
     expect(container.querySelector('ul')).toBeNull();
   });
 
-  it('citation names the publication and links out safely', () => {
+  it('citation names the publication, the date, and links out safely', () => {
     const { container } = renderBlock(EVERY_BLOCK.citation);
-    expect(container.textContent).toContain('A Magazine');
+    // The date literal, not a call to formatArticleDate -- an expectation
+    // computed by the code under test proves nothing (PostPage.test.tsx's
+    // own note on the same function). '2026-03-04' is EVERY_BLOCK.citation's
+    // own date. Previously only 'A Magazine' was asserted here, so dropping
+    // formatArticleDate(block.date) entirely from BlockView's citation case
+    // left this test (and its sibling below) green.
+    expect(container.textContent).toContain('A Magazine, March 4, 2026');
     const anchor = container.querySelector('a');
     expect(anchor?.getAttribute('href')).toBe('https://example.com/a');
     expect(anchor?.getAttribute('rel')).toBe('noopener noreferrer');
   });
 
-  it('a citation with no link renders the publication and no anchor', () => {
+  it('a citation with no link renders the publication, the date, and no anchor', () => {
     const { container } = renderBlock({ kind: 'citation', publication: 'A Magazine', url: null, date: '2026-03-04' });
-    expect(container.textContent).toContain('A Magazine');
+    expect(container.textContent).toContain('A Magazine, March 4, 2026');
     expect(container.querySelector('a')).toBeNull();
   });
 });

@@ -4,7 +4,11 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import PostPage from '../PostPage';
 import { ContentProvider } from '../../../content/context';
 import { defaultBundle } from '../../../content/ContentContext';
+import { site, copy } from '../../../content';
 import type { Post } from '../../../content/types';
+
+const canonicals = () =>
+  Array.from(document.head.querySelectorAll('link[rel="canonical"]'));
 
 // A fixture bundle whose post shares NO field value with
 // src/content/posts.json. If this fixture matched the committed content, a
@@ -106,15 +110,46 @@ describe('PostPage', () => {
 
   it('renders the not-found page for a slug no post has', () => {
     renderAt('/blog/nothing-here');
-    // NotFound's own heading, from copy.json. A blog post that does not
-    // exist and a URL that does not exist are the same thing to a visitor,
-    // and to a crawler -- the same decision App.tsx's PageRoute already made
-    // for a disabled page.
-    expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument();
+    // Matched against copy.notFound.* itself, not merely "some h1 exists" --
+    // NotFound.test.tsx uses the same pattern. A truthy-heading check alone
+    // would pass for ANY component with an h1, including a distinct
+    // "unpublished" screen that would contradict 80adc55's own commit
+    // message ("a missing slug and a nonexistent URL are indistinguishable
+    // to a visitor and a crawler").
+    expect(screen.getByRole('heading', { name: copy.notFound.heading })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: copy.notFound.back })).toBeInTheDocument();
     expect(screen.queryByText('A fixture post title')).toBeNull();
   });
 
-  it('renders the not-found page rather than crashing when there are no posts at all', () => {
-    expect(() => renderAt('/blog/a-fixture-post', [])).not.toThrow();
+  // Renamed from "...rather than crashing..." to match what it actually
+  // proves now: the old version was named for a not.toThrow() alone, which
+  // is silent about WHAT was rendered. Replacing NotFound with any other
+  // component that also doesn't throw -- e.g. a distinct "unpublished"
+  // screen -- left the old version green. This asserts NotFound's own copy
+  // renders, on top of not throwing.
+  it('renders the same not-found page, not merely without throwing, when there are no posts at all', () => {
+    renderAt('/blog/a-fixture-post', []);
+    expect(screen.getByRole('heading', { name: copy.notFound.heading })).toBeInTheDocument();
+  });
+
+  // S1: useCanonical(post ? `${site.seo.url}/blog/${post.slug}` : null) is
+  // called unconditionally above the early return. Mutating that call to
+  // useCanonical(null) leaves the rest of this file's suite green -- nothing
+  // else looks in document.head. site.seo.url is the real, non-fixture
+  // domain the Cloudflare Pages duplicate-host problem (useCanonical.ts's
+  // own header) needs pinned to a real value, so this is deliberately not a
+  // fixture URL.
+  it('declares the post\'s own canonical url', () => {
+    renderAt('/blog/a-fixture-post');
+    expect(canonicals().map((link) => link.getAttribute('href'))).toEqual([
+      `${site.seo.url}/blog/a-fixture-post`,
+    ]);
+  });
+
+  it('removes the post canonical on unmount', () => {
+    const { unmount } = renderAt('/blog/a-fixture-post');
+    expect(canonicals()).toHaveLength(1);
+    unmount();
+    expect(canonicals()).toHaveLength(0);
   });
 });
