@@ -1,0 +1,58 @@
+// Phase 4's runtime read for the About section, split out of OurStory.tsx
+// for the same reason awards-api.ts is split out of Awards.tsx: eslint's
+// react-refresh/only-export-components flags a .tsx file that exports both
+// a component and plain values.
+//
+// The shape check is stricter than isAward's, and deliberately so. A
+// malformed award is one missing card in a grid; a malformed story is the
+// entire visible content of a homepage section. So this returns `null` --
+// "keep whatever you already have" -- for anything it is not completely
+// sure about, and the component treats `null` as "the compiled-in copy
+// stands", never as "render nothing".
+//
+// It also checks the portrait's SHAPE, not just its type. validateStory
+// refuses an off-site path at the write boundary, but this body arrives
+// from a database at runtime with no build-time guard in front of it, and a
+// type-only check would put an attacker-supplied URL straight into a
+// homepage <img src>. Same posture as validate.ts's isUnsafeAssetPath,
+// re-implemented here rather than imported: src/content/validate.ts is the
+// Worker's module and does not export it.
+import type { StoryContent } from '../content/types';
+
+export const STORY_ENDPOINT = '/api/published?path=story.json';
+
+function isSiteRelativeAssetPath(value: unknown): value is string {
+  if (typeof value !== 'string') return false;
+  const trimmed = value.trim();
+  return trimmed.startsWith('/') && !trimmed.startsWith('//') && !trimmed.includes('..');
+}
+
+function isNonBlankString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+export function isStoryContent(value: unknown): value is StoryContent {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const { heading, paragraphs, chef } = value as Record<string, unknown>;
+  if (!isNonBlankString(heading)) return false;
+  if (!Array.isArray(paragraphs) || paragraphs.length === 0) return false;
+  if (!paragraphs.every(isNonBlankString)) return false;
+  if (!chef || typeof chef !== 'object' || Array.isArray(chef)) return false;
+  const { name, role, portrait, portraitAlt } = chef as Record<string, unknown>;
+  return (
+    isNonBlankString(name) &&
+    isNonBlankString(role) &&
+    isSiteRelativeAssetPath(portrait) &&
+    isNonBlankString(portraitAlt)
+  );
+}
+
+// `fetchImpl` is injected with a default, the same posture fetchAwards,
+// requestPublish and fetchBuildStatus already take -- what lets a test hand
+// this a fake without stubbing the global.
+export async function fetchStory(fetchImpl: typeof fetch = fetch): Promise<StoryContent | null> {
+  const response = await fetchImpl(STORY_ENDPOINT);
+  if (!response.ok) throw new Error(`the About section is unavailable (status ${response.status})`);
+  const parsed: unknown = await response.json();
+  return isStoryContent(parsed) ? parsed : null;
+}

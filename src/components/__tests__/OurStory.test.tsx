@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import OurStory from '../OurStory';
 import { story, galleries } from '../../content';
 import { ContentProvider, defaultBundle } from '../../content/ContentContext';
@@ -28,6 +28,16 @@ describe('OurStory', () => {
   // bad story.json before the commit exists, rather than after the build
   // has already run against it.
 
+  // Task 7: this test, the carousel test below it, and both byline tests
+  // in the nested describe now render a component that ALSO fetches. They
+  // still pass, but not because they prove the D1 path -- `<OurStory />`
+  // here gets no `fetchImpl`, so it falls through to the real global
+  // `fetch`, and jsdom rejects a relative URL (the same reason Awards.tsx's
+  // own swallowed `.catch` exists). That rejection is caught and swallowed,
+  // `story` never leaves its compiled-in initial state, and these four
+  // assertions end up checking the FALLBACK render, same as before Task 7.
+  // The live-swap path is proved separately, below, by the tests that pass
+  // an explicit `fetchImpl`.
   it('renders every paragraph', () => {
     render(<OurStory />);
     story.paragraphs.forEach((p) => {
@@ -128,6 +138,71 @@ describe('OurStory', () => {
       const lastParagraph = screen.getByText(story.paragraphs[story.paragraphs.length - 1]);
       const byline = screen.getByTestId('chef-byline');
       expect(lastParagraph.compareDocumentPosition(byline) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+  });
+
+  describe('the live copy from D1', () => {
+    const LIVE = {
+      heading: 'About Via Bianca',
+      paragraphs: ['A paragraph she edited five seconds ago.'],
+      chef: {
+        name: 'K. Anand',
+        role: 'Chef, owner, and pasta maker',
+        portrait: '/team/kamalika-anand.webp',
+        portraitAlt: 'A different description',
+      },
+    };
+
+    function jsonResponse(body: unknown): Response {
+      return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+
+    it('paints the compiled-in copy before the fetch resolves', () => {
+      // A promise that never settles: whatever renders here is what a
+      // visitor sees at first paint, which for this section must never be
+      // nothing.
+      const fetchImpl = vi.fn(() => new Promise<Response>(() => {}));
+      render(<OurStory fetchImpl={fetchImpl as unknown as typeof fetch} />);
+      expect(screen.getByText(story.paragraphs[0])).toBeInTheDocument();
+      expect(screen.getByTestId('chef-byline')).toHaveTextContent(story.chef.name);
+    });
+
+    it('swaps in the live copy when it arrives', async () => {
+      const fetchImpl = vi.fn(async () => jsonResponse(LIVE));
+      render(<OurStory fetchImpl={fetchImpl as unknown as typeof fetch} />);
+      expect(await screen.findByText(LIVE.paragraphs[0])).toBeInTheDocument();
+      expect(screen.getByText(LIVE.heading)).toBeInTheDocument();
+      expect(screen.getByTestId('chef-portrait')).toHaveAttribute('alt', LIVE.chef.portraitAlt);
+      expect(screen.queryByText(story.paragraphs[0])).toBeNull();
+    });
+
+    it('keeps the compiled-in copy when the response is malformed', async () => {
+      const fetchImpl = vi.fn(async () => jsonResponse({ heading: 'Broken' }));
+      render(<OurStory fetchImpl={fetchImpl as unknown as typeof fetch} />);
+      await waitFor(() => expect(fetchImpl).toHaveBeenCalled());
+      expect(screen.getByText(story.paragraphs[0])).toBeInTheDocument();
+      expect(screen.queryByText('Broken')).toBeNull();
+    });
+
+    it('keeps the compiled-in copy, and shows no error, when the fetch fails outright', async () => {
+      const fetchImpl = vi.fn(async () => {
+        throw new Error('offline');
+      });
+      render(<OurStory fetchImpl={fetchImpl as unknown as typeof fetch} />);
+      await waitFor(() => expect(fetchImpl).toHaveBeenCalled());
+      expect(screen.getByText(story.paragraphs[0])).toBeInTheDocument();
+      expect(screen.queryByRole('alert')).toBeNull();
+    });
+
+    // The carousel comes from galleries.json, which did not move. A D1
+    // document must not be able to change the photos, and this pins that
+    // the two are independent rather than merely happening not to interact.
+    it('does not let the live copy touch the carousel', async () => {
+      const fetchImpl = vi.fn(async () => jsonResponse(LIVE));
+      const { container } = render(<OurStory fetchImpl={fetchImpl as unknown as typeof fetch} />);
+      await screen.findByText(LIVE.paragraphs[0]);
+      const carousel = container.querySelector('[data-testid="our-story-carousel"]') as HTMLElement;
+      expect(within(carousel).getAllByRole('img')).toHaveLength(galleries.ourStory.length);
     });
   });
 });

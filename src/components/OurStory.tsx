@@ -1,22 +1,55 @@
 import React, { Fragment, useEffect, useState } from 'react';
 import { useContent } from '../content/ContentContext';
 import { usePrefersReducedMotion } from '../hooks/usePrefersReducedMotion';
+import { fetchStory } from './story-api';
 
-const OurStory: React.FC = () => {
+export interface OurStoryProps {
+  fetchImpl?: typeof fetch;
+}
+
+const OurStory: React.FC<OurStoryProps> = ({ fetchImpl = fetch }: OurStoryProps = {}) => {
   const content = useContent();
-  const { story, galleries } = content;
-  // Defensively, not `const { chef } = story` -- unreachable TODAY (
-  // EMPTY_STORY carries a blank `chef`, /edit drafts cannot hold
-  // `story.json`, and the worker validates before commit), but Task 7's D1
-  // swap changes exactly those preconditions: content will come from a
-  // fetch rather than a build-time, guard-checked import, and nothing
-  // upstream of this component will still guarantee `chef` is present.
-  // Mirrors StoryForm's own identical fallback (src/admin/StoryForm.tsx),
-  // and validateStory's own `asRecord()` fallback (src/content/validate.ts)
-  // -- the same defense at a third boundary, not a new rule.
+  const { galleries } = content;
+  // The compiled-in copy is the INITIAL value, not a placeholder: it is
+  // real, valid, published content, and it is what a crawler, a reader with
+  // JS off, and every first paint see. The fetch below replaces it only
+  // when a fully shape-checked document arrives, so a database outage, a
+  // malformed row or an offline visitor all degrade to "slightly older
+  // prose" rather than to an empty section.
+  //
+  // About is the eighth of nine homepage sections, well below the fold, so
+  // in practice the swap has happened long before anyone scrolls to it.
+  // Said plainly rather than sold: a reader already sitting on this section
+  // when she publishes an edit could see a word change under them.
+  const [story, setStory] = useState(content.story);
+  // Defensively, not `const { chef } = story` -- guards the INITIAL value,
+  // which still comes from whatever `content.story` the caller's
+  // ContentProvider hands this component (a test bundle with no `chef` is
+  // exactly this file's own "does not crash when `chef` itself is missing"
+  // case, below). The fetch below can never reintroduce the gap: fetchStory's
+  // own shape check (story-api.ts) refuses a body with no `chef` and returns
+  // `null`, which never reaches `setStory`. Mirrors StoryForm's own identical
+  // fallback (src/admin/StoryForm.tsx), and validateStory's own `asRecord()`
+  // fallback (src/content/validate.ts) -- the same defense at a third
+  // boundary, not a new rule.
   const chef = story.chef ?? { name: '', role: '', portrait: '', portraitAlt: '' };
   const [currentIndex, setCurrentIndex] = useState(0);
   const reduceMotion = usePrefersReducedMotion();
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchStory(fetchImpl)
+      .then((live) => {
+        if (!cancelled && live !== null) setStory(live);
+      })
+      .catch(() => {
+        // The compiled-in copy stands -- nothing rendered here, on purpose,
+        // and never an error message a visitor can see.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchImpl]);
 
   useEffect(() => {
     if (reduceMotion) return;

@@ -10,6 +10,7 @@ import { asD1, FakeD1 } from './fakeD1';
 // onward), so these two assertions read the same value the module under test
 // actually returns instead of pinning stale content by hand.
 const SNAPSHOT_BODY = snapshotFor('awards.json')!;
+const SNAPSHOT_STORY_BODY = snapshotFor('story.json')!;
 
 // A Map keyed on the cache key's URL, in the same spirit as fakeD1.ts: real
 // enough to prove the caching behaviour handlePublished depends on (a miss
@@ -172,6 +173,15 @@ describe('GET /api/published', () => {
   // cost freshness, never availability -- and About is now the section
   // whose entire body is on the other side of this call, unlike awards.json
   // which sits beside chrome that renders fine without it.
+  //
+  // `toBe(SNAPSHOT_STORY_BODY)`, not `toMatchObject({ heading:
+  // expect.any(String) })` -- the awards fallback tests above already use
+  // the strict form, and the loose one here passed even when
+  // `snapshotFor('story.json')` returned `{"heading":"WRONG BODY"}` with no
+  // `paragraphs` or `chef` at all, because `expect.any(String)` only checks
+  // that SOME string sits at `heading`. About's entire visible body is on
+  // the other side of this fallback, so the weakest assertion in the suite
+  // was guarding its largest payload.
   it('falls back to the snapshot when the D1 version read throws for story.json', async () => {
     const fake = new FakeD1();
     fake.failWith = 'D1_ERROR: no such table: content';
@@ -180,7 +190,7 @@ describe('GET /api/published', () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get(CONTENT_SOURCE_HEADER)).toBe('snapshot');
-    expect(JSON.parse(await response.text())).toMatchObject({ heading: expect.any(String) });
+    expect(await response.text()).toBe(SNAPSHOT_STORY_BODY);
   });
 
   it('404s an unknown or non-public path rather than reading anything', async () => {
