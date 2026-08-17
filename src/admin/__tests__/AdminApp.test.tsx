@@ -160,6 +160,50 @@ async function sectionByHeading(name: string): Promise<HTMLElement> {
   return section as HTMLElement;
 }
 
+// Every content file plus a `/api/publish` that keeps what it was sent, so a
+// case can read the request body rather than only the screen. The two describes
+// below both need it -- one to prove a photo reached the right block, one to
+// prove her typing reached the wire -- so it is written once here rather than a
+// fourth time inside a describe. `posts` is a parameter because one of those
+// two starts from committed posts and the other from a restored draft over an
+// empty file.
+function stubFetchCapturingPublish(posts: unknown = []) {
+  const publishBodies: { files: { path: string; content: string; encoding: string }[] }[] = [];
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === '/api/wa') return WA_RESPONSE();
+      if (url === '/api/publish') {
+        publishBodies.push(JSON.parse(String(init?.body)) as { files: { path: string; content: string; encoding: string }[] });
+        return new Response(JSON.stringify({ sha: 'commit-1', publishId: 'p1' }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      if (url.startsWith('/api/build-status')) {
+        return new Response(JSON.stringify({ state: 'live', deploymentUrl: null, commitUrl: 'https://c' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === '/build-info.json') {
+        return new Response(JSON.stringify({ sha: 'commit-1', builtAt: 'now' }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      if (url.includes('posts.json')) return contentResponse(posts, 'sha-posts');
+      if (url.includes('dishes.json')) return contentResponse(DISHES, 'sha-dishes');
+      if (url.includes('drinks.json')) return contentResponse(DRINKS, 'sha-drinks');
+      if (url.includes('press.json')) return contentResponse(PRESS, 'sha-press');
+      if (url.includes('sections.json')) return contentResponse(SECTIONS, 'sha-sections');
+      if (url.includes('site.json')) return contentResponse(SITE, 'sha-site');
+      if (url.includes('galleries.json')) return contentResponse(GALLERIES, 'sha-galleries');
+      if (url.includes('menus.json')) return contentResponse(MENUS, 'sha-menus');
+      if (url.includes('story.json')) return contentResponse(STORY, 'sha-story');
+      if (url.includes('copy.json')) return contentResponse(COPY, 'sha-copy');
+      if (url.includes('pages.json')) return contentResponse([], 'sha-pages');
+      throw new Error(`AdminApp.test.tsx: unexpected fetch to ${url}`);
+    }),
+  );
+  return publishBodies;
+}
+
 // The Posts panel, loaded and open, without one role-and-name sweep over the
 // shell. `sectionByHeading` above is fine for a case that mounts and asserts,
 // but it POLLS `findByRole('heading', { name })` -- a whole-document
@@ -1662,45 +1706,9 @@ describe('AdminApp: a photo picked for one block, and then that block moved', ()
     vi.unstubAllGlobals();
   });
 
-  function stubFetchWithPosts() {
-    const publishBodies: { files: { path: string; content: string; encoding: string }[] }[] = [];
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-        const url = String(input);
-        if (url === '/api/wa') return WA_RESPONSE();
-        if (url === '/api/publish') {
-          publishBodies.push(JSON.parse(String(init?.body)) as { files: { path: string; content: string; encoding: string }[] });
-          return new Response(JSON.stringify({ sha: 'commit-1', publishId: 'p1' }), { status: 200, headers: { 'content-type': 'application/json' } });
-        }
-        if (url.startsWith('/api/build-status')) {
-          return new Response(JSON.stringify({ state: 'live', deploymentUrl: null, commitUrl: 'https://c' }), {
-            status: 200,
-            headers: { 'content-type': 'application/json' },
-          });
-        }
-        if (url === '/build-info.json') {
-          return new Response(JSON.stringify({ sha: 'commit-1', builtAt: 'now' }), { status: 200, headers: { 'content-type': 'application/json' } });
-        }
-        if (url.includes('posts.json')) return contentResponse(POST_WITH_TWO_PHOTOS, 'sha-posts');
-        if (url.includes('dishes.json')) return contentResponse(DISHES, 'sha-dishes');
-        if (url.includes('drinks.json')) return contentResponse(DRINKS, 'sha-drinks');
-        if (url.includes('press.json')) return contentResponse(PRESS, 'sha-press');
-        if (url.includes('sections.json')) return contentResponse(SECTIONS, 'sha-sections');
-        if (url.includes('site.json')) return contentResponse(SITE, 'sha-site');
-        if (url.includes('galleries.json')) return contentResponse(GALLERIES, 'sha-galleries');
-        if (url.includes('menus.json')) return contentResponse(MENUS, 'sha-menus');
-        if (url.includes('story.json')) return contentResponse(STORY, 'sha-story');
-        if (url.includes('copy.json')) return contentResponse(COPY, 'sha-copy');
-        if (url.includes('pages.json')) return contentResponse([], 'sha-pages');
-        throw new Error(`AdminApp.test.tsx: unexpected fetch to ${url}`);
-      }),
-    );
-    return publishBodies;
-  }
 
   it('publishes the photo on the block she put it on, with the bytes for BOTH photos in the same request', async () => {
-    const publishBodies = stubFetchWithPosts();
+    const publishBodies = stubFetchCapturingPublish(POST_WITH_TWO_PHOTOS);
     const user = userEvent.setup();
     renderDashboard('/edit/manage/story');
 
@@ -1892,7 +1900,7 @@ describe('a draft saved before the block editor existed', () => {
 
   it('filling in what is missing lets her publish', async () => {
     window.localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(BLOCK_WITH_NO_TEXT_KEY));
-    stubFetch();
+    const publishBodies = stubFetchCapturingPublish();
     const user = userEvent.setup();
     renderDashboard('/edit/manage/story');
     await user.click(await screen.findByRole('button', { name: /^Restore/ }));
@@ -1921,6 +1929,22 @@ describe('a draft saved before the block editor existed', () => {
     // Nothing left on this panel claiming anything needs fixing, which is the
     // count summary going away entirely rather than one message going quiet.
     expect(within(panel).queryByText(/still needs fixing|still need fixing/)).toBeNull();
-    expect(screen.getByRole('button', { name: 'Publish' })).toBeEnabled();
+
+    // And the work really leaves the browser. Review measured the assertion
+    // that used to stand here -- `expect(Publish).toBeEnabled()` -- and it
+    // passes with the problem still on screen and nothing fixed, because
+    // nothing about validation gates that button
+    // (PublishBar.tsx's `disabled={!isDirty || busy || tooManyStaged}`, and
+    // PostList.tsx says so outright). So the button is CLICKED, and what is
+    // asserted is the paragraph she typed arriving in the request body.
+    await user.click(screen.getByRole('button', { name: 'Publish' }));
+    await user.click(screen.getByRole('button', { name: 'Yes, publish to the live site' }));
+    await waitFor(() => expect(publishBodies).toHaveLength(1));
+    const postsFile = publishBodies[0].files.find((file) => file.path === 'src/content/posts.json');
+    expect(postsFile).toBeDefined();
+    const published = JSON.parse(postsFile!.content) as Post[];
+    expect(published).toHaveLength(1);
+    const publishedBlocks = published[0].blocks as unknown as { text: string }[];
+    expect(publishedBlocks.map((published) => published.text)).toEqual(['A real paragraph.']);
   });
 });

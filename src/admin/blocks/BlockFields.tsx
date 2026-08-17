@@ -15,6 +15,7 @@ import InlineTextField from './InlineTextField';
 import BlockProblemMessage from './BlockProblemMessage';
 import { BLOCK_KIND_LABELS } from './block-meta';
 import { swapAt } from './reorder';
+import { useStableNames } from './stable-names';
 import { MOVE_BUTTON_CLASSNAME, REMOVE_BUTTON_CLASSNAME, ADD_BUTTON_CLASSNAME } from '../RecordList';
 import type React from 'react';
 import type { FieldSpec } from '../fields';
@@ -130,6 +131,23 @@ export default function BlockFields({
   onStaged,
   previewKeyPrefix,
 }: BlockFieldsProps) {
+  // The same fix BlockList applies to blocks, one level down, for the photos
+  // inside a gallery block -- and the trigger here is REMOVE rather than a
+  // reorder. `Remove photo 2` is a `filter`, so every later photo's position
+  // drops by one, and the comment on that button (below) recommends
+  // remove-and-re-add as the way to reorder a grid at all. While a staged
+  // photo's key was its position, that meant: she picks a photo for photo 2,
+  // removes photo 1, picks a photo for the tile now sitting where photo 2's
+  // key points, and PhotoField's supersede deletes photo 2's bytes on the way
+  // in. The post publishes naming a photo no file was sent for -- broken image
+  // live, then an asset-existence failure refusing every later publish.
+  //
+  // Reproduced end to end before it was fixed; see BlockList.test.tsx's own
+  // gallery case, which asserts what the collector holds rather than any key.
+  //
+  // Declared unconditionally, above the switch, because a hook cannot live
+  // inside the one branch that needs it.
+  const photoNames = useStableNames('g');
   // A list of markdown-bearing strings, with add/remove/move -- the shape
   // bulletList, numberList, ingredients and steps all share. StoryForm.tsx's
   // paragraph list is the same idea and the same button bindings; this is not
@@ -366,28 +384,41 @@ export default function BlockFields({
 
   function galleryFields(images: GalleryImage[], commit: (next: GalleryImage[]) => void): React.ReactNode {
     const safe = Array.isArray(images) ? images : [];
+    // Every edit to one photo replaces that photo's object, so each commit
+    // below carries its name across first -- exactly as BlockList does for a
+    // block, and for the same reason: without it, typing a description would
+    // move the photo she has already staged to a name nothing refers to.
+    const replaceAt = (i: number, next: GalleryImage): GalleryImage[] => {
+      photoNames.rename(safe[i], next, i);
+      return safe.map((existing, j) => (j === i ? next : existing));
+    };
     return (
       <>
-        {safe.map((image, i) => (
-          <div key={i}>
+        {safe.map((image, i) => {
+          // The photo's own name, not its position -- see this component's own
+          // comment at the top. The DOM ids and the problem keys below stay
+          // positional on purpose: ids only have to agree with themselves
+          // within one render, and a problem key is what the validator emits
+          // walking the array, so it is a position by definition.
+          const name = photoNames.nameOf(image, i);
+          return (
+          <div key={name}>
             <PhotoField
               id={`${idPrefix}-images-${i}-src`}
               label={`Photo ${i + 1}`}
               category="posts"
               value={image?.src ?? null}
-              onChange={(contentPath) =>
-                commit(safe.map((existing, j) => (j === i ? { ...existing, src: contentPath ?? '' } : existing)))
-              }
-              onStaged={(staged) => onStaged(`images[${i}].src`, staged)}
+              onChange={(contentPath) => commit(replaceAt(i, { ...image, src: contentPath ?? '' }))}
+              onStaged={(staged) => onStaged(`images[${name}].src`, staged)}
               previews={previews}
-              previewKey={`${previewKeyPrefix}:images[${i}].src`}
+              previewKey={`${previewKeyPrefix}:images[${name}].src`}
               problems={problemsFor(`images[${i}].src`)}
             />
             <Field<string>
               id={`${idPrefix}-images-${i}-alt`}
               spec={ALT_SPEC}
               value={image?.alt ?? ''}
-              onChange={(next) => commit(safe.map((existing, j) => (j === i ? { ...existing, alt: next } : existing)))}
+              onChange={(next) => commit(replaceAt(i, { ...image, alt: next }))}
               problems={problemsFor(`images[${i}].alt`)}
             />
             <div className={ROW_BUTTONS_CLASSNAME}>
@@ -407,7 +438,8 @@ export default function BlockFields({
               </button>
             </div>
           </div>
-        ))}
+          );
+        })}
         {problemsFor('images').map((problem, i) => (
           <BlockProblemMessage key={i}>{problem.message}</BlockProblemMessage>
         ))}

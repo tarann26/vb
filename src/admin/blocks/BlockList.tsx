@@ -6,13 +6,14 @@
 // Button bindings imported from RecordList rather than retyped, for the
 // reason that file's own comment gives: a retyped Tailwind string is a new
 // class to the content scanner and ships a duplicate rule.
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import BlockFields from './BlockFields';
 import BlockPicker from './BlockPicker';
 import BlockProblemMessage from './BlockProblemMessage';
 import { blankBlock } from './blank-block';
 import { blockProblemOf, type BlockProblemTarget } from './block-problems';
 import { moveTo, swapAt } from './reorder';
+import { useStableNames } from './stable-names';
 import { BLOCK_KIND_LABELS, UNKNOWN_BLOCK_LABEL, UNKNOWN_BLOCK_MESSAGE } from './block-meta';
 import { MOVE_BUTTON_CLASSNAME, REMOVE_BUTTON_CLASSNAME } from '../RecordList';
 import { BLOCK_KEYS, isBlockKind } from '../../content/guards';
@@ -139,36 +140,6 @@ const HANDLE_STYLE = { cursor: 'move' };
 // version that dimmed and never cleared would have passed.
 const DRAGGING_STYLE = { opacity: 0.5 };
 
-// A NAME FOR ONE BLOCK THAT SURVIVES BEING MOVED, and the whole of Task 10's
-// staged-photo fix.
-//
-// A block carries no id, and it must not start carrying one: `id` would be a
-// key in posts.json, published, validated and forever afterwards ours to keep
-// -- for something no reader of the blog will ever see. So the name is held
-// HERE, beside the list rather than inside it, keyed on the block object
-// itself. Reordering is what `swapAt`/`moveTo` do (reorder.ts): both copy the
-// ARRAY and move the same objects, so a block that has been dragged from
-// fourth place to first is, to a WeakMap, the identical key it always was.
-//
-// A WeakMap rather than a counter parallel to the list, which is the other
-// obvious shape: a parallel array has to be re-derived every time the list
-// changes from outside this component (a restored draft, an undo, a post
-// reordered above), and every one of those re-derivations is a chance to
-// hand a photo to the wrong block again. This map has nothing to re-derive.
-// It also cannot leak: an entry is unreachable the moment its block is,
-// which for a removed block is immediately.
-//
-// EDITING A BLOCK REPLACES ITS OBJECT (`{ ...block, text: next }`, one per
-// keystroke), so the name is carried across at that one call site below --
-// `rename` -- rather than being regenerated. Without that, every keystroke in
-// a block with a staged photo would move the photo to a name nothing else
-// refers to.
-//
-// Non-object blocks fall back to their position, which is the honest answer
-// for them: a stale draft's `null` or `"paragraph"` in the blocks array is not
-// a WeakMap key at all, renders no fields, and therefore never holds a photo.
-type BlockName = (block: Block, index: number) => string;
-
 export default function BlockList({
   blocks,
   postIndex,
@@ -178,31 +149,11 @@ export default function BlockList({
   onStaged,
   previewKeyPrefix,
 }: BlockListProps) {
-  const names = useRef(new WeakMap<object, string>());
-  const nextName = useRef(0);
-  // Cast the same way `kindOf` above casts, and for the same reason: a block
-  // out of localStorage need not be an object at all, whatever the type says.
-  const asKey = (block: Block): object | undefined => {
-    const raw = block as unknown;
-    return raw !== null && typeof raw === 'object' ? (raw as object) : undefined;
-  };
-  const nameOf: BlockName = (block, index) => {
-    const key = asKey(block);
-    if (key === undefined) return `at-${index}`;
-    const existing = names.current.get(key);
-    if (existing !== undefined) return existing;
-    nextName.current += 1;
-    const fresh = `b${nextName.current}`;
-    names.current.set(key, fresh);
-    return fresh;
-  };
-  // The edited block is a new object with the same name -- see the type's own
-  // comment above. Called before `onChange`, so the re-render that follows
-  // already finds it.
-  function rename(from: Block, to: Block, index: number): void {
-    const key = asKey(to);
-    if (key !== undefined) names.current.set(key, nameOf(from, index));
-  }
+  // One name per block that survives the block being moved -- stable-names.ts
+  // says what that is for and why a block cannot simply carry an id. The
+  // gallery photos inside one block use the same hook one level down
+  // (BlockFields), because Remove shifts their positions the same way.
+  const { nameOf, rename } = useStableNames('b');
 
   // A draft saved before this feature restores with no `blocks` key at all
   // (registerLoaded's unchecked cast), and the only error boundary between
@@ -223,7 +174,60 @@ export default function BlockList({
     (entry) => entry.target.block === undefined || entry.target.block < 0 || entry.target.block >= safe.length,
   );
 
-  function swap(index: number, otherIndex: number): void {
+  // The button she just pressed, kept until the reordered list has rendered so
+  // it can be given its focus back.
+  //
+  // WHY SHE NEEDS IT: the comment above reserves Up and Down as THE path to
+  // reordering for anyone on a phone or a screen reader, since a drag needs a
+  // pointer. Focus landing anywhere but her own block's button turns the second
+  // press into a re-navigation from the top of the document.
+  //
+  // Where focus actually goes without this, MEASURED under this jsdom rather
+  // than assumed, because the two obvious stories are both wrong:
+  //
+  //   * Her button survives the move -> it KEEPS focus. React relocates a row
+  //     with `insertBefore`, and jsdom does not blur a node for being moved.
+  //     A browser can (that is what `Element.moveBefore()` exists for), so the
+  //     refocus below stays and is the browser's fix; it is a no-op here, and
+  //     a jsdom test cannot tell whether it is there. That claim belongs in
+  //     e2e/block-editor.spec.ts, alongside the handle's cursor.
+  //   * Her button does NOT survive -> focus goes to `<body>`, every time, in
+  //     jsdom too. This happens whenever the block reaches an end, because that
+  //     direction is then omitted rather than disabled (RecordList's rule). It
+  //     is the common case, not the corner: two blocks and one press of Down is
+  //     already it.
+  //
+  // Not a nicety added on top of the keyed reorder either. Before the key
+  // change focus stayed on the POSITION's button, which is quietly worse:
+  // pressing Down twice moved her block down once and then moved the block that
+  // had replaced it down once, putting the list back the way it started with
+  // nothing on screen saying so.
+  const refocus = useRef<HTMLButtonElement | null>(null);
+  const refocusRow = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    const button = refocus.current;
+    if (button === null) return;
+    refocus.current = null;
+    if (button.isConnected) {
+      button.focus();
+      return;
+    }
+    // Her button is gone, so the block has reached an end. The other direction
+    // is the only reorder control the row still has. Never Remove, which would
+    // leave Enter one press away from deleting the block she was moving.
+    const row = refocusRow.current;
+    refocusRow.current = null;
+    if (row === null || !row.isConnected) return;
+    const other = [...row.querySelectorAll('button')].find((candidate) =>
+      (candidate.getAttribute('aria-label') ?? '').startsWith('Move '),
+    );
+    other?.focus();
+  });
+
+  function swap(index: number, otherIndex: number, button: HTMLButtonElement): void {
+    refocus.current = button;
+    refocusRow.current = button.closest('li');
     onChange(swapAt(safe, index, otherIndex));
   }
 
@@ -386,7 +390,7 @@ export default function BlockList({
                     <button
                       type="button"
                       aria-label={`Move ${label} block ${index + 1} up`}
-                      onClick={() => swap(index, index - 1)}
+                      onClick={(event) => swap(index, index - 1, event.currentTarget)}
                       className={MOVE_BUTTON_CLASSNAME}
                     >
                       Up
@@ -396,7 +400,7 @@ export default function BlockList({
                     <button
                       type="button"
                       aria-label={`Move ${label} block ${index + 1} down`}
-                      onClick={() => swap(index, index + 1)}
+                      onClick={(event) => swap(index, index + 1, event.currentTarget)}
                       className={MOVE_BUTTON_CLASSNAME}
                     >
                       Down

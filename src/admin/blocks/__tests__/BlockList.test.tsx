@@ -544,11 +544,13 @@ describe('a photo she has already picked, when the block it sits in moves', () =
     contentPath: string,
   ): Promise<void> {
     const before = FakeXHR.instances.length;
-    // Scoped to the block this picker belongs to, never to the whole render:
-    // the second pick in these cases lands on a DIFFERENT block that is in the
-    // same place on screen, and a count of confirmations across the document
-    // cannot tell those two apart.
-    const own = input.closest('li') as HTMLElement;
+    // Scoped to the picker's OWN field, never to the whole render: the second
+    // pick in these cases lands on a different block (or a different tile of
+    // one gallery) that is in the same place on screen, and a count of
+    // confirmations across the document cannot tell those apart. `closest`
+    // lands on PhotoField's own wrapper, which holds this input and its own
+    // status line and nothing else.
+    const own = input.closest('div') as HTMLElement;
     await user.upload(input, jpegFile(file));
     await waitFor(() => expect(FakeXHR.instances).toHaveLength(before + 1));
     FakeXHR.instances[before].respond(200, { path: `assets-source/posts/${file}`, contentPath });
@@ -632,6 +634,84 @@ describe('a photo she has already picked, when the block it sits in moves', () =
     expect([first.alt, first.src]).toEqual(['The tielle, sliced on a board', '/posts/better-tielle.webp']);
   });
 
+  // THE SAME DEFECT ONE LEVEL DOWN, found by review on the shipped tree. The
+  // tiles inside a gallery block have no reorder control -- the strip's own
+  // comment recommends removing and re-adding a photo instead -- and Remove is
+  // a filter, so every later tile's position drops by one under a photo she has
+  // already picked.
+  //
+  // Her sequence, and it is an ordinary one: three photos in the grid, she
+  // picks a new one for the second, decides the first can go, and then picks
+  // one for what is left at the bottom.
+  it('a photo she picked for one tile survives her removing the tile above it', async () => {
+    const user = userEvent.setup();
+    const sink: Sink = { blocks: [], files: {}, previews: {} };
+    const { container } = render(
+      <StagedBlocks
+        initial={[
+          {
+            kind: 'gallery',
+            images: [
+              { src: '/posts/already-live.webp', alt: 'Photo A' },
+              { src: '', alt: 'Photo B' },
+              { src: '', alt: 'Photo C' },
+            ],
+          },
+        ]}
+        sink={sink}
+      />,
+    );
+    const pickers = () => [...container.querySelectorAll<HTMLInputElement>('input[type="file"]')];
+
+    await pickPhoto(user, pickers()[1], 'bee.jpg', '/posts/bee.webp');
+    // The object URL she is looking at, which is what identifies the photo on
+    // screen -- nothing is live at a contentPath until a publish and a rebuild.
+    const picked = pickers()[1].parentElement?.querySelector('img')?.getAttribute('src');
+    expect(picked).toMatch(/^blob:/);
+
+    await user.click(screen.getByRole('button', { name: 'Remove photo 1' }));
+
+    // Her photo moved up with its own tile rather than staying on the tile
+    // number. Each tile identified by the description SHE typed, not by
+    // position, since position is what is under test.
+    const tiles = () => pickers().map((picker) => picker.parentElement?.parentElement as HTMLElement);
+    const [bee, sea] = tiles();
+    expect(within(bee).getByDisplayValue('Photo B')).toBeInTheDocument();
+    expect(bee.querySelector('img')).toHaveAttribute('src', picked as string);
+    // And the tile below it, which she has picked nothing for, shows nothing.
+    expect(within(sea).getByDisplayValue('Photo C')).toBeInTheDocument();
+    expect(sea.querySelector('img')).toBeNull();
+
+    // The tile now sitting second is the one that used to be third, and this is
+    // the pick that used to destroy the photo above it.
+    await pickPhoto(user, pickers()[1], 'sea.jpg', '/posts/sea.webp');
+
+    const { images } = sink.blocks[0] as unknown as { images: { src: string; alt: string }[] };
+    expect(images.map((image) => [image.alt, image.src])).toEqual([
+      ['Photo B', '/posts/bee.webp'],
+      ['Photo C', '/posts/sea.webp'],
+    ]);
+    // Both sets of bytes still collected. A publish sends one file per staged
+    // entry, so a photo the grid names with no entry behind it is a broken
+    // image on the site and an asset-existence failure on every build after it.
+    expect(Object.values(sink.files).map((file) => file.contentPath).sort()).toEqual([
+      '/posts/bee.webp',
+      '/posts/sea.webp',
+    ]);
+    // Said the other way round, which is the way review measured it: no photo
+    // this grid names was picked in this session without its bytes.
+    const staged = new Set(Object.values(sink.files).map((file) => file.contentPath));
+    expect(images.filter((image) => image.src.startsWith('/posts/') && !staged.has(image.src))).toEqual([]);
+
+    // Two live previews, one per photo. `previews.set` revokes whatever its key
+    // held before, so a preview key that named the tile POSITION would have
+    // revoked the first photo's object URL the moment the second landed on the
+    // position it had shifted into -- her photo gone from the screen, in a
+    // browser, with the grid still naming it. jsdom's revoke is a no-op, so the
+    // count is what says it here.
+    expect(new Set(Object.values(sink.previews)).size).toBe(2);
+  });
+
   it('shows her the photo she picked on the block she picked it for, not on the position it left', async () => {
     const user = userEvent.setup();
     const sink: Sink = { blocks: [], files: {}, previews: {} };
@@ -659,5 +739,92 @@ describe('a photo she has already picked, when the block it sits in moves', () =
     const oven = blocks[0];
     expect(within(oven).getByDisplayValue('The bread oven')).toBeInTheDocument();
     expect(oven.querySelector('img')).toBeNull();
+  });
+});
+
+// Where the keyboard is after a reorder, which is a fact about
+// `document.activeElement` and therefore something jsdom can answer honestly.
+//
+// The Up/Down buttons are not the lesser path: BlockList's own comment reserves
+// them as THE way to reorder for anyone on a phone or a screen reader, since a
+// drag needs a pointer and a steady hand. So where focus lands after one press
+// decides whether the second press is a keystroke or a re-navigation from the
+// top of the document.
+describe('BlockList’s Up and Down keep the keyboard on the block being moved', () => {
+  // Controlled, because the claim is about what happens AFTER the list comes
+  // back changed -- an uncontrolled harness never re-renders and so never moves
+  // anything for focus to follow.
+  function ControlledBlocks({ initial }: { initial: Block[] }) {
+    const [blocks, setBlocks] = useState<Block[]>(initial);
+    return (
+      <BlockList
+        blocks={blocks}
+        postIndex={0}
+        onChange={setBlocks}
+        problems={[]}
+        previews={NO_IMAGE_PREVIEWS}
+        onStaged={vi.fn()}
+        previewKeyPrefix="posts.json:fixture-a"
+      />
+    );
+  }
+
+  const wordsInOrder = (container: HTMLElement): string[] =>
+    [...container.querySelectorAll('textarea')].map((area) => area.value);
+
+  it('presses of Down keep moving the SAME block, because focus goes with it', async () => {
+    const user = userEvent.setup();
+    const { container } = render(<ControlledBlocks initial={BLOCKS} />);
+
+    const down = screen.getByRole('button', { name: 'Move Heading block 1 down' });
+    down.focus();
+    await user.click(down);
+
+    expect(wordsInOrder(container)).toEqual(['Second', 'First', 'Third']);
+    // Still on her own block's button, which now says block 2 because that is
+    // where her block is. Not `<body>`: a keyed reorder moves the row's DOM
+    // node, and moving a focused element blurs it.
+    expect(document.activeElement).toHaveAttribute('aria-label', 'Move Heading block 2 down');
+
+    // The second press, made the way she would make it -- on whatever the
+    // keyboard is on. Her block moves again. Before this fix she was on
+    // `<body>` and had nothing to press at all; before the keyed reorder she
+    // was on the POSITION's button, so this press moved the block that had
+    // replaced hers and put the list back the way it started, silently.
+    await user.click(document.activeElement as HTMLElement);
+    expect(wordsInOrder(container)).toEqual(['Second', 'Third', 'First']);
+  });
+
+  // Up as well as Down, because they are not symmetric: React reconciles keys
+  // by moving as few nodes as it can, so a Down press relocates the block BELOW
+  // hers and an Up press relocates hers. Measured under this jsdom: neither
+  // press loses the focus while her own button survives -- jsdom does not blur
+  // a node for being moved, whatever a browser may do -- so what these two
+  // cases pin is that the button she is left on belongs to HER block rather
+  // than to the position she moved it out of.
+  it('after Up, she is still on the button she pressed, on the block that moved', async () => {
+    const user = userEvent.setup();
+    const { container } = render(<ControlledBlocks initial={BLOCKS} />);
+
+    const up = screen.getByRole('button', { name: 'Move Paragraph block 3 up' });
+    up.focus();
+    await user.click(up);
+
+    expect(wordsInOrder(container)).toEqual(['First', 'Third', 'Second']);
+    expect(document.activeElement).toHaveAttribute('aria-label', 'Move Paragraph block 2 up');
+  });
+
+  it('lands on the block’s other direction when it reaches the end, never on Remove', async () => {
+    const user = userEvent.setup();
+    render(<ControlledBlocks initial={BLOCKS} />);
+
+    await user.click(screen.getByRole('button', { name: 'Move Heading block 1 down' }));
+    await user.click(document.activeElement as HTMLElement);
+
+    // Her block is last, so it no longer offers Down (omitted, not disabled --
+    // RecordList's rule). Up is the only reorder control the row has left, and
+    // it is where she is. Remove is one press of Enter away from deleting the
+    // block she was moving, so it is never the answer.
+    expect(document.activeElement).toHaveAttribute('aria-label', 'Move Heading block 3 up');
   });
 });
