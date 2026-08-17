@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
@@ -44,6 +44,31 @@ function renderIndex(posts: Post[]) {
 function cardHeadings(container: HTMLElement): string[] {
   return [...container.querySelectorAll('article h3')].map((h) => h.textContent ?? '');
 }
+
+// BlogIndex now does a runtime read (use-posts.ts) through the global
+// `fetch`. Every case that is not about that read gets one that fails on the
+// first tick: usePosts settles to `error` and keeps the provider's posts, so
+// those cases see the same cards they saw before this task -- and see them
+// through the same path a real reader hits when the database is down.
+function stubFetch(impl: () => Promise<unknown>): void {
+  vi.stubGlobal('fetch', vi.fn(impl));
+}
+
+function stubFetchResolving(posts: Post[]): void {
+  stubFetch(() => Promise.resolve({ ok: true, status: 200, json: async () => posts } as unknown as Response));
+}
+
+beforeEach(() => {
+  // A fetch that never settles. Every case below this one is about FIRST
+  // PAINT -- the compiled-in cards, rendered before anything comes back --
+  // which is exactly the state a pending fetch holds the component in, and it
+  // queues no state update for an assertion that never looks for one.
+  stubFetch(() => new Promise(() => undefined));
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe('BlogIndex', () => {
   it('renders one card per post, newest first', () => {
@@ -104,5 +129,33 @@ describe('BlogIndex', () => {
     renderIndex([post(1), post(2)]);
     expect(screen.getByText('In the press')).toBeInTheDocument();
     expect(screen.getByText('Recipe')).toBeInTheDocument();
+  });
+
+  // The index's half of the runtime read, and the deliberate difference from
+  // /blog/:slug: no loading screen, because this route always has something
+  // real to paint. A post only in the database appears when it arrives; the
+  // compiled-in cards are never replaced by nothing in the meantime.
+  it('paints the committed cards immediately and swaps in the database ones', async () => {
+    const D1_ONLY: Post[] = [
+      {
+        id: 'from-d1',
+        slug: 'a-post-only-in-the-database',
+        type: 'story',
+        title: 'A post only in the database',
+        date: '2026-05-06',
+        excerpt: 'A database excerpt.',
+        image: '/food/tielle.webp',
+        blocks: [{ kind: 'paragraph', text: 'A database paragraph.' }],
+      },
+    ];
+    stubFetchResolving(D1_ONLY);
+    const { container } = renderIndex([post(1)]);
+    // Committed content first -- no spinner, because the index has something
+    // real to show.
+    expect(cardHeadings(container)).toEqual(['Fixture post 1']);
+    expect(await screen.findByRole('heading', { level: 3, name: 'A post only in the database' })).toBeInTheDocument();
+    // Scoped to `article h3`: Footer.tsx renders an <h3> on every page, so a
+    // bare level-3 query counts the footer too.
+    expect(cardHeadings(container)).toEqual(['A post only in the database']);
   });
 });

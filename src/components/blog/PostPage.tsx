@@ -25,10 +25,18 @@ import Footer from '../Footer';
 import NotFound from '../NotFound';
 import PostBody from './PostBody';
 import { POST_TYPE_LABELS, postBySlug } from './posts';
+import { usePosts } from './use-posts';
 
 export default function PostPage() {
   const { slug } = useParams<{ slug: string }>();
-  const { posts, site } = useContent();
+  const { site } = useContent();
+  // The third state, and the reason it exists: a post published since the
+  // last deploy is in the database and NOT in the compiled-in list, so
+  // "postBySlug found nothing" means "not here YET" until the fetch settles.
+  // Rendering NotFound before then would flash a 404 at a reader who followed
+  // a link the owner had just given them -- and a crawler that samples the
+  // first paint would record it.
+  const { status, posts } = usePosts();
   const post = postBySlug(posts, slug);
 
   const title = post?.title ?? '';
@@ -57,11 +65,26 @@ export default function PostPage() {
   // inside an `if` (see its own comment).
   useCanonical(post ? `${site.seo.url}/blog/${post.slug}` : null);
 
+  // Order matters: `post` first, so a post that IS in the compiled-in copy
+  // renders immediately at first paint and never shows this screen at all.
+  if (!post && status === 'loading') {
+    return (
+      <div className="min-h-screen bg-white">
+        <NavBar offHomePage />
+        <div className="max-w-3xl mx-auto px-4 py-20">
+          <p className={`font-['Open_Sans'] text-gray-600`}>Loading this post…</p>
+        </div>
+        <Footer />
+      </div>
+    );
+  }
+
   // A post that does not exist and a URL that does not exist are the same
   // thing to a visitor and to a crawler -- the same decision App.tsx's
   // PageRoute already made for a disabled page, and for the same reason: a
   // distinct "this post is not here" screen would confirm that a slug is
-  // reserved for something.
+  // reserved for something. Reached only once the fetch has SETTLED, which is
+  // the whole difference this task makes.
   if (!post) return <NotFound />;
 
   return (

@@ -13,6 +13,7 @@ import NavBar from '../NavBar';
 import Footer from '../Footer';
 import PostCard from './PostCard';
 import { pageCount, pageOf } from './posts';
+import { usePosts } from './use-posts';
 
 // `copy.blogsPage.heading`/`.intro` are the two blogsPage.* leaves still
 // genuinely painted on a live page after this task -- BlogsPage.tsx's own
@@ -25,7 +26,12 @@ import { pageCount, pageOf } from './posts';
 // src/admin/editable-paths.ts's own NOT_EDITABLE_IN_PLACE_COPY_FIELDS is
 // where the other five, now genuinely unreachable, retire instead.
 export default function BlogIndex() {
-  const { posts, copy, site, renderText } = useContent();
+  const { copy, site, renderText } = useContent();
+  // No loading screen here, deliberately. The index has content to paint at
+  // first paint -- the compiled-in list -- so a spinner would replace real
+  // cards with nothing for the length of one fetch. `status` is unused on
+  // this route and that is the honest answer for it.
+  const { posts } = usePosts();
   const [page, setPage] = useState(1);
   useCanonical(`${site.seo.url}/blog`);
 

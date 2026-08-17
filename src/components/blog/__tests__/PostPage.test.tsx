@@ -1,5 +1,5 @@
-import { describe, expect, it, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
+import { act, render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import PostPage from '../PostPage';
 import { ContentProvider } from '../../../content/context';
@@ -9,6 +9,54 @@ import type { Post } from '../../../content/types';
 
 const canonicals = () =>
   Array.from(document.head.querySelectorAll('link[rel="canonical"]'));
+
+// The literal string NotFound.tsx renders, written out rather than imported
+// from the module under test's own source of truth. Phase 4's thirteenth
+// unfalsifiable test compared a response against the value under test, and
+// corrupting that value left 2837 tests green. Pinned against the shipped
+// copy by the case just below, so this literal cannot silently go stale
+// either.
+const NOT_FOUND_HEADING = 'Page not found';
+
+// PostPage now does a runtime read (use-posts.ts). Every test here drives it
+// through the global `fetch`, because PostPage calls `usePosts()` with no
+// argument -- which is the real production call and the only one worth
+// covering on this route.
+function stubFetch(impl: () => Promise<unknown>): void {
+  vi.stubGlobal('fetch', vi.fn(impl));
+}
+
+function stubFetchResolving(posts: Post[]): void {
+  stubFetch(() => Promise.resolve({ ok: true, status: 200, json: async () => posts } as unknown as Response));
+}
+
+function stubFetchRejecting(): void {
+  stubFetch(() => Promise.reject(new Error('no network here')));
+}
+
+// A promise this file settles by hand, so "while the fetch is pending" is an
+// actual state the assertions run in rather than a race.
+function deferred() {
+  let settle: (value: unknown) => void = () => undefined;
+  const promise = new Promise((resolve) => {
+    settle = resolve;
+  });
+  return { promise, settle };
+}
+
+// The same idea for the failure direction. `fail` is called inside `act`, so
+// the assertions that follow run on the SETTLED state rather than on first
+// paint -- which is the whole claim of the case that uses it, and what makes
+// that case able to fail when usePosts's catch branch drops the committed
+// posts. No unhandled rejection: usePosts attaches its catch synchronously,
+// before this promise is ever rejected.
+function deferredFailure() {
+  let fail: (reason: unknown) => void = () => undefined;
+  const promise = new Promise((_resolve, reject) => {
+    fail = reject;
+  });
+  return { promise, fail };
+}
 
 // A fixture bundle whose post shares NO field value with
 // src/content/posts.json. If this fixture matched the committed content, a
@@ -42,9 +90,24 @@ function renderAt(path: string, posts: Post[] = [FIXTURE_POST]) {
 
 beforeEach(() => {
   document.title = 'Original title';
+  // The default for every case that is not about the runtime read: a fetch
+  // that never settles. Those cases are all about FIRST PAINT -- the
+  // compiled-in copy, rendered before anything comes back -- which is exactly
+  // the state a pending fetch holds the component in. It also means they
+  // queue no state update at all, so none of them needs an `act` wrapper for
+  // an assertion it never makes.
+  stubFetch(() => deferred().promise);
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
 });
 
 describe('PostPage', () => {
+  it('pins the literal this file matches NotFound by', () => {
+    expect(copy.notFound.heading).toBe(NOT_FOUND_HEADING);
+  });
+
   it('renders the post title as the page\'s single h1', () => {
     const { container } = renderAt('/blog/a-fixture-post');
     const h1s = [...container.querySelectorAll('h1')];
@@ -108,7 +171,12 @@ describe('PostPage', () => {
     }
   });
 
-  it('renders the not-found page for a slug no post has', () => {
+  // `await findBy`, not a bare `getBy`, and the await is the task: the
+  // not-found screen is now reached only once the runtime read has SETTLED.
+  // Before it settles the loading line stands in for it, which is the whole
+  // point of use-posts.ts's third state.
+  it('renders the not-found page for a slug no post has', async () => {
+    stubFetchRejecting();
     renderAt('/blog/nothing-here');
     // Matched against copy.notFound.* itself, not merely "some h1 exists" --
     // NotFound.test.tsx uses the same pattern. A truthy-heading check alone
@@ -116,7 +184,7 @@ describe('PostPage', () => {
     // "unpublished" screen that would contradict 80adc55's own commit
     // message ("a missing slug and a nonexistent URL are indistinguishable
     // to a visitor and a crawler").
-    expect(screen.getByRole('heading', { name: copy.notFound.heading })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: copy.notFound.heading })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: copy.notFound.back })).toBeInTheDocument();
     expect(screen.queryByText('A fixture post title')).toBeNull();
   });
@@ -127,9 +195,10 @@ describe('PostPage', () => {
   // component that also doesn't throw -- e.g. a distinct "unpublished"
   // screen -- left the old version green. This asserts NotFound's own copy
   // renders, on top of not throwing.
-  it('renders the same not-found page, not merely without throwing, when there are no posts at all', () => {
+  it('renders the same not-found page, not merely without throwing, when there are no posts at all', async () => {
+    stubFetchResolving([]);
     renderAt('/blog/a-fixture-post', []);
-    expect(screen.getByRole('heading', { name: copy.notFound.heading })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: copy.notFound.heading })).toBeInTheDocument();
   });
 
   // S1: useCanonical(post ? `${site.seo.url}/blog/${post.slug}` : null) is
@@ -151,5 +220,80 @@ describe('PostPage', () => {
     expect(canonicals()).toHaveLength(1);
     unmount();
     expect(canonicals()).toHaveLength(0);
+  });
+});
+
+// THE defect this task exists to prevent, and the test that would have caught
+// it: a post that lives only in the database must not flash NotFound.
+//
+// "Committed" in this block means FIXTURE_POST, not src/content/posts.json --
+// renderAt hands the provider its own fixture, which is what usePosts reads
+// as the compiled-in fallback here. That is the stronger arrangement, not a
+// weaker one: this file's whole premise (see FIXTURE_POST's own comment) is
+// that a fixture equal to real content cannot tell a real binding from a
+// hardcoded copy, and D1_ONLY below differs from FIXTURE_POST in every field
+// asserted on, exactly as FIXTURE_POST differs from the real committed list.
+describe('a post that is only in the database', () => {
+  const D1_ONLY: Post[] = [
+    {
+      id: 'from-d1',
+      slug: 'a-post-only-in-the-database',
+      type: 'story',
+      title: 'A post only in the database',
+      date: '2026-05-06',
+      excerpt: 'A database excerpt.',
+      image: '/food/tielle.webp',
+      blocks: [{ kind: 'paragraph', text: 'A database paragraph.' }],
+    },
+  ];
+
+  it('shows a loading line while the fetch is pending, NOT NotFound', () => {
+    const { promise } = deferred();
+    stubFetch(() => promise);
+    renderAt('/blog/a-post-only-in-the-database');
+    expect(screen.getByText('Loading this post…')).toBeInTheDocument();
+    // NotFound's own copy, matched the way NotFound.test.tsx matches it, not
+    // a bare heading query -- a review found two tests named "redirects to
+    // /blog" that asserted only that something rendered.
+    expect(screen.queryByText(NOT_FOUND_HEADING)).toBeNull();
+  });
+
+  it('renders the post once the fetch lands', async () => {
+    stubFetchResolving(D1_ONLY);
+    renderAt('/blog/a-post-only-in-the-database');
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'A post only in the database' }),
+    ).toBeInTheDocument();
+    expect(screen.getByText('A database paragraph.')).toBeInTheDocument();
+  });
+
+  it('renders NotFound only after the fetch settles, for a slug nothing has', async () => {
+    stubFetchResolving(D1_ONLY);
+    renderAt('/blog/no-such-post');
+    expect(screen.getByText('Loading this post…')).toBeInTheDocument();
+    expect(await screen.findByText(NOT_FOUND_HEADING)).toBeInTheDocument();
+    expect(screen.queryByText('Loading this post…')).toBeNull();
+  });
+
+  it('a committed post never shows the loading line at all', () => {
+    const { promise } = deferred();
+    stubFetch(() => promise);
+    renderAt('/blog/a-fixture-post');
+    expect(screen.queryByText('Loading this post…')).toBeNull();
+    expect(screen.getByRole('heading', { level: 1, name: 'A fixture post title' })).toBeInTheDocument();
+  });
+
+  it('a failed fetch still renders the committed post, and never NotFound', async () => {
+    const { promise, fail } = deferredFailure();
+    stubFetch(() => promise);
+    renderAt('/blog/a-fixture-post');
+    // The failure is triggered inside act, so what follows is asserted on the
+    // settled state. A database outage costs freshness, never availability.
+    await act(async () => {
+      fail(new Error('the database is down'));
+    });
+    expect(screen.getByRole('heading', { level: 1, name: 'A fixture post title' })).toBeInTheDocument();
+    expect(screen.queryByText(NOT_FOUND_HEADING)).toBeNull();
+    expect(screen.queryByText('Loading this post…')).toBeNull();
   });
 });

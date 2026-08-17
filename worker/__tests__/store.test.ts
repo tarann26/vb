@@ -87,8 +87,15 @@ describe('storeFor, with CONTENT_STORE unset or "github"', () => {
   // src/content/ (git ls-files finds it, assets.test.ts walks it), it is
   // just no longer the file the site writes to. So this set is now "paths
   // whose live copy lives in D1", not "paths with no file behind them".
-  it('routes exactly the two D1-only paths to D1, regardless of CONTENT_STORE', () => {
-    expect([...D1_ONLY_PATHS].sort()).toEqual(['src/content/awards.json', 'src/content/story.json']);
+  // Phase 5B: the third. posts.json is story.json's case exactly -- a real
+  // file under src/content/ that is still compiled in and is no longer what
+  // the site writes to.
+  it('routes exactly the three D1-only paths to D1, regardless of CONTENT_STORE', () => {
+    expect([...D1_ONLY_PATHS].sort()).toEqual([
+      'src/content/awards.json',
+      'src/content/posts.json',
+      'src/content/story.json',
+    ]);
   });
 
   it('sends the pilot file to D1 anyway, because it exists nowhere else', () => {
@@ -98,6 +105,19 @@ describe('storeFor, with CONTENT_STORE unset or "github"', () => {
   it.each([undefined, 'github'])('sends story.json to D1 even when CONTENT_STORE is %s', (setting) => {
     const e = env({ CONTENT_STORE: setting });
     expect(storeFor(e, 'src/content/story.json').name).toBe('d1');
+  });
+
+  // The routing half of Phase 5B's flip, asserted on its own rather than left
+  // to the membership pin above. The pin catches a careless EDIT to the set;
+  // this catches storeFor answering the wrong store for this path however
+  // that came about, and it is the case that reddens when the entry is
+  // removed. Parametrised over both settings for the same reason story.json's
+  // is: 'undefined' is the production default and 'github' is the value a
+  // publish of every other content file rides on, and neither may send a post
+  // to a git commit now that D1 holds the live copy.
+  it.each([undefined, 'github'])('sends posts.json to D1 even when CONTENT_STORE is %s', (setting) => {
+    const e = env({ CONTENT_STORE: setting });
+    expect(storeFor(e, 'src/content/posts.json').name).toBe('d1');
   });
 
   it('sends photo and menu paths to GitHub -- R2 is bound and unused in this phase', () => {

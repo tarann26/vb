@@ -27,6 +27,12 @@ export const PUBLIC_FILES: ReadonlyMap<string, string> = new Map([
   // first and swaps this one in when it arrives (Task 7), instead of
   // rendering nothing until it does.
   ['story.json', 'src/content/story.json'],
+  // Phase 5B. Like story.json and unlike awards.json, this document's body is
+  // the entire visible content of two routes rather than a list beside chrome
+  // that renders without it -- so both surfaces paint the compiled-in copy
+  // first and swap this one in when it arrives, instead of rendering nothing
+  // until it does.
+  ['posts.json', 'src/content/posts.json'],
 ]);
 
 export interface PublishedEnv {

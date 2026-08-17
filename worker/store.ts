@@ -75,6 +75,21 @@ export interface StoreEnv extends GitHubEnv {
 export const D1_ONLY_PATHS: ReadonlySet<string> = new Set([
   'src/content/awards.json',
   'src/content/story.json',
+  // Phase 5B. The same case story.json is, one document later: the file still
+  // EXISTS in this repository and is still compiled into the bundle. It is no
+  // longer what the site writes to -- it is the first-paint fallback
+  // BlogIndex.tsx and PostPage.tsx render before their runtime fetch resolves
+  // (src/components/blog/use-posts.ts), what a crawler and a reader with JS
+  // off see, and the ONLY thing keeping every post's card image and every
+  // image/gallery block's src inside src/content/__tests__/assets.test.ts's
+  // walk, which cannot see D1 at all. That last one is why this document
+  // could not have gone to D1 in 5A: the fields most likely to break would
+  // have been entirely unguarded.
+  //
+  // scripts/sync-posts-fallback.mjs is what keeps the compiled-in copy from
+  // drifting away from the row. It is run by a human before a deploy that
+  // matters, not by the build -- see its own header for why.
+  'src/content/posts.json',
 ]);
 
 // The GitHub store is exactly today's behaviour behind the interface. It

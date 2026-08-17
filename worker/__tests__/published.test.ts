@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CONTENT_SOURCE_HEADER, handlePublished, type PublishedEnv } from '../published';
+import { CONTENT_SOURCE_HEADER, PUBLIC_FILES, handlePublished, type PublishedEnv } from '../published';
 import { D1Store, sha256Hex } from '../d1';
 import { snapshotFor } from '../snapshot';
 import { asD1, FakeD1 } from './fakeD1';
@@ -38,6 +38,7 @@ class FakeCache {
 
 const PATH = 'src/content/awards.json';
 const STORY_PATH = 'src/content/story.json';
+const POSTS_PATH = 'src/content/posts.json';
 
 function cache(): FakeCache {
   return new FakeCache();
@@ -53,6 +54,10 @@ function publish(fake: FakeD1, content: string, publishId: string): Promise<{ sh
 
 function publishStory(fake: FakeD1, content: string, publishId: string): Promise<{ sha: null }> {
   return new D1Store(asD1(fake)).write([{ path: STORY_PATH, content, encoding: 'utf-8' as const }], 'seed', publishId);
+}
+
+function publishPosts(fake: FakeD1, content: string, publishId: string): Promise<{ sha: null }> {
+  return new D1Store(asD1(fake)).write([{ path: POSTS_PATH, content, encoding: 'utf-8' as const }], 'seed', publishId);
 }
 
 function req(query = 'path=awards.json'): Request {
@@ -191,6 +196,34 @@ describe('GET /api/published', () => {
     expect(response.status).toBe(200);
     expect(response.headers.get(CONTENT_SOURCE_HEADER)).toBe('snapshot');
     expect(await response.text()).toBe(SNAPSHOT_STORY_BODY);
+  });
+
+  // Phase 5B: the third document this endpoint serves, and the one two whole
+  // public routes read at runtime. The fixture body is deliberately NOT
+  // src/content/posts.json's committed text -- a fixture identical to
+  // production content cannot distinguish "this route actually reads D1" from
+  // "this route happens to return the right bytes some other way".
+  it('serves posts.json from D1, which is what makes a publish visible in seconds', async () => {
+    const fake = new FakeD1();
+    await publishPosts(fake, '[{"id":"from-d1","slug":"a-post-only-in-the-database"}]', 'p1');
+
+    const response = await handlePublished(req('path=posts.json'), env(fake), cache() as unknown as Cache);
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get(CONTENT_SOURCE_HEADER)).toBe('d1');
+    expect(await response.text()).toBe('[{"id":"from-d1","slug":"a-post-only-in-the-database"}]');
+  });
+
+  // The allowlist's exact membership, positive AND negative, pinned the way
+  // worker/__tests__/store.test.ts pins D1_ONLY_PATHS's -- because this map is
+  // the whole of what makes a D1 document public, and both directions matter:
+  // a document missing from it is a dead read path in production, and a
+  // document added to it by accident is a private file served to the world.
+  it('publishes exactly the three public documents, under names that do not leak the repo layout', () => {
+    expect([...PUBLIC_FILES.keys()].sort()).toEqual(['awards.json', 'posts.json', 'story.json']);
+    expect(PUBLIC_FILES.get('posts.json')).toBe(POSTS_PATH);
+    expect(PUBLIC_FILES.has('src/content/posts.json')).toBe(false);
+    expect(PUBLIC_FILES.has('dishes.json')).toBe(false);
   });
 
   it('404s an unknown or non-public path rather than reading anything', async () => {
