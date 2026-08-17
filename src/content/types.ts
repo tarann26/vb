@@ -313,9 +313,31 @@ interface BlockContentMap {
   heading: { text: InlineText };
   bulletList: { items: InlineText[] };
   numberList: { items: InlineText[] };
-  image: { src: string; alt: string; caption: InlineText };
+  // `caption` and `attribution` are OPTIONAL, and the review that found them
+  // required is the reason they are not. Both were declared as required
+  // `InlineText` while nothing at either boundary enforced them: `{ kind:
+  // 'image', src, alt }` and `{ kind: 'quote', text }` are accepted by
+  // validatePosts (validate.ts calls validateInlineLinks on them, which
+  // returns [] for a non-string, deliberately -- its own comment already
+  // calls the caption "genuinely optional") and waved through by assertBlock,
+  // which stops at the discriminant and the key set. So the type promised a
+  // string that a committed file need not carry, and the first consumer to
+  // hand one to parseInline would have thrown on content already committed
+  // to this branch.
+  //
+  // Fixed at the TYPE end rather than the validator end, because the
+  // validator is right: a photo that speaks for itself needs no words under
+  // it, and an unattributed quote is an ordinary thing. `?` is what makes the
+  // compiler force every renderer to handle the absence instead of
+  // discovering it at runtime.
+  //
+  // The contrast is `citation.url`, which stays REQUIRED and nullable
+  // (`string | null`). "There is no online copy" is a fact the author states,
+  // not a field she omits -- and validatePosts does catch a citation with the
+  // key missing entirely, which is the behaviour that distinguishes the two.
+  image: { src: string; alt: string; caption?: InlineText };
   gallery: { images: GalleryImage[] };
-  quote: { text: InlineText; attribution: InlineText };
+  quote: { text: InlineText; attribution?: InlineText };
   ingredients: { heading: string; items: InlineText[] };
   steps: { heading: string; items: InlineText[] };
   // `url` is nullable, matching Article['url'] -- press.json's own committed

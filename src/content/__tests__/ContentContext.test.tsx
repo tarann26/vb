@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { useContent, ContentProvider, defaultBundle } from '../ContentContext';
-import { copy as realCopy } from '../index';
+import { copy as realCopy, posts as realPosts } from '../index';
 import { AppRoutes } from '../../App';
 
 function ReadsAtmosphereHeading() {
@@ -13,6 +13,24 @@ function ReadsAtmosphereHeading() {
 describe('ContentContext', () => {
   it('wraps the same static exports index.ts already validates, not a re-derived copy', () => {
     expect(defaultBundle.copy).toBe(realCopy);
+  });
+
+  // Review finding (Minor M1). Every other bundle field is held to its
+  // binding by some surface that renders it -- emptying `experiences` here
+  // reddens homepage-bytes, for instance. `posts` has no rendering surface
+  // until Tasks 7-9, so mutating `defaultBundle.posts` to `[]` reddened
+  // NOTHING across all 2960 tests: an unguarded binding those tasks would
+  // have inherited, and the exact shape of the defect Phase 3 shipped when
+  // /edit's carousel drew zero cards against six live ones.
+  //
+  // THE MUTATION: change `posts,` to `posts: []` in ContentContext.ts's
+  // defaultBundle. Identity fails first, then the length assertion -- so
+  // this also catches the subtler `posts: [...posts]`, which would be a
+  // re-derived copy rather than the validated export and is the same class
+  // of mistake this test's own sibling above was written for.
+  it('binds posts to the validated export itself, not an empty or copied stand-in', () => {
+    expect(defaultBundle.posts).toBe(realPosts);
+    expect(defaultBundle.posts.length).toBeGreaterThan(0);
   });
 
   it('renderText default is the identity function', () => {

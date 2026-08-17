@@ -530,3 +530,46 @@ describe('assertPosts', () => {
     expect(assertPosts([])).toEqual([]);
   });
 });
+
+import type { Block } from '../types';
+
+// Review finding (Important): `image.caption` and `quote.attribution` were
+// declared as required `InlineText` while NOTHING at either boundary
+// enforced them -- validatePosts accepts both blocks below (see
+// validate.test.ts's two cases pinning that) and assertBlock waves them
+// through, since it stops at the discriminant and the key set by design. A
+// renderer trusting the type would have handed `undefined` to parseInline
+// and thrown, on content already committed to this branch.
+describe('the two optional block text fields', () => {
+  // Spellable at all is the first half of the claim: with the old required
+  // type, neither of these annotations compiles.
+  const CAPTION_LESS_IMAGE: Block = { kind: 'image', src: '/food/tielle.webp', alt: 'A dish' };
+  const UNATTRIBUTED_QUOTE: Block = { kind: 'quote', text: 'Words worth repeating.' };
+
+  it('survive the import-time guard as real blocks', () => {
+    const posts = assertPosts([{ ...A_POST, blocks: [CAPTION_LESS_IMAGE, UNATTRIBUTED_QUOTE] }]);
+    expect(posts[0].blocks.map((b) => b.kind)).toEqual(['image', 'quote']);
+  });
+
+  // A COMPILE-TIME assertion, and it is the half that actually protects
+  // Tasks 5 and 6. tsc -b typechecks this file (tsconfig.app.json includes
+  // "src" whole), so each `@ts-expect-error` below is a real check with a
+  // real failure mode: if either field is ever changed back to a required
+  // string, the error it expects stops happening and tsc fails the build
+  // with "Unused '@ts-expect-error' directive". That is the mutation --
+  // drop the `?` from either field in BlockContentMap (types.ts) and watch
+  // `npx tsc -b --noEmit` go red here rather than in a renderer months
+  // later. Runtime alone could never assert this: the whole point is that
+  // the compiler now refuses a consumer that assumes presence.
+  it('force a consumer to handle their absence', () => {
+    if (CAPTION_LESS_IMAGE.kind !== 'image') throw new Error('narrowing failed');
+    if (UNATTRIBUTED_QUOTE.kind !== 'quote') throw new Error('narrowing failed');
+    // @ts-expect-error -- caption is `string | undefined`, so a consumer that
+    // wants a plain string has to say what happens when there is none.
+    const caption: string = CAPTION_LESS_IMAGE.caption;
+    // @ts-expect-error -- attribution is `string | undefined`, same reason.
+    const attribution: string = UNATTRIBUTED_QUOTE.attribution;
+    expect(caption).toBeUndefined();
+    expect(attribution).toBeUndefined();
+  });
+});

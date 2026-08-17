@@ -260,14 +260,22 @@ const EMPTY_EXPERIENCES: Experience[] = [];
 // constant is the only value available to this file -- src/admin/ may not
 // import the build-time snapshot (module header above).
 //
-// That is honest TODAY because /edit renders no post surface at all. It
-// stops being honest the moment one exists: 5A's Task 9 turns the
-// homepage's press section into the blog, and /edit renders the homepage.
-// READ THIS BEFORE WRITING THAT TASK -- shipping it against this constant
-// reproduces Phase 3's EMPTY_EXPERIENCES defect exactly (a section
-// rendering zero cards in /edit while the live homepage showed six). The
-// fix is the same one Phase 3 took: register posts.json in CONTENT_FILES
-// alongside its panel, then read it through `pick` like every file above.
+// That is honest for the whole of 5A, because /edit renders no post surface
+// at all -- an empty value behind nothing on screen tells nobody anything
+// false. It stops being honest the moment a surface exists, and the reason
+// this comment survives rather than being deleted is that the ruling which
+// keeps it honest was made deliberately: 5A's Task 9 does NOT swap the
+// homepage's press section for the blog. An empty preview in the dashboard
+// against three posts live is Phase 3's EMPTY_EXPERIENCES defect verbatim
+// (a carousel drawing zero cards in /edit while the homepage showed six),
+// and it protects a maintainer at the owner's expense. The swap waits for
+// 5B.
+//
+// SO: whoever builds the /edit-visible blog surface owns this constant. The
+// fix is the one Phase 3 took -- register posts.json in CONTENT_FILES
+// alongside its Manage panel (5B's first task, which also retires
+// content.test.ts's exception and its inverse assertion), then read it here
+// through `pick` like every file above. Do not add the surface without it.
 const EMPTY_POSTS: Post[] = [];
 
 const EMPTY_COPY: Copy = {
@@ -675,7 +683,7 @@ export function buildBundle(
     experiences: pick(entries, 'experiences.json', EMPTY_EXPERIENCES),
     // Phase 5A: not a `pick`, and deliberately so -- see EMPTY_POSTS' own
     // comment above for why there is nothing in `entries` to pick from, and
-    // for what Task 9 has to change before /edit renders a post surface.
+    // for what 5B has to change before /edit renders a post surface at all.
     posts: EMPTY_POSTS,
     // Plan 7, Task 5, Step 1: a section-content path needs sections.json
     // loaded, never copy.json -- gating both kinds on `copyLoaded` alone

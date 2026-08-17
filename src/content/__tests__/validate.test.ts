@@ -1384,6 +1384,32 @@ describe('posts.json', () => {
     it('accepts a citation with no link', () => {
       expect(withBlocks([{ kind: 'citation', publication: 'X', url: null, date: '2026-01-01' }])).toEqual([]);
     });
+
+    // Review finding (Important). Both of these were ALREADY accepted here
+    // while `Block` declared caption and attribution as required strings --
+    // so the type promised something no boundary enforced, and the first
+    // renderer to hand `undefined` to parseInline would have thrown on
+    // content already committed. The fix was to the TYPE (both are now `?`),
+    // because this validator's behaviour is the correct one. These two cases
+    // pin that behaviour so a later agent cannot "fix" it at this end
+    // instead and reintroduce the mismatch from the other side.
+    it('accepts an image block with no caption -- a photo can speak for itself', () => {
+      expect(withBlocks([{ kind: 'image', src: '/food/tielle.webp', alt: 'A dish' }])).toEqual([]);
+    });
+
+    it('accepts a quote block with no attribution', () => {
+      expect(withBlocks([{ kind: 'quote', text: 'Words worth repeating.' }])).toEqual([]);
+    });
+
+    // The CONTRAST, and it is what keeps the two decisions distinguishable:
+    // a citation's `url` stays required-and-nullable, so omitting the key is
+    // caught where omitting a caption is not. If this ever goes green, the
+    // optionality above has leaked into a field that must not have it.
+    it('still refuses a citation whose url key is missing entirely', () => {
+      expect(
+        withBlocks([{ kind: 'citation', publication: 'X', date: '2026-01-01' }]).map((p) => p.field),
+      ).toContain('[0].blocks[0].url');
+    });
   });
 
   // Conflict 12. This is the ONLY rule in this file that inspects a URL
