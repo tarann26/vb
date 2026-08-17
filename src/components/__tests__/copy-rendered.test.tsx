@@ -140,6 +140,11 @@ describe('copy-rendered', () => {
     expect(screen.getByText('Fixture View All Label')).toBeInTheDocument();
   });
 
+  // Review note (Minor #8, Phase 5 Task 8): BlogsPage is no longer reachable
+  // by any route -- App.tsx's /blogs redirects to /blog (BlogIndex.tsx) now.
+  // This test still passes, correctly, and still proves BlogsPage itself
+  // reads these copy.json fields rather than hardcoding them -- but green
+  // here is not evidence a visitor can reach this component.
   it('BlogsPage renders its title, subtitle, back link, heading, intro and pagination labels, and reuses copy.press.readArticle', async () => {
     const fixtureArticles = Array.from({ length: 11 }, (_, i) => ({
       id: `fixture-article-${i}`,

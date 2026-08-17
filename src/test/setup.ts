@@ -76,6 +76,21 @@ if (typeof URL !== 'undefined' && !URL.createObjectURL) {
   URL.revokeObjectURL = () => {};
 }
 
+// jsdom implements window.scrollTo as a real, callable function -- but one
+// that only reports itself to jsdom's virtual console as "Not implemented"
+// rather than doing anything, so a `!window.scrollTo` presence check (like
+// matchMedia's above) would never catch it: the property already exists, it
+// just misbehaves when called. Phase 5, Task 8's BlogIndex is the first
+// component whose test exercises it -- clicking a pagination button calls
+// `window.scrollTo({ top: 0, behavior: 'smooth' })` to return to the top of
+// the list -- and the stderr this printed was the only "Not implemented" in
+// the whole suite. Stubbed here rather than guarded at the call site: the
+// component's behaviour is correct as written, and real browsers implement
+// this fully, so production is unaffected either way.
+if (typeof window !== 'undefined') {
+  window.scrollTo = () => {};
+}
+
 // Node 22+ ships its own native, unflagged `localStorage` global backed by a
 // file `--localstorage-file` selects -- with no valid file configured (the
 // default for a plain `vitest run`), every method on it is `undefined`

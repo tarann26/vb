@@ -185,9 +185,17 @@ describe('every renderText/renderImage call site passes a path that really point
   const { bundle, textCalls, imageCalls } = makeRecordingBundle();
 
   // Mounted once for the whole describe block, not per-test: blogsPage.*
-  // only renders at /blogs and notFound.* only at a route nothing matches,
-  // so no single route's calls alone ever cover the full 29 -- the three
-  // together do.
+  // only renders at /blog and notFound.* only at a route nothing matches, so
+  // no single route's calls alone cover every EDITABLE_TEXT_PATHS entry --
+  // the three routes together do. (Review fix, Phase 5 Task 8: this list used
+  // to say "/blogs" and a hardcoded total of 29 -- both stale now. mounting
+  // at '/blogs' below still works, but ONLY because App.tsx's <Navigate>
+  // carries it to /blog, where blogsPage.heading/intro actually render; a
+  // real, undelegated /blogs route would make this mount vacuous for that
+  // half of the assertion below. The count moved too -- EDITABLE_TEXT_PATHS
+  // is 27 now (editable-paths.ts), not 29 -- and is asserted directly by that
+  // module's own test rather than repeated here as a second number to keep
+  // in sync.)
   beforeAll(() => {
     mountAt('/', bundle);
     mountAt('/blogs', bundle);

@@ -81,10 +81,17 @@ export function buildSitemapXml(
 // plugin here has it -- Vitest never sees this file, so nothing in the
 // suite depends on the wall clock or on `pages` being importable from a
 // jsdom environment.
+// Review fix (Minor #4): `posts` is REQUIRED here, unlike buildSitemapXml's
+// own third parameter -- this factory has exactly one call site
+// (vite.config.ts), and a default would let a dropped argument compile
+// clean and silently ship a sitemap with no post entries, detectable only by
+// crawlers.test.ts AFTER a real build (the exact skip trap the brief's own
+// Step 7 warns about). buildSitemapXml's default stays: its own tests call
+// it with two arguments on purpose, to exercise the pages-only case.
 export default function sitemap(
   baseUrl: string,
   pages: Pick<Page, 'slug' | 'enabled'>[],
-  posts: Pick<Post, 'slug'>[] = [],
+  posts: Pick<Post, 'slug'>[],
 ): Plugin {
   let outDir = 'dist';
   return {

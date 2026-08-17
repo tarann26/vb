@@ -74,9 +74,18 @@ export function labelForPath(path: string, pages: PageNaming[]): string {
   const withoutQuery = path.split('?')[0].split('#')[0];
   const normalised = withoutQuery === '/' ? '/' : withoutQuery.replace(/\/+$/, '') || '/';
 
-  // 2. The two paths that are pages without being in pages.json.
+  // 2. The paths that are pages without being in pages.json.
   if (normalised === '/') return 'Homepage';
+  // Review fix (Minor #6, Phase 5 Task 8): /blogs -> 'Press' predates the
+  // blog model and stays for historical rows (a real visit still landed
+  // there before this task's own 301 in public/_redirects started
+  // intercepting it at the edge). /blog and /blog/<slug> are its sibling
+  // orphan -- exactly the class already caught in editable-paths.ts for the
+  // SAME route change -- real traffic now lands there and had no entry at
+  // all, so it fell through to rule 4's raw-path fallback.
   if (normalised === '/blogs') return 'Press';
+  if (normalised === '/blog') return 'Blog';
+  if (normalised.startsWith('/blog/')) return 'Blog post';
 
   // 3. A leading-slash match against a page she created.
   const page = pages.find((candidate) => `/${candidate.slug}` === normalised);

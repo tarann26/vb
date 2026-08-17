@@ -60,7 +60,21 @@ describe('BlogIndex', () => {
   it('shows nine posts on the first page and the rest on the second', async () => {
     const many = Array.from({ length: 11 }, (_, i) => post(i + 1));
     const { container } = renderIndex(many);
-    expect(cardHeadings(container)).toHaveLength(9);
+    // Review fix (Minor #1): named exactly, not just counted -- a bug that
+    // returns the right COUNT but the wrong nine (while still returning the
+    // correct oldest two on page 2, which the assertion below already pins)
+    // would have passed the old `toHaveLength(9)` check.
+    expect(cardHeadings(container)).toEqual([
+      'Fixture post 11',
+      'Fixture post 10',
+      'Fixture post 9',
+      'Fixture post 8',
+      'Fixture post 7',
+      'Fixture post 6',
+      'Fixture post 5',
+      'Fixture post 4',
+      'Fixture post 3',
+    ]);
 
     await userEvent.click(screen.getByRole('button', { name: '2' }));
     expect(cardHeadings(container)).toHaveLength(2);
@@ -71,8 +85,13 @@ describe('BlogIndex', () => {
 
   it('renders no pagination controls at all when everything fits on one page', () => {
     renderIndex([post(1), post(2)]);
-    expect(screen.queryByRole('button', { name: 'Next' })).toBeNull();
-    expect(screen.queryByRole('button', { name: '1' })).toBeNull();
+    // Review fix (Minor #2): the old 'Next' half of this assertion could not
+    // fail on any code path -- BlogIndex never renders a Next control at
+    // all (unlike BlogsPage's Previous/Next design), only bare numbered
+    // buttons. Replaced with an exhaustive check over every possible
+    // numbered page button, not just '1', so a future change that renders
+    // some OTHER page number here is still caught.
+    expect(screen.queryAllByRole('button', { name: /^\d+$/ })).toHaveLength(0);
   });
 
   it('says so plainly when there are no posts yet, rather than rendering an empty grid', () => {

@@ -1,3 +1,24 @@
+# Review fix (Important #3, Task 8): a real 301 for /blogs, not just the
+# client-side <Navigate to="/blog" replace /> in App.tsx. Without this line,
+# https://…/blogs answered 200 (the SPA shell, from the catch-all below) and
+# only client-side JS moved the visitor -- so a non-rendering crawler
+# following the sitemap's own /blogs entry (plugins/sitemap.ts) learned
+# nothing, Search Console reported the submitted URL as a soft/JS redirect,
+# and an inbound press link pointing at /blogs passed no redirect signal at
+# all. This line is what actually makes plugins/sitemap.ts's own comment
+# ("a crawler that follows it learns the new address") true.
+#
+# MUST sit above the catch-all: Cloudflare Pages processes _redirects
+# top-to-bottom and stops at the first match, so a rule below `/* ...`
+# would never be reached -- the catch-all already answers everything.
+# src/test/hosting.test.ts pins both the rule and this ordering.
+#
+# The client-side <Navigate> in App.tsx STAYS, as the in-app fallback: Vite
+# preview (`npm run preview`, what Task 10's Playwright suite drives against)
+# does not process this file at all, so without it a Playwright /blogs test
+# would see the SPA shell with no redirect ever happening.
+/blogs  /blog  301
+
 # Deliberately no /api/* rule here. Cloudflare Pages' _redirects only accepts
 # status codes 200, 301, 302, 303, 307, or 308 -- an invalid status is silently
 # ignored at build time, not rejected, so there is no way to make this file

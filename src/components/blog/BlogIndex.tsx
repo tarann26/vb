@@ -43,9 +43,18 @@ export default function BlogIndex() {
       <div className="py-20">
         <div className="max-w-7xl mx-auto px-4">
           <div className="text-center mb-16">
-            <h2 className={`mb-6 font-['Montserrat'] text-4xl md:text-5xl font-bold text-ink`}>
+            {/* Review fix (Important #1): the brief's own Step 4 code lifted
+                this heading out of BlogsPage.tsx:63, where it sat under that
+                page's own real <h1> (BlogsPage.tsx:44) -- a header that did
+                not come along. Every sibling route has one (NotFound.tsx,
+                PostPage.tsx, Hero.tsx); this is the only one that didn't.
+                <h1>, not <h2> -- same class string, zero CSS, every rule
+                already ships. Cards stay <h3> (PostCard.tsx): that component
+                is shared with 5B's homepage section, where a different level
+                would clash. */}
+            <h1 className={`mb-6 font-['Montserrat'] text-4xl md:text-5xl font-bold text-ink`}>
               {renderText('blogsPage.heading', copy.blogsPage.heading)}
-            </h2>
+            </h1>
             <p className={`font-['Open_Sans'] text-gray-700 max-w-2xl mx-auto leading-relaxed`}>
               {renderText('blogsPage.intro', copy.blogsPage.intro)}
             </p>

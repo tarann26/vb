@@ -148,9 +148,12 @@ export function AppRoutes() {
       <Route path="/" element={<HomePage />} />
       {/* Phase 5. /blogs is not deleted -- it is a live URL people have
           already linked, and public/sitemap.xml has advertised it since the
-          site launched. It becomes a permanent client-side redirect to
-          /blog; the sitemap keeps listing it (plugins/sitemap.ts) so a
-          crawler that follows it learns the new address rather than
+          site launched. The real, permanent redirect is the 301 in
+          public/_redirects (review fix, Important #3) -- this <Navigate> is
+          the in-app FALLBACK for hosts that don't process that file (Vite
+          preview, which Task 10's Playwright suite runs against). The
+          sitemap keeps listing /blogs (plugins/sitemap.ts) so a crawler that
+          follows either mechanism learns the new address rather than
           silently dropping it. BlogsPage.tsx itself stays on disk, unrouted,
           under the owner's never-delete constraint. */}
       <Route path="/blogs" element={<Navigate to="/blog" replace />} />

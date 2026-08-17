@@ -56,6 +56,12 @@ describe('labelForPath -- the whole point of Card B', () => {
   it.each([
     ['/', 'Homepage'],
     ['/blogs', 'Press'],
+    // Review fix (Minor #6, Phase 5 Task 8): /blog and /blog/<slug> are
+    // real, live traffic now (App.tsx's /blogs -> /blog redirect) and had
+    // no entry here -- the same orphan class already caught for
+    // editable-paths.ts's own copy.json leaves.
+    ['/blog', 'Blog'],
+    ['/blog/some-post-slug', 'Blog post'],
     ['/catering', 'Catering'],
     ['/catering/', 'Catering'],
     ['/catering?utm_source=ig', 'Catering'],

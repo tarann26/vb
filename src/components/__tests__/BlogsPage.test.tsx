@@ -31,6 +31,12 @@ const linkedArticle = {
   image: '/fixture.jpg',
 };
 
+// Review note (Minor #8, Phase 5 Task 8): BlogsPage is no longer reachable
+// by any route -- App.tsx's /blogs now renders a <Navigate to="/blog"
+// replace /> instead, and BlogIndex.tsx is what actually renders there. This
+// file (and its component) stay under the owner's never-delete constraint
+// and this suite still passes, correctly -- but green here proves only that
+// BlogsPage still renders as written, not that a visitor can ever see it.
 describe('BlogsPage', () => {
   afterEach(() => {
     vi.doUnmock('../../content');

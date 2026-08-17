@@ -66,6 +66,24 @@ describe('cloudflare hosting config', () => {
     expect(redirects).toMatch(/^\/\*\s+\/index\.html\s+200$/m);
   });
 
+  // Review fix (Important #3, Task 8): App.tsx's client-side
+  // <Navigate to="/blog" replace /> keeps /blogs working for a visitor, but
+  // it is not an HTTP redirect -- without a real 301, /blogs answers 200 and
+  // only JS moves the visitor. That leaves a non-rendering crawler following
+  // the sitemap's own /blogs entry (plugins/sitemap.ts) learning nothing,
+  // and an inbound press link to /blogs passing no redirect signal to
+  // /blog. Pinned as its own line AND as sitting above the SPA catch-all --
+  // Cloudflare Pages processes _redirects top-to-bottom and stops at the
+  // first match, so a rule below the catch-all would never fire.
+  it('redirects /blogs to /blog with a real 301, above the SPA catch-all', () => {
+    const redirects = readFileSync('public/_redirects', 'utf8');
+    const blogsRule = redirects.match(/^\/blogs\s+\/blog\s+301$/m);
+    expect(blogsRule).not.toBeNull();
+    const catchAll = redirects.match(/^\/\*\s+\/index\.html\s+200$/m);
+    expect(catchAll).not.toBeNull();
+    expect(redirects.indexOf(blogsRule![0])).toBeLessThan(redirects.indexOf(catchAll![0]));
+  });
+
   // public/_redirects cannot keep /api/* out of this catch-all: Cloudflare
   // Pages' _redirects only accepts status 200, 301, 302, 303, 307 or 308 --
   // an earlier version of this test pinned a 404 rule there, which Cloudflare

@@ -13,12 +13,30 @@
 // entry, bypassing the guard entirely, so what's actually proven is
 // React Router 7's OWN specificity ranking, independent of whether the
 // content-level guard that currently prevents the scenario stays in place.
+import { useEffect } from 'react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import { site, assertPages } from '../content';
 import { ContentProvider, defaultBundle } from '../content/ContentContext';
 import { AppRoutes } from '../App';
+
+// Review fix (Important #2): both `/blogs` tests below used to assert only
+// that BlogIndex's empty state appeared -- which is also exactly what
+// `<Route path="/blogs" element={<BlogIndex />} />` (no redirect at all, two
+// live URLs serving identical content) would produce, so neither test
+// actually pinned the REDIRECT the brief and the commit message both claim.
+// This sibling of `AppRoutes`, mounted inside the same `<MemoryRouter>`,
+// reads the router's own current location -- proof the URL itself moved,
+// not just that the right component happened to render at the URL you
+// started on.
+function LocationProbe({ onLocate }: { onLocate: (pathname: string) => void }) {
+  const location = useLocation();
+  useEffect(() => {
+    onLocate(location.pathname);
+  }, [location.pathname, onLocate]);
+  return null;
+}
 
 afterEach(() => {
   vi.doUnmock('../content');
@@ -61,11 +79,14 @@ async function renderAt(path: string) {
     };
   });
   const { AppRoutes } = await import('../App');
-  return render(
+  let pathname = '';
+  const result = render(
     <MemoryRouter initialEntries={[path]}>
       <AppRoutes />
+      <LocationProbe onLocate={(p) => { pathname = p; }} />
     </MemoryRouter>,
   );
+  return { ...result, pathname: () => pathname };
 }
 
 function stubFetchLoggedOut() {
@@ -87,9 +108,16 @@ describe('/:slug never shadows a live static route, even with a colliding page i
     // injected colliding page) but the evidence for it moved to BlogIndex's
     // own empty-state text (posts: [] via renderAt's mock above) rather than
     // BlogsPage's <h1>.
-    await renderAt('/blogs');
+    const { pathname } = await renderAt('/blogs');
     expect(screen.getByText(/nothing here yet/i)).toBeInTheDocument();
     expect(screen.queryByText('Colliding Blogs Page')).not.toBeInTheDocument();
+    // Review fix (Important #2): the two assertions above also pass if
+    // `/blogs` renders BlogIndex directly with no redirect at all -- two
+    // live URLs serving identical content, exactly what the redirect exists
+    // to prevent. This is the one that actually pins it: the router's own
+    // location must have MOVED to /blog, not merely rendered the right
+    // component while sitting at /blogs.
+    expect(pathname()).toBe('/blog');
   });
 
   it('/edit still renders EditMode\'s own login overlay, not the colliding page', async () => {
@@ -155,14 +183,19 @@ describe('/:slug never shadows a live static route, even with a colliding page i
     // from, so the override below would silently apply to nothing and every
     // component would still see the real, three-post bundle. Confirmed by
     // hitting exactly that failure first.
+    let pathname = '';
     render(
       <ContentProvider value={{ ...defaultBundle, posts: [] }}>
         <MemoryRouter initialEntries={['/blogs']}>
           <AppRoutes />
+          <LocationProbe onLocate={(p) => { pathname = p; }} />
         </MemoryRouter>
       </ContentProvider>,
     );
     expect(screen.getByText(/nothing here yet/i)).toBeInTheDocument();
+    // Review fix (Important #2): same gap as the test above -- pins that the
+    // URL itself moved, not just that BlogIndex happened to render.
+    expect(pathname).toBe('/blog');
   });
 
   it('a page slugged "blog" cannot shadow the blog routes -- and cannot exist at all', () => {

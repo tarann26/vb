@@ -96,7 +96,7 @@ afterEach(() => {
 
 describe('sitemap (the Vite plugin)', () => {
   it('is scoped to apply: build', () => {
-    expect(sitemap(BASE_URL, []).apply).toBe('build');
+    expect(sitemap(BASE_URL, [], []).apply).toBe('build');
   });
 
   it('writes dist/sitemap.xml, including an enabled page, after a real build', async () => {
@@ -108,7 +108,7 @@ describe('sitemap (the Vite plugin)', () => {
       configFile: false,
       root,
       logLevel: 'silent',
-      plugins: [sitemap(BASE_URL, [page('our-menu', true)])],
+      plugins: [sitemap(BASE_URL, [page('our-menu', true)], [])],
       build: { outDir, write: true },
     });
 
@@ -123,7 +123,7 @@ describe('sitemap (the Vite plugin)', () => {
     // Reuses build-info.test.ts's own already-verified `apply: 'build'`
     // mechanics (this repo's own standing "don't re-derive a proof twice"
     // preference) -- checked here only at the shallow, structural level.
-    expect(sitemap(BASE_URL, []).apply).toBe('build');
+    expect(sitemap(BASE_URL, [], []).apply).toBe('build');
   });
 
   // M5 review fix: the test above never had a public/sitemap.xml in its own
@@ -150,7 +150,7 @@ describe('sitemap (the Vite plugin)', () => {
       configFile: false,
       root,
       logLevel: 'silent',
-      plugins: [sitemap(BASE_URL, [page('our-menu', true)])],
+      plugins: [sitemap(BASE_URL, [page('our-menu', true)], [])],
       build: { outDir, write: true },
     });
 

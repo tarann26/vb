@@ -70,10 +70,15 @@ describe('crawler files', () => {
   });
 
   // The pre-build source file this repo hand-maintains -- `/` and `/blogs`,
-  // literally, the same two routes plugins/sitemap.ts's own STATIC_ROUTES
-  // keeps as a base to generate FROM (see that module's own comment). Still
-  // worth pinning on its own: if this ever drifted, the generated
-  // dist/sitemap.xml below would drift with it.
+  // literally. Review fix (Minor #7, Phase 5 Task 8): plugins/sitemap.ts's
+  // own STATIC_ROUTES is three entries now (`/`, `/blog`, `/blogs`), not the
+  // same two this file has -- `/blog` needs no hand-authored line here
+  // because it did not exist before this file's own generated replacement
+  // (that plugin's `writeBundle`) did, so there was never a "base" state of
+  // this file to keep it in sync with. Still worth pinning THIS file on its
+  // own: if `/` or `/blogs` ever drifted here, the generated
+  // dist/sitemap.xml below would drift with it (Vite copies this file into
+  // dist/ before the plugin overwrites it -- see that module's own comment).
   it('lists the two static routes in the pre-build source file', () => {
     const xml = readFileSync('public/sitemap.xml', 'utf8');
     expect(xml).toContain(`<loc>${site.seo.url}/</loc>`);

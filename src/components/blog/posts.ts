@@ -5,10 +5,12 @@
 // already made for the same rule.
 import type { Post, PostType } from '../../content/types';
 
-// Nine, not ten: the index grid is `sm:grid-cols-2 lg:grid-cols-3` (Task 8),
-// so nine fills three complete rows on a desktop and leaves no orphan card.
-// The old /blogs page used ten against a three-across grid, which is why its
-// last row always had one card sitting alone.
+// Nine, not ten: the index grid is `md:grid-cols-2 lg:grid-cols-3`
+// (BlogIndex.tsx, Task 8 -- review fix: this comment said `sm:grid-cols-2`,
+// which is a real, differently-costed utility that BlogIndex does not
+// actually use), so nine fills three complete rows on a desktop and leaves
+// no orphan card. The old /blogs page used ten against a three-across grid,
+// which is why its last row always had one card sitting alone.
 export const POSTS_PER_PAGE = 9;
 
 // A total Record over PostType, so a fourth type is a `tsc -b` failure here
