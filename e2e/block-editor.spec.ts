@@ -115,13 +115,84 @@ async function boxOf(handle: Locator, what: string): Promise<{ x: number; y: num
   return box;
 }
 
-async function startDragging(page: Page, handle: Locator): Promise<void> {
+// WHY THIS WAITS BEFORE IT PRESSES, and why the wait is on a named condition
+// rather than on a duration. This spec failed in two full-suite runs out of
+// three while passing every time on its own, and the reason is not contention
+// in the driver -- it is that the panel is still moving when the last picker
+// click returns.
+//
+// Measured under an 8x CPU throttle, which reproduces deterministically what
+// four Playwright workers do to one renderer. Sampling the handle every 50ms
+// after the third block is added:
+//
+//   t+0 to t+100ms   handle at y=384, scrollY=16082, body 17548px, no
+//                    validation output on screen at all
+//   t+150ms          the debounced validation pass lands: seven alerts and the
+//                    count summary render, the body grows to 17812, the
+//                    browser's scroll anchoring bumps scrollY to 16298, and the
+//                    handle moves to y=408
+//   t+150 to t+1450  nothing moves again, ever
+//
+// Press inside that window and the handle slides 24px out from under the
+// pointer before Chromium's 3px drag threshold is crossed, so the drag never
+// starts. Observed at the event level, same sequence, two throttle rates:
+//
+//   1x: mousedown SPAN[h=2] @435,400 scrollY=16082
+//       mousemove SPAN[h=2] @437,402 scrollY=16082  -> dragstart, drop, moved
+//   8x: mousedown SPAN[h=2] @435,400 scrollY=16082
+//       mousemove LI        @437,402 scrollY=16298  -> no dragstart, ever, and
+//       the whole gesture degrades to plain mousemoves and a mouseup
+//
+// The failure that reaches the report is "the order is unchanged", which reads
+// like a broken reorder and is nothing of the kind.
+//
+// So: wait for the pass, not for a number of milliseconds. The count summary is
+// what that pass renders, and a blank post always has something to fix, so this
+// is a condition with a name and it fails loudly if the validator ever stops
+// producing it. Then read the box only once it has stopped moving across two
+// frames, which covers anything else that might arrive late in future.
+async function startDragging(page: Page, panel: Locator, handle: Locator): Promise<void> {
+  await expect(
+    panel.getByLabel('What still needs fixing'),
+    'the debounced validation pass never landed, so the panel was still moving',
+  ).toBeVisible();
+
   await handle.scrollIntoViewIfNeeded();
+  await expect
+    .poll(
+      async () =>
+        handle.evaluate(
+          (el) =>
+            new Promise<boolean>((resolve) => {
+              const before = el.getBoundingClientRect();
+              requestAnimationFrame(() =>
+                requestAnimationFrame(() => {
+                  const after = el.getBoundingClientRect();
+                  resolve(before.x === after.x && before.y === after.y);
+                }),
+              );
+            }),
+        ),
+      { message: 'the handle never stopped moving, so a drag pressed on it could not have started' },
+    )
+    .toBe(true);
+
   const box = await boxOf(handle, 'the handle the drag starts on');
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.down();
   // Still on the handle. This is the move `dragTo` never makes.
   await page.mouse.move(box.x + box.width / 2 + 6, box.y + box.height / 2 + 6, { steps: 3 });
+
+  // Defence in depth, and a named failure instead of a silent one. If the page
+  // moves anyway, this says so here rather than fifty lines later as an array
+  // that did not change -- which is how the same defect cost two rounds.
+  const stillOnTheHandle = await handle.evaluate((el, point: { x: number; y: number }) => {
+    const under = document.elementFromPoint(point.x, point.y);
+    return under !== null && (under === el || el.contains(under));
+  }, { x: box.x + box.width / 2 + 6, y: box.y + box.height / 2 + 6 });
+  expect(stillOnTheHandle, 'the page moved under the pointer between the press and the nudge, so no drag started').toBe(
+    true,
+  );
 }
 
 async function dropOnto(page: Page, handle: Locator): Promise<void> {
@@ -160,7 +231,7 @@ test.describe('the block editor', () => {
     expect(await kindsOf(post)).toEqual(['Heading', 'Bulleted list', 'Quote']);
 
     // The drag: the third block's handle onto the first block's row.
-    await startDragging(page, post.locator('[data-drag-handle="2"]'));
+    await startDragging(page, panel, post.locator('[data-drag-handle="2"]'));
     await dropOnto(page, post.locator('[data-drag-handle="0"]'));
 
     // A MOVE, not a swap: Quote goes to the top and the other two slide down. A
@@ -184,7 +255,7 @@ test.describe('the block editor', () => {
     await post.getByRole('button', { name: /^Quote/ }).click();
 
     await expect(rowOf(post, 0)).toHaveCSS('opacity', '1');
-    await startDragging(page, post.locator('[data-drag-handle="0"]'));
+    await startDragging(page, panel, post.locator('[data-drag-handle="0"]'));
     await expect(rowOf(post, 0)).toHaveCSS('opacity', '0.5');
     // And only that one. The other row is not dimmed, so this is a statement
     // about WHICH block she has hold of rather than about the list looking faded.
