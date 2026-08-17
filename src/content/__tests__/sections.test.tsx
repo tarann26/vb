@@ -22,7 +22,7 @@ const BESPOKE_SECTIONS: BespokeSection[] = sections.filter(
 // map is: dropping a section here is a `tsc` failure, not silently reduced
 // coverage.
 const MARKER: Record<SectionId, string> = {
-  hero: copy.hero.reserveButton,
+  hero: copy.hero.reservationsLabel,
   ourStory: story.heading,
   atmosphere: copy.atmosphere.heading,
   food: copy.food.heading,
@@ -85,18 +85,28 @@ function sectionRoot(id: SectionId): HTMLElement | null {
 // Whether `id`'s marker text is present. Six of the seven ids scope the
 // lookup to that section's own root (see the SECTION_SELECTOR comment
 // above for why); `hero`'s root selector (`h1`) is a *descendant* of
-// Hero's content, not a container of it -- `copy.hero.reserveButton`
-// ("Reserve a Table") isn't inside the <h1> -- so scoping within it would
+// Hero's content, not a container of it -- `copy.hero.reservationsLabel`
+// ("For reservations") isn't inside the <h1> -- so scoping within it would
 // wrongly report "absent" even when Hero renders normally. hero instead
 // gets an unscoped, whole-document lookup, which is safe because
-// `reserveButton` is verified to render nowhere else on the page (`grep
-// -rn "reserveButton" src/components/*.tsx` -- one hit, Hero.tsx) -- so
-// stubbing Hero to render nothing genuinely removes every instance of that
-// text, not just the one inside some root this check isn't scoped to. This
-// is the one marker not future-proofed against a later collision the way
-// the other six are (a deliberate trade against touching Hero.tsx's
-// production markup); if `copy.hero.reserveButton` is ever changed to
-// match text elsewhere on the page, this check would need re-auditing.
+// `reservationsLabel` is verified to render nowhere else on the page
+// (`grep -rn "reservationsLabel" src/components/*.tsx` -- two hits,
+// Hero.tsx and Footer.tsx, and Footer's own copy.footer.reservationsLabel
+// is a distinct string, "For Reservations:") -- so stubbing Hero to render
+// nothing genuinely removes every instance of Hero's own text, not just
+// the one inside some root this check isn't scoped to. This is the one
+// marker not future-proofed against a later collision the way the other
+// six are (a deliberate trade against touching Hero.tsx's production
+// markup); if `copy.hero.reservationsLabel` is ever changed to match text
+// elsewhere on the page, this check would need re-auditing.
+//
+// Owner request, 2026-08-17: this marker used to be `copy.hero.reserveButton`
+// ("Reserve a Table"), until the Reserve a Table button itself was removed
+// from Hero.tsx -- see that commit's brief. The value still exists in
+// copy.json (COPY_FIELDS keeps it; deleting it would break the owner's next
+// /edit publish) but nothing renders it any more, so it stopped being able
+// to prove Hero rendered at all. `reservationsLabel` is the next line down
+// in the same block and was already confirmed unique.
 function sectionMarkerPresent(id: SectionId): boolean {
   if (id === 'hero') {
     return screen.queryAllByText(MARKER.hero).length > 0;

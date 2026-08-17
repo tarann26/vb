@@ -363,8 +363,8 @@ describe('EditMode: a 401 mid-load does not unmount the page or lose what alread
     let copyCalls = 0;
     let dishesCalls = 0;
     // If copy.json were wrongly re-fetched after the re-login, THIS is what
-    // would land on screen instead of the original reserve-button text.
-    const CLOBBERED_COPY: Copy = { ...COPY, hero: { ...COPY.hero, reserveButton: 'CLOBBERED-IF-REFETCHED' } };
+    // would land on screen instead of the original reservations-label text.
+    const CLOBBERED_COPY: Copy = { ...COPY, hero: { ...COPY.hero, reservationsLabel: 'CLOBBERED-IF-REFETCHED' } };
     const REAL_DISHES: Dish[] = [
       { id: 'after-relogin', name: 'Loaded After Re-Login', description: 'x', image: '/x.jpg', tags: [] },
     ];
@@ -406,7 +406,7 @@ describe('EditMode: a 401 mid-load does not unmount the page or lose what alread
     );
 
     // copy.json loaded on the first pass.
-    expect(await screen.findByRole('button', { name: COPY.hero.reserveButton })).toBeInTheDocument();
+    expect(await screen.findByText(COPY.hero.reservationsLabel)).toBeInTheDocument();
     expect(copyCalls).toBe(1);
 
     // dishes.json 401'd -- the corrected notice appears (Fix 1's other
@@ -415,7 +415,7 @@ describe('EditMode: a 401 mid-load does not unmount the page or lose what alread
     // yet).
     expect(await screen.findByLabelText(/password/i)).toBeInTheDocument();
     expect(await screen.findByText(/whatever has already loaded will stay exactly as it was.*whatever hasn't will load now/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: COPY.hero.reserveButton })).toBeInTheDocument();
+    expect(screen.getByText(COPY.hero.reservationsLabel)).toBeInTheDocument();
 
     await user.type(screen.getByLabelText(/password/i), 'whatever-the-real-password-is');
     await user.click(screen.getByRole('button', { name: /log in/i }));
@@ -425,7 +425,7 @@ describe('EditMode: a 401 mid-load does not unmount the page or lose what alread
     // The button still shows the ORIGINAL text; the second fixture's text
     // never appears.
     expect(copyCalls).toBe(1);
-    expect(screen.getByRole('button', { name: COPY.hero.reserveButton })).toBeInTheDocument();
+    expect(screen.getByText(COPY.hero.reservationsLabel)).toBeInTheDocument();
     expect(screen.queryByText('CLOBBERED-IF-REFETCHED')).not.toBeInTheDocument();
 
     // Half 2 -- refilled: dishes.json WAS retried after the re-login, and
@@ -479,7 +479,7 @@ describe('EditMode: a 401 mid-load does not unmount the page or lose what alread
 
     await waitFor(() => expect(screen.queryByLabelText(/password/i)).not.toBeInTheDocument());
     // The page is not a permanent blank -- real content loaded on retry...
-    expect(await screen.findByRole('button', { name: COPY.hero.reserveButton })).toBeInTheDocument();
+    expect(await screen.findByText(COPY.hero.reservationsLabel)).toBeInTheDocument();
     // ...and the loading banner is gone, not stuck forever.
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
   });
@@ -498,9 +498,9 @@ describe('EditMode: a 401 mid-load does not unmount the page or lose what alread
       </MemoryRouter>,
     );
 
-    // The rest of the page still renders -- e.g. the reserve button, which
-    // depends only on copy.json (unaffected here).
-    expect(await screen.findByRole('button', { name: COPY.hero.reserveButton })).toBeInTheDocument();
+    // The rest of the page still renders -- e.g. the reservations label,
+    // which depends only on copy.json (unaffected here).
+    expect(await screen.findByText(COPY.hero.reservationsLabel)).toBeInTheDocument();
     // The failure is reported, naming the file...
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent(/press\.json/);
@@ -531,7 +531,7 @@ describe('EditMode: a 401 mid-load does not unmount the page or lose what alread
 
     // The rest of the page still renders, same as any other file's own
     // independent load.
-    expect(await screen.findByRole('button', { name: COPY.hero.reserveButton })).toBeInTheDocument();
+    expect(await screen.findByText(COPY.hero.reservationsLabel)).toBeInTheDocument();
     // Give every other load effect the same settling window the sibling
     // test above relies on implicitly (its own `findByRole('alert')` await)
     // -- here there is deliberately nothing to find, so this waits on the
@@ -625,24 +625,12 @@ describe('EditMode: the page\'s own links do not fire', () => {
     delete (window.navigator as { sendBeacon?: unknown }).sendBeacon;
   });
 
-  it('clicking the reserve button fires no beacon and opens no window', async () => {
-    stubFetch();
-    const beaconSpy = vi.fn(() => true);
-    Object.defineProperty(window.navigator, 'sendBeacon', { value: beaconSpy, configurable: true });
-    const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);
-
-    render(
-      <MemoryRouter>
-        <EditMode />
-      </MemoryRouter>,
-    );
-
-    const button = await screen.findByRole('button', { name: COPY.hero.reserveButton });
-    fireEvent.click(button);
-
-    expect(beaconSpy).not.toHaveBeenCalled();
-    expect(openSpy).not.toHaveBeenCalled();
-  });
+  // Owner request, 2026-08-17: the Reserve a Table button this test used to
+  // click was removed from Hero.tsx -- see that commit's brief. There is no
+  // remaining WhatsApp-opening control on the homepage for this describe
+  // block's "the page's own links do not fire" concern to cover; the Maps
+  // link and menu-download link tests below are unaffected and still prove
+  // the same class of thing for the controls that do still exist.
 
   it('clicking the Visit Us Maps link does not navigate -- preventDefault fires on the anchor itself', async () => {
     stubFetch();
@@ -690,7 +678,7 @@ describe('EditMode: the page\'s own links do not fire', () => {
     expect(screen.queryByText('BLOG PAGE SENTINEL')).not.toBeInTheDocument();
     // Still on /edit: a section untouched by the click (Hero, which reads
     // none of posts.json) is still right there.
-    expect(screen.getByRole('button', { name: COPY.hero.reserveButton })).toBeInTheDocument();
+    expect(screen.getByText(COPY.hero.reservationsLabel)).toBeInTheDocument();
   });
 
   // The other case the same review finding names as uncovered: Drinks'
@@ -782,8 +770,8 @@ describe('EditMode: in-page navigation and page chrome are not blocked (post-rev
     input.addEventListener('click', inputClickSpy);
     // `fireEvent.click`'s own return value is `!event.defaultPrevented` --
     // `true` here is what a fixed guard must produce (the mirror image of
-    // the "reserve button"/"Maps link" tests above, which assert `false`
-    // for the clicks that must stay blocked).
+    // the Maps-link test above, which asserts `false` for the click that
+    // must stay blocked).
     expect(fireEvent.click(control)).toBe(true);
     expect(inputClickSpy).toHaveBeenCalledTimes(1);
   });
@@ -831,7 +819,7 @@ describe('EditMode: one malformed content file does not take down the page', () 
       expect(await screen.findByText(/could not show menu/i)).toBeInTheDocument();
       // ...while an unrelated section (Hero, which never touches dishes)
       // still rendered normally.
-      expect(screen.getByRole('button', { name: COPY.hero.reserveButton })).toBeInTheDocument();
+      expect(screen.getByText(COPY.hero.reservationsLabel)).toBeInTheDocument();
     } finally {
       errorSpy.mockRestore();
     }
@@ -954,7 +942,7 @@ describe('EditMode: post-review Fix 6 -- /edit never emits a canonical link or R
       </MemoryRouter>,
     );
 
-    await screen.findByRole('button', { name: COPY.hero.reserveButton });
+    await screen.findByText(COPY.hero.reservationsLabel);
     expect(document.head.querySelector('link[rel="canonical"]')).toBeNull();
     expect(document.querySelector('script[type="application/ld+json"]')).toBeNull();
   });
@@ -1050,7 +1038,7 @@ describe('EditMode: post-review Fix 7 -- /edit and /edit/manage never resolve to
 // what's currently on screen in this file is proven: by what's rendered,
 // not by reaching into React internals.
 describe('EditMode: committing a text edit writes it back and it appears on screen', () => {
-  it('editing the reserve button and blurring replaces the displayed text with what she typed', async () => {
+  it('editing the reservations label and blurring replaces the displayed text with what she typed', async () => {
     stubFetch();
     render(
       <MemoryRouter>
@@ -1058,16 +1046,15 @@ describe('EditMode: committing a text edit writes it back and it appears on scre
       </MemoryRouter>,
     );
 
-    const button = await screen.findByRole('button', { name: COPY.hero.reserveButton });
-    const field = button.querySelector('[data-editable-path="hero.reserveButton"]');
-    expect(field).not.toBeNull();
+    const field = await screen.findByText(COPY.hero.reservationsLabel);
+    expect(field.getAttribute('data-editable-path')).toBe('hero.reservationsLabel');
 
-    fireEvent.focus(field!);
-    field!.textContent = 'Book Your Table Now';
-    fireEvent.blur(field!);
+    fireEvent.focus(field);
+    field.textContent = 'Book Your Table Now';
+    fireEvent.blur(field);
 
-    expect(await screen.findByRole('button', { name: 'Book Your Table Now' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: COPY.hero.reserveButton })).not.toBeInTheDocument();
+    expect(await screen.findByText('Book Your Table Now')).toBeInTheDocument();
+    expect(screen.queryByText(COPY.hero.reservationsLabel)).not.toBeInTheDocument();
   });
 
   // EditMode.tsx's own `copyLoaded` guard (buildBundle): committing an edit
@@ -1105,7 +1092,7 @@ describe('EditMode: committing a text edit writes it back and it appears on scre
     expect(container.querySelectorAll('[data-editable-path]')).toHaveLength(0);
 
     resolveCopy(contentResponse(COPY, 'sha-copy'));
-    await screen.findByRole('button', { name: COPY.hero.reserveButton });
+    await screen.findByText(COPY.hero.reservationsLabel);
     expect(container.querySelectorAll('[data-editable-path]').length).toBeGreaterThan(0);
   });
 });
@@ -1121,7 +1108,7 @@ describe('EditMode: committing a text edit writes it back and it appears on scre
 // send"): the Publish button itself stays enabled, this only tells her
 // sooner what a publish would already refuse.
 describe('EditMode: I8 -- client-side validation surfaces a problem before she ever clicks Publish', () => {
-  it('emptying the reserve button shows the validator\'s own message, without disabling Publish', async () => {
+  it('emptying the reservations label shows the validator\'s own message, without disabling Publish', async () => {
     stubFetch();
     render(
       <MemoryRouter>
@@ -1129,15 +1116,14 @@ describe('EditMode: I8 -- client-side validation surfaces a problem before she e
       </MemoryRouter>,
     );
 
-    const button = await screen.findByRole('button', { name: COPY.hero.reserveButton });
-    const field = button.querySelector('[data-editable-path="hero.reserveButton"]')!;
+    const field = await screen.findByText(COPY.hero.reservationsLabel);
     fireEvent.focus(field);
     field.textContent = '';
     fireEvent.blur(field);
 
     // useValidation's own 400ms debounce (useValidation.ts) -- findByText
     // polls until it fires rather than this test hardcoding a wait.
-    expect(await screen.findByText('content/copy.json: "hero.reserveButton" must not be blank')).toBeInTheDocument();
+    expect(await screen.findByText('content/copy.json: "hero.reservationsLabel" must not be blank')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Publish' })).not.toBeDisabled();
   });
 });
@@ -1208,7 +1194,7 @@ describe('EditMode: Minor -- a pre-existing DASHBOARD draft is mentioned, never 
       </MemoryRouter>,
     );
 
-    await screen.findByRole('button', { name: COPY.hero.reserveButton });
+    await screen.findByText(COPY.hero.reservationsLabel);
     expect(screen.queryByText(/unpublished changes saved on the dashboard/i)).not.toBeInTheDocument();
   });
 });
@@ -1236,7 +1222,7 @@ describe('EditMode: an edit survives a 401 mid-session -- Task 2\'s per-file fet
     let dishesCalls = 0;
     // What would land on screen instead if copy.json were wrongly
     // re-fetched after the re-login and clobbered her edit.
-    const CLOBBERED_COPY: Copy = { ...COPY, hero: { ...COPY.hero, reserveButton: 'CLOBBERED-IF-REFETCHED' } };
+    const CLOBBERED_COPY: Copy = { ...COPY, hero: { ...COPY.hero, reservationsLabel: 'CLOBBERED-IF-REFETCHED' } };
     const REAL_DISHES: Dish[] = [
       { id: 'after-relogin', name: 'Loaded After Re-Login', description: 'x', image: '/x.jpg', tags: [] },
     ];
@@ -1279,20 +1265,18 @@ describe('EditMode: an edit survives a 401 mid-session -- Task 2\'s per-file fet
 
     // copy.json loaded on the first pass -- commit a real edit to it before
     // anything else happens.
-    const button = await screen.findByRole('button', { name: COPY.hero.reserveButton });
+    const field = await screen.findByText(COPY.hero.reservationsLabel);
     expect(copyCalls).toBe(1);
-    const field = button.querySelector('[data-editable-path="hero.reserveButton"]');
-    expect(field).not.toBeNull();
-    fireEvent.focus(field!);
-    field!.textContent = 'MY EDIT SURVIVES';
-    fireEvent.blur(field!);
-    expect(await screen.findByRole('button', { name: 'MY EDIT SURVIVES' })).toBeInTheDocument();
+    fireEvent.focus(field);
+    field.textContent = 'MY EDIT SURVIVES';
+    fireEvent.blur(field);
+    expect(await screen.findByText('MY EDIT SURVIVES')).toBeInTheDocument();
 
     // dishes.json 401'd -- the login overlay appears over the still-mounted
     // page, exactly as Task 2 proved; her edit is still right there beneath
     // it.
     expect(await screen.findByLabelText(/password/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'MY EDIT SURVIVES' })).toBeInTheDocument();
+    expect(screen.getByText('MY EDIT SURVIVES')).toBeInTheDocument();
 
     await user.type(screen.getByLabelText(/password/i), 'whatever-the-real-password-is');
     await user.click(screen.getByRole('button', { name: /log in/i }));
@@ -1304,7 +1288,7 @@ describe('EditMode: an edit survives a 401 mid-session -- Task 2\'s per-file fet
     // an entry (her edit). Her edit is still on screen; the clobbered
     // fixture's text never appears.
     expect(copyCalls).toBe(1);
-    expect(screen.getByRole('button', { name: 'MY EDIT SURVIVES' })).toBeInTheDocument();
+    expect(screen.getByText('MY EDIT SURVIVES')).toBeInTheDocument();
     expect(screen.queryByText('CLOBBERED-IF-REFETCHED')).not.toBeInTheDocument();
 
     // And the file that genuinely 401'd was retried and filled in, matching
@@ -1828,11 +1812,16 @@ describe('Plan 7, Task 5: a template section\'s own photo replacement writes bac
 // and clears under the 'edit' draft key and never the dashboard's, and that
 // the self-conflict wording (Step 3) actually reaches the screen from here.
 describe('Plan 5 Task 5: publishing from /edit', () => {
-  async function editReserveButton() {
-    const button = await screen.findByRole('button', { name: COPY.hero.reserveButton });
-    const field = button.querySelector('[data-editable-path="hero.reserveButton"]')!;
+  // Owner request, 2026-08-17: this used to edit the Reserve a Table button
+  // (`hero.reserveButton`), removed from Hero.tsx along with its in-place
+  // affordance -- see that commit's brief. `hero.reservationsLabel` is the
+  // next hero leaf over ("For reservations"), still in-place editable, and
+  // every test below only needs SOME real committed edit to drive the
+  // publish flow, not this specific one.
+  async function editReservationsLabel() {
+    const field = await screen.findByText(COPY.hero.reservationsLabel);
     fireEvent.focus(field);
-    field.textContent = 'Reserve Your Table';
+    field.textContent = 'Call Us to Reserve';
     fireEvent.blur(field);
     return field;
   }
@@ -1853,7 +1842,7 @@ describe('Plan 5 Task 5: publishing from /edit', () => {
       </MemoryRouter>,
     );
 
-    await editReserveButton();
+    await editReservationsLabel();
     await waitFor(() => expect(loadDraft('edit')).not.toBeNull());
 
     const publishButton = await screen.findByRole('button', { name: 'Publish' });
@@ -1879,7 +1868,7 @@ describe('Plan 5 Task 5: publishing from /edit', () => {
       </MemoryRouter>,
     );
 
-    await editReserveButton();
+    await editReservationsLabel();
     await waitFor(() => expect(loadDraft('edit')).not.toBeNull());
 
     expect(loadDraft('edit')).toEqual({ 'copy.json': expect.objectContaining({ data: expect.anything() }) });
@@ -1899,7 +1888,7 @@ describe('Plan 5 Task 5: publishing from /edit', () => {
       </MemoryRouter>,
     );
 
-    await editReserveButton();
+    await editReservationsLabel();
     const publishButton = await screen.findByRole('button', { name: 'Publish' });
     fireEvent.click(publishButton);
     acceptPublishConfirm();
@@ -1927,7 +1916,7 @@ describe('Plan 5 Task 5: publishing from /edit', () => {
           <EditMode />
         </MemoryRouter>,
       );
-      await editReserveButton();
+      await editReservationsLabel();
       fireEvent.click(await screen.findByRole('button', { name: 'Publish' }));
       acceptPublishConfirm();
     }
@@ -1939,7 +1928,7 @@ describe('Plan 5 Task 5: publishing from /edit', () => {
           <EditMode />
         </MemoryRouter>,
       );
-      await screen.findByRole('button', { name: COPY.hero.reserveButton });
+      await screen.findByText(COPY.hero.reservationsLabel);
       expect(document.querySelector('[data-editable-path="hero.logoName"]')?.getAttribute('contenteditable')).toBe('true');
       unmount();
       vi.unstubAllGlobals();
@@ -2122,7 +2111,7 @@ describe('Plan 5 Task 5: publishing from /edit', () => {
       </MemoryRouter>,
     );
 
-    await editReserveButton();
+    await editReservationsLabel();
     fireEvent.click(await screen.findByRole('button', { name: 'Publish' }));
 
     expect(screen.getByRole('dialog', { name: /publish/i })).toBeInTheDocument();
@@ -2136,7 +2125,7 @@ describe('Plan 5 Task 5: publishing from /edit', () => {
   // built this recovery flow for in the first place -- a draft saved but
   // never offered back would be strictly worse than not saving one at all).
   it('a pre-existing edit-mode draft is offered on load, never auto-applied, and Restore puts it on screen', async () => {
-    const draftCopy: Copy = { ...COPY, hero: { ...COPY.hero, reserveButton: 'Restored From Draft' } };
+    const draftCopy: Copy = { ...COPY, hero: { ...COPY.hero, reservationsLabel: 'Restored From Draft' } };
     saveDraft('edit', { 'copy.json': { data: draftCopy, savedAt: 5_000 } });
 
     stubFetch();
@@ -2147,7 +2136,7 @@ describe('Plan 5 Task 5: publishing from /edit', () => {
     );
 
     // Never auto-applied: the server's own value is what's on screen first.
-    expect(await screen.findByRole('button', { name: COPY.hero.reserveButton })).toBeInTheDocument();
+    expect(await screen.findByText(COPY.hero.reservationsLabel)).toBeInTheDocument();
     expect(screen.queryByText('Restored From Draft')).not.toBeInTheDocument();
 
     const banner = await screen.findByRole('alert', { name: '' });
@@ -2169,7 +2158,7 @@ describe('Plan 5 Task 5: publishing from /edit', () => {
 
     fireEvent.click(within(banner).getByRole('button', { name: 'Restore' }));
 
-    expect(await screen.findByRole('button', { name: 'Restored From Draft' })).toBeInTheDocument();
+    expect(await screen.findByText('Restored From Draft')).toBeInTheDocument();
     expect(screen.queryByText(/unsaved changes/i)).not.toBeInTheDocument();
   });
 

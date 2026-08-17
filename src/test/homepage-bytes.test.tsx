@@ -226,6 +226,26 @@ import { AppRoutes } from '../App';
 // The section id (`press`), the `#blogs` anchor and both `press.heading`/
 // `press.intro` copy leaves are byte-identical before and after; only the
 // cards, the through-link and the nav label moved.
+//
+// Owner request, 2026-08-17: 48404 -> 48074 (-330 bytes). Two removals in
+// the same commit, measured separately by toggling each file back to its
+// HEAD content in isolation (not estimated):
+//
+//   -191  the Reserve a Table button leaving Hero.tsx entirely:
+//         `<button class="bg-brand hover:bg-brand-dark text-ink px-8 py-4
+//         rounded-lg font-semibold uppercase tracking-wide shadow-lg
+//         hover:shadow-xl transition-all duration-300">Reserve a
+//         Table</button>`. `copy.hero.reserveButton`'s value is untouched
+//         (see editable-paths.ts's own comment on why the leaf itself
+//         stays); this is only the markup that painted it.
+//   -139  `site.json`'s second phone number leaving `site.phones`, which
+//         drops one `<p>` in each of the two places that map over the
+//         array: Hero's reservation block (-98, `<p class="font-['Open_
+//         Sans'] text-lg font-semibold text-ink whitespace-nowrap">+91
+//         92117 91188</p>`) and the footer (-41, `<p class="text-
+//         white">+91 92117 91188</p>`).
+//
+// Sum: -191 + -139 = -330, matching the whole-page delta exactly.
 describe('homepage byte count', () => {
   it('the public homepage is unchanged', () => {
     const { container } = render(
@@ -233,6 +253,6 @@ describe('homepage byte count', () => {
         <AppRoutes />
       </MemoryRouter>,
     );
-    expect(new TextEncoder().encode(container.innerHTML).length).toBe(48404);
+    expect(new TextEncoder().encode(container.innerHTML).length).toBe(48074);
   });
 });

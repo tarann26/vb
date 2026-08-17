@@ -29,6 +29,14 @@ describe('copy-rendered', () => {
     vi.resetModules();
   });
 
+  // `copy.hero.reserveButton` dropped out of this test's coverage on
+  // 2026-08-17: the Reserve a Table button it used to prove was removed
+  // from Hero.tsx (owner request), and nothing renders that leaf any more
+  // -- the same reason BlogsPage's test below no longer claims its five
+  // orphaned fields are "editable", not "unread". The value and its
+  // COPY_FIELDS descriptor both still exist (copy.json, fields.ts); there
+  // is just no DOM assertion left that could prove either "read" or
+  // "hardcoded", because there is no render site to check.
   it('Hero renders site.name/site.tagline and copy.hero fields from content, not hardcoded literals', async () => {
     vi.resetModules();
     vi.doMock('../../content', async () => {
@@ -43,7 +51,6 @@ describe('copy-rendered', () => {
             logoName: 'Fixture Logo Circle Name',
             logoTagline: 'Fixture Logo Circle Tagline',
             reservationsLabel: 'Fixture Reservations Label',
-            reserveButton: 'Fixture Reserve Button',
           },
         },
       };
@@ -64,7 +71,6 @@ describe('copy-rendered', () => {
     expect(screen.getByText('Fixture Logo Circle Name')).toBeInTheDocument();
     expect(screen.getByText('Fixture Logo Circle Tagline')).toBeInTheDocument();
     expect(screen.getByText('Fixture Reservations Label')).toBeInTheDocument();
-    expect(screen.getByText('Fixture Reserve Button')).toBeInTheDocument();
   });
 
   // Drinks.tsx is now a single FoodGallery-style photo carousel (the three

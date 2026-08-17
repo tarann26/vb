@@ -3,12 +3,14 @@ import { render, fireEvent } from '@testing-library/react';
 import WhatsAppButton from '../WhatsAppButton';
 import { site } from '../../../content';
 
-// Mirrors Hero.test.tsx's own "the Reserve a Table button" describe block --
+// Mirrored Hero.test.tsx's own "the Reserve a Table button" describe block --
 // same mutations, same reasoning -- since this component's own header
 // comment records that it reuses Hero.tsx's `/api/wa` beacon path exactly
-// (Plan 7, Task 2, Step 2's decision). A regression here is the identical
-// class of defect that block's own comments already document in detail;
-// not repeated at the same length here.
+// (Plan 7, Task 2, Step 2's decision). That Hero.tsx block (and the button
+// it tested) is gone now, removed by owner request 2026-08-17 -- see that
+// commit's brief -- but the reasoning it recorded still applies to THIS
+// component's own openWhatsApp, which is untouched and still real
+// production code; not repeated at the same length here.
 describe('WhatsAppButton', () => {
   afterEach(() => {
     vi.restoreAllMocks();
