@@ -38,13 +38,16 @@ import type {
   Award,
   Experience,
   ChefIntro,
+  Post,
 } from '../content/types';
 // The runtime list of gallery layouts, not a second copy of it. guards.ts
 // holds the one array (checked exhaustive against the union at compile
 // time) that assertTemplateContent and validateTemplateContentFields both
 // test against, so the select below cannot offer her a layout the server
 // then refuses -- or miss one it would have accepted.
-import { GALLERY_LAYOUTS } from '../content/guards';
+// POST_TYPES joins it for the identical reason -- the one array checked
+// exhaustive against the PostType union at compile time.
+import { GALLERY_LAYOUTS, POST_TYPES } from '../content/guards';
 import type { UploadCategory } from '../shared/upload-categories';
 
 // `kind` is a function of the field's *value type*, not a fixed union
@@ -312,6 +315,66 @@ export const EXPERIENCE_FIELDS: FieldsOf<Experience> = {
     kind: 'toggle',
     help: 'A coming-soon item shows a stamp and does not open anything. Turn this off only once it has a page to open.',
   },
+};
+
+// ---------------------------------------------------------------------------
+// Post -- and the one record type in this file that CANNOT be described whole.
+//
+// `FieldsOf<Post>` is uninhabitable, and that is a fact about the type system
+// rather than a limitation of this file. FieldsOf demands a FieldSpec for
+// every key of Required<T>; FieldSpec<V>'s three branches are all keyed on
+// Kind<V>; and Kind<Block[]> matches none of Kind's five cases, so it is
+// `never`, so no value of any shape satisfies it. Confirmed with a probe
+// module: `blocks: { label: 'Blocks', kind: 'text' }` inside a
+// FieldsOf<Post> fails `tsc -b` with TS2322 "Type 'string' is not assignable
+// to type 'never'".
+//
+// So blocks are edited entirely outside FieldsOf/RecordForm -- the same
+// decision GalleryList.tsx and StoryForm.tsx already took for an array-valued
+// field, and the same `FieldsOf<Pick<...>>` shape GALLERY_IMAGE_FIELDS above
+// already uses. PostList.tsx renders RecordForm<PostMeta> for the scalars and
+// BlockList for the rest.
+export type PostMeta = Omit<Post, 'blocks'>;
+
+export const POST_FIELDS: FieldsOf<PostMeta> = {
+  id: {
+    label: 'ID',
+    kind: 'text',
+    help: 'A short identifier used only to tell posts apart -- changing it does not rename or relink anything else.',
+  },
+  // The web address, and the one field that is expensive to change after
+  // publishing: an inbound link to the old one stops working. Said here
+  // rather than left for her to find out, because nothing in this dashboard
+  // can add a redirect on her behalf.
+  slug: {
+    label: 'Web address',
+    kind: 'text',
+    help: 'The last part of the post’s address, e.g. "spaghetti-all-assassina" for /blog/spaghetti-all-assassina. Letters a-z, numbers and hyphens only. Changing it after the post is live breaks any link anyone already has to it.',
+  },
+  // Options come from POST_TYPES (src/content/guards.ts), the one array that
+  // is checked exhaustive against the PostType union at compile time -- the
+  // same reason SECTION_FIELDS reads GALLERY_LAYOUTS rather than retyping
+  // three strings. A select that could offer a type the validator refuses,
+  // or miss one it accepts, is the failure this avoids.
+  type: {
+    label: 'Kind of post',
+    kind: 'select',
+    options: POST_TYPES,
+    help: 'A recipe is something to cook, a story is something to read, and a mention is somebody else writing about the restaurant.',
+  },
+  title: { label: 'Title', kind: 'text' },
+  date: { label: 'Published on', kind: 'date' },
+  excerpt: {
+    label: 'Short summary',
+    kind: 'textarea',
+    help: 'One or two sentences. This is what shows on the card, not in the post itself.',
+  },
+  // 'posts', the ninth upload category (src/shared/upload-categories.ts) and
+  // the first one added for a content type rather than reused from a
+  // neighbour -- unlike AWARD_FIELDS.image, which borrows 'press'. A post
+  // photo is a full-width figure and a press logo is a small badge; sharing a
+  // directory would mean sharing a max width neither wants.
+  image: { label: 'Card photo', kind: 'image', category: 'posts' },
 };
 
 // ---------------------------------------------------------------------------

@@ -29,6 +29,7 @@ import {
   TEMPLATE_SECTION_ID_FIELD,
   PAGE_FIELDS,
   PAGE_SEO_FIELDS,
+  POST_FIELDS,
 } from '../fields';
 import { UPLOAD_CATEGORIES } from '../../shared/upload-categories';
 
@@ -69,6 +70,11 @@ describe('every descriptor has a non-empty label and a real kind', () => {
   it('WHATSAPP_BUTTON_FIELDS', () => checkSpecs(WHATSAPP_BUTTON_FIELDS));
   it('PAGE_FIELDS', () => checkSpecs(PAGE_FIELDS));
   it('PAGE_SEO_FIELDS', () => checkSpecs(PAGE_SEO_FIELDS));
+  // Phase 5B, Task 4. Added by hand, and the sweeps in this file are the
+  // reason: every describe block here names its descriptors explicitly, so a
+  // new one is picked up by NOTHING until it is listed -- the task brief said
+  // this file's checks would find POST_FIELDS on their own, and they do not.
+  it('POST_FIELDS', () => checkSpecs(POST_FIELDS));
   it('GALLERY_LAYOUT_FIELD / TEMPLATE_SECTION_ID_FIELD (bare FieldSpecs, not FieldsOf)', () => {
     checkSpecs({ layout: GALLERY_LAYOUT_FIELD, sectionId: TEMPLATE_SECTION_ID_FIELD });
   });
@@ -162,7 +168,15 @@ describe("every real 'image'-kind descriptor carries a category the Worker actua
     expect(imageCategory(ARTICLE_FIELDS.image)).toBe('press');
   });
 
-  it.each([DISH_FIELDS.image, DRINK_FIELDS.image, ARTICLE_FIELDS.image])(
+  // 'posts', not 'press': a post's card photo is a full-width figure and a
+  // press logo is a small badge, so sharing a directory would mean sharing a
+  // max width neither wants (scripts/paths.mjs's DIR_MAX_WIDTH).
+  it('POST_FIELDS.image is category "posts" -- its own directory, not press\'s', () => {
+    expect(POST_FIELDS.image.kind).toBe('image');
+    expect(imageCategory(POST_FIELDS.image)).toBe('posts');
+  });
+
+  it.each([DISH_FIELDS.image, DRINK_FIELDS.image, ARTICLE_FIELDS.image, POST_FIELDS.image])(
     'category is a real, known upload category',
     (spec) => {
       expect(UPLOAD_CATEGORIES).toContain(imageCategory(spec));
@@ -281,6 +295,39 @@ describe('exactly the expected fields are kind: readonly or kind: select -- noth
       ['name', 'seo.description', 'seo.keywords', 'seo.locale', 'seo.ogImage', 'seo.title', 'seo.url', 'tagline'].sort(),
     );
     expect(keysWithKind(SITE_FIELDS, 'select')).toEqual([]);
+  });
+
+  it('POST_FIELDS: type is the only select field, nothing is readonly', () => {
+    expect(keysWithKind(POST_FIELDS, 'select')).toEqual(['type']);
+    expect(keysWithKind(POST_FIELDS, 'readonly')).toEqual([]);
+  });
+});
+
+// Phase 5B, Task 4. POST_FIELDS describes `Omit<Post, 'blocks'>` rather than
+// Post, and it is not a style choice: FieldsOf<Post> is uninhabitable because
+// Kind<Block[]> resolves to `never` (see that descriptor's own comment in
+// fields.ts). The compile-time half of that is the `Omit` itself; this is the
+// runtime half, the same shape GALLERY_IMAGE_FIELDS' own "declares ONLY alt"
+// check takes -- Object.keys is what actually observes there is no `blocks`
+// entry, not merely that reading one would fail to type-check.
+describe('POST_FIELDS covers every scalar field of a post and nothing else', () => {
+  it('declares no entry for blocks -- BlockList edits those, not RecordForm', () => {
+    expect(Object.keys(POST_FIELDS)).not.toContain('blocks');
+  });
+
+  it('declares every other key of Post', () => {
+    expect(Object.keys(POST_FIELDS).sort()).toEqual(['date', 'excerpt', 'id', 'image', 'slug', 'title', 'type']);
+  });
+
+  // Hand-written, never imported from guards.ts: POST_FIELDS.type.options IS
+  // POST_TYPES, so comparing the two would compare a list to itself and stay
+  // green if that array ever drifted from what isPostType accepts. Same
+  // reasoning as DRINK_FIELDS.category above.
+  it('the type select offers exactly the three kinds isPostType accepts', () => {
+    const spec = POST_FIELDS.type;
+    expect(spec.kind).toBe('select');
+    if (spec.kind !== 'select') throw new Error('unreachable -- asserted above');
+    expect([...spec.options].sort()).toEqual(['mention', 'recipe', 'story']);
   });
 });
 

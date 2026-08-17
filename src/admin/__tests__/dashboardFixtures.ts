@@ -132,6 +132,21 @@ export function stubFetch(dishesResponse: Promise<Response> | Response = content
       // mounted"), so any test that renders the dashboard at all now reaches
       // this branch, not only tests that visit the Pages area.
       if (url.includes('experiences.json')) return contentResponse(EXPERIENCES, 'sha-experiences');
+      // Phase 5B, Task 4: posts.json, and it has to arrive in the SAME commit
+      // as the panel that fetches it. PostsArea mounts unconditionally in the
+      // `story` area, so without this branch the stub throws, PostsArea reads
+      // that as a genuine load failure, and every test that renders the
+      // dashboard at all gains a second "needs attention" marker that has
+      // nothing to do with what it is asserting -- the exact shape Task 11's
+      // awards.json comment above records.
+      //
+      // An empty list with a real sha, like pages.json and awards.json and
+      // unlike experiences.json: validatePosts accepts `[]` (there is no "the
+      // blog needs at least one post" rule -- a restaurant with no posts yet
+      // is a normal state), so `[]` produces no problems and no spurious
+      // marker. A test that needs real posts overrides this one path; see
+      // areas/__tests__/PostsArea.test.tsx.
+      if (url.includes('posts.json')) return contentResponse([], 'sha-posts');
       throw new Error(`dashboardFixtures: unexpected fetch to ${url}`);
     }),
   );
