@@ -29,6 +29,7 @@
 import { chromium } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
+import { postsDriftProblems } from './published-posts-check.mjs';
 
 const SITE = process.env.VB_SITE ?? 'https://vb.aionxxxi.uk';
 const ORIGIN = new URL(SITE).origin;
@@ -235,6 +236,48 @@ if (!/json/i.test(health.headers.get('content-type') ?? '')) {
   failures.push(`the deployed Worker is STALE -- run \`npx wrangler deploy\` (missing ${missingWorkerHeaders.join(', ')})`);
 } else {
   note('  ok    /api/health carries every header the current Worker sets');
+}
+
+// ---------------------------------------------------------------------------
+// 2c. Is the live blog BEHIND the repository?
+//
+// Phase 5B moved src/content/posts.json onto D1, and that created a window
+// nothing else here can see. Until the Worker carrying that change ships,
+// posts.json still routes to GitHub, so a publish landing between
+// `npx tsx scripts/seed-posts-d1.mjs` and `npx wrangler deploy` commits a post
+// to the repository and leaves the seeded D1 row stale -- and the deploy then
+// makes that stale row the live copy and HIDES the post she just published.
+// Silently, at HTTP 200, with the compiled-in fallback painting first so the
+// site looks completely healthy.
+//
+// Undetectable before the deploy; both artefacts are right here after it. A
+// slug the repository has and the live copy does not is the signature, and it
+// is the only direction that fails -- the reverse (she published since the
+// last sync) is the ordinary state of this system and is printed, not failed.
+// See scripts/published-posts-check.mjs for the full argument, and
+// docs/cloudflare-cutover.md for the sequence this defends.
+//
+// Read through the production hostname on purpose: /api/* is the Worker's
+// route, not a Pages asset, so none of the propagation-poisoning reasoning
+// that moved the asset checks onto the per-deployment URL applies to it.
+// ---------------------------------------------------------------------------
+note('\nthe live blog against the committed fallback:');
+const publishedPosts = await fetch(`${SITE}/api/published?path=posts.json`, { headers: { Origin: ORIGIN } });
+if (!publishedPosts.ok) {
+  note(`  FAIL  /api/published?path=posts.json answered ${publishedPosts.status}`);
+  failures.push(
+    `the blog read path answered ${publishedPosts.status} -- either the Worker is stale ` +
+      '(`npx wrangler deploy`) or the row was never seeded (`npx tsx scripts/seed-posts-d1.mjs`)',
+  );
+} else {
+  const { failures: drift, notes: driftNotes } = postsDriftProblems(
+    await publishedPosts.text(),
+    readFileSync('src/content/posts.json', 'utf8'),
+  );
+  for (const n of driftNotes) note(`  note  ${n}`);
+  for (const f of drift) note(`  FAIL  ${f}`);
+  failures.push(...drift);
+  if (drift.length === 0) note('  ok    every committed post is live');
 }
 
 // ---------------------------------------------------------------------------

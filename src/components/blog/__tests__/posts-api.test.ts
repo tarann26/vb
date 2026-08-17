@@ -69,6 +69,23 @@ describe('fetchPosts', () => {
     expect(await fetchPosts(respond(body))).toBeNull();
   });
 
+  // A 200 carrying something that is not JSON at all -- an intermediary's HTML
+  // error page is the realistic one. That is BAD DATA wearing a healthy
+  // status, so it takes the same "keep what you have" exit as a refused shape,
+  // NOT the throw a non-2xx takes. The distinction is what Tasks 10-12 branch
+  // on: an outage is worth telling a reader about, a body nobody can fix by
+  // retrying is not.
+  it('returns null when a healthy response carries a body that is not JSON', async () => {
+    const impl = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => {
+        throw new SyntaxError('Unexpected token < in JSON at position 0');
+      },
+    }) as unknown as typeof fetch;
+    expect(await fetchPosts(impl)).toBeNull();
+  });
+
   it('accepts an empty list, because a restaurant with no posts is not an error', async () => {
     expect(await fetchPosts(respond([]))).toEqual([]);
   });

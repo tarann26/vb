@@ -258,6 +258,19 @@ describe('a post that is only in the database', () => {
     expect(screen.queryByText(NOT_FOUND_HEADING)).toBeNull();
   });
 
+  // The role is a promise, so it is asserted rather than left as decoration --
+  // and asserted as `status` specifically. `alert` would announce this as a
+  // problem and would drag the line into FIRST_PROBLEM_SELECTOR
+  // ('[aria-describedby*="-error"], [role="alert"]'), which is what /edit
+  // jumps to; nothing is wrong here and nothing for her to fix.
+  it('announces the wait politely, and never as a problem', () => {
+    const { promise } = deferred();
+    stubFetch(() => promise);
+    renderAt('/blog/a-post-only-in-the-database');
+    expect(screen.getByRole('status')).toHaveTextContent('Loading this post…');
+    expect(document.querySelectorAll('[role="alert"]')).toHaveLength(0);
+  });
+
   it('renders the post once the fetch lands', async () => {
     stubFetchResolving(D1_ONLY);
     renderAt('/blog/a-post-only-in-the-database');
@@ -267,11 +280,22 @@ describe('a post that is only in the database', () => {
     expect(screen.getByText('A database paragraph.')).toBeInTheDocument();
   });
 
+  // The settle is driven by hand, inside act, rather than waited for with a
+  // polling findBy: "before" and "after" are then two assertions either side
+  // of one controlled event, and there is no interval in which the test could
+  // have observed either state by luck.
   it('renders NotFound only after the fetch settles, for a slug nothing has', async () => {
-    stubFetchResolving(D1_ONLY);
+    const { promise, settle } = deferred();
+    stubFetch(() => promise);
     renderAt('/blog/no-such-post');
     expect(screen.getByText('Loading this post…')).toBeInTheDocument();
-    expect(await screen.findByText(NOT_FOUND_HEADING)).toBeInTheDocument();
+    expect(screen.queryByText(NOT_FOUND_HEADING)).toBeNull();
+
+    await act(async () => {
+      settle({ ok: true, status: 200, json: async () => D1_ONLY });
+    });
+
+    expect(screen.getByText(NOT_FOUND_HEADING)).toBeInTheDocument();
     expect(screen.queryByText('Loading this post…')).toBeNull();
   });
 

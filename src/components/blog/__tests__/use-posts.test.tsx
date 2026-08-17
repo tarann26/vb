@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { usePosts } from '../use-posts';
 import { ContentProvider, defaultBundle } from '../../../content/ContentContext';
@@ -28,8 +28,24 @@ const ROW = [
   },
 ];
 
+// A second valid list, used only to be the WRONG answer: it is what a read
+// that has already been superseded would write if nothing stopped it.
+const STALE = [{ ...ROW[0], id: 'stale', slug: 'the-read-that-was-superseded' }];
+
+function responseOf(body: unknown) {
+  return { ok: true, status: 200, json: async () => body };
+}
+
 function respond(body: unknown) {
-  return vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => body }) as unknown as typeof fetch;
+  return vi.fn().mockResolvedValue(responseOf(body)) as unknown as typeof fetch;
+}
+
+function deferredResponse() {
+  let settle: (value: unknown) => void = () => undefined;
+  const promise = new Promise((resolve) => {
+    settle = resolve;
+  });
+  return { promise, settle };
 }
 
 describe('usePosts', () => {
@@ -76,6 +92,43 @@ describe('usePosts', () => {
     const { result } = renderHook(() => usePosts(impl), { wrapper: ContentWrapper });
     await waitFor(() => expect(result.current.status).toBe('loaded'));
     expect(result.current.posts.map((post) => post.slug)).toEqual(committed.map((post) => post.slug));
+  });
+
+  // The `cancelled` flag, tested on the property it actually protects.
+  //
+  // Deliberately NOT "unmount before it settles": in React 18 a setState on an
+  // unmounted component is a silent no-op -- the old "can't perform a React
+  // state update on an unmounted component" warning was removed in 18.0 -- so
+  // that test passes identically with the flag and without it. It would be
+  // unfalsifiable, and an unfalsifiable test costs exactly what a skipped one
+  // does. This exercises the same two lines through the case that IS
+  // observable: the effect re-runs, its cleanup cancels the first read, and
+  // the first read then lands LAST. Without the flag the superseded answer
+  // wins and the reader sees content that was already out of date when it
+  // arrived.
+  it('ignores a read that lands after a newer one has replaced it', async () => {
+    const first = deferredResponse();
+    const second = deferredResponse();
+    const implA = vi.fn().mockReturnValue(first.promise) as unknown as typeof fetch;
+    const implB = vi.fn().mockReturnValue(second.promise) as unknown as typeof fetch;
+
+    const { result, rerender } = renderHook(({ impl }: { impl: typeof fetch }) => usePosts(impl), {
+      wrapper: ContentWrapper,
+      initialProps: { impl: implA },
+    });
+    // Changing the injected fetch re-runs the effect, which runs the first
+    // one's cleanup on the way.
+    rerender({ impl: implB });
+
+    await act(async () => {
+      second.settle(responseOf(ROW));
+    });
+    await act(async () => {
+      first.settle(responseOf(STALE));
+    });
+
+    expect(result.current.posts.map((post) => post.slug)).toEqual(['a-post-only-in-the-database']);
+    expect(result.current.status).toBe('loaded');
   });
 
   // Pinning the negative: the committed list is not empty, so every

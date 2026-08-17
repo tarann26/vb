@@ -72,7 +72,20 @@ export default function PostPage() {
       <div className="min-h-screen bg-white">
         <NavBar offHomePage />
         <div className="max-w-3xl mx-auto px-4 py-20">
-          <p className={`font-['Open_Sans'] text-gray-600`}>Loading this post…</p>
+          {/* role="status", not role="alert": nothing here is a problem, and
+              alert is reserved for regions that carry one -- it would also put
+              this line inside FIRST_PROBLEM_SELECTOR, which is /edit's "take
+              me to what went wrong" query. A status region is the polite one,
+              and the promise it makes is one this screen actually keeps: the
+              text is advisory, it is not an error, and it does not steal
+              focus. What it buys is real on the path that matters most --
+              a reader following a link from /blog arrives by client-side
+              navigation, so this region is INSERTED into a live document and
+              is announced. On a cold load it is part of the first render and
+              is simply read in order, which is the honest limit of it. */}
+          <p role="status" className={`font-['Open_Sans'] text-gray-600`}>
+            Loading this post…
+          </p>
         </div>
         <Footer />
       </div>

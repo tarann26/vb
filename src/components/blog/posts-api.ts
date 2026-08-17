@@ -30,8 +30,15 @@ export const POSTS_ENDPOINT = '/api/published?path=posts.json';
 export async function fetchPosts(fetchImpl: typeof fetch = fetch): Promise<Post[] | null> {
   const response = await fetchImpl(POSTS_ENDPOINT);
   if (!response.ok) throw new Error(`the blog is unavailable (status ${response.status})`);
-  const parsed: unknown = await response.json();
   try {
+    // INSIDE the try, and the placement is the point rather than tidiness. A
+    // 200 whose body is not JSON at all -- an intermediary's HTML error page,
+    // a truncated write -- is BAD DATA arriving with a healthy status, not an
+    // outage. Parsing it outside this block made it reject out of here and
+    // land in usePosts's catch as `status: 'error'`, which is the opposite of
+    // what the comment below says this function promises, and Tasks 10-12
+    // consume that status.
+    const parsed: unknown = await response.json();
     return assertPosts(parsed);
   } catch {
     // Deliberately swallowed rather than rethrown, and the distinction

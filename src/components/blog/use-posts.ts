@@ -25,6 +25,34 @@ export interface PostsState {
   posts: Post[];
 }
 
+// NO TIMEOUT AND NO AbortController, decided rather than overlooked, and
+// written down here because the next person to read this will wonder.
+//
+// A response that HANGS -- open, silent, never settling -- leaves "Loading
+// this post…" on screen without a bound. That is real, and it is the only
+// visitor-facing state here with no end. It was still left alone:
+//
+//   - The blast radius is a URL that does not exist. A post in the
+//     compiled-in list never reaches the loading branch at all (PostPage
+//     checks `post` before `status`), and a post only in the database gets
+//     its content the moment the read lands. What a hang actually costs is a
+//     bogus /blog/<slug> its not-found screen -- a wrong screen on a URL
+//     that has nothing to show anyway.
+//   - A timeout trades that for something worse in the direction that
+//     matters. Firing on a slow connection turns a REAL post into a false
+//     not-found, which is precisely the defect this whole module exists to
+//     prevent, reintroduced from the other side. There is no interval that
+//     is right for both a congested mobile connection in Delhi and a fast
+//     one, and picking one means picking who gets the wrong answer.
+//   - A connection that genuinely dies rejects rather than hangs, and lands
+//     in the catch below: `status: 'error'`, committed posts, not-found
+//     rendered correctly. The unbounded case needs a peer that accepts the
+//     request and then says nothing, which is rare and clears on a reload.
+//
+// If this ever does need addressing, the right shape is not an abort but a
+// SECOND message -- "still loading, this is taking a while" -- which keeps
+// the read alive while telling the reader the truth. That is a design
+// decision with copy attached, not a patch.
 export function usePosts(fetchImpl: typeof fetch = fetch): PostsState {
   const { posts: committed } = useContent();
   const [state, setState] = useState<PostsState>({ status: 'loading', posts: committed });
