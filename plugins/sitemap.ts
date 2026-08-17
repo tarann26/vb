@@ -1,7 +1,7 @@
 import type { Plugin } from 'vite';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import type { Page } from '../src/content/types';
+import type { Page, Post } from '../src/content/types';
 
 // Plan 7, Task 3, Step 3: "a new page appears in ... the sitemap." Before
 // this task, public/sitemap.xml was a plain STATIC file -- `/` and `/blogs`
@@ -23,10 +23,28 @@ import type { Page } from '../src/content/types';
 // page exactly like a nonexistent one) and NotFound's own robots.txt-level
 // invisibility; advertising a URL in the sitemap that then 404s would be
 // actively counterproductive for search ranking, not merely unhelpful.
-export const STATIC_ROUTES = ['/', '/blogs'] as const;
+// Phase 5, Task 8: `/blog` joins the two hand-authored static routes, and
+// `/blogs` STAYS. It is a live URL that redirects rather than a dead one,
+// it has been in this file since the site launched, and a crawler that
+// follows it is what learns the new address -- dropping it would just make
+// the old links disappear from the index instead of moving.
+export const STATIC_ROUTES = ['/', '/blog', '/blogs'] as const;
 
 export function pageUrls(pages: Pick<Page, 'slug' | 'enabled'>[]): string[] {
   return pages.filter((page) => page.enabled).map((page) => `/${page.slug}`);
+}
+
+// Every committed post's own /blog/<slug>. There is no `enabled` flag on a
+// Post -- unlike a Page, an unpublished post is simply not in the file --
+// so every entry here is live by construction.
+//
+// STATED PLAINLY rather than left to be discovered: this reads the COMMITTED
+// posts.json at build time. Once sub-plan 5B moves the live copy to D1, a
+// post published between deploys is absent from sitemap.xml until the next
+// build, exactly as a story.json edit is absent from the Worker snapshot
+// until scripts/build-snapshot.mjs runs. 5B's sync script is what closes it.
+export function postUrls(posts: Pick<Post, 'slug'>[]): string[] {
+  return posts.map((post) => `/blog/${post.slug}`);
 }
 
 // `changefreq`/`priority` match public/sitemap.xml's own committed values
@@ -39,12 +57,19 @@ function urlEntry(baseUrl: string, route: string, priority: string): string {
   return `  <url>\n    <loc>${baseUrl}${route}</loc>\n    <changefreq>monthly</changefreq>\n    <priority>${priority}</priority>\n  </url>\n`;
 }
 
-export function buildSitemapXml(baseUrl: string, pages: Pick<Page, 'slug' | 'enabled'>[]): string {
-  const homeAndBlogs = STATIC_ROUTES.map((route, i) => urlEntry(baseUrl, route, i === 0 ? '1.0' : '0.7')).join('');
+export function buildSitemapXml(
+  baseUrl: string,
+  pages: Pick<Page, 'slug' | 'enabled'>[],
+  posts: Pick<Post, 'slug'>[] = [],
+): string {
+  const staticEntries = STATIC_ROUTES.map((route, i) => urlEntry(baseUrl, route, i === 0 ? '1.0' : '0.7')).join('');
   const pageEntries = pageUrls(pages)
     .map((route) => urlEntry(baseUrl, route, '0.7'))
     .join('');
-  return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${homeAndBlogs}${pageEntries}</urlset>\n`;
+  const postEntries = postUrls(posts)
+    .map((route) => urlEntry(baseUrl, route, '0.7'))
+    .join('');
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${staticEntries}${pageEntries}${postEntries}</urlset>\n`;
 }
 
 // `writeBundle`, not `closeBundle` -- the identical reasoning
@@ -56,7 +81,11 @@ export function buildSitemapXml(baseUrl: string, pages: Pick<Page, 'slug' | 'ena
 // plugin here has it -- Vitest never sees this file, so nothing in the
 // suite depends on the wall clock or on `pages` being importable from a
 // jsdom environment.
-export default function sitemap(baseUrl: string, pages: Pick<Page, 'slug' | 'enabled'>[]): Plugin {
+export default function sitemap(
+  baseUrl: string,
+  pages: Pick<Page, 'slug' | 'enabled'>[],
+  posts: Pick<Post, 'slug'>[] = [],
+): Plugin {
   let outDir = 'dist';
   return {
     name: 'sitemap',
@@ -66,7 +95,7 @@ export default function sitemap(baseUrl: string, pages: Pick<Page, 'slug' | 'ena
     },
     writeBundle() {
       mkdirSync(outDir, { recursive: true });
-      writeFileSync(path.join(outDir, 'sitemap.xml'), buildSitemapXml(baseUrl, pages));
+      writeFileSync(path.join(outDir, 'sitemap.xml'), buildSitemapXml(baseUrl, pages, posts));
     },
   };
 }

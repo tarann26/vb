@@ -1,14 +1,17 @@
 // The explicit list of dotted copy.json paths edit mode lets her rewrite in
 // place -- Plan 5 Task 3, Step 1. Derived from COPY_FIELDS
 // (src/admin/fields.ts, Plan 4 Task 2's flat map), not re-typed by hand: a
-// second, hand-copied 32-entry list here could silently drift from
+// second, hand-copied 27-entry list here could silently drift from
 // fields.ts the moment a field is added, renamed, or reclassified as
 // attribute-only there. src/admin/__tests__/editable-paths.test.tsx imports
 // this same constant for its own "recorded calls match exactly" check, so
-// there is exactly one place this 32-entry set is ever written down.
+// there is exactly one place this 27-entry set is ever written down.
+// (32 through Phase 5, Task 7; Task 8 retired five blogsPage.* leaves along
+// with BlogsPage.tsx's own route -- see the exclusion set's own comment,
+// below.)
 //
-// Three exclusions. The first two were decided by the edit mode plan's own
-// coverage table and are not re-litigated here:
+// Four exclusions now, not three. The first two were decided by the edit
+// mode plan's own coverage table and are not re-litigated here:
 //   - the five COPY_FIELDS leaves wired straight to an HTML attribute
 //     (an aria-label, or VisitUs.tsx's <iframe title>) rather than painted
 //     as visible text -- no component has a content.renderText call for
@@ -36,6 +39,12 @@
 //     under a real editing bundle and compares what it finds), so a future
 //     component that wrapped this leaf in renderText again would fail
 //     there.
+// The fourth is Phase 5, Task 8's: BlogsPage.tsx's own title, subtitle,
+//   back button and Previous/Next pagination labels, orphaned when /blogs
+//   became a redirect to /blog and BlogIndex.tsx -- a different component,
+//   with no header and no Previous/Next -- became what actually renders
+//   there. See the exclusion set's own comment, below, for the full
+//   reasoning and for why blogsPage.heading/intro are NOT part of it.
 import { COPY_FIELDS } from './fields';
 import type { Copy } from '../content/types';
 
@@ -54,6 +63,24 @@ const NOT_EDITABLE_IN_PLACE_COPY_FIELDS = new Set([
   'footer.linkedinLabel',
   // Painted as visible text, but inside a control that owns the click.
   'nav.pagesLabel',
+  // Phase 5, Task 8: BlogsPage.tsx stopped being routed -- /blogs is now a
+  // redirect to /blog (App.tsx), and BlogIndex.tsx is what renders there.
+  // These five were BlogsPage's own header title/subtitle, its "back to
+  // home" button, and its Previous/Next pagination labels -- none of which
+  // BlogIndex has an equivalent for (its own pagination is bare page
+  // numbers, not Previous/Next, and it carries no page header at all). Kept
+  // on disk in copy.json and BlogsPage.tsx under the owner's never-delete
+  // constraint, and still fully editable on the dashboard (COPY_FIELDS,
+  // below, is untouched) -- only the LIVE, in-place affordance is gone,
+  // because there is no longer a live element to put it on.
+  // (`blogsPage.heading`/`.intro` are NOT here: BlogIndex reuses those two
+  // keys for its own real heading and intro, through `renderText`, so they
+  // stay in EDITABLE_TEXT_PATHS below.)
+  'blogsPage.title',
+  'blogsPage.subtitle',
+  'blogsPage.back',
+  'blogsPage.previous',
+  'blogsPage.next',
 ]);
 
 // `readonly string[]`, not a narrowed literal union: `Object.keys(COPY_FIELDS)`

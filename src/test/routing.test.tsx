@@ -17,6 +17,8 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { site, assertPages } from '../content';
+import { ContentProvider, defaultBundle } from '../content/ContentContext';
+import { AppRoutes } from '../App';
 
 afterEach(() => {
   vi.doUnmock('../content');
@@ -33,6 +35,11 @@ async function renderAt(path: string) {
       // both refused by the real guard (guards.test.ts), injected here
       // anyway so this test proves the ROUTER's own behaviour rather than
       // the content guard's.
+      // posts: [] so the /blogs-redirects-to-/blog test below can assert
+      // BlogIndex's own empty state rather than depending on the three real
+      // committed posts (which would make that assertion drift the moment
+      // someone publishes a fourth).
+      posts: [],
       pages: [
         {
           slug: 'blogs',
@@ -73,11 +80,15 @@ function stubFetchLoggedOut() {
 }
 
 describe('/:slug never shadows a live static route, even with a colliding page injected', () => {
-  it('/blogs still renders BlogsPage, not the colliding page', async () => {
+  it('/blogs still redirects to /blog, not to the colliding page', async () => {
+    // Phase 5, Task 8: /blogs no longer renders BlogsPage directly -- it is
+    // a <Navigate to="/blog" replace /> (App.tsx) -- so the property this
+    // test proves is unchanged (the static route still wins over the
+    // injected colliding page) but the evidence for it moved to BlogIndex's
+    // own empty-state text (posts: [] via renderAt's mock above) rather than
+    // BlogsPage's <h1>.
     await renderAt('/blogs');
-    // BlogsPage's own real <h1> (copy.blogsPage.title) -- present only if
-    // the static route won over the injected colliding page.
-    expect(screen.getByRole('heading', { level: 1, name: 'Via Bianca Stories' })).toBeInTheDocument();
+    expect(screen.getByText(/nothing here yet/i)).toBeInTheDocument();
     expect(screen.queryByText('Colliding Blogs Page')).not.toBeInTheDocument();
   });
 
@@ -130,6 +141,28 @@ describe('/:slug never shadows a live static route, even with a colliding page i
     // (Navbar/Footer) -- proven by the presence of the nav, not NotFound's
     // own text.
     expect(screen.queryByText(/page not found/i)).not.toBeInTheDocument();
+  });
+
+  it('/blogs redirects to /blog and renders the index there, with no mocked pages in play', () => {
+    // Independent of the colliding-page tests above: proves the redirect
+    // itself, against the real router and a ContentProvider override of
+    // just `posts`, the same shape Task 8's own BlogIndex.test.tsx uses.
+    // Uses the statically-imported AppRoutes/ContentProvider (top of file)
+    // rather than the dynamic-import-after-vi.resetModules pattern the other
+    // tests in this file use -- resetModules would invalidate the module
+    // cache entirely, giving AppRoutes a DIFFERENT ContentReactContext
+    // instance than the one this test's own ContentProvider import comes
+    // from, so the override below would silently apply to nothing and every
+    // component would still see the real, three-post bundle. Confirmed by
+    // hitting exactly that failure first.
+    render(
+      <ContentProvider value={{ ...defaultBundle, posts: [] }}>
+        <MemoryRouter initialEntries={['/blogs']}>
+          <AppRoutes />
+        </MemoryRouter>
+      </ContentProvider>,
+    );
+    expect(screen.getByText(/nothing here yet/i)).toBeInTheDocument();
   });
 
   it('a page slugged "blog" cannot shadow the blog routes -- and cannot exist at all', () => {

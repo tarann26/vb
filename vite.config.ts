@@ -5,7 +5,7 @@ import path from "path";
 import { execFileSync } from 'node:child_process';
 import buildInfo from './plugins/build-info';
 import sitemap from './plugins/sitemap';
-import { pages, site } from './src/content';
+import { pages, posts, site } from './src/content';
 
 // https://vitejs.dev/config/
 // Short commit id mixed into every asset filename -- see the `build` block
@@ -37,7 +37,9 @@ export default defineConfig(() => ({
     // static public/sitemap.xml a developer used to have to hand-edit for
     // every new page. `site.seo.url` is the same base URL SeoHead.tsx's own
     // canonical link and every existing sitemap entry already use.
-    sitemap(site.seo.url, pages),
+    // Phase 5, Task 8: `posts` too, for every committed post's own
+    // /blog/<slug> entry.
+    sitemap(site.seo.url, pages, posts),
   ].filter(Boolean),
   // ---------------------------------------------------------------------------
   // Asset filenames carry the COMMIT as well as the content hash.

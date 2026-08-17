@@ -1,5 +1,5 @@
 import { Fragment, lazy, Suspense, type ReactNode } from 'react';
-import { BrowserRouter as Router, Routes, Route, useParams } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useParams } from 'react-router-dom';
 import Navbar from './components/NavBar';
 import Hero from './components/Hero';
 import OurStory from './components/OurStory';
@@ -11,7 +11,7 @@ import BlogTeaser from './components/BlogTeaser';
 import Awards from './components/Awards';
 import VisitUs from './components/VisitUs';
 import Footer from './components/Footer';
-import BlogsPage from './components/BlogsPage';
+import BlogIndex from './components/blog/BlogIndex';
 import PostPage from './components/blog/PostPage';
 import SeoHead from './components/SeoHead';
 import PageSeoHead from './components/PageSeoHead';
@@ -146,7 +146,15 @@ export function AppRoutes() {
   return (
     <Routes>
       <Route path="/" element={<HomePage />} />
-      <Route path="/blogs" element={<BlogsPage />} />
+      {/* Phase 5. /blogs is not deleted -- it is a live URL people have
+          already linked, and public/sitemap.xml has advertised it since the
+          site launched. It becomes a permanent client-side redirect to
+          /blog; the sitemap keeps listing it (plugins/sitemap.ts) so a
+          crawler that follows it learns the new address rather than
+          silently dropping it. BlogsPage.tsx itself stays on disk, unrouted,
+          under the owner's never-delete constraint. */}
+      <Route path="/blogs" element={<Navigate to="/blog" replace />} />
+      <Route path="/blog" element={<BlogIndex />} />
       <Route path="/blog/:slug" element={<PostPage />} />
       <Route
         path="/edit"

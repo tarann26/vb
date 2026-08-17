@@ -204,7 +204,11 @@ describe('every renderText/renderImage call site passes a path that really point
   });
 
   it('the recorded copy.json paths are exactly EDITABLE_TEXT_PATHS (src/admin/editable-paths.ts) -- no missing, no extra', () => {
-    expect(EDITABLE_TEXT_PATHS).toHaveLength(32);
+    // 27, not 32: Phase 5, Task 8 retired BlogsPage.tsx's own route (/blogs
+    // now redirects to /blog), which took five of its copy.json leaves --
+    // title, subtitle, back, previous, next -- out of every live route.
+    // See editable-paths.ts's own NOT_EDITABLE_IN_PLACE_COPY_FIELDS comment.
+    expect(EDITABLE_TEXT_PATHS).toHaveLength(27);
     // Partitioned, not filtered-and-forgotten: EDITABLE_TEXT_PATHS is derived
     // from COPY_FIELDS and therefore describes copy.json ONLY, so a template
     // section's `sections.<id>.content.*` path is legitimately not a member.
@@ -263,18 +267,18 @@ describe('every renderText/renderImage call site passes a path that really point
 // test of the exported module's own membership, not a re-derivation of it
 // (which would only ever prove the module equals itself).
 describe('EDITABLE_TEXT_PATHS (src/admin/editable-paths.ts)', () => {
-  it('has exactly 32 entries, every one a real COPY_FIELDS key', () => {
-    expect(EDITABLE_TEXT_PATHS).toHaveLength(32);
+  it('has exactly 27 entries, every one a real COPY_FIELDS key', () => {
+    expect(EDITABLE_TEXT_PATHS).toHaveLength(27);
     const copyFieldKeys = new Set(Object.keys(COPY_FIELDS));
     EDITABLE_TEXT_PATHS.forEach((path) => expect(copyFieldKeys.has(path)).toBe(true));
   });
 
-  // The six names this list must NOT contain, spelled out independently of
-  // editable-paths.ts's own internal set (fields.ts's CopyLeafShape comment
-  // is the authority the first five trace back to) -- if editable-paths.ts
-  // ever dropped its own exclusion, this still catches it without depending
-  // on the same constant that would already be wrong.
-  it('excludes exactly the six COPY_FIELDS leaves /edit does not offer in place, and nothing else', () => {
+  // The eleven names this list must NOT contain, spelled out independently
+  // of editable-paths.ts's own internal set (fields.ts's CopyLeafShape
+  // comment is the authority the first five trace back to) -- if
+  // editable-paths.ts ever dropped its own exclusion, this still catches it
+  // without depending on the same constant that would already be wrong.
+  it('excludes exactly the eleven COPY_FIELDS leaves /edit does not offer in place, and nothing else', () => {
     const notEditableInPlace = [
       // Bound to an attribute, never painted as visible text.
       'nav.instagramLabel',
@@ -285,6 +289,16 @@ describe('EDITABLE_TEXT_PATHS (src/admin/editable-paths.ts)', () => {
       // Painted, but as a <button>'s own label -- see NavBar.tsx's own
       // comment, and the describe block at the end of this file.
       'nav.pagesLabel',
+      // Phase 5, Task 8: BlogsPage.tsx's own route is gone (/blogs now
+      // redirects to /blog), taking these five along with it -- nothing
+      // live renders them any more. blogsPage.heading/intro are NOT here:
+      // BlogIndex.tsx reuses those two keys for its own real heading and
+      // intro, through renderText, so they stay editable in place.
+      'blogsPage.title',
+      'blogsPage.subtitle',
+      'blogsPage.back',
+      'blogsPage.previous',
+      'blogsPage.next',
     ];
     notEditableInPlace.forEach((path) => expect(EDITABLE_TEXT_PATHS).not.toContain(path));
     expect(Object.keys(COPY_FIELDS)).toHaveLength(EDITABLE_TEXT_PATHS.length + notEditableInPlace.length);

@@ -67,17 +67,21 @@ describe('canonical url per route', () => {
   // `/<slug>` page has PageSeoHead's.
   //
   // The property that mattered then still holds and is still asserted: the
-  // canonical on /blogs is /blogs' own, NOT the homepage's. That was the real
-  // failure the old test was guarding against, and pointing at the homepage
-  // would now be worse than emitting nothing at all -- it would actively ask
-  // Google to drop the page.
-  it('is /blogs\' own url on /blogs, never the homepage\'s', () => {
+  // canonical on /blogs is never the homepage's. What changed is WHICH real
+  // URL it names -- Phase 5, Task 8 turned /blogs into a client-side
+  // <Navigate to="/blog" replace />, so a visitor (and this test's router)
+  // lands on /blog before BlogIndex's own useCanonical ever runs, and /blog
+  // is what it declares. Pointing at the homepage, or at nothing, would both
+  // still be worse than emitting nothing at all -- it would actively ask
+  // Google to drop the page -- but the specific URL this test pins had to
+  // move with the redirect.
+  it('is /blog\'s own url when reached via /blogs, never the homepage\'s', () => {
     render(
       <MemoryRouter initialEntries={['/blogs']}>
         <AppRoutes />
       </MemoryRouter>,
     );
-    expect(canonicals().map((link) => link.getAttribute('href'))).toEqual([`${site.seo.url}/blogs`]);
+    expect(canonicals().map((link) => link.getAttribute('href'))).toEqual([`${site.seo.url}/blog`]);
   });
 
   // Exactly one, on every route that has one. Two canonical links on a page

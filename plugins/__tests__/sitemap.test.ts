@@ -8,8 +8,8 @@ import { build } from 'vite';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import sitemap, { buildSitemapXml, pageUrls, STATIC_ROUTES } from '../sitemap';
-import type { Page } from '../../src/content/types';
+import sitemap, { buildSitemapXml, pageUrls, postUrls, STATIC_ROUTES } from '../sitemap';
+import type { Page, Post } from '../../src/content/types';
 
 const BASE_URL = 'https://example.com';
 
@@ -17,11 +17,36 @@ function page(slug: string, enabled: boolean): Pick<Page, 'slug' | 'enabled'> {
   return { slug, enabled };
 }
 
+function post(slug: string): Pick<Post, 'slug'> {
+  return { slug };
+}
+
 describe('buildSitemapXml / pageUrls (pure)', () => {
-  it('always lists the two static routes, home with a trailing slash, blogs without', () => {
+  it('always lists the three static routes, home with a trailing slash, blog and blogs without', () => {
     const xml = buildSitemapXml(BASE_URL, []);
     expect(xml).toContain(`<loc>${BASE_URL}/</loc>`);
+    expect(xml).toContain(`<loc>${BASE_URL}/blog</loc>`);
     expect(xml).toContain(`<loc>${BASE_URL}/blogs</loc>`);
+  });
+
+  // Phase 5, Task 8: lists the three static routes, then every page, then
+  // every post -- pinned as an exact ordered array, not a set of
+  // `.toContain`s, so a regression that reorders or drops a section is
+  // caught even if every individual URL still happens to be present.
+  it('lists the three static routes, then every page, then every post', () => {
+    const xml = buildSitemapXml(BASE_URL, [page('catering', true)], [post('a-post')]);
+    const locs = [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]);
+    expect(locs).toEqual([
+      `${BASE_URL}/`,
+      `${BASE_URL}/blog`,
+      `${BASE_URL}/blogs`,
+      `${BASE_URL}/catering`,
+      `${BASE_URL}/blog/a-post`,
+    ]);
+  });
+
+  it('postUrls maps every post to its own /blog/<slug>', () => {
+    expect(postUrls([post('a'), post('b')])).toEqual(['/blog/a', '/blog/b']);
   });
 
   it('appends every ENABLED page as its own /<slug> entry', () => {

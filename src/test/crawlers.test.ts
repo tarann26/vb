@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync, existsSync } from 'node:fs';
-import { site } from '../content';
+import { site, posts } from '../content';
 
 // M5 review fix: `plugins/sitemap.ts`'s own `writeBundle` hook OVERWRITES
 // dist/sitemap.xml on every real build (Plan 7, Task 3, Step 3 -- it has to,
@@ -91,7 +91,16 @@ describe('crawler files', () => {
   it.skipIf(!REQUIRED && !existsSync(DIST_SITEMAP))('lists every public route in the built dist/sitemap.xml -- the file a crawler actually reaches', () => {
     const xml = readFileSync(DIST_SITEMAP, 'utf8');
     expect(xml).toContain(`<loc>${site.seo.url}/</loc>`);
+    expect(xml).toContain(`<loc>${site.seo.url}/blog</loc>`);
     expect(xml).toContain(`<loc>${site.seo.url}/blogs</loc>`);
+    // Phase 5, Task 8: every committed post's own /blog/<slug>, read off the
+    // real posts array rather than hand-typed, so this test tracks
+    // posts.json rather than needing its own edit the next time someone
+    // publishes.
+    expect(posts.length).toBeGreaterThan(0);
+    for (const post of posts) {
+      expect(xml).toContain(`<loc>${site.seo.url}/blog/${post.slug}</loc>`);
+    }
   });
 
   it.skipIf(!REQUIRED && !existsSync(DIST_SITEMAP))('does not advertise the unrouted admin or reservation pages in the built dist/sitemap.xml', () => {
