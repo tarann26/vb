@@ -18,6 +18,7 @@ import userEvent from '@testing-library/user-event';
 // Wording (opening hours, page copy).
 import { markEveryAreaSeeded, renderDashboard } from './renderDashboard';
 import { LOCKUP_ACCESSIBLE_NAME } from '../manage/brand';
+import { PANELS } from '../manage/areas';
 import { DISH_FIELDS } from '../fields';
 import {
   COPY,
@@ -36,7 +37,7 @@ import {
   stubFetch,
 } from './dashboardFixtures';
 import { collagePhotos } from '../../content/collage';
-import type { Dish, Page, StoryContent } from '../../content/types';
+import type { Dish, Page, Post, StoryContent } from '../../content/types';
 import { DRAFT_STORAGE_KEY, DRAFT_STAGED_COUNT_KEY, saveDraft } from '../drafts';
 import { LOCK_TIMEOUT_MS } from '../PublishBar';
 
@@ -157,6 +158,31 @@ async function sectionByHeading(name: string): Promise<HTMLElement> {
   const toggle = within(section as HTMLElement).getByRole('button', { name });
   if (toggle.getAttribute('aria-expanded') === 'false') fireEvent.click(toggle);
   return section as HTMLElement;
+}
+
+// The Posts panel, loaded and open, without one role-and-name sweep over the
+// shell. `sectionByHeading` above is fine for a case that mounts and asserts,
+// but it POLLS `findByRole('heading', { name })` -- a whole-document
+// accessible-name computation every 50ms -- and a case that then does two
+// uploads and a publish on top of that is exactly the shape that starves the
+// render it is waiting for. Measured: this case failed once in eight runs
+// under 24 burners at a 5000ms budget with `sectionByHeading`, and eight in
+// eight green with this, the budget untouched.
+//
+// The wait is `#section-panel-posts button`, which is cheap (one indexed
+// selector, no name computation) and honest: the panel body renders one `<p>`
+// and no controls while it is loading, and no body at all if the boundary
+// caught something. `[data-panel]` alone would prove nothing -- every area
+// mounts from the first render and stays mounted.
+async function openPostsPanel(user: ReturnType<typeof userEvent.setup>): Promise<HTMLElement> {
+  await waitFor(() => {
+    expect(document.querySelector('#section-panel-posts button')).not.toBeNull();
+  });
+  // Folded on arrival: the shell opens an area's FIRST panel, which in Story &
+  // Photos is Galleries. She opens this one, so this does too.
+  const toggle = document.querySelector<HTMLElement>('[data-panel="posts"] button[aria-expanded="false"]');
+  if (toggle !== null) await user.click(toggle);
+  return document.getElementById('section-panel-posts') as HTMLElement;
 }
 
 // A whole-PANEL `getByLabelText` is what has now nearly refused a production
@@ -799,7 +825,12 @@ describe("AdminApp: Task 9's wiring, proven end-to-end -- staged photos across D
     // session" gap right after `render`, where nothing meaningful is on
     // screen yet.
     expect(screen.getByText('No changes to publish yet.')).toBeInTheDocument();
-    const dishPhotoInput = within(dSection).getAllByLabelText(DISH_FIELDS.image.label)[0];
+    // `photoPickers`, not a whole-panel `getAllByLabelText`: the association
+    // proven is identical -- `<label for>` against the control's own id, read
+    // from the control's side -- and it costs one indexed selector match per
+    // file input instead of a `.labels` document walk per element in the
+    // panel. See that helper's own comment. This case had two such sweeps.
+    const dishPhotoInput = photoPickers(dSection, DISH_FIELDS.image.label)[0];
     await user.upload(dishPhotoInput, jpegFile('dish.jpg'));
     await waitFor(() => expect(FakeXHR.instances).toHaveLength(1));
     FakeXHR.instances[0].respond(200, { path: 'assets-source/food/aaa111aaa111.jpg', contentPath: '/food/aaa111aaa111.webp' });
@@ -810,13 +841,14 @@ describe("AdminApp: Task 9's wiring, proven end-to-end -- staged photos across D
 
     const drSection = await sectionByHeading('Drinks');
     await within(drSection).findByDisplayValue('Drink X');
-    // `getAllByLabelText` is safe here now that RecordForm's `idFor` takes
-    // a per-file `scope` (see the "no duplicate DOM ids" describe block
-    // below, and AdminApp.tsx's own comment on why) -- Dishes' and Drinks'
-    // own first record no longer share `id="field-image-0"`, so this
-    // resolves to the DRINK's own input, not whichever section happens to
-    // render first in the document.
-    const drinkPhotoInput = within(drSection).getAllByLabelText('Photo')[0];
+    // Scoping to the Drinks panel is what makes this the DRINK's own input
+    // rather than whichever section happens to render first -- sound because
+    // RecordForm's `idFor` takes a per-file `scope` (see the "no duplicate DOM
+    // ids" describe block below, and AdminApp.tsx's own comment on why), so
+    // Dishes' and Drinks' first record no longer share `id="field-image-0"`.
+    // `photoPickers` reads exactly that id/`for` pair, which is the same
+    // association a label sweep resolves and the reason this gives nothing up.
+    const drinkPhotoInput = photoPickers(drSection, 'Photo')[0];
     await user.upload(drinkPhotoInput, jpegFile('drink.jpg'));
     await waitFor(() => expect(FakeXHR.instances).toHaveLength(2));
     FakeXHR.instances[1].respond(200, { path: 'assets-source/mocktails/bbb222bbb222.jpg', contentPath: '/mocktails/bbb222bbb222.webp' });
@@ -993,7 +1025,7 @@ describe('AdminApp: Critical review fix -- a restored draft cannot publish a pho
     await user.clear(nameInput);
     await user.type(nameInput, 'Dish A Edited');
 
-    const dishPhotoInput = within(dSection).getAllByLabelText(DISH_FIELDS.image.label)[0];
+    const dishPhotoInput = photoPickers(dSection, DISH_FIELDS.image.label)[0];
     await user.upload(dishPhotoInput, jpegFile('dish.jpg'));
     await waitFor(() => expect(FakeXHR.instances).toHaveLength(1));
     FakeXHR.instances[0].respond(200, { path: 'assets-source/food/aaa111aaa111.jpg', contentPath: '/food/aaa111aaa111.webp' });
@@ -1187,7 +1219,7 @@ describe('AdminApp: Task 10 review fix -- a 401 mid-edit does not destroy the dr
 
     const dSection = await dishesSection();
     await within(dSection).findByDisplayValue('Dish A');
-    const dishPhotoInput = within(dSection).getAllByLabelText(DISH_FIELDS.image.label)[0];
+    const dishPhotoInput = photoPickers(dSection, DISH_FIELDS.image.label)[0];
     await user.upload(dishPhotoInput, jpegFile('dish.jpg'));
     await waitFor(() => expect(FakeXHR.instances).toHaveLength(1));
     FakeXHR.instances[0].respond(200, { path: 'assets-source/food/aaa111aaa111.jpg', contentPath: '/food/aaa111aaa111.webp' });
@@ -1586,5 +1618,309 @@ describe('AdminApp: Phase 4 review fix -- a stale /edit draft missing `chef` is 
       portrait: '/team/kamalika.webp',
       portraitAlt: 'Chef Kamalika Anand',
     });
+  });
+});
+
+// Ruled in by Task 8's review and proven here rather than in BlockList.test.tsx,
+// because the claim is about what LEAVES THE BROWSER: a photo she picked, a
+// block she then moved, and one publish request that has to carry both halves
+// in agreement. Only the whole chain can say that -- PhotoField's upload,
+// BlockList's keys, the collector every panel shares (staged.ts), and
+// buildPublishRequest assembling the body.
+//
+// What used to happen, reproduced step for step below: the staged photo was
+// filed under the block's POSITION, so moving the block left the bytes behind
+// at the old position; the next photo picked there superseded them (the
+// collector drops whatever sits at a key the instant a new pick starts, which
+// is right and is the whole point of that contract); and the publish went out
+// naming a photo no file was ever sent for. Live, that is a broken image in
+// her post. On the next build it is an asset-existence failure that refuses
+// every publish after it until somebody edits the JSON by hand. Reported to
+// her as a success, both times.
+describe('AdminApp: a photo picked for one block, and then that block moved', () => {
+  const POST_WITH_TWO_PHOTOS = [
+    {
+      id: 'post-1',
+      slug: 'the-tielle',
+      type: 'recipe',
+      title: 'The tielle',
+      date: '2026-03-04',
+      excerpt: 'A pie from Sète, by way of a bread oven.',
+      image: '/press/hotelier.webp',
+      blocks: [
+        { kind: 'image', src: '', alt: 'The tielle, sliced', caption: '' },
+        { kind: 'image', src: '', alt: 'The bread oven', caption: '' },
+      ],
+    },
+  ];
+
+  beforeEach(() => {
+    FakeXHR.instances = [];
+    vi.stubGlobal('XMLHttpRequest', FakeXHR as unknown as typeof XMLHttpRequest);
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function stubFetchWithPosts() {
+    const publishBodies: { files: { path: string; content: string; encoding: string }[] }[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url === '/api/wa') return WA_RESPONSE();
+        if (url === '/api/publish') {
+          publishBodies.push(JSON.parse(String(init?.body)) as { files: { path: string; content: string; encoding: string }[] });
+          return new Response(JSON.stringify({ sha: 'commit-1', publishId: 'p1' }), { status: 200, headers: { 'content-type': 'application/json' } });
+        }
+        if (url.startsWith('/api/build-status')) {
+          return new Response(JSON.stringify({ state: 'live', deploymentUrl: null, commitUrl: 'https://c' }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        if (url === '/build-info.json') {
+          return new Response(JSON.stringify({ sha: 'commit-1', builtAt: 'now' }), { status: 200, headers: { 'content-type': 'application/json' } });
+        }
+        if (url.includes('posts.json')) return contentResponse(POST_WITH_TWO_PHOTOS, 'sha-posts');
+        if (url.includes('dishes.json')) return contentResponse(DISHES, 'sha-dishes');
+        if (url.includes('drinks.json')) return contentResponse(DRINKS, 'sha-drinks');
+        if (url.includes('press.json')) return contentResponse(PRESS, 'sha-press');
+        if (url.includes('sections.json')) return contentResponse(SECTIONS, 'sha-sections');
+        if (url.includes('site.json')) return contentResponse(SITE, 'sha-site');
+        if (url.includes('galleries.json')) return contentResponse(GALLERIES, 'sha-galleries');
+        if (url.includes('menus.json')) return contentResponse(MENUS, 'sha-menus');
+        if (url.includes('story.json')) return contentResponse(STORY, 'sha-story');
+        if (url.includes('copy.json')) return contentResponse(COPY, 'sha-copy');
+        if (url.includes('pages.json')) return contentResponse([], 'sha-pages');
+        throw new Error(`AdminApp.test.tsx: unexpected fetch to ${url}`);
+      }),
+    );
+    return publishBodies;
+  }
+
+  it('publishes the photo on the block she put it on, with the bytes for BOTH photos in the same request', async () => {
+    const publishBodies = stubFetchWithPosts();
+    const user = userEvent.setup();
+    renderDashboard('/edit/manage/story');
+
+    const section = await openPostsPanel(user);
+
+    // Each block found by the description SHE typed into it, never by
+    // position -- position is the thing under test, so a query that used one
+    // would be assuming the answer. `closest('li')` lands on the BLOCK's own
+    // item, which is nested inside the post's.
+    //
+    // A plain value scan rather than `getByDisplayValue`, and it is called
+    // four times: what it gives up is the nice failure message, what it saves
+    // is four Testing Library sweeps in a case that already spends its budget
+    // on two uploads and a publish.
+    const blockOf = (description: string): HTMLElement => {
+      const input = [...section.querySelectorAll<HTMLInputElement>('input')].find(
+        (candidate) => candidate.value === description,
+      );
+      expect(input, `no field on this panel holds "${description}"`).toBeDefined();
+      return (input as HTMLInputElement).closest('li') as HTMLElement;
+    };
+
+    async function pickPhotoIn(block: HTMLElement, file: string, contentPath: string): Promise<void> {
+      const before = FakeXHR.instances.length;
+      const picker = block.querySelector('input[type="file"]') as HTMLInputElement;
+      await user.upload(picker, jpegFile(file));
+      await waitFor(() => expect(FakeXHR.instances).toHaveLength(before + 1));
+      FakeXHR.instances[before].respond(200, { path: `assets-source/posts/${file}`, contentPath });
+      // Scoped to this block, so a confirmation left over on a DIFFERENT
+      // block cannot answer for this one -- which is exactly the confusion
+      // this whole case is about.
+      await waitFor(() => expect(within(block).getByText(/Uploaded/)).toBeInTheDocument());
+    }
+
+    // A photo for the tielle, which is the first block.
+    await pickPhotoIn(blockOf('The tielle, sliced'), 'tielle.jpg', '/posts/tielle.webp');
+    // She moves it under the oven -- one gesture with the drag handle in a
+    // real browser, one click here, the same reorder either way (the buttons
+    // are not the lesser path; they are the only path on her phone).
+    await user.click(within(section).getByRole('button', { name: 'Move Photo block 1 down' }));
+    // ...and then a photo for the oven, which is now the first block.
+    await pickPhotoIn(blockOf('The bread oven'), 'oven.jpg', '/posts/oven.webp');
+
+    await user.click(screen.getByRole('button', { name: 'Publish' }));
+    await user.click(screen.getByRole('button', { name: 'Yes, publish to the live site' }));
+    await waitFor(() => expect(publishBodies).toHaveLength(1));
+
+    const sent = publishBodies[0].files;
+    const postsFile = sent.find((f) => f.path === 'src/content/posts.json');
+    expect(postsFile).toBeDefined();
+    const publishedBlocks = (JSON.parse(postsFile!.content) as Post[])[0].blocks as unknown as {
+      alt: string;
+      src: string;
+    }[];
+    // Her order, and her pairing: the oven first because she moved it there,
+    // each block naming the photo she picked FOR IT.
+    expect(publishedBlocks.map((block) => [block.alt, block.src])).toEqual([
+      ['The bread oven', '/posts/oven.webp'],
+      ['The tielle, sliced', '/posts/tielle.webp'],
+    ]);
+
+    // And the bytes for both, in this same request. This is the assertion the
+    // defect failed: `assets-source/posts/tielle.jpg` was absent, because the
+    // oven's pick had superseded the tielle's photo at the position it used to
+    // occupy -- while posts.json above went on naming it. Asserted as the
+    // whole set rather than two `toContain`s, so a THIRD, orphaned copy staged
+    // under a name nothing refers to would fail here too.
+    expect(sent.filter((f) => f.path.startsWith('assets-source/')).map((f) => f.path).sort()).toEqual([
+      'assets-source/posts/oven.jpg',
+      'assets-source/posts/tielle.jpg',
+    ]);
+  });
+});
+
+// The Phase 4 defect, tested rather than asserted. A draft saved before this
+// feature existed restores through registerLoaded's unchecked
+// `draftEntry.data as ContentTypeMap[K]` cast (sections/register-loaded.ts),
+// so the shapes below are what the dashboard genuinely gets handed -- not
+// hypotheticals. The only error boundary between a panel and the page is
+// per-SECTION, so an unguarded read does not leave her one broken field: it
+// takes the heading down with the panel, and she cannot even find the thing
+// that is wrong.
+describe('a draft saved before the block editor existed', () => {
+  // The literal SectionErrorBoundary.tsx renders, with this panel's own name
+  // in it -- read off that component rather than described, because a
+  // `queryByText` of a message that is merely LIKE the real one finds nothing
+  // either way and passes vacuously.
+  const SECTION_ERROR_BOUNDARY_MESSAGE = `Could not show ${PANELS.posts.heading} — something in this file's content confused this page. The rest of the dashboard is unaffected; try reloading.`;
+
+  // Three genuinely different pre-5B shapes, and none of them uses a
+  // present-but-empty stand-in for an absent key -- `blocks: []` is a
+  // DIFFERENT state from no `blocks` key, and this project has twice made the
+  // mistake of testing absence with emptiness.
+  const NO_POSTS_ENTRY = {
+    'dishes.json': { data: DISHES, savedAt: Date.now() },
+  };
+  const POST_WITH_NO_BLOCKS_KEY = {
+    'posts.json': {
+      data: [{ id: 'stale-1', slug: 'a-stale-post', type: 'story', title: 'A stale post', date: '2026-01-02', excerpt: 'A stale excerpt.', image: '/press/hotelier.webp' }],
+      savedAt: Date.now(),
+    },
+  };
+  const BLOCK_WITH_NO_TEXT_KEY = {
+    'posts.json': {
+      data: [{ id: 'stale-2', slug: 'another-stale-post', type: 'story', title: 'Another stale post', date: '2026-01-02', excerpt: 'A stale excerpt.', image: '/press/hotelier.webp', blocks: [{ kind: 'paragraph' }] }],
+      savedAt: Date.now(),
+    },
+  };
+
+  // What "the posts panel finished" actually looks like in the DOM, and why it
+  // is not the `[data-panel="posts"]` wait this task's brief prescribed:
+  // EVERY area mounts from the first render and stays mounted (ManageShell,
+  // and CollapsibleSection.tsx's own comment says so in as many words), so
+  // `[data-panel="posts"]` is already in the document on every route before
+  // any fetch resolves. A wait on it is a wait on nothing at all -- it would
+  // have passed against a panel that never loaded and against a panel that
+  // crashed.
+  //
+  // A button inside the panel body is the honest signal: while the section is
+  // loading it renders one `<p>` and no controls, and a section the boundary
+  // caught renders no panel body at all. Cheap on purpose -- one indexed
+  // selector, no role sweep, no label resolution -- because a poll that costs
+  // a `getComputedStyle` walk over this shell starves the render it is waiting
+  // for, which is what failed a Cloudflare build from this file.
+  //
+  // The boundary's own message is part of the CONDITION rather than only of
+  // the assertions below: a crashed panel would otherwise sit here until the
+  // wait timed out and report "expected null not to be null", which says
+  // nothing about what went wrong. This way the wait ends promptly and the
+  // assertion that follows names the real failure.
+  async function postsPanelSettled(): Promise<void> {
+    await waitFor(() => {
+      expect(
+        document.querySelector('#section-panel-posts button') ?? screen.queryByText(SECTION_ERROR_BOUNDARY_MESSAGE),
+      ).not.toBeNull();
+    });
+  }
+
+  it.each([
+    ['a draft with no posts.json entry at all', NO_POSTS_ENTRY],
+    ['a post with no blocks key', POST_WITH_NO_BLOCKS_KEY],
+    ['a paragraph block with no text key', BLOCK_WITH_NO_TEXT_KEY],
+  ])('%s restores without taking the panel down', async (_name, draft) => {
+    window.localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
+    stubFetch();
+    const user = userEvent.setup();
+    renderDashboard('/edit/manage/story');
+
+    await user.click(await screen.findByRole('button', { name: /^Restore/ }));
+    await postsPanelSettled();
+
+    // The heading survives. That is the whole Phase 4 lesson in one
+    // assertion: the crash there took the heading, so she could not find the
+    // section that was broken.
+    expect(screen.getByRole('heading', { name: PANELS.posts.heading })).toBeInTheDocument();
+    // And the panel body is really there, not replaced by the boundary's
+    // fallback -- SectionErrorBoundary renders its own message, so asserting
+    // the heading alone would pass on a caught crash.
+    const panel = document.getElementById('section-panel-posts');
+    expect(panel).not.toBeNull();
+    expect(screen.queryByText(SECTION_ERROR_BOUNDARY_MESSAGE)).toBeNull();
+    // The panel's own first control, which a caught crash cannot satisfy and a
+    // renamed boundary message cannot fake. `hidden: true` because this panel
+    // is folded on arrival (the shell opens an area's FIRST panel, which here
+    // is Galleries) -- a crash inside a folded panel throws just the same, so
+    // the case is about the crash rather than about what she is looking at.
+    expect(within(panel as HTMLElement).getByRole('button', { name: 'Add a post', hidden: true })).toBeInTheDocument();
+  });
+
+  it('every problem in a stale post lands on its own field, never as one banner', async () => {
+    window.localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(BLOCK_WITH_NO_TEXT_KEY));
+    stubFetch();
+    const user = userEvent.setup();
+    renderDashboard('/edit/manage/story');
+    await user.click(await screen.findByRole('button', { name: /^Restore/ }));
+    await postsPanelSettled();
+    const panel = await openPostsPanel(user);
+
+    // The block's own field carries the block's own problem, by
+    // aria-describedby -- the association she actually depends on, not merely
+    // the message being somewhere on the page. Scoped to the one field block
+    // it can be answered by (fieldBlock's own comment), because a
+    // whole-panel label sweep here is what has twice nearly refused a deploy.
+    const box = await waitFor(() => within(fieldBlock(panel, 'Words')).getByLabelText('Words'));
+    await waitFor(() => expect(box.getAttribute('aria-describedby')).not.toBeNull());
+    const describedBy = box.getAttribute('aria-describedby') as string;
+    expect(document.getElementById(describedBy.split(' ').pop() as string)).toHaveTextContent(/needs some words/);
+  });
+
+  it('filling in what is missing lets her publish', async () => {
+    window.localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(BLOCK_WITH_NO_TEXT_KEY));
+    stubFetch();
+    const user = userEvent.setup();
+    renderDashboard('/edit/manage/story');
+    await user.click(await screen.findByRole('button', { name: /^Restore/ }));
+    await postsPanelSettled();
+    const panel = await openPostsPanel(user);
+
+    // The problem is on screen BEFORE she fixes it, and this is not
+    // scene-setting: a wait for a message to go away is satisfied by a message
+    // that never arrived. Without this line, lengthening the validation
+    // debounce to ten times its real value leaves this case green -- measured,
+    // not supposed.
+    await waitFor(() => expect(within(panel).getByText(/needs some words/)).toBeInTheDocument());
+
+    await user.type(within(fieldBlock(panel, 'Words')).getByLabelText('Words'), 'A real paragraph.');
+
+    // The publish path is what "she could not get stuck" actually means: not
+    // that the screen rendered, but that the work can leave the browser. The
+    // validation debounce is 400ms, so this waits for the problem to CLEAR
+    // rather than for a fixed time.
+    await waitFor(
+      () => {
+        expect(within(panel).queryByText(/needs some words/)).toBeNull();
+      },
+      { timeout: 2000 },
+    );
+    // Nothing left on this panel claiming anything needs fixing, which is the
+    // count summary going away entirely rather than one message going quiet.
+    expect(within(panel).queryByText(/still needs fixing|still need fixing/)).toBeNull();
+    expect(screen.getByRole('button', { name: 'Publish' })).toBeEnabled();
   });
 });

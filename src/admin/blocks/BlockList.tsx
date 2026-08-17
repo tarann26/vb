@@ -6,7 +6,7 @@
 // Button bindings imported from RecordList rather than retyped, for the
 // reason that file's own comment gives: a retyped Tailwind string is a new
 // class to the content scanner and ships a duplicate rule.
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import BlockFields from './BlockFields';
 import BlockPicker from './BlockPicker';
 import BlockProblemMessage from './BlockProblemMessage';
@@ -139,6 +139,36 @@ const HANDLE_STYLE = { cursor: 'move' };
 // version that dimmed and never cleared would have passed.
 const DRAGGING_STYLE = { opacity: 0.5 };
 
+// A NAME FOR ONE BLOCK THAT SURVIVES BEING MOVED, and the whole of Task 10's
+// staged-photo fix.
+//
+// A block carries no id, and it must not start carrying one: `id` would be a
+// key in posts.json, published, validated and forever afterwards ours to keep
+// -- for something no reader of the blog will ever see. So the name is held
+// HERE, beside the list rather than inside it, keyed on the block object
+// itself. Reordering is what `swapAt`/`moveTo` do (reorder.ts): both copy the
+// ARRAY and move the same objects, so a block that has been dragged from
+// fourth place to first is, to a WeakMap, the identical key it always was.
+//
+// A WeakMap rather than a counter parallel to the list, which is the other
+// obvious shape: a parallel array has to be re-derived every time the list
+// changes from outside this component (a restored draft, an undo, a post
+// reordered above), and every one of those re-derivations is a chance to
+// hand a photo to the wrong block again. This map has nothing to re-derive.
+// It also cannot leak: an entry is unreachable the moment its block is,
+// which for a removed block is immediately.
+//
+// EDITING A BLOCK REPLACES ITS OBJECT (`{ ...block, text: next }`, one per
+// keystroke), so the name is carried across at that one call site below --
+// `rename` -- rather than being regenerated. Without that, every keystroke in
+// a block with a staged photo would move the photo to a name nothing else
+// refers to.
+//
+// Non-object blocks fall back to their position, which is the honest answer
+// for them: a stale draft's `null` or `"paragraph"` in the blocks array is not
+// a WeakMap key at all, renders no fields, and therefore never holds a photo.
+type BlockName = (block: Block, index: number) => string;
+
 export default function BlockList({
   blocks,
   postIndex,
@@ -148,6 +178,32 @@ export default function BlockList({
   onStaged,
   previewKeyPrefix,
 }: BlockListProps) {
+  const names = useRef(new WeakMap<object, string>());
+  const nextName = useRef(0);
+  // Cast the same way `kindOf` above casts, and for the same reason: a block
+  // out of localStorage need not be an object at all, whatever the type says.
+  const asKey = (block: Block): object | undefined => {
+    const raw = block as unknown;
+    return raw !== null && typeof raw === 'object' ? (raw as object) : undefined;
+  };
+  const nameOf: BlockName = (block, index) => {
+    const key = asKey(block);
+    if (key === undefined) return `at-${index}`;
+    const existing = names.current.get(key);
+    if (existing !== undefined) return existing;
+    nextName.current += 1;
+    const fresh = `b${nextName.current}`;
+    names.current.set(key, fresh);
+    return fresh;
+  };
+  // The edited block is a new object with the same name -- see the type's own
+  // comment above. Called before `onChange`, so the re-render that follows
+  // already finds it.
+  function rename(from: Block, to: Block, index: number): void {
+    const key = asKey(to);
+    if (key !== undefined) names.current.set(key, nameOf(from, index));
+  }
+
   // A draft saved before this feature restores with no `blocks` key at all
   // (registerLoaded's unchecked cast), and the only error boundary between
   // here and the page is per-SECTION -- so an unguarded read would take the
@@ -198,35 +254,41 @@ export default function BlockList({
         </div>
       )}
 
-      {/* A POSITIONAL key on the <li>, deliberately, and it is the opposite
-          call from RecordList's `key={item.id}`. A block carries no id and its
-          identity IS its position: moving one is exactly what Up/Down and the
-          drag handle do, and React should re-render both. PostBody.tsx (5A,
-          Task 6) argues the other side at length for CollagePhoto, where a
-          positional identity was wrong because a photo survives a swap and a
-          staged replacement has to follow it.
+      {/* `nameOf(block, index)`, NOT the index -- and this line used to be the
+          index, with a comment defending it, so read the correction rather
+          than the habit. PostBody.tsx (5A, Task 6) argued the same point for
+          CollagePhoto and got it right there: a positional identity is wrong
+          wherever a photo can survive the move, because the photo has to
+          follow the thing it belongs to.
 
-          A KNOWN DEFECT LIVES HERE, AND THE DRAG HANDLE WIDENED IT. Say this
-          plainly rather than as a note about keying, because it is the one
-          thing on this screen that can damage her work without telling her.
-
-          A block does not survive a reorder, but a staged PHOTO inside one
-          does, and `onStaged`'s key below is `blocks[<index>].src` -- a
-          POSITION. So she picks a photo for the fourth block, moves that block
-          to the top before publishing, and the photo she picked is attached to
-          whichever block is fourth now. Nothing on screen says so. The first
-          she sees of it is the published post.
+          THE DEFECT THIS FIXES, kept written down because the shape of it is
+          the reason three keys below all have to agree. A block does not
+          survive a reorder; a staged PHOTO inside one does. While every one of
+          those keys was a POSITION, she could pick a photo for the fourth
+          block, move that block to the top before publishing, and find her
+          photo shown on whichever block was fourth now -- and, if she then
+          picked a second photo there, find the FIRST one's bytes dropped from
+          the collector entirely (they were stored under the position, and the
+          new pick's own supersede cleared that position). The post would then
+          be published naming a photo no file was ever sent for: a broken image
+          on the live site, and an asset-existence failure on every build after
+          it. Nothing on screen said any of it.
 
           Older than the drag handle: Up and Down could always do this. What
-          the handle changed is the cost of reaching it. Four positions used to
-          be six deliberate clicks and is now one gesture, so a defect that
-          needed persistence is now one an ordinary edit runs into.
+          the handle changed is the cost of reaching it -- four positions used
+          to be six deliberate clicks and is now one gesture -- so a defect
+          that needed persistence became one an ordinary edit runs into, which
+          is why Task 8's review ruled it in.
 
-          Not fixed here on purpose. The fix is a stable key per staged photo,
-          which reaches the shared staged-file collector rather than this
-          component, and Task 10 owns it as a named deliverable. */}
+          The React key is here, the staged-photo key and the preview key are
+          on BlockFields below, and all three are now the block's own name.
+          They have to move together: a stable staged key with a positional
+          React key still shows her the wrong photo, because PhotoField's
+          just-picked object URL lives in the component instance that the
+          positional key would leave standing where it was. */}
       <ul>
         {safe.map((block, index) => {
+          const name = nameOf(block, index);
           const kind = kindOf(block);
           const label = kind === undefined ? UNKNOWN_BLOCK_LABEL : BLOCK_KIND_LABELS[kind];
           const own = mine.filter((entry) => entry.target.block === index);
@@ -236,7 +298,7 @@ export default function BlockList({
           const unplaced = kind === undefined ? own : own.filter((entry) => !claimsKey(block, kind, entry.target.key));
           return (
             <li
-              key={index}
+              key={name}
               // The drop target is the whole row, not a thin line between rows:
               // a 4px gap is not something anybody can hit on a phone, and
               // dropping "on" a block meaning "put mine here" is how every list
@@ -369,21 +431,39 @@ export default function BlockList({
               {kind !== undefined && (
                 <BlockFields
                   block={block}
-                  onChange={(next) => onChange(safe.map((existing, i) => (i === index ? next : existing)))}
+                  onChange={(next) => {
+                    // Before onChange, never after: the re-render this
+                    // schedules is what looks the name up again, and an edited
+                    // block is a NEW object. See the BlockName comment above.
+                    rename(block, next, index);
+                    onChange(safe.map((existing, i) => (i === index ? next : existing)));
+                  }}
+                  // The one key here that stays POSITIONAL, and it is not an
+                  // oversight. These are DOM ids for `<label for>`, and the
+                  // pair only has to agree with itself within a single render;
+                  // `posts-0-block-2-text` is also something a person reads in
+                  // a test failure, which `posts-0-block-b7-text` is not.
+                  // Nothing survives a reorder by holding one.
                   idPrefix={`posts-${postIndex}-block-${index}`}
                   problemsFor={(key) =>
                     own.filter((entry) => entry.target.key === key).map((entry) => entry.problem)
                   }
                   previews={previews}
-                  // THE POSITIONAL STAGED-PHOTO KEY, which the <ul> above calls
-                  // a known defect and explains in full. A photo staged here
-                  // follows the INDEX, not the block, so any reorder between
-                  // picking it and publishing attaches it to a different block.
-                  // The drag handle made that reorder a single gesture. Task 10
-                  // owns the fix, which belongs in the shared staged-file
-                  // collector rather than in this line.
-                  onStaged={(key, staged) => onStaged(`blocks[${index}].${key}`, staged)}
-                  previewKeyPrefix={`${previewKeyPrefix}:blocks[${index}]`}
+                  // THE STAGED-PHOTO KEY AND THE PREVIEW KEY, both the block's
+                  // own name rather than its position -- the fix the <ul>
+                  // comment above explains in full. `previews.set` revokes
+                  // whatever its key held before, so a positional preview key
+                  // does not merely mislead: it destroys the other photo's
+                  // object URL when two blocks trade places.
+                  //
+                  // Only this component can compose these. The collector
+                  // (staged.ts) stores whatever string it is handed and never
+                  // reads one back, so a re-keying pass down there would have
+                  // to be told which key moved where by exactly this line
+                  // anyway -- and would still be a second mechanism to keep in
+                  // step with the React key.
+                  onStaged={(key, staged) => onStaged(`blocks[${name}].${key}`, staged)}
+                  previewKeyPrefix={`${previewKeyPrefix}:blocks[${name}]`}
                 />
               )}
             </li>

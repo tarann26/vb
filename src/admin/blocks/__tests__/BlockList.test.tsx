@@ -1,9 +1,11 @@
-import { describe, expect, it, vi } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { useState } from 'react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import BlockList, { type BlockListProps } from '../BlockList';
 import { BLOCK_KIND_LABELS, UNKNOWN_BLOCK_MESSAGE } from '../block-meta';
-import { NO_IMAGE_PREVIEWS } from '../../previews';
+import { NO_IMAGE_PREVIEWS, useImagePreviews } from '../../previews';
+import { fromStagedPhoto, useStagedFiles, type StagedFile } from '../../staged';
 import { BLOCK_KEYS, BLOCK_KINDS } from '../../../content/guards';
 import type { Block, BlockKind } from '../../../content/types';
 
@@ -442,5 +444,220 @@ describe('BlockList namespaces its ids by post', () => {
     renderList({ postIndex: 3 });
     expect(document.getElementById('posts-3-block-1-text')).not.toBeNull();
     expect(document.getElementById('posts-0-block-1-text')).toBeNull();
+  });
+});
+
+// The one thing a positional block key was NOT free for, and the fix for it.
+//
+// A block's identity used to BE its position, all the way down: the React key,
+// the preview key, and the key `onStaged` reported a picked photo under. A
+// photo, unlike a block, survives a reorder -- so every one of those three
+// pointed at the position she moved the block AWAY from. Task 8's drag handle
+// turned four positions from six deliberate clicks into one gesture, which is
+// what made a defect that needed persistence into one an ordinary edit runs
+// into.
+//
+// Nothing below asserts a key STRING. What is asserted is what she would find
+// out about: the photo she picked is on the block she picked it for, and the
+// bytes behind every photo the post now names are still collected, so a
+// publish sends a file for every reference. A test that pinned the key format
+// would go green against a component that named its keys beautifully and still
+// lost her photo.
+describe('a photo she has already picked, when the block it sits in moves', () => {
+  // A third copy of PhotoField.test.tsx's XHR double (AdminApp.test.tsx has
+  // the second), and deliberately the smallest one that will do: this file
+  // needs a real upload to reach a real collector -- the whole claim is about
+  // bytes surviving an edit -- but nothing here drives progress, failure or
+  // retry, so those three members are not repeated.
+  class FakeXHR {
+    static instances: FakeXHR[] = [];
+    status = 0;
+    responseText = '';
+    timeout = 0;
+    withCredentials = false;
+    upload: { onprogress: (() => void) | null } = { onprogress: null };
+    onload: (() => void) | null = null;
+    onerror: (() => void) | null = null;
+    ontimeout: (() => void) | null = null;
+    constructor() {
+      FakeXHR.instances.push(this);
+    }
+    open() {}
+    send() {}
+    respond(status: number, body: unknown) {
+      this.status = status;
+      this.responseText = JSON.stringify(body);
+      this.onload?.();
+    }
+  }
+
+  function jpegFile(name: string): File {
+    const bytes = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 0, 0, 0, ...new TextEncoder().encode('JFIF')]);
+    return new File([bytes], name, { type: 'image/jpeg' });
+  }
+
+  interface Sink {
+    blocks: Block[];
+    files: Record<string, StagedFile>;
+    previews: Record<string, string>;
+  }
+
+  // `renderList` above hands `onChange` to a spy, so the list it renders never
+  // actually changes -- which is exactly the state this defect cannot be seen
+  // in. Here the list is genuinely held and handed back, and the staged bytes
+  // go to the real collector every panel on this dashboard shares, through the
+  // real `fromStagedPhoto` conversion PostsArea uses.
+  function StagedBlocks({ initial, sink }: { initial: Block[]; sink: Sink }) {
+    const [blocks, setBlocks] = useState<Block[]>(initial);
+    const { files, stage } = useStagedFiles();
+    // The REAL preview store, not NO_IMAGE_PREVIEWS: its `set` revokes
+    // whatever the key it is given held before, so the store is the one place
+    // a preview key colliding with another block's is observable at all.
+    const previews = useImagePreviews();
+    sink.blocks = blocks;
+    sink.files = files;
+    sink.previews = previews.urls;
+    return (
+      <BlockList
+        blocks={blocks}
+        postIndex={0}
+        onChange={setBlocks}
+        problems={[]}
+        previews={previews}
+        onStaged={(key, staged) => stage(key, fromStagedPhoto(staged))}
+        previewKeyPrefix="posts.json:fixture-a"
+      />
+    );
+  }
+
+  function twoPhotoBlocks(): Block[] {
+    return [
+      { kind: 'image', src: '', alt: 'The tielle, sliced' },
+      { kind: 'image', src: '', alt: 'The bread oven' },
+    ];
+  }
+
+  async function pickPhoto(
+    user: ReturnType<typeof userEvent.setup>,
+    input: HTMLInputElement,
+    file: string,
+    contentPath: string,
+  ): Promise<void> {
+    const before = FakeXHR.instances.length;
+    // Scoped to the block this picker belongs to, never to the whole render:
+    // the second pick in these cases lands on a DIFFERENT block that is in the
+    // same place on screen, and a count of confirmations across the document
+    // cannot tell those two apart.
+    const own = input.closest('li') as HTMLElement;
+    await user.upload(input, jpegFile(file));
+    await waitFor(() => expect(FakeXHR.instances).toHaveLength(before + 1));
+    FakeXHR.instances[before].respond(200, { path: `assets-source/posts/${file}`, contentPath });
+    // The upload's own confirmation, which is what tells her it is safe to
+    // carry on editing -- waited for rather than timed, and it is also the
+    // point at which the bytes have genuinely reached the collector.
+    await waitFor(() => expect(within(own).getByText(/Uploaded/)).toBeInTheDocument());
+  }
+
+  beforeEach(() => {
+    FakeXHR.instances = [];
+    vi.stubGlobal('XMLHttpRequest', FakeXHR as unknown as typeof XMLHttpRequest);
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('is still on that block, and its bytes are still collected, after she moves it', async () => {
+    const user = userEvent.setup();
+    const sink: Sink = { blocks: [], files: {}, previews: {} };
+    const { container } = render(<StagedBlocks initial={twoPhotoBlocks()} sink={sink} />);
+    const pickers = () => [...container.querySelectorAll<HTMLInputElement>('input[type="file"]')];
+
+    // She picks a photo for the tielle, which is the first block.
+    await pickPhoto(user, pickers()[0], 'tielle.jpg', '/posts/tielle.webp');
+    // Then moves it below the oven -- one gesture with the handle, one click
+    // here, the same reorder either way.
+    await user.click(screen.getByRole('button', { name: `Move ${BLOCK_KIND_LABELS.image} block 1 down` }));
+    // Then picks a photo for the oven, which is now the first block.
+    await pickPhoto(user, pickers()[0], 'oven.jpg', '/posts/oven.webp');
+
+    // Each block names the photo she picked FOR IT, in the order she left them.
+    const [first, second] = sink.blocks as { alt: string; src: string }[];
+    expect([first.alt, first.src]).toEqual(['The bread oven', '/posts/oven.webp']);
+    expect([second.alt, second.src]).toEqual(['The tielle, sliced', '/posts/tielle.webp']);
+
+    // ...and BOTH photos' bytes are still staged, which is the half that
+    // decides what she gets live: a publish sends one file per staged entry,
+    // so a reference with no entry behind it is a broken image on the site and
+    // an asset-existence failure on every build after it.
+    expect(Object.values(sink.files).map((file) => file.contentPath).sort()).toEqual([
+      '/posts/oven.webp',
+      '/posts/tielle.webp',
+    ]);
+    // Two entries, not one entry that happens to hold both paths' worth of
+    // hope: a second photo staged under a key the first already occupied
+    // silently replaces it, which is precisely how the first photo used to be
+    // lost.
+    expect(Object.keys(sink.files)).toHaveLength(2);
+
+    // The same claim about the preview store, which is a separate key composed
+    // on the same line and can go wrong on its own. Two DISTINCT object URLs
+    // still held: `set` revokes what its key held before, so a preview key
+    // that named the position would have revoked the tielle's own preview the
+    // moment the oven's photo landed on the position it left -- her first
+    // photo gone from the screen, in a browser, with the block still naming
+    // it. jsdom's revoke is a no-op, so the count is what says it here.
+    expect(new Set(Object.values(sink.previews)).size).toBe(2);
+  });
+
+  // The half of a block's name that has nothing to do with reordering: an
+  // edited block is a NEW object every keystroke (`{ ...block, alt: next }`),
+  // so a name that was not carried across would change under a photo already
+  // staged -- leaving the first photo's bytes stranded under a name nothing
+  // refers to any more. She would not lose a photo to that one, but she would
+  // publish an asset her post does not use, and the collector's own supersede
+  // contract ("a new pick drops what this field had") would be broken for the
+  // rest of the session.
+  it('a second thought about the photo, after typing the description, leaves one photo staged and not two', async () => {
+    const user = userEvent.setup();
+    const sink: Sink = { blocks: [], files: {}, previews: {} };
+    const { container } = render(<StagedBlocks initial={twoPhotoBlocks()} sink={sink} />);
+    const picker = () => container.querySelectorAll<HTMLInputElement>('input[type="file"]')[0];
+
+    await pickPhoto(user, picker(), 'tielle.jpg', '/posts/tielle.webp');
+    await user.type(screen.getByDisplayValue('The tielle, sliced'), ' on a board');
+    await pickPhoto(user, picker(), 'better-tielle.jpg', '/posts/better-tielle.webp');
+
+    expect(Object.values(sink.files).map((file) => file.contentPath)).toEqual(['/posts/better-tielle.webp']);
+    const [first] = sink.blocks as { alt: string; src: string }[];
+    expect([first.alt, first.src]).toEqual(['The tielle, sliced on a board', '/posts/better-tielle.webp']);
+  });
+
+  it('shows her the photo she picked on the block she picked it for, not on the position it left', async () => {
+    const user = userEvent.setup();
+    const sink: Sink = { blocks: [], files: {}, previews: {} };
+    const { container } = render(<StagedBlocks initial={twoPhotoBlocks()} sink={sink} />);
+    const pickers = () => [...container.querySelectorAll<HTMLInputElement>('input[type="file"]')];
+
+    await pickPhoto(user, pickers()[0], 'tielle.jpg', '/posts/tielle.webp');
+    // The just-picked photo is an object URL, never the contentPath -- nothing
+    // is live at that path until a publish and a rebuild. So THIS is the
+    // string that identifies the photo she is looking at.
+    const picked = container.querySelector('img')?.getAttribute('src');
+    expect(picked).toMatch(/^blob:/);
+
+    await user.click(screen.getByRole('button', { name: `Move ${BLOCK_KIND_LABELS.image} block 1 down` }));
+
+    // The tielle block is second now. Found by the description SHE typed, not
+    // by position, because position is the thing under test.
+    const blocks = screen.getAllByRole('listitem');
+    const tielle = blocks.find((li) => within(li).queryByDisplayValue('The tielle, sliced') !== null);
+    expect(tielle).toBeDefined();
+    expect(tielle).toBe(blocks[1]);
+    expect(tielle?.querySelector('img')).toHaveAttribute('src', picked);
+    // And the oven block, which she has picked nothing for, still shows
+    // nothing -- a preview left behind on the position would show up here.
+    const oven = blocks[0];
+    expect(within(oven).getByDisplayValue('The bread oven')).toBeInTheDocument();
+    expect(oven.querySelector('img')).toBeNull();
   });
 });

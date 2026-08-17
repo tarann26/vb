@@ -183,6 +183,30 @@ describe('each kind renders its own fields', () => {
     expect(caption).toHaveValue('');
   });
 
+  // The same landmine on a REQUIRED key, which is the shape a draft saved
+  // before this feature existed genuinely restores with -- `{ kind:
+  // 'paragraph' }`, no `text` at all, straight through registerLoaded's
+  // unchecked cast. Told apart from a cast by the same snap-back the two
+  // optional-key cases above use, and by the toolbar: `surround` reads
+  // `value.slice`, so an undefined value turns the Bold button into a thrown
+  // TypeError the moment she uses it to start writing.
+  it('a paragraph with no text key renders an empty box, and it is controlled', async () => {
+    const user = userEvent.setup();
+    const noText = { kind: 'paragraph' } as Block;
+    expect('text' in noText).toBe(false);
+    const { onChange } = renderFields(noText);
+    const words = screen.getByLabelText('Words');
+    expect(words).toHaveValue('');
+    await user.type(words, 'X');
+    expect(onChange).toHaveBeenCalledWith({ kind: 'paragraph', text: 'X' });
+    expect(words).toHaveValue('');
+
+    // And Bold still works on it: she turns bold on and types, which is what
+    // that button does with nothing selected.
+    await user.click(screen.getByRole('button', { name: 'Bold' }));
+    expect(onChange).toHaveBeenLastCalledWith({ kind: 'paragraph', text: '****' });
+  });
+
   it('a quote with no attribution key renders an empty box, and it is controlled', async () => {
     const user = userEvent.setup();
     const noAttribution = { kind: 'quote', text: 'Just the words.' } as Block;
