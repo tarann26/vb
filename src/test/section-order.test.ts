@@ -38,3 +38,29 @@ describe('the story section presents as About', () => {
     expect(link?.href).toBe('#our-story');
   });
 });
+
+// Phase 5B, Task 11 review finding: nothing directly pinned the nav label
+// swap ("Stories" -> "Blog") before this -- only homepage-bytes.test.tsx
+// caught a revert, and only by accident, because the two strings happen to
+// differ in length. A same-length relabel would have passed every test in
+// the suite silently. Mirrors "the story section presents as About" above,
+// the same rename-the-display-keep-the-id pattern Phase 1 established for
+// ourStory.
+describe('the press section presents as Blog', () => {
+  it('the nav calls it Blog, not Stories', () => {
+    const labels = copy.nav.links.map((l) => l.label);
+    expect(labels).toContain('Blog');
+    expect(labels).not.toContain('Stories');
+  });
+
+  it('keeps the section id and the live anchor unchanged', () => {
+    // Both are load-bearing and independently so, for exactly the same
+    // reason as ourStory's own equivalent check above: the id is also
+    // SECTION_COMPONENTS' own key (App.tsx, EditMode.tsx) and every
+    // Copy['press'] leaf's namespace; the anchor is a URL someone may have
+    // bookmarked.
+    const link = copy.nav.links.find((l) => l.label === 'Blog');
+    expect(link?.section).toBe('press');
+    expect(link?.href).toBe('#blogs');
+  });
+});

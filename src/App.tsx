@@ -7,7 +7,7 @@ import PlaceGallery from './components/PlaceGallery';
 import FoodGallery from './components/FoodGallery';
 import Drinks from './components/Drinks';
 import Experiences from './components/Experiences';
-import BlogTeaser from './components/BlogTeaser';
+import BlogSection from './components/blog/BlogSection';
 import Awards from './components/Awards';
 import VisitUs from './components/VisitUs';
 import Footer from './components/Footer';
@@ -51,7 +51,11 @@ const SECTION_COMPONENTS: Record<SectionId, () => ReactNode> = {
   food: () => <FoodGallery />,
   drinks: () => <Drinks />,
   experiences: () => <Experiences />,
-  press: () => <BlogTeaser />,
+  // Phase 5B: the section behind the `press` id is the blog now. The ID does
+  // not change and the #blogs anchor does not change -- see BlogSection.tsx's
+  // own header for the seven places that id is load-bearing, and Phase 1's
+  // identical ruling for ourStory.
+  press: () => <BlogSection />,
   awards: () => <Awards />,
   visit: () => <VisitUs />,
 };

@@ -193,9 +193,12 @@ describe('every renderText/renderImage call site passes a path that really point
   // carries it to /blog, where blogsPage.heading/intro actually render; a
   // real, undelegated /blogs route would make this mount vacuous for that
   // half of the assertion below. The count moved too -- EDITABLE_TEXT_PATHS
-  // is 27 now (editable-paths.ts), not 29 -- and is asserted directly by that
+  // is 26 now (editable-paths.ts), not 29 -- and is asserted directly by that
   // module's own test rather than repeated here as a second number to keep
-  // in sync.)
+  // in sync. (Phase 5B, Task 11: 27 -> 26 -- the homepage `press` section
+  // became the blog, BlogTeaser is unrouted, and `press.readArticle` moved
+  // into NOT_EDITABLE_IN_PLACE_COPY_FIELDS because nothing on any live route
+  // calls renderText with it any more.)
   beforeAll(() => {
     mountAt('/', bundle);
     mountAt('/blogs', bundle);
@@ -212,13 +215,19 @@ describe('every renderText/renderImage call site passes a path that really point
   });
 
   it('the recorded copy.json paths are exactly EDITABLE_TEXT_PATHS (src/admin/editable-paths.ts) -- no missing, no extra', () => {
-    // 27, not 32: Phase 5, Task 8 retired BlogsPage.tsx's own route (/blogs
+    // 26, not 32: Phase 5, Task 8 retired BlogsPage.tsx's own route (/blogs
     // now redirects to /blog), which took five of its copy.json leaves --
     // title, subtitle, back, previous, next -- out of every live route, and
     // the review of that task then took the same five out of COPY_FIELDS,
-    // so they no longer render a dashboard control either. The 27 is
-    // unmoved by that second step; what moved is COPY_FIELDS, 38 to 33.
-    expect(EDITABLE_TEXT_PATHS).toHaveLength(27);
+    // so they no longer render a dashboard control either. That step left 27
+    // unmoved (what moved was COPY_FIELDS, 38 to 33); Phase 5B Task 11 is
+    // the one that moved this number, 27 to 26 -- the homepage `press`
+    // section became the blog (BlogSection.tsx) and BlogTeaser, the only
+    // thing that ever rendered `press.readArticle`, is unrouted, so that
+    // leaf moved into NOT_EDITABLE_IN_PLACE_COPY_FIELDS (editable-paths.ts)
+    // rather than staying claimed as a live in-place affordance that
+    // resolves to nothing.
+    expect(EDITABLE_TEXT_PATHS).toHaveLength(26);
     // Partitioned, not filtered-and-forgotten: EDITABLE_TEXT_PATHS is derived
     // from COPY_FIELDS and therefore describes copy.json ONLY, so a template
     // section's `sections.<id>.content.*` path is legitimately not a member.
@@ -277,26 +286,26 @@ describe('every renderText/renderImage call site passes a path that really point
 // test of the exported module's own membership, not a re-derivation of it
 // (which would only ever prove the module equals itself).
 describe('EDITABLE_TEXT_PATHS (src/admin/editable-paths.ts)', () => {
-  it('has exactly 27 entries, every one a real COPY_FIELDS key', () => {
-    expect(EDITABLE_TEXT_PATHS).toHaveLength(27);
+  it('has exactly 26 entries, every one a real COPY_FIELDS key', () => {
+    expect(EDITABLE_TEXT_PATHS).toHaveLength(26);
     const copyFieldKeys = new Set(Object.keys(COPY_FIELDS));
     EDITABLE_TEXT_PATHS.forEach((path) => expect(copyFieldKeys.has(path)).toBe(true));
   });
 
-  // The six names this list must NOT contain, spelled out independently of
+  // The seven names this list must NOT contain, spelled out independently of
   // editable-paths.ts's own internal set (fields.ts's CopyLeafShape comment
   // is the authority the first five trace back to) -- if editable-paths.ts
   // ever dropped its own exclusion, this still catches it without depending
   // on the same constant that would already be wrong.
   //
-  // Six, not eleven, and 33 COPY_FIELDS keys rather than 38. The difference
+  // Seven, not eleven, and 33 COPY_FIELDS keys rather than 38. The difference
   // is the five blogsPage leaves Task 8 orphaned: excluding them from
   // in-place editing left them rendering as five dashboard controls that
   // changed nothing anywhere, so the review fix removed their COPY_FIELDS
   // descriptors outright. A leaf with no descriptor is not "excluded" from
   // this list -- it never reaches it, because the list is derived from
   // COPY_FIELDS. fields.test.ts is where their absence is pinned by name.
-  it('excludes exactly the six COPY_FIELDS leaves /edit does not offer in place, and nothing else', () => {
+  it('excludes exactly the seven COPY_FIELDS leaves /edit does not offer in place, and nothing else', () => {
     const notEditableInPlace = [
       // Bound to an attribute, never painted as visible text.
       'nav.instagramLabel',
@@ -307,9 +316,14 @@ describe('EDITABLE_TEXT_PATHS (src/admin/editable-paths.ts)', () => {
       // Painted, but as a <button>'s own label -- see NavBar.tsx's own
       // comment, and the describe block at the end of this file.
       'nav.pagesLabel',
+      // Phase 5B, Task 11: BlogTeaser is unrouted (the homepage `press`
+      // section is BlogSection.tsx now), and it was the only thing that ever
+      // rendered this leaf -- see editable-paths.ts's own comment on this
+      // entry.
+      'press.readArticle',
     ];
     notEditableInPlace.forEach((path) => expect(EDITABLE_TEXT_PATHS).not.toContain(path));
-    expect(notEditableInPlace).toHaveLength(6);
+    expect(notEditableInPlace).toHaveLength(7);
     expect(Object.keys(COPY_FIELDS)).toHaveLength(33);
     expect(Object.keys(COPY_FIELDS)).toHaveLength(EDITABLE_TEXT_PATHS.length + notEditableInPlace.length);
     // blogsPage.heading and blogsPage.intro are the two that survived Task 8

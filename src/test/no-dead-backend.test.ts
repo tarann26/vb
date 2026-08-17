@@ -40,6 +40,11 @@ describe('dead backend', () => {
     'NewsPress.tsx',
     'SignatureMocktails.tsx',
     'BlogsPage.tsx',
+    // Phase 5B: nothing routes to BlogTeaser after the homepage swap, and it
+    // stays on disk under the owner's never-delete constraint -- the same
+    // treatment NewsPress.tsx already has. The section it used to draw is the
+    // blog now; the file is kept because she asked for nothing to be deleted.
+    'BlogTeaser.tsx',
   ];
 
   it.each(protectedComponents)('keeps %s on disk for later revival', (file) => {

@@ -1,17 +1,18 @@
 // The explicit list of dotted copy.json paths edit mode lets her rewrite in
 // place -- Plan 5 Task 3, Step 1. Derived from COPY_FIELDS
 // (src/admin/fields.ts, Plan 4 Task 2's flat map), not re-typed by hand: a
-// second, hand-copied 27-entry list here could silently drift from
+// second, hand-copied 26-entry list here could silently drift from
 // fields.ts the moment a field is added, renamed, or reclassified as
 // attribute-only there. src/admin/__tests__/editable-paths.test.tsx imports
 // this same constant for its own "recorded calls match exactly" check, so
-// there is exactly one place this 27-entry set is ever written down.
+// there is exactly one place this 26-entry set is ever written down.
 // (32 through Phase 5, Task 7; Task 8 retired five blogsPage.* leaves along
 // with BlogsPage.tsx's own route, and the review of that task took the same
 // five out of COPY_FIELDS entirely -- see below.)
 //
-// Three exclusions, and they are the two the edit mode plan's own coverage
-// table decided plus this repair's own. Not re-litigated here:
+// Four exclusions, and they are the two the edit mode plan's own coverage
+// table decided, this repair's own, and Phase 5B Task 11's own. Not
+// re-litigated here:
 //   - the five COPY_FIELDS leaves wired straight to an HTML attribute
 //     (an aria-label, or VisitUs.tsx's <iframe title>) rather than painted
 //     as visible text -- no component has a content.renderText call for
@@ -40,7 +41,7 @@
 //     component that wrapped this leaf in renderText again would fail
 //     there.
 //
-// A fourth exclusion lived here briefly and is gone, which is worth
+// A fifth exclusion lived here briefly and is gone, which is worth
 // recording because deleting an exclusion usually means the opposite of what
 // it means here. Task 8 excluded BlogsPage.tsx's title, subtitle, back
 // button and Previous/Next labels from in-place editing when /blogs became a
@@ -55,7 +56,7 @@ import { COPY_FIELDS } from './fields';
 import type { Copy } from '../content/types';
 
 // Named for what it MEANS -- "not offered as an in-place edit at /edit" --
-// rather than for the one reason five of its six members happen to share.
+// rather than for the one reason six of its seven members happen to share.
 // Every member is still fully editable on the dashboard (/edit/manage
 // renders one Field per COPY_FIELDS key, this filter never reaches it);
 // what this set decides is only whether the LIVE PAGE puts an editing
@@ -69,6 +70,18 @@ const NOT_EDITABLE_IN_PLACE_COPY_FIELDS = new Set([
   'footer.linkedinLabel',
   // Painted as visible text, but inside a control that owns the click.
   'nav.pagesLabel',
+  // Phase 5B, Task 11: the homepage `press` section became the blog
+  // (BlogSection.tsx), whose through-link reuses `press.viewAll` rather than
+  // minting a second string -- see that component's own header comment for
+  // why. `press.readArticle` drove BlogTeaser's per-card "Read Article" link
+  // out to the publication; BlogTeaser is unrouted now (kept on disk under
+  // the owner's never-delete constraint -- src/test/no-dead-backend.test.ts),
+  // and nothing else on any live route calls `renderText('press.readArticle',
+  // ...)`. Excluded here rather than removed from COPY_FIELDS: the value and
+  // its dashboard control both stay (fields.ts's own comment on why deleting
+  // a COPY_FIELDS entry is a bigger, separate decision), this just stops the
+  // live page from claiming an in-place affordance that resolves to nothing.
+  'press.readArticle',
 ]);
 
 // `readonly string[]`, not a narrowed literal union: `Object.keys(COPY_FIELDS)`

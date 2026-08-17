@@ -24,7 +24,7 @@ import PlaceGallery from '../components/PlaceGallery';
 import FoodGallery from '../components/FoodGallery';
 import Drinks from '../components/Drinks';
 import Experiences from '../components/Experiences';
-import BlogTeaser from '../components/BlogTeaser';
+import BlogSection from '../components/blog/BlogSection';
 import Awards from '../components/Awards';
 import VisitUs from '../components/VisitUs';
 import Footer from '../components/Footer';
@@ -105,7 +105,11 @@ const SECTION_COMPONENTS: Record<SectionId, () => React.ReactNode> = {
   food: () => <FoodGallery />,
   drinks: () => <Drinks />,
   experiences: () => <Experiences />,
-  press: () => <BlogTeaser />,
+  // Phase 5B: the section behind the `press` id is the blog now. The ID does
+  // not change and the #blogs anchor does not change -- see BlogSection.tsx's
+  // own header for the seven places that id is load-bearing, and Phase 1's
+  // identical ruling for ourStory.
+  press: () => <BlogSection />,
   awards: () => <Awards />,
   visit: () => <VisitUs />,
 };
@@ -1093,13 +1097,18 @@ const EditMode: React.FC = () => {
   //      cannot drift apart again. The editor's PANEL needs no carve-out: it
   //      is rendered outside this guard's own wrapper entirely (see below).
   //
-  // Everything else stays blocked, including Hero's reserve button
-  // (fires the WhatsApp beacon) and BlogTeaser's "View all"
-  // (`navigate('/blogs')`) -- neither is an anchor and neither carries
-  // `aria-expanded`, so both fall straight through to the same
-  // preventDefault/stopPropagation as before. Fails closed: a future
-  // button added anywhere in this tree is blocked by default unless it
-  // explicitly earns one of the four carve-outs above.
+  // Everything else stays blocked, including Hero's reserve button (fires
+  // the WhatsApp beacon -- not an anchor, and carries no `aria-expanded`, so
+  // it falls straight through to preventDefault/stopPropagation) and, since
+  // Phase 5B Task 11, BlogSection's "View all": a real router `<Link
+  // to="/blog">`, so it IS an anchor, but its resolved `pathname` ("/blog")
+  // never equals `/edit`'s own -- `staysOnThisPage` is false for exactly the
+  // reason it is for VisitUs' Maps link or Drinks' PDF, just on the
+  // path clause instead of origin/download/target -- so clause 1 still
+  // does not exempt it and the same preventDefault/stopPropagation fires.
+  // Fails closed: a future button OR anchor added anywhere in this tree is
+  // blocked by default unless it explicitly earns one of the four carve-outs
+  // above.
   function handleCaptureClick(event: React.MouseEvent) {
     const target = event.target;
     if (target instanceof Element) {

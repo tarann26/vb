@@ -197,6 +197,35 @@ import { AppRoutes } from '../App';
 //
 // Both are pure HTML with no accompanying CSS change: `dist/assets/
 // index-*.css` stays 38555 bytes, byte-identical to `main`.
+//
+// Phase 5B, Task 11, the homepage press section becomes the blog:
+// 52355 -> 48404 (-3951). Four sources, measured separately rather than
+// attributed to one, because a prior entry in this comment was found
+// crediting a whole delta to one cause when it had two -- measured directly,
+// by rendering `#blogs` in a worktree checkout of the parent commit (BlogTeaser,
+// three real press.json cards) against this one (BlogSection, three real
+// posts.json cards) and diffing `outerHTML`, not estimated:
+//   -7116  BlogTeaser's three press cards leaving, each a
+//          `<article>` with an external anchor, a publication badge, a date
+//          line, a title, an excerpt and a Read-Article link out to the
+//          publication.
+//   +3530  PostCard's three post cards arriving, each a smaller `<article>`
+//          wrapping one internal `<Link>` -- a type badge, a date line, a
+//          title and an excerpt, with no separate external anchor inside it.
+//   -362   the through-link's own markup: BlogTeaser's `<button
+//          onClick={navigate}>` carried an inline `<span>`, a lucide
+//          `ArrowRight` `<svg>` (nine attributes plus two `<path>`s) and a
+//          longer class list; BlogSection's `<Link to="/blog">` is a single
+//          anchor with a shorter, already-shipped class list and no icon.
+//   -3     `copy.json`'s `nav.links[4].label`, "Stories" (7 characters) ->
+//          "Blog" (4), rendered once in the desktop nav link list (the
+//          mobile panel is not in the DOM at first paint, so this is not
+//          doubled).
+// Sum: -7116 + 3530 - 362 - 3 = -3951, matching the whole-page delta exactly
+// -- nothing outside these four is chrome, and nothing is left unaccounted.
+// The section id (`press`), the `#blogs` anchor and both `press.heading`/
+// `press.intro` copy leaves are byte-identical before and after; only the
+// cards, the through-link and the nav label moved.
 describe('homepage byte count', () => {
   it('the public homepage is unchanged', () => {
     const { container } = render(
@@ -204,6 +233,6 @@ describe('homepage byte count', () => {
         <AppRoutes />
       </MemoryRouter>,
     );
-    expect(new TextEncoder().encode(container.innerHTML).length).toBe(52355);
+    expect(new TextEncoder().encode(container.innerHTML).length).toBe(48404);
   });
 });

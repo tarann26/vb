@@ -145,6 +145,26 @@ describe('homepage sections', () => {
     assertDocumentOrder(enabledIds);
   });
 
+  // Phase 5B, Task 11 review finding: `sectionMarkerPresent('press')` above
+  // checks `copy.press.heading` renders inside `#blogs` -- true of BOTH
+  // BlogSection AND BlogTeaser, since the two share that copy leaf. Mapping
+  // `press` back to `<BlogTeaser />` in SECTION_COMPONENTS (App.tsx) passes
+  // every check above and is pinned only by the homepage's overall byte
+  // count, which names no component. This asserts the actual component
+  // behind the id: BlogSection's cards link INTO this site (`/blog/<slug>`);
+  // BlogTeaser's linked out to the publication.
+  it('the press section behind #blogs links its cards to this site, not out to a publication (BlogSection, not BlogTeaser)', () => {
+    render(
+      <MemoryRouter>
+        <HomePage />
+      </MemoryRouter>,
+    );
+
+    const cardLink = document.querySelector('section#blogs article a');
+    expect(cardLink).not.toBeNull();
+    expect(cardLink!.getAttribute('href')).toMatch(/^\/blog\//);
+  });
+
   // assertCopy only checks `href` is shaped like a "#"-prefixed fragment
   // (see content/index.ts) -- it has no way to know, at import time, whether
   // that fragment names a real, currently-enabled anchor in the rendered

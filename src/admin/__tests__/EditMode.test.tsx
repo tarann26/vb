@@ -333,33 +333,40 @@ describe('EditMode: a 401 mid-load does not unmount the page or lose what alread
   // as written, because that fixture returned identical content on every
   // call to every file, so a wrongly-repeated re-fetch and a correctly
   // skipped one would have rendered identically. It was also, after Fix 1's
-  // production change, simply wrong: Fix 1 makes press.json genuinely
+  // production change, simply wrong: Fix 1 makes the 401'd file genuinely
   // retried on re-login, and reusing the SAME already-settled 401 Response
   // for that retry (the old fixture's `pressResponse: press.promise`, a
   // single deferred value handed back on every call) made the retry 401
   // again too, re-triggering logout and hanging the test forever -- the
   // "replayed 401 fixture re-triggers logout" case named in this review.
   // This version makes the two fixtures that matter -- the one file that
-  // already loaded (copy.json) and the one that 401'd (press.json) --
+  // already loaded (copy.json) and the one that 401'd (story.json) --
   // return DIFFERENT content on a SECOND fetch, so "was it clobbered?" and
   // "was it refilled?" are both directly observable on screen, not inferred
   // from a comment.
+  //
+  // Phase 5B, Task 11: this used to 401 press.json and look for its Article
+  // content re-appearing (BlogTeaser's own rendering of it). BlogTeaser is
+  // unrouted now -- the section behind `press` is BlogSection.tsx, which
+  // reads posts.json through usePosts, not press.json through this
+  // registry -- so press.json is no longer rendered by anything EditMode
+  // mounts and can no longer serve as this test's observable "was it
+  // refilled" proof. dishes.json (FoodGallery's own dish names) takes over
+  // that role; the per-file guard itself is generic over CONTENT_FILES and
+  // was never press.json-specific. story.json was tried first and rejected:
+  // OurStory.tsx (story-api.ts's fetchStory) has its own independent runtime
+  // read of published content, same as posts.json's usePosts, so a
+  // story.json call count observed here would be counting TWO different
+  // fetchers, not one -- confirmed directly (the count came out 3, not 2).
+  // dishes.json has no such second reader.
   it('a loaded file is never re-fetched after a re-login (no clobber); a 401\'d file IS retried and fills in (no permanent blank)', async () => {
     let copyCalls = 0;
-    let pressCalls = 0;
+    let dishesCalls = 0;
     // If copy.json were wrongly re-fetched after the re-login, THIS is what
     // would land on screen instead of the original reserve-button text.
     const CLOBBERED_COPY: Copy = { ...COPY, hero: { ...COPY.hero, reserveButton: 'CLOBBERED-IF-REFETCHED' } };
-    const REAL_PRESS: Article[] = [
-      {
-        id: 'after-relogin',
-        title: 'Loaded After Re-Login',
-        publication: 'Test Press',
-        date: '2026-01-01',
-        excerpt: 'x',
-        url: null,
-        image: '/x.jpg',
-      },
+    const REAL_DISHES: Dish[] = [
+      { id: 'after-relogin', name: 'Loaded After Re-Login', description: 'x', image: '/x.jpg', tags: [] },
     ];
 
     vi.stubGlobal(
@@ -368,20 +375,24 @@ describe('EditMode: a 401 mid-load does not unmount the page or lose what alread
         const url = String(input);
         if (url === '/api/wa') return WA_RESPONSE();
         if (url === '/api/login') return new Response(null, { status: 204 });
-        if (url.includes('dishes.json')) return contentResponse(DISHES, 'sha-dishes');
         if (url.includes('drinks.json')) return contentResponse(DRINKS, 'sha-drinks');
         if (url.includes('sections.json')) return contentResponse(SECTIONS, 'sha-sections');
         if (url.includes('site.json')) return contentResponse(SITE, 'sha-site');
         if (url.includes('galleries.json')) return contentResponse(GALLERIES, 'sha-galleries');
         if (url.includes('menus.json')) return contentResponse(MENUS, 'sha-menus');
         if (url.includes('story.json')) return contentResponse(STORY, 'sha-story');
+        if (url.includes('press.json')) return contentResponse(PRESS, 'sha-press');
+        // BlogSection's own runtime read (usePosts, not this registry) --
+        // harmless here and not what this test is about; see this file's
+        // shared stubFetch() for the same branch.
+        if (url.includes('posts.json')) return contentResponse([], 'sha-posts');
         if (url.includes('copy.json')) {
           copyCalls += 1;
           return contentResponse(copyCalls === 1 ? COPY : CLOBBERED_COPY, 'sha-copy');
         }
-        if (url.includes('press.json')) {
-          pressCalls += 1;
-          return pressCalls === 1 ? unauthorizedResponse() : contentResponse(REAL_PRESS, 'sha-press-2');
+        if (url.includes('dishes.json')) {
+          dishesCalls += 1;
+          return dishesCalls === 1 ? unauthorizedResponse() : contentResponse(REAL_DISHES, 'sha-dishes-2');
         }
         throw new Error(`EditMode.test.tsx (per-file guard test): unexpected fetch to ${url}`);
       }),
@@ -398,7 +409,7 @@ describe('EditMode: a 401 mid-load does not unmount the page or lose what alread
     expect(await screen.findByRole('button', { name: COPY.hero.reserveButton })).toBeInTheDocument();
     expect(copyCalls).toBe(1);
 
-    // press.json 401'd -- the corrected notice appears (Fix 1's other
+    // dishes.json 401'd -- the corrected notice appears (Fix 1's other
     // half: the old wording promised the page "will still be showing
     // exactly what it was", which is untrue for a file that hadn't loaded
     // yet).
@@ -417,9 +428,9 @@ describe('EditMode: a 401 mid-load does not unmount the page or lose what alread
     expect(screen.getByRole('button', { name: COPY.hero.reserveButton })).toBeInTheDocument();
     expect(screen.queryByText('CLOBBERED-IF-REFETCHED')).not.toBeInTheDocument();
 
-    // Half 2 -- refilled: press.json WAS retried after the re-login, and
+    // Half 2 -- refilled: dishes.json WAS retried after the re-login, and
     // its real content is now on screen -- not permanently blank.
-    expect(pressCalls).toBe(2);
+    expect(dishesCalls).toBe(2);
     expect(await screen.findByText('Loaded After Re-Login')).toBeInTheDocument();
   });
 
@@ -656,23 +667,29 @@ describe('EditMode: the page\'s own links do not fire', () => {
   // <Routes> table (not just a bare <EditMode/>) is what makes "did it
   // navigate" observable: if the click had gone through, `/blogs` would
   // have replaced this tree with the sentinel below.
-  it('clicking BlogTeaser\'s "View all" does not navigate to /blogs', async () => {
+  // Phase 5B, Task 11: the homepage `press` section is BlogSection.tsx now,
+  // and its "View all" is a real router `<Link to="/blog">` (an <a>, not a
+  // <button> with an onClick navigate) -- see EditMode.tsx's own
+  // handleCaptureClick comment for why an anchor whose pathname differs from
+  // `/edit`'s own is still blocked, just by the anchor clause instead of by
+  // "not an anchor at all."
+  it('clicking BlogSection\'s "View all" does not navigate to /blog', async () => {
     stubFetch();
     render(
       <MemoryRouter initialEntries={['/edit']}>
         <Routes>
           <Route path="/edit" element={<EditMode />} />
-          <Route path="/blogs" element={<div>BLOGS PAGE SENTINEL</div>} />
+          <Route path="/blog" element={<div>BLOG PAGE SENTINEL</div>} />
         </Routes>
       </MemoryRouter>,
     );
 
-    const viewAll = await screen.findByRole('button', { name: COPY.press.viewAll });
-    fireEvent.click(viewAll);
+    const viewAll = await screen.findByRole('link', { name: COPY.press.viewAll });
+    expect(fireEvent.click(viewAll)).toBe(false);
 
-    expect(screen.queryByText('BLOGS PAGE SENTINEL')).not.toBeInTheDocument();
+    expect(screen.queryByText('BLOG PAGE SENTINEL')).not.toBeInTheDocument();
     // Still on /edit: a section untouched by the click (Hero, which reads
-    // none of press.json) is still right there.
+    // none of posts.json) is still right there.
     expect(screen.getByRole('button', { name: COPY.hero.reserveButton })).toBeInTheDocument();
   });
 
@@ -1203,23 +1220,25 @@ describe('EditMode: Minor -- a pre-existing DASHBOARD draft is mentioned, never 
 // different fixture value behind the file that 401s, so "was copy.json
 // clobbered" is directly observable on screen rather than inferred from a
 // comment.
+//
+// Phase 5B, Task 11: the file that 401s here moved from press.json to
+// dishes.json for the same reason as the sibling test above -- BlogTeaser
+// (the only thing that ever rendered press.json's Article content) is
+// unrouted now, so press.json can no longer prove "was it refilled" on
+// screen. The per-file guard under test is generic over CONTENT_FILES.
+// story.json was tried and rejected: OurStory.tsx's own fetchStory
+// (story-api.ts) reads published content independently of this registry,
+// the same way posts.json's usePosts does, so it is not a clean single
+// counter either.
 describe('EditMode: an edit survives a 401 mid-session -- Task 2\'s per-file fetch guard is what makes it hold', () => {
   it('committing an edit to copy.json, then a 401 on a DIFFERENT file, then logging back in -- the edit is still on screen, and copy.json was fetched exactly once, ever', async () => {
     let copyCalls = 0;
-    let pressCalls = 0;
+    let dishesCalls = 0;
     // What would land on screen instead if copy.json were wrongly
     // re-fetched after the re-login and clobbered her edit.
     const CLOBBERED_COPY: Copy = { ...COPY, hero: { ...COPY.hero, reserveButton: 'CLOBBERED-IF-REFETCHED' } };
-    const REAL_PRESS: Article[] = [
-      {
-        id: 'after-relogin',
-        title: 'Loaded After Re-Login',
-        publication: 'Test Press',
-        date: '2026-01-01',
-        excerpt: 'x',
-        url: null,
-        image: '/x.jpg',
-      },
+    const REAL_DISHES: Dish[] = [
+      { id: 'after-relogin', name: 'Loaded After Re-Login', description: 'x', image: '/x.jpg', tags: [] },
     ];
 
     vi.stubGlobal(
@@ -1228,20 +1247,24 @@ describe('EditMode: an edit survives a 401 mid-session -- Task 2\'s per-file fet
         const url = String(input);
         if (url === '/api/wa') return WA_RESPONSE();
         if (url === '/api/login') return new Response(null, { status: 204 });
-        if (url.includes('dishes.json')) return contentResponse(DISHES, 'sha-dishes');
         if (url.includes('drinks.json')) return contentResponse(DRINKS, 'sha-drinks');
         if (url.includes('sections.json')) return contentResponse(SECTIONS, 'sha-sections');
         if (url.includes('site.json')) return contentResponse(SITE, 'sha-site');
         if (url.includes('galleries.json')) return contentResponse(GALLERIES, 'sha-galleries');
         if (url.includes('menus.json')) return contentResponse(MENUS, 'sha-menus');
         if (url.includes('story.json')) return contentResponse(STORY, 'sha-story');
+        if (url.includes('press.json')) return contentResponse(PRESS, 'sha-press');
+        // BlogSection's own runtime read (usePosts, not this registry) --
+        // harmless here and not what this test is about; see this file's
+        // shared stubFetch() for the same branch.
+        if (url.includes('posts.json')) return contentResponse([], 'sha-posts');
         if (url.includes('copy.json')) {
           copyCalls += 1;
           return contentResponse(copyCalls === 1 ? COPY : CLOBBERED_COPY, 'sha-copy');
         }
-        if (url.includes('press.json')) {
-          pressCalls += 1;
-          return pressCalls === 1 ? unauthorizedResponse() : contentResponse(REAL_PRESS, 'sha-press-2');
+        if (url.includes('dishes.json')) {
+          dishesCalls += 1;
+          return dishesCalls === 1 ? unauthorizedResponse() : contentResponse(REAL_DISHES, 'sha-dishes-2');
         }
         throw new Error(`EditMode.test.tsx (edit-survives-401 test): unexpected fetch to ${url}`);
       }),
@@ -1265,7 +1288,7 @@ describe('EditMode: an edit survives a 401 mid-session -- Task 2\'s per-file fet
     fireEvent.blur(field!);
     expect(await screen.findByRole('button', { name: 'MY EDIT SURVIVES' })).toBeInTheDocument();
 
-    // press.json 401'd -- the login overlay appears over the still-mounted
+    // dishes.json 401'd -- the login overlay appears over the still-mounted
     // page, exactly as Task 2 proved; her edit is still right there beneath
     // it.
     expect(await screen.findByLabelText(/password/i)).toBeInTheDocument();
@@ -1286,7 +1309,7 @@ describe('EditMode: an edit survives a 401 mid-session -- Task 2\'s per-file fet
 
     // And the file that genuinely 401'd was retried and filled in, matching
     // Task 2's own guarantee alongside this one.
-    expect(pressCalls).toBe(2);
+    expect(dishesCalls).toBe(2);
     expect(await screen.findByText('Loaded After Re-Login')).toBeInTheDocument();
   });
 });
