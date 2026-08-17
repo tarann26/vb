@@ -605,6 +605,38 @@ describe('dist/assets/ keeps admin code out of the entry chunk', () => {
 // BYTE-IDENTICAL, confirmed with `cmp`. Not merely "zero net": zero rules
 // added and zero removed by the entire branch. Margin back to 145 bytes.
 //
+// Phase 5A, the blog's ten block renderers plus both routes: 38555 -> 38593
+// (+38), ONE rule added and zero removed, traced by a rule-level diff
+// against a worktree checkout of the true parent commit (never a stash) to
+// `.list-decimal` on blocks.tsx's numberList and steps blocks. Preflight
+// ships `ol,ul,menu{list-style:none}`, so an ordered list without it renders
+// as unnumbered lines -- it is load-bearing, not decoration.
+//
+// The interesting number is what this DID NOT cost, because it is the reason
+// a ten-block-type feature fits in a 145-byte budget at all. Preflight
+// already ships `b,strong{font-weight:bolder}`, `code,kbd,samp,pre{font-family:
+// ui-monospace,...}` and NO `em` rule at all -- so markdown bold, inline code
+// and markdown emphasis each render correctly with no utility whatsoever.
+// Measured individually before the design was fixed: the monospace utility
+// costs 111 bytes, the slant utility 26, and both would have changed nothing
+// visible. A thirteen-utility "comfortable" set measured +427, a 282-byte
+// breach. THE CEILING WAS NOT RAISED and is still 38700, with a 107-byte
+// margin.
+//
+// blocks.tsx's own comments confirm the same comment-scan hazard this file
+// already documents twice above (`.lowercase`, `.collapse`/`.invisible`). An
+// early draft named the slant utility and the larger grid breakpoint's class
+// bare in prose: 38593 -> 38682 (+89), the rule-level diff showing `italic`
+// and `md:grid-cols-3` alongside `list-decimal` in ADDED. Rewording the first
+// pass removed both words but introduced a third, the bare three-column class
+// with no breakpoint prefix at all: 38682 -> 38652, ADDED now showing
+// `grid-cols-3` alone alongside `list-decimal`. Only the final wording, which
+// describes the effect ("three columns from the 640px breakpoint up") rather
+// than naming any class, produced the clean `ADDED: ['list-decimal']` this
+// task's own diff is built on. Caught each time by the rule-level diff, not
+// by reading the prose -- exactly why this lineage's standing rule is to run
+// the diff rather than trust that a reworded comment is safe by inspection.
+//
 // The finding worth more than the byte count, recorded here because this is
 // where the next person will look: this assertion is `skipIf`, and for the
 // whole of Phase 3 it silently skipped. `npm test -- --run` reported it as
