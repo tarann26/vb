@@ -982,3 +982,75 @@ leaves the live Worker serving its previous build -- `GET
 /api/published?path=<new file>` 404s against production while the frontend
 already expects it to work. The site does not break (the compiled-in
 fallback still renders), but the feature is inert until this runs.
+
+### Phase 5A: the blog
+
+`src/content/posts.json` is committed JSON on the GitHub store, like
+`experiences.json` and unlike `awards.json`. Every post carries a required
+card image and may carry image and gallery blocks, and
+`src/content/__tests__/assets.test.ts` only walks `src/content/` — a
+D1-stored post would leave the fields most likely to break unguarded.
+
+**No Worker change, so no `npx wrangler deploy` is needed for 5A.** A normal
+push to `main` is the whole deploy. That changes in 5B, which moves
+`posts.json` to D1: from that point on a push without `wrangler deploy`
+ships the read path inert, exactly as Phase 4's final review caught.
+
+**Adding a post today** means editing `src/content/posts.json` by hand and
+pushing — the Manage panel is 5B's. A new photo goes in
+`assets-source/press/` (or its own category once 5B adds one) and is
+processed by `npm run images` at build time; R2 is still not enabled.
+
+**The nine unmigrated `press.json` entries** are still in the repository and
+are rendered by nothing. Three of the twelve carried a real, resolvable URL
+and became Mention posts; the other nine have `url: null`, publications that
+read as invented, and images borrowed from the food and mocktail galleries.
+They wait on a decision rather than shipping as fabricated citations.
+`src/content/__tests__/shape.test.ts` pins the three, so a fourth appearing
+without that decision fails the build.
+
+**`/blogs` is a real HTTP 301, not just a client-side route.** `public/_redirects`
+carries `/blogs  /blog  301` above the SPA catch-all (`/*  /index.html  200`).
+Cloudflare Pages reads `_redirects` top to bottom and stops at the first
+match, so this rule has to sit above the catch-all — below it, the catch-all
+already answers every request first and the 301 rule is dead config that
+still looks alive in a diff. `src/test/hosting.test.ts` pins both the rule
+text and that ordering.
+
+**No Playwright spec covers this 301.** Vite dev and Vite preview — what
+`npx playwright test` and `npm run preview` both run against — do not process
+`public/_redirects` at all; that file is a Cloudflare Pages mechanism with no
+local equivalent. `e2e/blog.spec.ts`'s `/blogs lands on /blog` test passes
+because `App.tsx` still carries a client-side `<Navigate to="/blog" replace />`
+as an in-app fallback, and that is a different code path from the 301.
+A green e2e suite says nothing about the redirect; `hosting.test.ts` is its
+only pin, and only a live `curl -sI https://<domain>/blogs` after deploy
+confirms the real one.
+
+**Playwright runs against `npm run dev`, not `dist`.** `playwright.config.ts`'s
+`webServer.command` is `npm run dev`, so `npm run build`'s output in Step 1
+above has no effect on what any e2e spec, including `e2e/blog.spec.ts`, sees.
+The only test that reads `dist/` is `npm run test:bundle` (`src/test/bundle.post-build.test.ts`
+and `src/test/crawlers.test.ts`), run as part of `npm run build` itself.
+
+**Tailwind's dev JIT does not un-generate a class within one server session.**
+Once a utility class has been scanned and emitted once, removing the source
+that referenced it does not remove the rule from that dev server's output —
+the JIT only ever adds. A CSS-removal change reads as still-present until the
+dev server is stopped and restarted cold. This cost real time to track down
+during this phase and is worth knowing before trusting a "the class is still
+there" observation against a long-running `npm run dev`.
+
+**`docs/` is outside Tailwind's content scanner.** `tailwind.config.js`'s
+`content` glob is `['./index.html', './src/**/*.{js,ts,jsx,tsx}', '!./src/**/__tests__/**', '!./src/test/**']`
+— nothing under `docs/` is scanned. A utility-class-looking token written into
+a doc, including this one, emits no CSS rule and costs nothing against the
+38700-byte ceiling. (The scanner is still a plain text extractor with no JS
+parser, so this guarantee is specific to the glob, not to prose in general —
+see this file's own comment block for what happens inside a scanned glob.)
+
+**Two open items are the owner's call, not resolved by this phase:**
+the nine fabricated `press.json` entries above, and `public/press/hotelier.webp`
+— a social-card screenshot whose headline is baked into the pixels, cropped
+mid-descender, with the same headline then repeated as the post's own
+heading. Wrong asset, pre-existing this phase, waiting on her.
