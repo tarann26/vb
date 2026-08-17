@@ -11,6 +11,7 @@
 // ships extra CSS for a rule that already exists, which is why those three
 // bindings are exported at all (RecordList.tsx's own comment says so, and
 // HoursField/SectionList/StoryForm already read them).
+import { useRef } from 'react';
 import RecordForm from './RecordForm';
 import BlockList from './blocks/BlockList';
 import { isBlockProblem } from './blocks/block-problems';
@@ -65,6 +66,37 @@ function metaOf(post: Post): PostMeta {
 function blocksOf(post: Post): Block[] {
   return Array.isArray(post.blocks) ? post.blocks : [];
 }
+
+// The count at the top of the panel, and the sentence around it.
+//
+// "Publishing will be refused until..." rather than "before this can go live",
+// and PublishBar.tsx's validationHeading is where that wording was settled: a
+// validation problem does NOT disable the Publish button (useValidation's own
+// contract is that its result may never decide what a publish is ALLOWED to
+// send, only tell her sooner what the server would say), so a sentence that
+// describes the button as blocked is one she can disprove by clicking it.
+function problemCountSentence(count: number): string {
+  return count === 1
+    ? 'One thing here still needs fixing. Publishing will be refused until it is.'
+    : `${count} things here still need fixing. Publishing will be refused until they are.`;
+}
+
+// The first thing on this panel that is complaining, in document order.
+//
+// Two shapes, because there are two ways a problem appears on this screen: a
+// CONTROL whose own error region it points at (Field, PhotoField and
+// InlineTextField all build `aria-describedby` ending in `-error` when, and
+// only when, they have a problem to show), or one of the message regions that
+// carry a problem no control could -- this component's own banner, BlockList's,
+// and the per-block and empty-list messages inside it, each of which carries
+// `tabIndex={-1}` so that it can be focused without joining the tab order.
+//
+// Queried from the DOM rather than computed from `problems`, deliberately:
+// mapping a problem's `field` string back to a DOM id would be a fourth
+// independent copy of the id scheme (RecordForm's, BlockList's, PhotoField's),
+// and the thing that needs finding is "the first one SHE can see", which is a
+// fact about what rendered.
+const FIRST_PROBLEM_SELECTOR = '[aria-describedby*="-error"], [role="alert"][tabindex="-1"]';
 
 export default function PostList({
   items,
@@ -125,12 +157,51 @@ export default function PostList({
     onReorder(ids);
   }
 
+  // Carried forward from Task 4's review as M6, and this is where it is paid.
+  //
+  // Every message on this panel now lands on the field that caused it, which is
+  // the right place and also a long way down: seven fields per post, plus a
+  // block list under each, so a problem on the third post is some twenty
+  // controls below the fold with nothing at the top of the panel to say it is
+  // there. "Open the panel to see" showed her post one.
+  //
+  // A count plus a button, rather than moving focus on its own: validation is
+  // debounced, so a panel that focused the first problem whenever the list
+  // changed would yank the caret out of the box she is typing in, half a second
+  // after she starts. She decides when to be taken there.
+  const listRef = useRef<HTMLDivElement>(null);
+
+  function goToFirstProblem(): void {
+    listRef.current?.querySelector<HTMLElement>(FIRST_PROBLEM_SELECTOR)?.focus();
+  }
+
   return (
-    <div>
+    <div ref={listRef}>
+      {problems.length > 0 && (
+        // `role="status"`, not "alert": this region's text changes on every
+        // debounced revalidation while she types, and an assertive region would
+        // interrupt her to read a new count each time. The problems it counts
+        // are each announced by their own alert where they land.
+        //
+        // No `tabIndex` here, which is what keeps FIRST_PROBLEM_SELECTOR from
+        // matching this region and sending her to the summary she just clicked.
+        <div
+          role="status"
+          aria-label="What still needs fixing"
+          className="mb-4 rounded border border-red-300 bg-red-50 p-3 text-sm text-red-700"
+        >
+          <p className="mb-2">{problemCountSentence(problems.length)}</p>
+          <button type="button" onClick={goToFirstProblem} className={MOVE_BUTTON_CLASSNAME}>
+            Take me to the first one
+          </button>
+        </div>
+      )}
+
       {unclaimed.length > 0 && (
         <div
           role="alert"
           aria-label="Problems with the whole list of posts"
+          tabIndex={-1}
           className="mb-4 rounded border border-red-300 bg-red-50 p-3 text-sm text-red-700"
         >
           <ul className="list-disc pl-5">

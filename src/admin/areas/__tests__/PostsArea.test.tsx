@@ -107,6 +107,22 @@ describe('the Posts panel', () => {
     expect(within(panel).getByDisplayValue('a-fixture-post')).toBeInTheDocument();
   });
 
+  // The seam this task adds: the panel's own body, not just its scalar fields.
+  // Asserted through a value query rather than a role-and-name sweep over the
+  // ~1200-element shell, which is the cheap-then-assert-once pattern this
+  // project's own AdminApp timeout finding mandates.
+  it('renders the blocks of a committed post, in her words', async () => {
+    stubFetchWithPosts(FIXTURE_POSTS);
+    renderDashboard('/edit/manage/story');
+
+    const panel = await openPostsPanel();
+    expect(await within(panel).findByDisplayValue('A fixture paragraph.')).toBeInTheDocument();
+    // The strip over the block, which is the only thing on screen that tells
+    // her what kind of block she is looking at.
+    expect(within(panel).getByText('Paragraph')).toBeInTheDocument();
+    expect(within(panel).getByRole('button', { name: 'Remove Paragraph block 1' })).toBeInTheDocument();
+  });
+
   it('a 404 reads as no posts yet, not as a failure', async () => {
     stubFetchNotFound();
     renderDashboard('/edit/manage/story');

@@ -215,3 +215,78 @@ describe('PostList places every problem somewhere, and only once', () => {
     expect(screen.getByText('expected a list of posts')).toBeInTheDocument();
   });
 });
+
+// Carried forward from this task's own review as M6. Every message now lands
+// on the field that caused it, which is the right place and also a long way
+// down: seven fields per post plus a block list under each, so a problem on
+// the third post is some twenty controls below the fold. "Open the panel to
+// see" showed her post one.
+describe('PostList says how much is wrong, and takes her to it', () => {
+  it('says nothing when nothing is wrong', () => {
+    renderList();
+    expect(screen.queryByRole('status', { name: 'What still needs fixing' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Take me to the first one' })).toBeNull();
+  });
+
+  it('counts what is wrong, in a sentence she can act on', () => {
+    renderList({
+      problems: [
+        { field: '[0].title', message: 'the post at position 0 needs a title' },
+        { field: '[1].slug', message: 'the second post needs a web address' },
+      ],
+    });
+    expect(screen.getByRole('status', { name: 'What still needs fixing' })).toHaveTextContent(
+      '2 things here still need fixing. Publishing will be refused until they are.',
+    );
+  });
+
+  it('one problem reads as one thing, not as "1 things"', () => {
+    renderList({ problems: [{ field: '[0].title', message: 'the post at position 0 needs a title' }] });
+    expect(screen.getByRole('status', { name: 'What still needs fixing' })).toHaveTextContent(
+      'One thing here still needs fixing. Publishing will be refused until it is.',
+    );
+  });
+
+  // Above the first post, which is the whole point of it: a count below twenty
+  // fields of the post she is not looking for is no better than no count.
+  // DOM order, not layout -- jsdom has no layout engine and a geometry claim
+  // belongs in e2e/.
+  it('sits above the first post', () => {
+    const { container } = renderList({
+      problems: [{ field: '[1].title', message: 'the second post needs a title' }],
+    });
+    const summary = screen.getByRole('status', { name: 'What still needs fixing' });
+    const firstPost = container.querySelector('li');
+    expect(firstPost).not.toBeNull();
+    expect(summary.compareDocumentPosition(firstPost!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  // The half a count alone cannot do. Focus, not scroll position: a browser
+  // scrolls a newly focused control into view on its own, and a scroll
+  // assertion would be a layout claim jsdom cannot make.
+  it('takes her to the field that has the problem, not to the top of the list', async () => {
+    const user = userEvent.setup();
+    renderList({ problems: [{ field: '[1].title', message: 'the second post needs a title' }] });
+    await user.click(screen.getByRole('button', { name: 'Take me to the first one' }));
+    expect(document.activeElement).toBe(screen.getByDisplayValue('A second fixture post'));
+  });
+
+  // ...and when the problem has no field to land on, to the message region
+  // that is carrying it. `[0].blocks` with no index is the message an empty
+  // block list produces, and it is exactly the shape no control can show.
+  it('takes her to the message region when no field could hold the problem', async () => {
+    const user = userEvent.setup();
+    renderList({ problems: [{ field: '[0].blocks', message: 'this post has nothing in it yet' }] });
+    await user.click(screen.getByRole('button', { name: 'Take me to the first one' }));
+    expect(document.activeElement).toHaveTextContent('this post has nothing in it yet');
+  });
+
+  // The summary must not be its own destination, or the button reads as broken.
+  it('never sends her to the summary itself', async () => {
+    const user = userEvent.setup();
+    renderList({ problems: [{ field: '[1].title', message: 'the second post needs a title' }] });
+    const summary = screen.getByRole('status', { name: 'What still needs fixing' });
+    await user.click(screen.getByRole('button', { name: 'Take me to the first one' }));
+    expect(summary.contains(document.activeElement)).toBe(false);
+  });
+});
