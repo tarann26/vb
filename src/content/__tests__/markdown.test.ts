@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isSafeHref, parseInline, rawLinkTargets, type InlineNode } from '../markdown';
+import { isSafeHref, MAX_NESTING_DEPTH, parseInline, rawLinkTargets, type InlineNode } from '../markdown';
 
 // Every expected value below is a hand-written literal. Nothing here builds
 // its expectation by calling parseInline, isSafeHref or any other function
@@ -114,32 +114,60 @@ describe('parseInline: unclosed and malformed runs stay literal', () => {
 // Bounds, not exact timings: the numbers above are 2^n, so a 1000ms budget
 // against a measured 0-4ms is a margin of two to three orders of magnitude.
 // A machine slow enough to fail this honestly has a different problem.
+//
+// One case in the block below guards nothing at this bound: 24 brackets
+// took under a second before this fix too (906ms measured for the plan,
+// 885.6ms and 963ms independently measured since), so it would pass on the
+// pre-fix parser. It stays for what it documents -- the first point on the
+// 2^n curve small enough to still finish -- not as one of the cases doing
+// the guarding; that work is 30, 40, 2000 and 50000.
 describe('parseInline: an unclosed bracket cannot hang the tab', () => {
-  function msToParse(source: string): number {
-    const started = performance.now();
-    parseInline(source);
-    return performance.now() - started;
-  }
-
+  // Timing alone cannot tell a fixed parser from a broken one that returns
+  // nothing: `parseInline = () => []` is very fast and would pass every
+  // `toBeLessThan` below on its own. Each case therefore also asserts what
+  // the parser actually produced -- for a source with no `](` anywhere at
+  // all, `lastTargetOpen` is -1, every '[' is refused at depth 0, and the
+  // whole thing stays one literal text node equal to the source, which is
+  // the same answer the pre-fix parser gave, just faster.
   it.each([
     ['24 unclosed brackets -- 906ms before this fix', '['.repeat(24) + 'ok'],
     ['30 unclosed brackets -- about two minutes before this fix', '['.repeat(30) + 'ok'],
     ['40 unclosed brackets -- did not finish in 120 seconds before this fix', '['.repeat(40) + 'ok'],
     ['2000 unclosed brackets', '['.repeat(2000) + 'ok'],
     ['50000 unclosed brackets -- a paste, not typing', '['.repeat(50000) + 'ok'],
-  ])('%s parses in under 1000ms', (_name, source) => {
-    expect(msToParse(source)).toBeLessThan(1000);
+  ])('%s parses in under 1000ms and stays entirely literal', (_name, source) => {
+    const started = performance.now();
+    const nodes = parseInline(source);
+    expect(performance.now() - started).toBeLessThan(1000);
+    expect(nodes).toEqual([text(source)]);
   });
 
   // The shape that defeats a failure-only memo: a long bracket run WITH a
   // real link target after it, so every outer attempt succeeds and, without
   // success memoisation, is recomputed at every position. Measured at 38
   // SECONDS with failures memoised and successes not; 3ms with both.
+  //
+  // Also asserts the shape, for the same reason as the block above: past
+  // MAX_NESTING_DEPTH consecutive openers, the innermost 32 collapse into
+  // one link (the depth-32 case in the block below pins that this is
+  // byte-identical to the uncapped answer), and everything before that is
+  // literal text -- `n - MAX_NESTING_DEPTH` leftover '[' end up inside the
+  // link's own children rather than opening 'n' further levels of descent.
   it.each([
-    ['2000 brackets then a real target', '['.repeat(2000) + '](https://example.com)'],
-    ['50000 brackets then a real target', '['.repeat(50000) + '](https://example.com)'],
-  ])('%s parses in under 1000ms', (_name, source) => {
-    expect(msToParse(source)).toBeLessThan(1000);
+    ['2000 brackets then a real target', '['.repeat(2000) + '](https://example.com)', 2000],
+    ['50000 brackets then a real target', '['.repeat(50000) + '](https://example.com)', 50000],
+  ])('%s parses in under 1000ms and forms exactly one link to the real target', (_name, source, n) => {
+    const started = performance.now();
+    const nodes = parseInline(source);
+    expect(performance.now() - started).toBeLessThan(1000);
+    expect(nodes).toEqual([
+      text('['.repeat(MAX_NESTING_DEPTH - 1)),
+      {
+        kind: 'link',
+        href: 'https://example.com',
+        children: [text('['.repeat(n - MAX_NESTING_DEPTH))],
+      },
+    ]);
   });
 
   // A mixed paste bomb: brackets interleaved with real markup, so neither
@@ -165,6 +193,10 @@ describe('parseInline: an unclosed bracket cannot hang the tab', () => {
 
   // Deep nesting must not trade a hang for a stack overflow. Memoisation
   // alone still descends once per consecutive '[', which is 50000 frames.
+  // `not.toThrow(RangeError)` is a named tell in this project's Global
+  // Constraints, used here deliberately and exactly once in this file --
+  // the claim genuinely is "this specific throw does not happen", and nine
+  // other cases in this block now assert the positive output directly.
   it('50000 levels of nesting does not overflow the stack', () => {
     expect(() => parseInline('['.repeat(50000) + 'ok')).not.toThrow(RangeError);
   });
@@ -177,8 +209,22 @@ describe('parseInline: an unclosed bracket cannot hang the tab', () => {
   // deleted MAX_NESTING_DEPTH. A real target forces the actual descent the
   // cap exists to bound -- without it, this throws
   // `RangeError: Maximum call stack size exceeded` on this machine.
+  //
+  // Asserted as output rather than as `not.toThrow` a second time: a
+  // successful `toEqual` already proves no exception reached the test
+  // (an uncaught throw fails the test on its own), and it proves the
+  // positive claim -- one link, to the real target, with the leftover
+  // openers held as its own literal text -- at the same time.
   it('50000 levels of nesting, resolving to a real target, does not overflow the stack', () => {
-    expect(() => parseInline('['.repeat(50000) + 'x](https://example.com)')).not.toThrow(RangeError);
+    const n = 50000;
+    expect(parseInline('['.repeat(n) + 'x](https://example.com)')).toEqual([
+      text('['.repeat(MAX_NESTING_DEPTH - 1)),
+      {
+        kind: 'link',
+        href: 'https://example.com',
+        children: [text(`${'['.repeat(n - MAX_NESTING_DEPTH)}x`)],
+      },
+    ]);
   });
 });
 
@@ -197,8 +243,8 @@ describe('parseInline: the memo changes no output', () => {
     // never fires and this is byte-identical to the pre-fix parser's
     // answer -- the INNERMOST bracket opens the link, the 31 outer attempts
     // each fail once the target is claimed, and the label holds only 'x'.
-    ['thirty-two deep, then a real link', '['.repeat(32) + 'x](https://example.com)', [
-      { kind: 'text' as const, value: '['.repeat(31) },
+    ['thirty-two deep, then a real link', '['.repeat(MAX_NESTING_DEPTH) + 'x](https://example.com)', [
+      { kind: 'text' as const, value: '['.repeat(MAX_NESTING_DEPTH - 1) },
       { kind: 'link' as const, href: 'https://example.com', children: [{ kind: 'text' as const, value: 'x' }] },
     ]],
     // One past the cap, and the answer is NOT the one the pre-fix parser
@@ -214,11 +260,11 @@ describe('parseInline: the memo changes no output', () => {
     // levels of descent. Still a link, still to the right target, never a
     // hang -- which is the actual guarantee this task makes above depth 32.
     ['forty deep, then a real link -- past the cap, not identical to the pre-fix answer', '['.repeat(40) + 'x](https://example.com)', [
-      { kind: 'text' as const, value: '['.repeat(31) },
+      { kind: 'text' as const, value: '['.repeat(MAX_NESTING_DEPTH - 1) },
       {
         kind: 'link' as const,
         href: 'https://example.com',
-        children: [{ kind: 'text' as const, value: `${'['.repeat(8)}x` }],
+        children: [{ kind: 'text' as const, value: `${'['.repeat(40 - MAX_NESTING_DEPTH)}x` }],
       },
     ]],
     ['a bracket run with no target at all', '[[[[ok', [{ kind: 'text' as const, value: '[[[[ok' }]],

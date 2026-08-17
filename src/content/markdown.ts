@@ -147,16 +147,27 @@ export function rawLinkTargets(source: string): string[] {
 // emphasis inside a link label), so 32 is four times more than anything a
 // person writes and cheap insurance against the rest.
 //
-// Measured, not assumed: AT OR BELOW 32 consecutive openers, the output is
-// byte-identical to the pre-cap parser's, because a run that short never
-// reaches the cap and the INNERMOST bracket still finds the target exactly
-// as before. Past 32 the cap does change the answer -- it fires partway
-// through the label instead of finishing the descent, leaving a few extra
-// '[' inside the link's own children instead of them being consumed by
-// deeper recursion. The link still forms and still points at the right
-// target; only the exact text inside it differs from what the (impossibly
-// slow) uncapped parser would eventually have produced. Both cases are
-// pinned by name in the test file rather than assumed from the argument.
+// Measured, not assumed: AT OR BELOW 32 total speculative descents --
+// openers of any of the three kinds this module tries, not 32 of one kind;
+// a run of alternating '[*' spends two descents per repetition, so it
+// reaches the cap at 16 repetitions -- the output is byte-identical to the
+// pre-cap parser's, because nothing that short ever reaches the cap. PAST
+// 32, the cap can change more than trailing bytes: it can change the
+// SHAPE of the tree. '[*'.repeat(30) + 'x](https://example.com)' yields 8
+// `em` siblings under the cap and 14 without it -- a difference in how many
+// sibling nodes exist and how they nest, not only in what text one of them
+// holds. Both regimes are pinned by name in the test file.
+//
+// That shape change is still safe, and the reason does not depend on where
+// it lands: no security decision in this codebase reads AST bytes at all.
+// validate.ts's write boundary calls rawLinkTargets, which scans raw
+// source and never imports parseInline. Inline.tsx is the only place an
+// AST value reaches a DOM sink, and the only field it reads off a link
+// node is `href`, which passed isSafeHref at the single site tryLink
+// builds a link node ({ kind: 'link' }, below) -- the cap cannot route
+// around that check, only change how much of the source ends up inside
+// versus outside the node that already passed it. Every other AST value is
+// text, and text goes to textContent, which never re-parses.
 export const MAX_NESTING_DEPTH = 32;
 
 // One remembered attempt: what the run produced (null for "this is not a
@@ -199,7 +210,7 @@ interface Cursor {
   // input nested deeper than 32, which is the regime that HANGS today, so a
   // terminating answer is an improvement in every case. At depth <= 32 --
   // every input this repository can produce -- the behaviour is identical,
-  // verified against 26 hand cases and 300000 random strings with zero
+  // verified against 28 hand cases and 300000 random strings with zero
   // differences.
   readonly linkMemo: Map<number, Attempt>;
   readonly strongMemo: Map<number, Attempt>;
@@ -263,9 +274,13 @@ function tryLink(cursor: Cursor): InlineNode | null {
     cursor.index = seen.end;
     return seen.node;
   }
+  // Deliberately NOT remembered, same reason as tryDelimited above: the
+  // answer at this index depends on how deep the caller was, so caching it
+  // would poison a shallower attempt.
   if (cursor.depth >= MAX_NESTING_DEPTH) return null;
-  // The constant-time refusal. Remembered, because it does not depend on
-  // depth at all.
+  // The constant-time refusal, in contrast to the depth check just above:
+  // remembered, because unlike depth it does not depend on how the caller
+  // got here -- `lastTargetOpen` is fixed for the whole parse.
   if (start > cursor.lastTargetOpen) return remember(cursor.linkMemo, start, null, start);
 
   cursor.index += 1;
