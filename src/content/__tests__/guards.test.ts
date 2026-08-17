@@ -530,36 +530,26 @@ describe('assertPosts', () => {
     expect(assertPosts([])).toEqual([]);
   });
 
-  // The asymmetry a review found and this closes: validatePost runs the full
-  // asset-path check on `image` and this guard checked only that the string
-  // was non-empty. Both boundaries now ask isSiteRelativePath the same
-  // question, which is the same shared-primitive treatment assertBlock's own
-  // `src` check already gets -- and it matters because the exposed path is a
-  // DIRECT COMMIT to posts.json, which is the only way a post is authored
-  // today, and because scripts/sync-posts-fallback.mjs writes this file from
-  // a database row.
-  //
-  // isSiteRelativePath, not a pattern: '/' followed by a backslash resolves
-  // to somebody else's host, and so does '/' followed by a tab followed by
-  // '//host'. Naming the dangerous characters one at a time is how the old
-  // check came to be wrong.
-  it.each([
-    ['an off-site card image', 'https://evil.example/x.webp'],
-    ['a protocol-relative card image', '//evil.example/x.webp'],
-    ['a backslash card image', '/\\evil.example/x.webp'],
-    ['a traversing card image', '/press/../../etc/passwd'],
-    ['a bare filename', 'hotelier.webp'],
-  ])('refuses %s', (_name, image) => {
-    expect(() => assertPosts([{ ...A_POST, image }])).toThrow(/photo on this site/);
-  });
+  // The unsafe-path refusals for `image` live in the both-ends table below,
+  // not here -- a table that asserted only assertPosts on these same values
+  // would be a byte-for-byte duplicate of that table's own `refuses` rows,
+  // able to fail only in lockstep with it, and a maintainer strengthening
+  // one copy would have no reason to remember the other.
 
   // A percent-encoded backslash is NOT decoded before parsing, so it stays
   // on this origin and is accepted. Asserted beside the refusals rather than
   // left implicit: refusing it would be over-strict against real content,
   // and it was a deliberate call when isSafeHref was hardened.
+  //
+  // The encoded backslash has to sit in the LEADING run for this to mean
+  // anything -- decoding one that sits after a directory changes only the
+  // path shape, never the origin, because a browser's parser treats a
+  // backslash as an ordinary separator everywhere except where it completes
+  // the opening slash pair. A fixture with a directory in front of the
+  // escape would pass this test whether or not decoding happened at all.
   it('accepts a percent-encoded backslash, which stays on this origin', () => {
-    expect(assertPosts([{ ...A_POST, image: '/press/%5Chotelier.webp' }])[0].image).toBe(
-      '/press/%5Chotelier.webp',
+    expect(assertPosts([{ ...A_POST, image: '/%5Cevil.example/hotelier.webp' }])[0].image).toBe(
+      '/%5Cevil.example/hotelier.webp',
     );
   });
 
@@ -725,15 +715,36 @@ describe('assertBlock and the write boundary refuse the same broken blocks', () 
 // the block-level table above does -- one row, both boundaries asserted in
 // the same test -- because a row that only reached one end would look like
 // coverage without being any.
+//
+// isSiteRelativePath, not a pattern: '/' followed by a backslash resolves
+// to somebody else's host, and so does '/' followed by a tab followed by
+// '//host'. Naming the dangerous characters one at a time is how the old
+// check came to be wrong.
 describe('assertPosts and the write boundary refuse the same unsafe card image', () => {
   it.each([
     ['an off-site card image', { image: 'https://evil.example/x.webp' }, '[0].image'],
     ['a protocol-relative card image', { image: '//evil.example/x.webp' }, '[0].image'],
     ['a backslash card image', { image: '/\\evil.example/x.webp' }, '[0].image'],
+    ['a card image whose leading run mixes both slashes', { image: '/\\/evil.example/x.webp' }, '[0].image'],
     ['a traversing card image', { image: '/press/../../etc/passwd' }, '[0].image'],
+    // Review finding (Minor 5): refused in fact by isUnsafeAssetPath's own
+    // leading-slash test, but never pinned at the write boundary before this
+    // row -- posts[].image is absent from validate.test.ts's own ASSET_FIELDS
+    // table, which covers eight other image-shaped fields but not this one.
+    ['a bare filename', { image: 'hotelier.webp' }, '[0].image'],
   ])('refuses %s', (_name, override, field) => {
     expect(() => assertPosts([{ ...A_POST, ...override }])).toThrow(/photo on this site/);
     expect(validateContent('posts.json', [{ ...A_POST, ...override }]).map((p) => p.field)).toContain(field);
+  });
+
+  // The other direction, the same reason the block-level table above gives:
+  // without this, the table above is satisfied by a guard that refuses every
+  // card image, which would fail the build on the three posts already
+  // committed.
+  it('accepts an ordinary card image at both ends', () => {
+    const image = '/press/hotelier.webp';
+    expect(assertPosts([{ ...A_POST, image }])[0].image).toBe(image);
+    expect(validateContent('posts.json', [{ ...A_POST, image }])).toEqual([]);
   });
 });
 
