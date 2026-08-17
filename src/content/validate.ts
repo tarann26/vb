@@ -38,7 +38,7 @@ import {
 // below, and markdown.ts's own header. This module is bundled into the
 // Worker, and markdown.ts imports nothing, holds no JSX and touches no DOM,
 // so the chain stays clean (worker/__tests__/bundle.test.ts).
-import { isSafeHref, rawLinkTargets } from './markdown';
+import { isSafeHref, isSiteRelativePath, rawLinkTargets } from './markdown';
 // The hero collage's own data structure. The rules below are the same ones
 // `assertCollageTree` (./guards) fails the BUILD on, written for her instead
 // of for a developer -- see `collageTreeProblems` for the split, and this
@@ -107,10 +107,16 @@ function isUnsafeExternalUrl(value: unknown): boolean {
 // otherwise -- an absolute URL here would silently move an asset off-origin,
 // leaking every visitor's IP and referrer to whoever owns it, and would slip
 // past the guardrail that checks each of these files exists under public/.
+//
+// The "is this really a path on this site" half is `isSiteRelativePath`
+// (./markdown), not three string tests written out again here. It used to be
+// those three tests, and they let `/` + `\` + `evil.example` through: a
+// single leading slash, no dot-dot, and a browser resolves it to a different
+// origin anyway. See that function for the parser behaviour, and
+// markdown.test.ts for the shapes.
 function isUnsafeAssetPath(value: unknown): boolean {
   if (typeof value !== 'string') return true;
-  const trimmed = value.trim();
-  return !trimmed.startsWith('/') || trimmed.startsWith('//') || trimmed.includes('..');
+  return !isSiteRelativePath(value);
 }
 
 // Stricter than `asRecord`, which maps anything that isn't a plain object
@@ -1227,6 +1233,25 @@ function validateInlineText(
   return validateInlineLinks(value, field, subject);
 }
 
+// The two block text fields that may be absent (image captions, quote
+// attributions -- see BlockContentMap's own comment for why those two and no
+// others). Absent is accepted; present-but-not-text is not, because the
+// renderer trims it and the build guard refuses it.
+function validateOptionalInlineText(
+  value: unknown,
+  field: string,
+  subject: string,
+  what: string,
+): ValidationProblem[] {
+  if (value === undefined || typeof value === 'string') return [];
+  return [
+    problem(
+      field,
+      `a block in ${subject} has a ${what} that is not text -- reload this page, decline any draft it offers to restore, and make the edit again`,
+    ),
+  ];
+}
+
 function validateInlineList(
   value: unknown,
   field: string,
@@ -1284,6 +1309,13 @@ function validateBlock(raw: unknown, field: string, subject: string): Validation
       }
       // The caption is genuinely optional -- a photo that speaks for itself
       // needs no words under it -- so it is link-checked but never required.
+      // Optional is not the same as "any value at all", though: absent is
+      // fine, a string is fine, and anything else is a shape assertBlock
+      // (guards.ts) fails the BUILD on. Without this line the two ends
+      // disagree in the dangerous direction -- a write the Worker accepted
+      // and committed would then fail every build afterwards, which is the
+      // poisoned-main shape this file's own header warns about.
+      problems.push(...validateOptionalInlineText(block.caption, `${field}.caption`, subject, 'caption'));
       problems.push(...validateInlineLinks(block.caption, `${field}.caption`, subject));
       break;
     case 'gallery': {
@@ -1312,6 +1344,7 @@ function validateBlock(raw: unknown, field: string, subject: string): Validation
     }
     case 'quote':
       problems.push(...validateInlineText(block.text, `${field}.text`, subject, 'the words being quoted'));
+      problems.push(...validateOptionalInlineText(block.attribution, `${field}.attribution`, subject, 'attribution'));
       problems.push(...validateInlineLinks(block.attribution, `${field}.attribution`, subject));
       break;
     case 'ingredients':

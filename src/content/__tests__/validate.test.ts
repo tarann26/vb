@@ -1320,6 +1320,12 @@ describe('posts.json', () => {
     ['an off-site image', { image: 'https://evil.example/x.webp' }, '[0].image'],
     ['a protocol-relative image', { image: '//evil.example/x.webp' }, '[0].image'],
     ['a traversing image', { image: '/press/../../etc/passwd' }, '[0].image'],
+    // Review finding (Important #1) at the WRITE boundary. One leading
+    // slash, no dot-dot, and a browser fetches it from evil.example -- so
+    // every visitor's address and referrer go to whoever owns that name,
+    // which is the exact harm isUnsafeAssetPath's own comment names.
+    ['an image whose leading run hides a backslash', { image: '/\\evil.example/x.webp' }, '[0].image'],
+    ['an image whose leading run mixes both slashes', { image: '/\\/evil.example/x.webp' }, '[0].image'],
     ['an unknown post type', { type: 'essay' }, '[0].type'],
     ['a slug with spaces', { slug: 'a fixture post' }, '[0].slug'],
     ['a slug in capitals', { slug: 'A-Fixture-Post' }, '[0].slug'],
@@ -1370,6 +1376,8 @@ describe('posts.json', () => {
       ['an image with no description', { kind: 'image', src: '/food/tielle.webp', alt: '', caption: '' }, '[0].blocks[0].alt'],
       ['a gallery with no images', { kind: 'gallery', images: [] }, '[0].blocks[0].images'],
       ['a gallery image with an unsafe source', { kind: 'gallery', images: [{ src: '//evil.example/x.webp', alt: 'a' }] }, '[0].blocks[0].images[0].src'],
+      ['an image block whose source hides a backslash', { kind: 'image', src: '/\\evil.example/x.webp', alt: 'a', caption: '' }, '[0].blocks[0].src'],
+      ['a gallery photo whose source hides a backslash', { kind: 'gallery', images: [{ src: '/\\evil.example/x.webp', alt: 'a' }] }, '[0].blocks[0].images[0].src'],
       ['an empty quote', { kind: 'quote', text: '', attribution: 'Someone' }, '[0].blocks[0].text'],
       ['ingredients with no heading', { kind: 'ingredients', heading: '', items: ['Flour'] }, '[0].blocks[0].heading'],
       ['steps with no items', { kind: 'steps', heading: 'Method', items: [] }, '[0].blocks[0].items'],
@@ -1428,6 +1436,11 @@ describe('posts.json', () => {
       'Click [here](vbscript:msgbox(1)) now',
       'Click [here](//evil.example/x) now',
       'Click [here](/press/../../etc/passwd) now',
+      // Review finding (Important #1). This is the one that reads as an
+      // internal link in the dashboard and lands off-site in the browser --
+      // and the one Inline.tsx would have rendered through its own internal
+      // branch, which carries no `rel` at all.
+      'Click [here](/\\evil.example) now',
     ])('refuses %s', (text) => {
       const problems = withText(text);
       expect(problems.map((p) => p.field)).toContain('[0].blocks[0].text');

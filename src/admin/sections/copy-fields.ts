@@ -1,4 +1,4 @@
-// copy.json's pure helpers: how its 34 dotted leaf keys are grouped into
+// copy.json's pure helpers: how its 33 dotted leaf keys are grouped into
 // the sections of the site she recognises, how one leaf is read out of a
 // fetched Copy object without assuming its shape, and how one is written
 // back without reconstructing anything around it.
@@ -75,7 +75,7 @@ export function leafValue(data: Copy, path: string): string {
 }
 
 // The write side of `leafValue` above -- every COPY_FIELDS key is exactly
-// two segments (`section.key`; confirmed directly, none of the 34 keys in
+// two segments (`section.key`; confirmed directly, none of the 33 keys in
 // fields.ts's own COPY_FIELDS has a third dot), so this only ever has to
 // rebuild one level of nesting. `{ ...sectionValue, [key]: value }`, never a
 // reconstruction from a named list of known keys, is what preserves every

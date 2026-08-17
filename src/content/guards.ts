@@ -9,6 +9,13 @@ import {
   isNormalizedSizes,
   isSplitDirection,
 } from './collage';
+// Phase 5, review fix. The two href-shape answers assertBlock needs for
+// `citation.url`, `image.src` and `gallery.images[].src`. Read from
+// ./markdown rather than restated here so this guard, validate.ts and the
+// inline parser cannot come to three different conclusions about the same
+// string; ./markdown imports nothing at all, so this adds no dependency to
+// anything that already imports this file.
+import { isSafeHref, isSiteRelativePath } from './markdown';
 import type {
   CollageNode,
   Hours,
@@ -798,15 +805,65 @@ export function assertPosts(raw: unknown): Post[] {
   });
 }
 
-// Deliberately stops at the discriminant and the key set. Field-level shape
-// is the write boundary's job (validatePosts), which produces a sentence SHE
-// can act on rather than a build failure. This guard's contract is narrower
-// and deliberately so: the discriminant is real and no stray key survives,
-// which is what makes the cast below safe and what keeps a hand-edited file
-// from reaching a renderer that destructures a field that is not there.
-// Duplicating the field checks here would create exactly the
-// two-lists-that-drift problem validateKnownKeys' own comment (validate.ts)
-// records this project already paying for once.
+// The four helpers assertBlock's per-kind branches are built from. Presence
+// and primitive type only -- exactly what assertTemplateContent's own
+// comment above promises for template content, for the same reason: enough
+// that no renderer can be handed a field that is not there.
+function assertBlockText(value: unknown, key: string, context: string): void {
+  if (typeof value !== 'string') {
+    throw new Error(`content/posts.json: block ${context} needs a "${key}"`);
+  }
+}
+
+function assertOptionalBlockText(value: unknown, key: string, context: string): void {
+  if (value !== undefined && typeof value !== 'string') {
+    throw new Error(`content/posts.json: block ${context} has a "${key}" that is not text`);
+  }
+}
+
+function assertBlockTextList(value: unknown, key: string, context: string): void {
+  if (!Array.isArray(value) || value.some((item) => typeof item !== 'string')) {
+    throw new Error(`content/posts.json: block ${context} needs a "${key}" list of text`);
+  }
+}
+
+// An <img src> on a live page. `isSiteRelativePath` (./markdown) is the same
+// answer validate.ts's isUnsafeAssetPath reads, so the two ends cannot
+// disagree about what a path on this site is -- which matters here because
+// the shape they used to disagree with was `/` followed by a backslash, and
+// a browser fetches that from somebody else's host.
+function assertBlockAssetPath(value: unknown, key: string, context: string): void {
+  assertBlockText(value, key, context);
+  if (!isSiteRelativePath(value as string)) {
+    throw new Error(`content/posts.json: block ${context} "${key}" must be a photo on this site, starting with /`);
+  }
+}
+
+// Checks the discriminant, the key set, and -- per kind -- that every field
+// a renderer reads is present and of the right primitive type.
+//
+// The third of those is new, and the comment that used to sit here claimed
+// it while the code did not do it. A review proved the gap: a MISSING key is
+// not an UNKNOWN key, and nothing here noticed one, so `{"kind":"paragraph"}`,
+// `{"kind":"bulletList"}` and `{"kind":"gallery"}` all passed this guard and
+// then threw a TypeError inside BlockView, and a `citation.url` of
+// `javascript:` reached an href with nothing in its way. validatePosts
+// catches all four, so the dashboard was never the exposed path -- a direct
+// commit to posts.json was, and that is the only way a post is authored
+// today.
+//
+// The rules are written out here rather than delegated to validatePosts, and
+// the reason is import direction, not preference: src/content/validate.ts
+// imports THIS module and is built on top of it (its own header says so), so
+// a call the other way would be a cycle. What keeps the two copies honest is
+// a test, not a promise -- validate.test.ts's "both ends refuse the same
+// broken blocks" runs every shape refused below through validateContent too,
+// and fails if either end starts letting one through.
+//
+// Deliberately narrower than validatePosts in one direction: a present but
+// blank string passes here. An empty paragraph renders an empty paragraph,
+// which is not a crash, and "this paragraph needs some words" is a sentence
+// only the boundary that can show it to her should be producing.
 function assertBlock(raw: unknown, context: string): Block {
   if (!raw || typeof raw !== 'object') {
     throw new Error(`content/posts.json: block ${context} is not an object`);
@@ -815,12 +872,74 @@ function assertBlock(raw: unknown, context: string): Block {
   if (!isBlockKind(record.kind)) {
     throw new Error(`content/posts.json: "${String(record.kind)}" is not a block kind at ${context}`);
   }
-  const unknown = unknownKeys(record, BLOCK_KEYS[record.kind]);
+  const kind = record.kind;
+  const unknown = unknownKeys(record, BLOCK_KEYS[kind]);
   if (unknown.length > 0) {
     throw new Error(
-      `content/posts.json: block ${context} carries "${unknown[0]}", which a ${record.kind} block does not use`,
+      `content/posts.json: block ${context} carries "${unknown[0]}", which a ${kind} block does not use`,
     );
   }
+
+  switch (kind) {
+    case 'paragraph':
+    case 'heading':
+      assertBlockText(record.text, 'text', context);
+      break;
+    case 'bulletList':
+    case 'numberList':
+      assertBlockTextList(record.items, 'items', context);
+      break;
+    case 'image':
+      assertBlockAssetPath(record.src, 'src', context);
+      assertBlockText(record.alt, 'alt', context);
+      assertOptionalBlockText(record.caption, 'caption', context);
+      break;
+    case 'gallery': {
+      const images = record.images;
+      if (!Array.isArray(images)) {
+        throw new Error(`content/posts.json: block ${context} needs an "images" list`);
+      }
+      images.forEach((entry, i) => {
+        if (!entry || typeof entry !== 'object') {
+          throw new Error(`content/posts.json: block ${context} images[${i}] is not an object`);
+        }
+        const photo = entry as Record<string, unknown>;
+        assertBlockAssetPath(photo.src, `images[${i}].src`, context);
+        assertBlockText(photo.alt, `images[${i}].alt`, context);
+      });
+      break;
+    }
+    case 'quote':
+      assertBlockText(record.text, 'text', context);
+      assertOptionalBlockText(record.attribution, 'attribution', context);
+      break;
+    case 'ingredients':
+    case 'steps':
+      assertBlockText(record.heading, 'heading', context);
+      assertBlockTextList(record.items, 'items', context);
+      break;
+    case 'citation':
+      assertBlockText(record.publication, 'publication', context);
+      assertBlockText(record.date, 'date', context);
+      // `null` is the real "there is no online copy" value, matching
+      // Article['url'] and the committed press.json entries that carry it.
+      // Anything else goes through isSafeHref, the same check every other
+      // href on this site is held to -- blocks.tsx renders this one raw.
+      if (record.url !== null && (typeof record.url !== 'string' || !isSafeHref(record.url))) {
+        throw new Error(
+          `content/posts.json: block ${context} needs a usable "url", or null when there is no online copy`,
+        );
+      }
+      break;
+    default: {
+      // Unreachable while BLOCK_KIND_SET and this switch agree; an eleventh
+      // kind added without a branch fails to compile here, the same
+      // exhaustiveness assertTemplateContent relies on.
+      const _exhaustive: never = kind;
+      throw new Error(`content/posts.json: block ${context} has an unhandled kind "${String(_exhaustive)}"`);
+    }
+  }
+
   return record as unknown as Block;
 }
 

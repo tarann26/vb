@@ -214,8 +214,10 @@ describe('every renderText/renderImage call site passes a path that really point
   it('the recorded copy.json paths are exactly EDITABLE_TEXT_PATHS (src/admin/editable-paths.ts) -- no missing, no extra', () => {
     // 27, not 32: Phase 5, Task 8 retired BlogsPage.tsx's own route (/blogs
     // now redirects to /blog), which took five of its copy.json leaves --
-    // title, subtitle, back, previous, next -- out of every live route.
-    // See editable-paths.ts's own NOT_EDITABLE_IN_PLACE_COPY_FIELDS comment.
+    // title, subtitle, back, previous, next -- out of every live route, and
+    // the review of that task then took the same five out of COPY_FIELDS,
+    // so they no longer render a dashboard control either. The 27 is
+    // unmoved by that second step; what moved is COPY_FIELDS, 38 to 33.
     expect(EDITABLE_TEXT_PATHS).toHaveLength(27);
     // Partitioned, not filtered-and-forgotten: EDITABLE_TEXT_PATHS is derived
     // from COPY_FIELDS and therefore describes copy.json ONLY, so a template
@@ -281,12 +283,20 @@ describe('EDITABLE_TEXT_PATHS (src/admin/editable-paths.ts)', () => {
     EDITABLE_TEXT_PATHS.forEach((path) => expect(copyFieldKeys.has(path)).toBe(true));
   });
 
-  // The eleven names this list must NOT contain, spelled out independently
-  // of editable-paths.ts's own internal set (fields.ts's CopyLeafShape
-  // comment is the authority the first five trace back to) -- if
-  // editable-paths.ts ever dropped its own exclusion, this still catches it
-  // without depending on the same constant that would already be wrong.
-  it('excludes exactly the eleven COPY_FIELDS leaves /edit does not offer in place, and nothing else', () => {
+  // The six names this list must NOT contain, spelled out independently of
+  // editable-paths.ts's own internal set (fields.ts's CopyLeafShape comment
+  // is the authority the first five trace back to) -- if editable-paths.ts
+  // ever dropped its own exclusion, this still catches it without depending
+  // on the same constant that would already be wrong.
+  //
+  // Six, not eleven, and 33 COPY_FIELDS keys rather than 38. The difference
+  // is the five blogsPage leaves Task 8 orphaned: excluding them from
+  // in-place editing left them rendering as five dashboard controls that
+  // changed nothing anywhere, so the review fix removed their COPY_FIELDS
+  // descriptors outright. A leaf with no descriptor is not "excluded" from
+  // this list -- it never reaches it, because the list is derived from
+  // COPY_FIELDS. fields.test.ts is where their absence is pinned by name.
+  it('excludes exactly the six COPY_FIELDS leaves /edit does not offer in place, and nothing else', () => {
     const notEditableInPlace = [
       // Bound to an attribute, never painted as visible text.
       'nav.instagramLabel',
@@ -297,19 +307,17 @@ describe('EDITABLE_TEXT_PATHS (src/admin/editable-paths.ts)', () => {
       // Painted, but as a <button>'s own label -- see NavBar.tsx's own
       // comment, and the describe block at the end of this file.
       'nav.pagesLabel',
-      // Phase 5, Task 8: BlogsPage.tsx's own route is gone (/blogs now
-      // redirects to /blog), taking these five along with it -- nothing
-      // live renders them any more. blogsPage.heading/intro are NOT here:
-      // BlogIndex.tsx reuses those two keys for its own real heading and
-      // intro, through renderText, so they stay editable in place.
-      'blogsPage.title',
-      'blogsPage.subtitle',
-      'blogsPage.back',
-      'blogsPage.previous',
-      'blogsPage.next',
     ];
     notEditableInPlace.forEach((path) => expect(EDITABLE_TEXT_PATHS).not.toContain(path));
+    expect(notEditableInPlace).toHaveLength(6);
+    expect(Object.keys(COPY_FIELDS)).toHaveLength(33);
     expect(Object.keys(COPY_FIELDS)).toHaveLength(EDITABLE_TEXT_PATHS.length + notEditableInPlace.length);
+    // blogsPage.heading and blogsPage.intro are the two that survived Task 8
+    // and must keep surviving: BlogIndex.tsx paints both through renderText
+    // on a live route, so they are in-place editable, not excluded and not
+    // removed.
+    expect(EDITABLE_TEXT_PATHS).toContain('blogsPage.heading');
+    expect(EDITABLE_TEXT_PATHS).toContain('blogsPage.intro');
     // Phase 3, Task 3: experiences.heading/intro are now painted through a
     // live content.renderText call (Experiences.tsx), so they belong in
     // EDITABLE_TEXT_PATHS rather than in the excluded set above -- the

@@ -38,12 +38,53 @@ export type InlineNode =
 // measurement expects.
 const ESCAPABLE = '*`[]()\\';
 
+// The origin `isSiteRelativePath` measures against. `.invalid` is reserved
+// by RFC 2606 and can never be a real host, so this can never accidentally
+// agree with a name somebody owns. The value itself is arbitrary; only the
+// comparison against it means anything.
+const PROBE_ORIGIN = 'https://site.invalid';
+
+// Whether a target that LOOKS like a path on this site really is one.
+//
+// "Begins with a slash and carries no dot-dot" was the old test, and a
+// review found it wrong. A slash followed by a backslash is a protocol
+// slash pair to every browser: the WHATWG URL parser accepts a backslash
+// wherever it accepts a slash while the scheme is a special one, so
+// `/` + `\` + `evil.example` lands on `https://evil.example/`. Confirmed
+// against Node's own URL parser, which is the same implementation the
+// browser runs. A tab or a newline sitting in the leading run does the same
+// thing, because the parser removes both before it decides anything. Naming
+// the dangerous characters one by one is exactly how the old test came to be
+// wrong, so this one names none of them: it asks the parser where the string
+// really lands and insists the answer is here.
+//
+// The dot-dot test stays in FRONT of the parser rather than being left to
+// it, because the parser resolves traversal instead of refusing it --
+// `/a/../../b` normalises to `/b`, which is on this origin and still not a
+// path anybody meant to write.
+//
+// Exported because three boundaries need this one answer and had no shared
+// place to read it from: `isSafeHref` below, `isUnsafeAssetPath`
+// (src/content/validate.ts) and `assertBlock` (src/content/guards.ts). It
+// lives in this module for the reason `isSafeHref` already did -- this file
+// imports nothing at all, so the Worker bundle stays clean.
+export function isSiteRelativePath(value: string): boolean {
+  const path = value.trim();
+  if (!path.startsWith('/')) return false;
+  if (path.includes('..')) return false;
+  try {
+    return new URL(path, `${PROBE_ORIGIN}/`).origin === PROBE_ORIGIN;
+  } catch {
+    return false;
+  }
+}
+
 // The two shapes a link target is allowed to have, and they are the same two
 // shapes validate.ts already enforces for whole fields: an off-site
-// `https?://host` (isUnsafeExternalUrl) or a site-relative `/path` with no
+// `https?://host` (isUnsafeExternalUrl) or a path on this site with no
 // traversal (isUnsafeAssetPath). Everything else -- `javascript:`, `data:`,
-// `vbscript:`, a protocol-relative `//host`, a bare `example.com` -- is
-// refused here and refused again at the write boundary by validatePosts.
+// `vbscript:`, a protocol slash pair, a bare `example.com` -- is refused
+// here and refused again at the write boundary by validatePosts.
 //
 // One deliberate difference from isUnsafeExternalUrl: whitespace is excluded
 // from the host position. `https:// evil.example` passes that older pattern,
@@ -51,8 +92,7 @@ const ESCAPABLE = '*`[]()\\';
 export function isSafeHref(value: string): boolean {
   const href = value.trim();
   if (href.length === 0) return false;
-  if (href.startsWith('//')) return false;
-  if (href.startsWith('/')) return !href.includes('..');
+  if (href.startsWith('/')) return isSiteRelativePath(href);
   return /^https?:\/\/[^/\s]/i.test(href);
 }
 

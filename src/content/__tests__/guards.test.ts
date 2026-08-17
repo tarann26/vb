@@ -531,6 +531,156 @@ describe('assertPosts', () => {
   });
 });
 
+import { validateContent } from '../validate';
+import realPosts from '../posts.json';
+
+// Review finding (Important #2). assertBlock checked the discriminant and
+// the key set and nothing else, while its own comment claimed it kept "a
+// hand-edited file from reaching a renderer that destructures a field that
+// is not there". It did not: a MISSING key is not an UNKNOWN key. Every
+// block below passed the guard at the reviewed commit; the first three then
+// threw a TypeError inside BlockView on a live page, and the citation put
+// `javascript:` into an href.
+//
+// Each row is checked at BOTH ends, in one table, on purpose. assertBlock
+// cannot call validatePosts (validate.ts imports guards.ts, so the call
+// would be a cycle -- see assertBlock's own comment), so the rules exist
+// twice, and a table that only checked one end would let the other drift
+// silently. The guard message is pinned per row rather than a bare toThrow,
+// the same reason the assertPosts table above gives.
+describe('assertBlock and the write boundary refuse the same broken blocks', () => {
+  const withBlock = (block: unknown) => [{ ...A_POST, blocks: [block] }];
+
+  it.each([
+    ['a paragraph with no text at all', { kind: 'paragraph' }, /block test-1\[0\] needs a "text"/, '[0].blocks[0].text'],
+    ['a heading with no text at all', { kind: 'heading' }, /needs a "text"/, '[0].blocks[0].text'],
+    ['a bullet list with no items key', { kind: 'bulletList' }, /needs a "items" list of text/, '[0].blocks[0].items'],
+    [
+      'a numbered list holding something that is not text',
+      { kind: 'numberList', items: ['A step.', 42] },
+      /needs a "items" list of text/,
+      '[0].blocks[0].items[1]',
+    ],
+    ['an image with no source', { kind: 'image', alt: 'A dish' }, /needs a "src"/, '[0].blocks[0].src'],
+    [
+      'an image whose source leaves this site through a backslash',
+      { kind: 'image', src: '/\\evil.example/x.webp', alt: 'A dish' },
+      /"src" must be a photo on this site/,
+      '[0].blocks[0].src',
+    ],
+    ['an image with no description', { kind: 'image', src: '/food/tielle.webp' }, /needs a "alt"/, '[0].blocks[0].alt'],
+    [
+      'an image whose caption is not text',
+      { kind: 'image', src: '/food/tielle.webp', alt: 'A dish', caption: 42 },
+      /has a "caption" that is not text/,
+      '[0].blocks[0].caption',
+    ],
+    ['a gallery with no images key', { kind: 'gallery' }, /needs an "images" list/, '[0].blocks[0].images'],
+    [
+      'a gallery photo that is not an object',
+      { kind: 'gallery', images: [null] },
+      /images\[0\] is not an object/,
+      '[0].blocks[0].images[0].src',
+    ],
+    [
+      'a gallery photo with no source',
+      { kind: 'gallery', images: [{ alt: 'A dish' }] },
+      /needs a "images\[0\]\.src"/,
+      '[0].blocks[0].images[0].src',
+    ],
+    [
+      'a gallery photo leaving this site through a backslash',
+      { kind: 'gallery', images: [{ src: '/\\evil.example/x.webp', alt: 'A dish' }] },
+      /"images\[0\]\.src" must be a photo on this site/,
+      '[0].blocks[0].images[0].src',
+    ],
+    ['a quote with no words in it', { kind: 'quote' }, /needs a "text"/, '[0].blocks[0].text'],
+    [
+      'a quote whose attribution is not text',
+      { kind: 'quote', text: 'Words worth repeating.', attribution: 42 },
+      /has a "attribution" that is not text/,
+      '[0].blocks[0].attribution',
+    ],
+    [
+      'ingredients with no heading',
+      { kind: 'ingredients', items: ['Flour'] },
+      /needs a "heading"/,
+      '[0].blocks[0].heading',
+    ],
+    ['steps with no items key', { kind: 'steps', heading: 'Method' }, /needs a "items" list of text/, '[0].blocks[0].items'],
+    [
+      'a citation with no publication',
+      { kind: 'citation', url: null, date: '2026-01-01' },
+      /needs a "publication"/,
+      '[0].blocks[0].publication',
+    ],
+    [
+      'a citation with no date',
+      { kind: 'citation', publication: 'A Paper', url: null },
+      /needs a "date"/,
+      '[0].blocks[0].date',
+    ],
+    [
+      'a citation with no url key at all',
+      { kind: 'citation', publication: 'A Paper', date: '2026-01-01' },
+      /needs a usable "url"/,
+      '[0].blocks[0].url',
+    ],
+    [
+      'a citation whose url is script',
+      { kind: 'citation', publication: 'A Paper', url: 'javascript:alert(1)', date: '2026-01-01' },
+      /needs a usable "url"/,
+      '[0].blocks[0].url',
+    ],
+    [
+      'a citation whose url leaves this site through a backslash',
+      { kind: 'citation', publication: 'A Paper', url: '/\\evil.example', date: '2026-01-01' },
+      /needs a usable "url"/,
+      '[0].blocks[0].url',
+    ],
+  ])('refuses %s', (_name, block, message, field) => {
+    expect(() => assertPosts(withBlock(block))).toThrow(message);
+    expect(validateContent('posts.json', withBlock(block)).map((p) => p.field)).toContain(field);
+  });
+
+  // The other direction. Without these the table above is satisfied by a
+  // guard that refuses everything, which would fail the build on the three
+  // posts already committed.
+  it.each([
+    ['a paragraph', { kind: 'paragraph', text: 'A paragraph.' }],
+    ['a heading', { kind: 'heading', text: 'A heading' }],
+    ['a bullet list', { kind: 'bulletList', items: ['One', 'Two'] }],
+    ['a numbered list', { kind: 'numberList', items: ['One', 'Two'] }],
+    ['an image with a caption', { kind: 'image', src: '/food/tielle.webp', alt: 'A dish', caption: 'A caption.' }],
+    ['an image with no caption key', { kind: 'image', src: '/food/tielle.webp', alt: 'A dish' }],
+    ['a gallery', { kind: 'gallery', images: [{ src: '/food/tielle.webp', alt: 'A dish' }] }],
+    ['a quote with an attribution', { kind: 'quote', text: 'Words.', attribution: 'Someone' }],
+    ['a quote with no attribution key', { kind: 'quote', text: 'Words.' }],
+    ['ingredients', { kind: 'ingredients', heading: 'Ingredients', items: ['Flour'] }],
+    ['steps', { kind: 'steps', heading: 'Method', items: ['Rest the dough.'] }],
+    ['a citation with a link', { kind: 'citation', publication: 'A Paper', url: 'https://example.com/a', date: '2026-01-01' }],
+    ['a citation with no online copy', { kind: 'citation', publication: 'A Paper', url: null, date: '2026-01-01' }],
+  ])('accepts %s', (_name, block) => {
+    const posts = assertPosts(withBlock(block));
+    expect(posts[0].blocks[0]).toEqual(block);
+  });
+
+  // The committed file itself. The guard above is new and strict, and
+  // posts.json is what it gates -- src/content/index.ts runs assertPosts on
+  // it at import time, so this pins the shipped content against the new
+  // rules here rather than leaving it to a build failure. Three, and the
+  // three slugs, are hand-written: shape.test.ts's own tripwire pins the
+  // same count for the same reason.
+  it('accepts the three posts this branch ships', () => {
+    const posts = assertPosts(realPosts);
+    expect(posts.map((post) => post.slug)).toEqual([
+      'bw-hotelier-regional-flair',
+      'delhi-royale-pastificio-ristorante',
+      'restaurant-india-cordon-bleu-debut',
+    ]);
+  });
+});
+
 import type { Block } from '../types';
 
 // Review finding (Important): `image.caption` and `quote.attribution` were

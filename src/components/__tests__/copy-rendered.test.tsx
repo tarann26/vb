@@ -145,6 +145,18 @@ describe('copy-rendered', () => {
   // This test still passes, correctly, and still proves BlogsPage itself
   // reads these copy.json fields rather than hardcoding them -- but green
   // here is not evidence a visitor can reach this component.
+  //
+  // The follow-up review turned that note into a work item, and this is
+  // where the two halves part company. Five of the seven fields below --
+  // title, subtitle, back, previous, next -- no longer have a COPY_FIELDS
+  // descriptor, so /edit/manage renders no control for them and nobody can
+  // edit them any more (src/admin/__tests__/fields.test.ts pins that by
+  // name). The VALUES are still in copy.json and this component still reads
+  // them, which is exactly what this test is for: BlogsPage stays on disk
+  // under the owner's never-delete constraint, and a page put back into
+  // service later should find its own words where it left them, still bound
+  // to the file rather than baked into the component. Nothing here should be
+  // read as saying those five are editable.
   it('BlogsPage renders its title, subtitle, back link, heading, intro and pagination labels, and reuses copy.press.readArticle', async () => {
     const fixtureArticles = Array.from({ length: 11 }, (_, i) => ({
       id: `fixture-article-${i}`,

@@ -482,13 +482,24 @@ interface CopyLeafShape {
   'footer.rightsSuffix': string;
   'footer.instagramLabel': string;
   'footer.linkedinLabel': string;
-  'blogsPage.title': string;
-  'blogsPage.subtitle': string;
+  // Two of copy.json's seven `blogsPage` leaves, not all seven. The other
+  // five (title, subtitle, back, previous, next) were the header, the back
+  // button and the Previous/Next labels of BlogsPage.tsx, which Phase 5 Task
+  // 8 took off every route -- /blogs redirects to /blog, and BlogIndex.tsx,
+  // which renders there, has no header and numbers its pages rather than
+  // stepping through them. A review found them still rendering as five
+  // labelled controls on /edit/manage that changed nothing anywhere, which
+  // is the worst thing a dashboard can do to somebody who is not going to
+  // read the code to find out why. Removing the descriptor is what removes
+  // the control; the VALUES stay in copy.json, untouched, because the
+  // component that reads them stays on disk under the owner's never-delete
+  // constraint (src/test/no-dead-backend.test.ts) and a page put back into
+  // service should find its own words where it left them.
+  //
+  // heading and intro are live and stay: BlogIndex.tsx paints both through
+  // renderText.
   'blogsPage.heading': string;
   'blogsPage.intro': string;
-  'blogsPage.back': string;
-  'blogsPage.previous': string;
-  'blogsPage.next': string;
   'notFound.heading': string;
   'notFound.back': string;
 }
@@ -552,13 +563,9 @@ export const COPY_FIELDS: FieldsOf<CopyLeafShape> = {
   'footer.rightsSuffix': { label: 'Copyright suffix', kind: 'text' },
   'footer.instagramLabel': { label: 'Footer Instagram label', kind: 'text' },
   'footer.linkedinLabel': { label: 'Footer LinkedIn label', kind: 'text' },
-  'blogsPage.title': { label: 'Stories page title', kind: 'text' },
-  'blogsPage.subtitle': { label: 'Stories page subtitle', kind: 'text' },
+  // See CopyLeafShape above for why this group is two entries and not seven.
   'blogsPage.heading': { label: 'Stories page heading', kind: 'text' },
   'blogsPage.intro': { label: 'Stories page intro', kind: 'textarea' },
-  'blogsPage.back': { label: 'Back link', kind: 'text' },
-  'blogsPage.previous': { label: 'Previous button', kind: 'text' },
-  'blogsPage.next': { label: 'Next button', kind: 'text' },
   'notFound.heading': { label: '404 heading', kind: 'text' },
   'notFound.back': { label: '404 back link', kind: 'text' },
 };

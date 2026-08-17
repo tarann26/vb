@@ -320,6 +320,31 @@ function collectLeafPaths(value: unknown, prefix: string, out: string[]): void {
   // rather than by silently miscounting.
 }
 
+// The five leaves copy.json still carries and the dashboard deliberately
+// does not offer. Phase 5 Task 8 took BlogsPage.tsx off every route (/blogs
+// redirects to /blog, and BlogIndex.tsx renders there with no page header
+// and numbered pages rather than Previous/Next). A review of that task found
+// these five still rendering as labelled controls on /edit/manage that
+// changed nothing anywhere -- "Stories page title", "Back link", "Previous
+// button" and the rest -- so their COPY_FIELDS descriptors were removed.
+//
+// The VALUES stay in copy.json on purpose: BlogsPage.tsx stays on disk under
+// the owner's never-delete constraint (src/test/no-dead-backend.test.ts
+// fails if it goes), it still reads all seven, and the dashboard's own write
+// path spreads the fetched object (`withLeaf`, src/admin/sections/copy-fields.ts)
+// rather than rebuilding it from this map, so an unlisted leaf survives a
+// publish untouched instead of being dropped into a build failure.
+//
+// Written out here rather than filtered by prefix, so a SIXTH orphan --
+// including a future blogsPage leaf -- still fails the walk below by name.
+const NOT_ON_THE_DASHBOARD = [
+  'blogsPage.title',
+  'blogsPage.subtitle',
+  'blogsPage.back',
+  'blogsPage.previous',
+  'blogsPage.next',
+];
+
 describe('COPY_FIELDS covers every editable leaf in the real, committed copy.json', () => {
   const paths: string[] = [];
   collectLeafPaths(copyRaw, '', paths);
@@ -328,8 +353,37 @@ describe('COPY_FIELDS covers every editable leaf in the real, committed copy.jso
     expect(paths.length).toBeGreaterThan(20);
   });
 
-  it.each(paths)('copy.json leaf "%s" has a COPY_FIELDS entry', (path) => {
-    expect(Object.prototype.hasOwnProperty.call(COPY_FIELDS, path), path).toBe(true);
+  it.each(paths.filter((path) => !NOT_ON_THE_DASHBOARD.includes(path)))(
+    'copy.json leaf "%s" has a COPY_FIELDS entry',
+    (path) => {
+      expect(Object.prototype.hasOwnProperty.call(COPY_FIELDS, path), path).toBe(true);
+    },
+  );
+
+  // Both halves of the exemption, so it cannot go stale in either direction:
+  // the leaf is really still in copy.json (otherwise this list is excusing
+  // something that no longer exists, and the walk above lost a real check
+  // for nothing), and it really has no descriptor (otherwise the control is
+  // back on /edit/manage and nothing here would have said so).
+  it.each(NOT_ON_THE_DASHBOARD)('retired leaf "%s" is still in copy.json but has no COPY_FIELDS entry', (path) => {
+    expect(paths, path).toContain(path);
+    expect(Object.prototype.hasOwnProperty.call(COPY_FIELDS, path), path).toBe(false);
+  });
+
+  // What she would actually see. The five labels below were real controls on
+  // /edit/manage under the "Stories page" group at the reviewed commit, and
+  // the two above them are the ones that must NOT go with them -- BlogIndex
+  // paints both on the live /blog page.
+  it.each(['Stories page title', 'Stories page subtitle', 'Back link', 'Previous button', 'Next button'])(
+    'no field on /edit/manage is still labelled "%s"',
+    (label) => {
+      expect(Object.values(COPY_FIELDS).map((spec) => spec.label)).not.toContain(label);
+    },
+  );
+
+  it('keeps the two Stories-page fields the live /blog page really renders', () => {
+    expect(Object.keys(COPY_FIELDS)).toContain('blogsPage.heading');
+    expect(Object.keys(COPY_FIELDS)).toContain('blogsPage.intro');
   });
 
   it('has no COPY_FIELDS entry that does not correspond to a real leaf in copy.json', () => {

@@ -5366,42 +5366,6 @@ exports[`the twelve panels, as they render today > Words on the site (copy) 1`] 
         >
           <label
             class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-            for="copy-blogsPage.title"
-          >
-            Stories page title
-          </label>
-          <input
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-            id="copy-blogsPage.title"
-            type="text"
-            value="Via Bianca Stories"
-          />
-        </div>
-      </div>
-      <div>
-        <div
-          class="mb-4"
-        >
-          <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-            for="copy-blogsPage.subtitle"
-          >
-            Stories page subtitle
-          </label>
-          <input
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-            id="copy-blogsPage.subtitle"
-            type="text"
-            value="Press & Articles"
-          />
-        </div>
-      </div>
-      <div>
-        <div
-          class="mb-4"
-        >
-          <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
             for="copy-blogsPage.heading"
           >
             Stories page heading
@@ -5430,60 +5394,6 @@ exports[`the twelve panels, as they render today > Words on the site (copy) 1`] 
           >
             Discover the complete collection of articles, reviews, and features about Via Bianca's culinary journey and authentic Italian dining experience.
           </textarea>
-        </div>
-      </div>
-      <div>
-        <div
-          class="mb-4"
-        >
-          <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-            for="copy-blogsPage.back"
-          >
-            Back link
-          </label>
-          <input
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-            id="copy-blogsPage.back"
-            type="text"
-            value="← Back to Home"
-          />
-        </div>
-      </div>
-      <div>
-        <div
-          class="mb-4"
-        >
-          <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-            for="copy-blogsPage.previous"
-          >
-            Previous button
-          </label>
-          <input
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-            id="copy-blogsPage.previous"
-            type="text"
-            value="Previous"
-          />
-        </div>
-      </div>
-      <div>
-        <div
-          class="mb-4"
-        >
-          <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-            for="copy-blogsPage.next"
-          >
-            Next button
-          </label>
-          <input
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-            id="copy-blogsPage.next"
-            type="text"
-            value="Next"
-          />
         </div>
       </div>
     </div>

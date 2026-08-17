@@ -107,6 +107,7 @@ describe('isSafeHref', () => {
     'http://example.com',
     '/catering',
     '/blog/a-post',
+    '/press/x.webp',
   ])('accepts %s', (href) => {
     expect(isSafeHref(href)).toBe(true);
   });
@@ -126,8 +127,51 @@ describe('isSafeHref', () => {
     '',
     '   ',
     'https:// evil.example',
+    // Review finding (Important #1). Every one of these begins with a single
+    // slash and carries no dot-dot, so the old test read all of them as a
+    // path on this site. They are not; see the resolution assertions below.
+    '/\\evil.example',
+    '/\\evil.example/a',
+    '/\\/evil.example',
+    '/\t/evil.example',
   ])('refuses %s', (href) => {
     expect(isSafeHref(href)).toBe(false);
+  });
+});
+
+// The property this guard exists for is not "the string contains a
+// backslash" -- that is only the symptom the old test missed. It is "a
+// browser resolves this somewhere other than here." So each row asserts
+// WHERE the string actually lands, using the same URL implementation a
+// browser runs, and only then asserts the guard's verdict. A future fix that
+// keeps the verdicts while breaking the reason fails the first assertion.
+describe('isSafeHref agrees with where a browser actually goes', () => {
+  const HERE = 'https://viabianca.example/blog/a-post';
+
+  it.each([
+    ['a backslash after the leading slash', '/\\evil.example'],
+    ['a backslash with a path after it', '/\\evil.example/a'],
+    ['two slashes, the shape already known', '//evil.example'],
+    ['a slash, a backslash, a slash', '/\\/evil.example'],
+    // A tab is REMOVED by the URL parser before it decides anything, so this
+    // is the two-slash shape wearing a disguise. Included because the fix
+    // must not be a list of dangerous characters -- this one is not a
+    // character anybody would think to list.
+    ['a tab inside the leading run', '/\t/evil.example'],
+  ])('%s lands on another origin: %s', (_name, href) => {
+    expect(new URL(href, HERE).origin).toBe('https://evil.example');
+    expect(isSafeHref(href)).toBe(false);
+  });
+
+  // The other direction, and it is what stops the fix being "refuse anything
+  // that looks odd": a percent-encoded backslash is an ordinary path
+  // character to the parser, stays on this origin, and is therefore a real
+  // -- if strange -- path on this site. Refusing it would be a guard
+  // disagreeing with the browser in the safe direction, which is still a
+  // guard nobody can reason about.
+  it.each(['/%5Cevil.example', '/blog/foo', '/press/x.webp'])('%s stays on this origin and is accepted', (href) => {
+    expect(new URL(href, HERE).origin).toBe('https://viabianca.example');
+    expect(isSafeHref(href)).toBe(true);
   });
 });
 
