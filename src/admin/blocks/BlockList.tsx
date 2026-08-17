@@ -1,17 +1,18 @@
-// Every block of one post, in order, with Up/Down/Remove. The drag handle
-// arrives in Task 8; the buttons stay when it does, because a drag is
-// unusable on a phone with a long list of blocks, so drag is a SECOND way to
-// do this and never the only way.
+// Every block of one post, in order, with Up/Down/Remove and a drag handle.
+// The buttons stay now that the handle is here, because a drag is unusable on
+// a phone with a long list of blocks, so drag is a SECOND way to do this and
+// never the only way.
 //
 // Button bindings imported from RecordList rather than retyped, for the
 // reason that file's own comment gives: a retyped Tailwind string is a new
 // class to the content scanner and ships a duplicate rule.
+import { useState } from 'react';
 import BlockFields from './BlockFields';
 import BlockPicker from './BlockPicker';
 import BlockProblemMessage from './BlockProblemMessage';
 import { blankBlock } from './blank-block';
 import { blockProblemOf, type BlockProblemTarget } from './block-problems';
-import { swapAt } from './reorder';
+import { moveTo, swapAt } from './reorder';
 import { BLOCK_KIND_LABELS, UNKNOWN_BLOCK_LABEL, UNKNOWN_BLOCK_MESSAGE } from './block-meta';
 import { MOVE_BUTTON_CLASSNAME, REMOVE_BUTTON_CLASSNAME } from '../RecordList';
 import { BLOCK_KEYS, isBlockKind } from '../../content/guards';
@@ -84,6 +85,46 @@ function claimsKey(block: Block, kind: BlockKind, key: string | undefined): bool
   return Object.prototype.hasOwnProperty.call(BLOCK_KEYS[kind], key);
 }
 
+// A drag handle's whole discoverability is its cursor: the handle is one glyph
+// wide and there is no other affordance on it, so the pointer changing shape
+// over it is the only thing that says it can be dragged at all.
+//
+// THE CURSOR IS AN INLINE STYLE, NOT A UTILITY CLASS, and that is a byte
+// decision rather than a style preference. The move-cursor utility has no rule
+// in this stylesheet, and neither has any half-strength opacity utility (the
+// four that ship are 0, 20, 90 and 100) -- measured, both of them, by a
+// rule-level diff against a worktree build of the parent commit: the class
+// version of this handle and its dimmed row costs +48 bytes and two new rules
+// against 107 bytes of headroom, leaving 59 for whoever comes next. So both
+// take the escape hatch this repository has documented for this exact ceiling
+// since Plan 6 (CollageTile.tsx's inline gradient, CollapsibleSection.tsx's
+// fieldset reset, the publish panel's 72px offset): the pixels are identical
+// and the stylesheet does not move a byte. `style-src` allows inline styles on
+// purpose and src/test/hosting.test.ts says why.
+//
+// The user-select utility below is a real class because it ALREADY has a rule,
+// so it costs nothing -- and it is not optional: without it a slow drag selects
+// the kind label's text instead of starting a drag, which reads as the handle
+// not working.
+//
+// `aria-hidden` and no role: this is a mouse affordance, and a screen-reader
+// user reorders with the Up/Down buttons, which are real buttons with real
+// names and are not going anywhere. A `role="button"` here would announce a
+// third control that does nothing without a pointer.
+const HANDLE_CLASSNAME = 'select-none px-3 py-1 text-gray-500';
+
+// Read off the handle itself by e2e/block-editor.spec.ts, which is the only
+// place a computed cursor can be checked at all -- jsdom has no layout engine
+// and no cascade worth asking.
+const HANDLE_STYLE = { cursor: 'move' };
+
+// The block in flight, dimmed. Once the pointer has left the row this is the
+// only thing telling her which block she has hold of. Inline for the same
+// reason the cursor is, and 0.5 rather than one of the four opacity utilities
+// that do ship: 0.9 is not a visible change and 0.2 is a block she can no
+// longer read.
+const DRAGGING_STYLE = { opacity: 0.5 };
+
 export default function BlockList({
   blocks,
   postIndex,
@@ -115,6 +156,17 @@ export default function BlockList({
   function swap(index: number, otherIndex: number): void {
     onChange(swapAt(safe, index, otherIndex));
   }
+
+  // Which block is being dragged, or null. State rather than a ref, because the
+  // dragged block renders differently while it is in flight, and that dimming
+  // is the only thing telling her which one she has hold of once the pointer
+  // has left the row.
+  //
+  // It is also what carries the source index across the drop, rather than the
+  // DataTransfer payload: only this list can be mid-drag in its own state, so a
+  // block cannot be dragged out of one post and dropped into another, and a
+  // file dragged in from the desktop finds no drop target here at all.
+  const [dragging, setDragging] = useState<number | null>(null);
 
   return (
     <div>
@@ -153,9 +205,67 @@ export default function BlockList({
           // rendered at all.
           const unplaced = kind === undefined ? own : own.filter((entry) => !claimsKey(block, kind, entry.target.key));
           return (
-            <li key={index} className="mb-6 rounded border border-gray-200 p-4">
+            <li
+              key={index}
+              // The drop target is the whole row, not a thin line between rows:
+              // a 4px gap is not something anybody can hit on a phone, and
+              // dropping "on" a block meaning "put mine here" is how every list
+              // she has ever used behaves.
+              onDragOver={(event) => {
+                if (dragging === null) return;
+                // preventDefault is what makes an element a valid drop target at
+                // all -- without it the browser refuses the drop and the drag
+                // ends with nothing happening, which is the single most common
+                // way HTML5 drag-and-drop is got wrong. No jsdom test can see
+                // it; e2e/block-editor.spec.ts is what covers it.
+                event.preventDefault();
+              }}
+              onDrop={(event) => {
+                if (dragging === null) return;
+                event.preventDefault();
+                if (dragging !== index) onChange(moveTo(safe, dragging, index));
+                setDragging(null);
+              }}
+              className="mb-6 rounded border border-gray-200 p-4"
+              style={dragging === index ? DRAGGING_STYLE : undefined}
+            >
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                <span className={`font-['Montserrat'] text-sm uppercase tracking-wide text-accent`}>{label}</span>
+                {/* The handle and the kind label as ONE group, so the row still
+                    has two things in it to space apart -- a third child here
+                    would push the label into the middle of the row. The same
+                    grouping RecordList's own header uses for its thumbnail and
+                    move buttons, out of the same already-shipping utilities. */}
+                <div className="flex items-center gap-2">
+                  <span
+                    aria-hidden="true"
+                    draggable
+                    onDragStart={(event) => {
+                      setDragging(index);
+                      // Firefox refuses to start a drag at all unless something
+                      // is set on the DataTransfer. The value is never read --
+                      // the source index lives in this component's state, which
+                      // is the only thing that survives a drop reliably across
+                      // browsers -- so this is deliberately the block's own
+                      // position as a plain string rather than anything a paste
+                      // could act on.
+                      event.dataTransfer.setData('text/plain', String(index));
+                      event.dataTransfer.effectAllowed = 'move';
+                    }}
+                    onDragEnd={() => setDragging(null)}
+                    className={HANDLE_CLASSNAME}
+                    style={HANDLE_STYLE}
+                    // The e2e spec's selector, carrying the index so it can
+                    // target one specific handle without a role-and-name query
+                    // it could never have (the handle has no accessible name on
+                    // purpose). The same cheap-attribute reasoning `data-panel`
+                    // follows, and it costs no CSS rule.
+                    data-drag-handle={index}
+                    title="Drag to move this block"
+                  >
+                    ⠿
+                  </span>
+                  <span className={`font-['Montserrat'] text-sm uppercase tracking-wide text-accent`}>{label}</span>
+                </div>
                 <div className="flex items-center gap-2">
                   {/* The labels carry the block's POSITION as well as its kind,
                       and that is not padding. A recipe has two Paragraph

@@ -637,6 +637,56 @@ describe('dist/assets/ keeps admin code out of the entry chunk', () => {
 // by reading the prose -- exactly why this lineage's standing rule is to run
 // the diff rather than trust that a reworded comment is safe by inspection.
 //
+// Phase 5B, the block editor, all eight tasks including drag-to-reorder:
+// 38593 -> 38593, ZERO bytes, byte-identical output down to the same content
+// hash 4e742936. ADDED: [], REMOVED: [] -- not zero net, zero of each --
+// measured by a rule-level diff against a worktree checkout of the true parent
+// commit 2df6aef, never a stash. (That worktree build also came out
+// byte-identical to a build of the clean working tree, which is the check that
+// says the method itself is sound.) Rule count 536 both sides. THE CEILING IS
+// NOT RAISED and is still 38700, with the same 107-byte margin Phase 5A left.
+//
+// This entry exists because the plan for the drag handle called for a raise and
+// did not need one, and the arithmetic is worth leaving where the next person
+// will look. The class version of the handle is `cursor-move` on the glyph and
+// `opacity-50` on the row in flight: measured at 38593 -> 38641, +48, two rules
+// added, zero removed -- which is UNDER the existing 38700 ceiling, by 59 bytes.
+// It would have passed this assertion untouched. The argument for raising
+// anyway was that 59 is below this lineage's own 115-250 margin band, which is a
+// real argument and is not the same thing as a build that fails; the plan's own
+// mutation table claimed `npm run build` would exit 1 at 38641 against 38700,
+// and that was simply run and found to pass.
+//
+// So neither rule was bought. Both went inline instead, the escape hatch this
+// file has pointed at since Plan 6 and the same one CollageTile.tsx's gradient,
+// CollapsibleSection.tsx's fieldset reset and the publish panel's 72px offset
+// took: `style={{ cursor: 'move' }}` on the handle and `style={{ opacity: 0.5 }}`
+// on the row being dragged. Identical pixels, no rule, and `style-src` allows it
+// on purpose (src/test/hosting.test.ts). Reusing a shipped opacity utility was
+// considered and rejected on the pixels rather than the bytes: the four that
+// ship are 0, 20, 90 and 100, and 90 is not a visible change while 20 is a block
+// she can no longer read. There is no shipped cursor rule to reuse at all
+// (`cursor-pointer` and `cursor-text` are the two, and neither means "this
+// moves"). The handle's user-select and padding utilities ARE classes, because
+// those rules already exist -- and the user-select one is not decoration, since
+// without it a slow drag selects the kind label instead of starting a drag.
+//
+// What that leaves is a whole sub-plan at zero: the Posts panel, PostList, the
+// block fields, the picker, the toolbar and the drag handle. Four of its files
+// (PostList, BlockList, BlockFields, InlineTextField) import RecordList's and
+// Field.tsx's own exported class bindings rather than retyping the strings -- a
+// retyped string is a new class to the scanner and ships a duplicate rule for a
+// style that already exists. Each task ran this same rule-level diff and each
+// reported ADDED: [], REMOVED: [].
+//
+// One near-miss worth recording, because it is the hazard the blocks.tsx
+// paragraph above measures at 26 bytes and it fired again: the toolbar's middle
+// button is labelled "Italic" in JSX text, and the scanner is a plain text
+// extractor. The capital letter is the whole of what saves it, since Tailwind's
+// own class name is lowercase -- and it was CHECKED with a diff rather than
+// assumed. BlockList.tsx's comment above HANDLE_CLASSNAME names no utility for
+// the same reason.
+//
 // The finding worth more than the byte count, recorded here because this is
 // where the next person will look: this assertion is `skipIf`, and for the
 // whole of Phase 3 it silently skipped. `npm test -- --run` reported it as

@@ -361,6 +361,79 @@ describe('BlockList reads a restored draft defensively', () => {
   });
 });
 
+// What jsdom can honestly say about a drag: that the handle is there, that it
+// is marked draggable, that it sits with the block it moves, and that it is NOT
+// a second control competing with the buttons. Whether a block MOVES is
+// e2e/block-editor.spec.ts's claim -- jsdom has no drag implementation, no
+// DataTransfer worth the name and no layout engine, so a fireEvent.dragStart
+// test here would prove a handler was called and nothing whatsoever about
+// whether anything moved.
+describe('BlockList’s drag handle, as far as jsdom can tell', () => {
+  it('every block has one, and it is draggable', () => {
+    renderList({ blocks: BLOCKS });
+    const handles = document.querySelectorAll('[data-drag-handle]');
+    expect(handles).toHaveLength(BLOCKS.length);
+    handles.forEach((handle) => {
+      expect(handle).toHaveAttribute('draggable', 'true');
+    });
+  });
+
+  it('is hidden from assistive technology, because the buttons are the accessible path', () => {
+    renderList({ blocks: BLOCKS });
+    const handles = document.querySelectorAll('[data-drag-handle]');
+    // Counted before the loop, because a forEach over an empty NodeList asserts
+    // nothing at all -- this case would otherwise pass green against a build
+    // with no handles in it.
+    expect(handles).toHaveLength(BLOCKS.length);
+    handles.forEach((handle) => {
+      expect(handle).toHaveAttribute('aria-hidden', 'true');
+    });
+    // And the buttons are still there. Drag is a second way, never the only
+    // way: a drag is unusable on a phone with a long block list.
+    expect(screen.getByRole('button', { name: 'Move Heading block 1 down' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Move Paragraph block 3 up' })).toBeInTheDocument();
+  });
+
+  // Not a restatement of the aria-hidden case above, and the difference is why
+  // this is worth its own test: `getAllByRole` skips an aria-hidden subtree by
+  // default, so a handle that had quietly become `role="button"` while KEEPING
+  // aria-hidden would satisfy both that case and a query for a button named
+  // "drag". Asked of the whole block instead: whatever the handle is, the
+  // controls this block offers are still exactly the ones it offered before --
+  // Remove, and the three formatting buttons over its text. `hidden: true` on
+  // purpose, since an aria-hidden control is the thing being ruled out, so the
+  // query has to be able to see one.
+  it('adds no control to the block, only a mouse affordance', () => {
+    renderList({ blocks: [{ kind: 'heading', text: 'Only' }] });
+    const [li] = screen.getAllByRole('listitem');
+    const controls = within(li)
+      .getAllByRole('button', { hidden: true })
+      .map((button) => button.getAttribute('aria-label') ?? button.textContent ?? '');
+    expect(controls).toEqual(['Remove Heading block 1', 'Bold', 'Italic', 'Link']);
+    const handle = li.querySelector('[data-drag-handle]');
+    expect(handle?.tagName).toBe('SPAN');
+    expect(handle?.hasAttribute('role')).toBe(false);
+  });
+
+  // The handle belongs to the block whose kind is written next to it, and it
+  // says so in the DOM rather than only on screen -- jsdom has no layout engine,
+  // so "next to" is a document-order claim here and a geometry claim only in
+  // e2e/. It is also exactly what the browser spec reads a block's kind off, so
+  // a handle moved out of this group would leave that spec measuring the Up and
+  // Remove buttons' text instead and still passing.
+  it('sits immediately before the kind label of the block it moves', () => {
+    renderList({ blocks: [EVERY_BLOCK.quote, EVERY_BLOCK.numberList] });
+    const [first, second] = screen.getAllByRole('listitem');
+    const handle = first.querySelector('[data-drag-handle]') as HTMLElement;
+    const label = within(first).getByText(BLOCK_KIND_LABELS.quote);
+    expect(Boolean(handle.compareDocumentPosition(label) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(handle.parentElement?.textContent).toBe(`⠿${BLOCK_KIND_LABELS.quote}`);
+    expect(second.querySelector('[data-drag-handle]')?.parentElement?.textContent).toBe(
+      `⠿${BLOCK_KIND_LABELS.numberList}`,
+    );
+  });
+});
+
 describe('BlockList namespaces its ids by post', () => {
   it('two posts’ block 1 get different input ids, so a label click cannot land in the wrong post', () => {
     const { unmount } = renderList({ postIndex: 0 });
