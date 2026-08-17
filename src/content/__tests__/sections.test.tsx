@@ -2,7 +2,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { HomePage } from '../../App';
-import { copy, story, sections, assertSections } from '../index';
+import { copy, posts, story, sections, assertSections } from '../index';
 import type { SectionId, BespokeSection } from '../index';
 
 // Plan 7, Task 1: `sections` is now `Section[]` (bespoke | template) --
@@ -154,6 +154,13 @@ describe('homepage sections', () => {
   // behind the id: BlogSection's cards link INTO this site (`/blog/<slug>`);
   // BlogTeaser's linked out to the publication.
   it('the press section behind #blogs links its cards to this site, not out to a publication (BlogSection, not BlogTeaser)', () => {
+    // Fix round 1, Finding F6: `document.querySelector(...article a)` below
+    // has no card to find, for a reason unrelated to what this case claims
+    // to check, the moment committed posts.json ships empty -- making that
+    // dependency visible rather than latent, precisely so a future failure
+    // here reads as "posts.json is empty" and not as "the component regressed".
+    expect(posts.length).toBeGreaterThan(0);
+
     render(
       <MemoryRouter>
         <HomePage />
