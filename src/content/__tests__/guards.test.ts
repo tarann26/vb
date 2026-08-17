@@ -665,6 +665,35 @@ describe('assertBlock and the write boundary refuse the same broken blocks', () 
       /needs a usable "url"/,
       '[0].blocks[0].url',
     ],
+    // Phase 5B, Task 6. The exact shape blankBlock('image') and
+    // blankBlock('gallery') produce (src/admin/blocks/blank-block.ts) -- a
+    // PRESENT but blank `src`, which every row above misses: the two src rows
+    // above omit the key entirely, and a missing key is not a blank one.
+    //
+    // Refused at both ends, and it is the only pair of blank kinds that is:
+    // assertBlock checks presence and primitive type only and accepts a
+    // present-but-blank string by design (its own comment says so), so the
+    // other eight blank kinds are refused by the write boundary alone. There
+    // is deliberately no row here claiming otherwise.
+    //
+    // This is what makes the import-time refusal of a freshly-added photo
+    // block a pinned decision rather than a surprise: she cannot publish one
+    // either, because the write boundary refuses the same block first, so it
+    // can never reach a committed posts.json for this guard to meet. Nobody
+    // may "fix" the factory with a placeholder path -- there would be no file
+    // behind it, and assets.test.ts fails the build on that.
+    [
+      'a blank image block, the shape a freshly-added photo block has',
+      { kind: 'image', src: '', alt: '' },
+      /"src" must be a photo on this site/,
+      '[0].blocks[0].src',
+    ],
+    [
+      'a blank gallery photo, the shape a freshly-added photo grid has',
+      { kind: 'gallery', images: [{ src: '', alt: '' }] },
+      /"images\[0\]\.src" must be a photo on this site/,
+      '[0].blocks[0].images[0].src',
+    ],
   ])('refuses %s', (_name, block, message, field) => {
     expect(() => assertPosts(withBlock(block))).toThrow(message);
     expect(validateContent('posts.json', withBlock(block)).map((p) => p.field)).toContain(field);

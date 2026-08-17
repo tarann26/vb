@@ -119,8 +119,14 @@ describe('the Posts panel', () => {
     expect(await within(panel).findByDisplayValue('A fixture paragraph.')).toBeInTheDocument();
     // The strip over the block, which is the only thing on screen that tells
     // her what kind of block she is looking at.
-    expect(within(panel).getByText('Paragraph')).toBeInTheDocument();
-    expect(within(panel).getByRole('button', { name: 'Remove Paragraph block 1' })).toBeInTheDocument();
+    //
+    // Scoped to that block's own <li>, because the picker under the list
+    // offers a Paragraph button by the same name -- an unscoped query finds
+    // both and throws on the ambiguity rather than asserting anything. The
+    // Remove button is what locates the block, and is the assertion below.
+    const remove = within(panel).getByRole('button', { name: 'Remove Paragraph block 1' });
+    expect(remove).toBeInTheDocument();
+    expect(within(remove.closest('li') as HTMLElement).getByText('Paragraph')).toBeInTheDocument();
   });
 
   it('a 404 reads as no posts yet, not as a failure', async () => {

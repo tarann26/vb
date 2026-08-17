@@ -7,7 +7,9 @@
 // reason that file's own comment gives: a retyped Tailwind string is a new
 // class to the content scanner and ships a duplicate rule.
 import BlockFields from './BlockFields';
+import BlockPicker from './BlockPicker';
 import BlockProblemMessage from './BlockProblemMessage';
+import { blankBlock } from './blank-block';
 import { blockProblemOf, type BlockProblemTarget } from './block-problems';
 import { swapAt } from './reorder';
 import { BLOCK_KIND_LABELS, UNKNOWN_BLOCK_LABEL, UNKNOWN_BLOCK_MESSAGE } from './block-meta';
@@ -227,6 +229,14 @@ export default function BlockList({
           );
         })}
       </ul>
+
+      {/* Unconditional, and that is the case that matters: a post with no
+          blocks at all shows validatePost's "has nothing in it yet -- add a
+          paragraph before publishing it" in the banner above, and a picker
+          rendered only when blocks exist would leave her reading a complaint
+          with no remedy on the same screen. `blankPost` (areas/PostsArea.tsx)
+          creates exactly that post, on purpose. */}
+      <BlockPicker onPick={(kind) => onChange([...safe, blankBlock(kind)])} />
     </div>
   );
 }

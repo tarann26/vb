@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import BlockList, { type BlockListProps } from '../BlockList';
 import { BLOCK_KIND_LABELS, UNKNOWN_BLOCK_MESSAGE } from '../block-meta';
@@ -67,11 +67,24 @@ describe('BlockList', () => {
     expect(screen.getByRole('button', { name: 'Remove Paragraph block 3' })).toBeInTheDocument();
   });
 
+  // Scoped to the block's own <li>, not to the whole render, and the scope is
+  // load-bearing rather than tidiness: the picker under the list offers every
+  // kind under the same name, so an unscoped getByText finds two "Numbered
+  // list" nodes and throws on the ambiguity instead of asserting anything. The
+  // claim is about the strip over THIS block, so the query says so. Narrowed
+  // rather than counted -- a bare count of matches would go stale the moment
+  // the picker gains or loses a button.
   it('names each block on screen in her words, not the model’s', () => {
     renderList({ blocks: [EVERY_BLOCK.numberList, EVERY_BLOCK.citation] });
-    expect(screen.getByText(BLOCK_KIND_LABELS.numberList)).toBeInTheDocument();
-    expect(screen.getByText(BLOCK_KIND_LABELS.citation)).toBeInTheDocument();
-    expect(screen.queryByText('numberList')).toBeNull();
+    const [numberList, citation] = screen.getAllByRole('listitem');
+    expect(within(numberList).getByText(BLOCK_KIND_LABELS.numberList)).toBeInTheDocument();
+    expect(within(citation).getByText(BLOCK_KIND_LABELS.citation)).toBeInTheDocument();
+    // Nowhere on screen, which is a claim about the whole render rather than
+    // about one block -- so this one is deliberately NOT scoped. queryAllBy,
+    // not queryBy: with the picker offering every kind too, a label that
+    // regressed to the model's own identifier would appear twice, and
+    // queryByText throws on that instead of failing on it.
+    expect(screen.queryAllByText('numberList')).toEqual([]);
   });
 
   // Two blocks whose fields would collide if either label were the other's.
@@ -162,6 +175,24 @@ describe('BlockList', () => {
       { kind: 'paragraph', text: 'Second' },
       { kind: 'paragraph', text: 'Third!' },
     ]);
+  });
+
+  it('picking a kind appends a blank block of that kind', async () => {
+    const user = userEvent.setup();
+    const { onChange } = renderList({ blocks: [{ kind: 'heading', text: 'First' }] });
+    await user.click(screen.getByRole('button', { name: new RegExp(BLOCK_KIND_LABELS.numberList) }));
+    expect(onChange).toHaveBeenCalledWith([
+      { kind: 'heading', text: 'First' },
+      { kind: 'numberList', items: [''] },
+    ]);
+  });
+
+  // The case "she could not get stuck" is actually measured against: an empty
+  // post shows the validator's "has nothing in it yet" message AND the ten
+  // things she could add, in the same view.
+  it('the picker is offered even when the post has no blocks at all', () => {
+    renderList({ blocks: [] });
+    expect(screen.getByRole('button', { name: new RegExp(BLOCK_KIND_LABELS.paragraph) })).toBeInTheDocument();
   });
 });
 
