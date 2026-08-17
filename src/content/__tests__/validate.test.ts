@@ -725,6 +725,29 @@ describe('validateContent: pages.json (Plan 7)', () => {
   it('rejects pages.json that is not an array', () => {
     expect(messages(validateContent('pages.json', {}))).toMatch(/expected a list of pages/i);
   });
+
+  // Phase 5, Task 1. /blog and /blog/:slug are static routes from Task 7
+  // onward, and React Router 7 ranks by SPECIFICITY rather than declaration
+  // order -- so a page she slugs "blog" would be shadowed by the blog index
+  // and simply never render, with no error on any screen. Reserved before
+  // the route exists, so the first time this can bite is already closed.
+  it('refuses a page slugged "blog", the way it already refuses "blogs"', () => {
+    const problems = validateContent('pages.json', [
+      { slug: 'blog', name: 'Blog', inNav: false, enabled: true, seo: { title: 'T', description: 'D' }, sections: [] },
+    ]);
+    expect(problems.map((p) => p.field)).toContain('[0].slug');
+    expect(problems.map((p) => p.message).join(' ')).toContain('already used by the site itself');
+  });
+
+  // The negative control, and it is what stops the rule above from being
+  // written as a substring check that also swallows every slug CONTAINING
+  // "blog". "blog-recipes" is a page she may legitimately want.
+  it('still accepts a slug that merely starts with blog', () => {
+    const problems = validateContent('pages.json', [
+      { slug: 'blog-recipes', name: 'Blog recipes', inNav: false, enabled: true, seo: { title: 'T', description: 'D' }, sections: [] },
+    ]);
+    expect(problems.filter((p) => p.field === '[0].slug')).toEqual([]);
+  });
 });
 
 // Plan 5 Task 6: "anything the tools can produce must pass the deploy gate."

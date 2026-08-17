@@ -410,3 +410,22 @@ describe('assertExperiences (Phase 3)', () => {
     expect(assertExperiences([danglingLink])).toEqual([danglingLink]);
   });
 });
+
+import { RESERVED_PAGE_SLUGS, assertPages } from '../guards';
+
+describe('reserved page slugs', () => {
+  // Pinned as an exact set, not a `.has('blog')` spot check: this is the
+  // list the build guard and the write boundary must agree on, and a spot
+  // check cannot notice one of them quietly losing a member.
+  it('is exactly the routes the site owns itself', () => {
+    expect([...RESERVED_PAGE_SLUGS].sort()).toEqual(['blog', 'blogs', 'edit']);
+  });
+
+  it('assertPages throws at import time for a page slugged blog', () => {
+    expect(() =>
+      assertPages([
+        { slug: 'blog', name: 'Blog', inNav: false, enabled: true, seo: { title: 'T', description: 'D' }, sections: [] },
+      ]),
+    ).toThrow(/collides with an existing route/);
+  });
+});

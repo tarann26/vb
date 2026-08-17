@@ -534,7 +534,17 @@ const SLUG_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 // segment, structurally unreachable from a single `/:slug` route, but
 // `edit` alone already blocks a page from being named "edit" in the first
 // place, which is what would be confusing regardless of routing mechanics.
-export const RESERVED_PAGE_SLUGS = new Set(['blogs', 'edit']);
+//
+// Phase 5, Task 1: `blog` joins them, ahead of the route that makes it
+// necessary. React Router 7 ranks by specificity rather than declaration
+// order, so once `/blog` exists as a static route it beats `/:slug`
+// unconditionally -- a page she slugged "blog" would render nothing, with
+// no error on any screen and nothing in the dashboard able to explain it.
+// Reserved BEFORE Task 7 adds the route, so the window in which that can
+// happen never opens. `blogs` stays reserved too: Task 8 turns it into a
+// redirect rather than removing it, because it is a live, already-linked
+// URL.
+export const RESERVED_PAGE_SLUGS = new Set(['blog', 'blogs', 'edit']);
 
 export function isUrlSafeSlug(value: unknown): value is string {
   return typeof value === 'string' && SLUG_PATTERN.test(value);

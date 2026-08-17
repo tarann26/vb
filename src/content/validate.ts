@@ -845,7 +845,11 @@ function validateSections(data: unknown): ValidationProblem[] {
 // pages.json (Plan 7, Task 1)
 
 const SLUG_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
-const RESERVED_PAGE_SLUGS = new Set(['blogs', 'edit']);
+// Phase 5, Task 1: kept deliberately in step with guards.ts's own set of
+// the same name -- that one is the import-time build guard, this one is the
+// write boundary that puts a sentence next to the field instead of failing
+// a build. guards.test.ts pins the membership of both.
+const RESERVED_PAGE_SLUGS = new Set(['blog', 'blogs', 'edit']);
 
 function validatePage(raw: unknown, index: number, seenSlugs: Set<string>): ValidationProblem[] {
   const page = asRecord(raw);
