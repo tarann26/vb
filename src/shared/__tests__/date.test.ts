@@ -6,7 +6,9 @@ import { todayInKolkata } from '../date';
 // in here (e.g. dropping the explicit `timeZone` and falling back to the
 // host clock, the exact bug this function exists to prevent) would leave the
 // rest of the Worker suite green, since nothing else asserts on which DAY a
-// tap lands under.
+// tap lands under. Moved here with the function when the Posts panel became
+// its second caller (Phase 5B, Task 4); PostsArea's own test pins the same
+// boundary from the browser end, against a new post's pre-filled date.
 describe('todayInKolkata', () => {
   afterEach(() => {
     vi.useRealTimers();

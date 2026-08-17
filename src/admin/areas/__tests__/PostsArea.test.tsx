@@ -21,6 +21,7 @@ import { POST_FIELDS } from '../../fields';
 import type { Post } from '../../../content/types';
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   window.localStorage.clear();
 });
@@ -126,7 +127,9 @@ describe('the Posts panel', () => {
     expect(await within(panel).findByRole('alert')).toHaveTextContent(/Could not load posts.*GitHub is unreachable/);
   });
 
-  it('Add a post produces a record whose problems name what it still needs', async () => {
+  it('Add a post produces a record whose problems name what it still needs, dated by the restaurant’s clock', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-03-04T20:30:00Z'));
     const user = userEvent.setup();
     stubFetchWithPosts([]);
     renderDashboard('/edit/manage/story');
@@ -145,16 +148,22 @@ describe('the Posts panel', () => {
     // The one field that is pre-filled, and the reason it is: an empty date
     // input tells her nothing about the format it wants.
     //
-    // The two assertions below are NOT independent, and the brief that asked
-    // for both said they were: validate.ts's POST_DATE_PATTERN is literally
-    // `/^\d{4}-\d{2}-\d{2}$/`, the same regex asserted here, so there is no
-    // pre-filled value that satisfies one and fails the other -- setting
-    // `date: ''` reddens the first and never reaches the second. The absence
-    // check is kept anyway because it is the one that will still hold if that
-    // pattern is ever tightened (a real calendar-date check), and it costs
-    // nothing to leave standing.
+    // Asserted against the RESTAURANT's clock, at a frozen instant chosen to
+    // sit inside the window where UTC and IST disagree (20:30 UTC on the 4th
+    // is 02:00 IST on the 5th). Two weaker assertions stood here first -- a
+    // format regex and the absence of "needs a date like" -- and neither
+    // could fail on the bug that was actually in the code: POST_DATE_PATTERN
+    // (validate.ts) is that same regex, so both accepted any well-formed
+    // date, including yesterday's. This one pins the day itself, which is the
+    // only thing that distinguishes todayInKolkata() from
+    // `new Date().toISOString()`.
+    //
+    // `toFake: ['Date']` rather than the whole timer set, and that is what
+    // makes this assertion deterministic instead of a test that only reddens
+    // between midnight and 05:30 IST: Date is frozen, while setTimeout stays
+    // real so userEvent's own delays, useValidation's 400ms debounce and the
+    // settle above all still work normally.
     const date = within(panel).getByLabelText(POST_FIELDS.date.label) as HTMLInputElement;
-    expect(date.value).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-    expect(within(panel).queryByText(/needs a date like/)).toBeNull();
+    expect(date.value).toBe('2026-03-05');
   });
 });

@@ -25,6 +25,7 @@ import { PANELS } from '../manage/areas';
 import { fetchContent, ContentNotFoundError } from '../content';
 import { replaceAt, useValidation } from '../useValidation';
 import { fromStagedPhoto } from '../staged';
+import { todayInKolkata } from '../../shared/date';
 import type { StagedFile } from '../staged';
 import type { ContentRegistry } from '../publish';
 import type { DraftMap } from '../drafts';
@@ -137,6 +138,14 @@ function PostsSection({
 // field is genuinely better left blank, because the validator's own sentence
 // is a better prompt than a made-up value would be.
 //
+// "Today" is the RESTAURANT's today (src/shared/date.ts), not this browser's
+// and not UTC. Review finding: the first version of this line was
+// `new Date().toISOString().slice(0, 10)`, which pre-fills YESTERDAY between
+// midnight and 05:30 IST -- the hours a chef actually writes up the evening
+// service -- and nothing on screen would say so, because the validator
+// accepts any well-formed date. The helper already existed for the tap
+// counter and now has two callers rather than two copies.
+//
 // `blocks: []` on purpose: validatePost refuses an empty block list with
 // "has nothing in it yet -- add a paragraph before publishing it", which is
 // exactly the sentence that should be on screen next to the block picker the
@@ -147,7 +156,7 @@ function blankPost(): Post {
     slug: '',
     type: 'story',
     title: '',
-    date: new Date().toISOString().slice(0, 10),
+    date: todayInKolkata(),
     excerpt: '',
     image: '',
     blocks: [],

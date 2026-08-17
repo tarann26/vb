@@ -133,7 +133,7 @@
 // ExecutionContext, and threading one through every route for a
 // sub-millisecond edge write is a wider change than it is worth.
 import { parseCookie, verifyToken } from './auth';
-import { todayInKolkata } from './date';
+import { todayInKolkata } from '../src/shared/date';
 import { readWaCounts } from './wa';
 import type { PagesEnv } from './status';
 

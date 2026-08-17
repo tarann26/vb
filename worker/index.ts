@@ -33,7 +33,7 @@ import { validateContent, type ValidationProblem } from '../src/content/validate
 import { handleUpload } from './upload';
 import { handleBuildStatus, type PagesEnv } from './status';
 import { handleAnalytics, type WebAnalyticsEnv } from './analytics';
-import { todayInKolkata } from './date';
+import { todayInKolkata } from '../src/shared/date';
 import { WA_COUNTS_KV_KEY, readWaCounts } from './wa';
 import { storeFor, partitionByStore } from './store';
 import { D1ConflictError, D1Store } from './d1';

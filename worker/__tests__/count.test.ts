@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import worker, { WA_DAILY_CAP, type Env } from '../index';
 import { hashPassword, signToken } from '../auth';
-import { todayInKolkata } from '../date';
+import { todayInKolkata } from '../../src/shared/date';
 import { site } from '../../src/content';
 
 // The session key is TOKEN_SECRET bound to the current password hash, so a

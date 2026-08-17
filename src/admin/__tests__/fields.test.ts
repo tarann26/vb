@@ -297,9 +297,15 @@ describe('exactly the expected fields are kind: readonly or kind: select -- noth
     expect(keysWithKind(SITE_FIELDS, 'select')).toEqual([]);
   });
 
-  it('POST_FIELDS: type is the only select field, nothing is readonly', () => {
+  // `id` is readonly on purpose, and this line is the designated place that
+  // says so (this block's own title is what makes it that place). It is the
+  // one field of a post she must never edit: PostList keys its row on it, the
+  // staged-photo bytes are collected under it, and the reorder map looks posts
+  // up by it -- see POST_FIELDS.id's own comment for what each of those does
+  // when the value changes under them.
+  it('POST_FIELDS: type is the only select field and id is the only readonly one', () => {
     expect(keysWithKind(POST_FIELDS, 'select')).toEqual(['type']);
-    expect(keysWithKind(POST_FIELDS, 'readonly')).toEqual([]);
+    expect(keysWithKind(POST_FIELDS, 'readonly')).toEqual(['id']);
   });
 });
 

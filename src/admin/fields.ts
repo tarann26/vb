@@ -337,10 +337,34 @@ export const EXPERIENCE_FIELDS: FieldsOf<Experience> = {
 export type PostMeta = Omit<Post, 'blocks'>;
 
 export const POST_FIELDS: FieldsOf<PostMeta> = {
+  // 'readonly', and the label and help rewritten with it rather than left as
+  // the sixth verbatim copy of a sentence written for hand-authored short
+  // ids (DISH_FIELDS.id and the four after it). Three things were wrong with
+  // that copy here, all found by review: 'ID' is a developer's word for a
+  // developer's concept; "a short identifier" describes something this value
+  // is not, since blankPost (PostsArea.tsx) makes it a 36-character
+  // crypto.randomUUID(); and "changing it does not rename or relink anything
+  // else" is false in THIS list, which is the part that made the box worse
+  // than useless. PostList keys each row on `post.id`, so editing it
+  // remounted the row and threw focus out of the box she was typing in on
+  // every keystroke; the staged-photo bytes are collected under
+  // `posts.json:<id>:image`, so an edit after picking a photo orphaned them;
+  // and a value colliding with a sibling makes PostsArea's own
+  // `byId.get(id)` reorder duplicate one post and drop another.
+  //
+  // Field.tsx's 'readonly' branch renders `<input disabled readOnly>` with no
+  // onChange wired at all, so there is no write path left to close -- the
+  // same mechanism nine SITE_FIELDS entries already rely on. Problems still
+  // render: Field paints `problems` outside its kind switch, so a
+  // `[i].id` message ("two posts share the id") still appears on the field.
+  // The one thing that becomes unfixable from this dashboard is exactly that
+  // collision, which needs hand-edited JSON or a stale draft to reach at all
+  // -- so the help below names the escape hatch instead of pretending she can
+  // do something about it, the same posture SITE_READONLY_HELP takes.
   id: {
-    label: 'ID',
-    kind: 'text',
-    help: 'A short identifier used only to tell posts apart -- changing it does not rename or relink anything else.',
+    label: 'Reference',
+    kind: 'readonly',
+    help: 'Generated automatically when the post is created, and never shown to a visitor. It only tells posts apart, so there is nothing to fill in here. If the dashboard ever complains about this, ask your developer.',
   },
   // The web address, and the one field that is expensive to change after
   // publishing: an inbound link to the old one stops working. Said here

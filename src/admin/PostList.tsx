@@ -96,6 +96,21 @@ export default function PostList({
   //    goes in this component's own banner. That is the RecordList
   //    unclaimedProblems guarantee, and only this component can keep it,
   //    because only this component knows how many posts are mounted.
+  //
+  // READ THIS BEFORE HARMONISING THE TWO: the rule below is NOT
+  // RecordList.tsx's unclaimedProblems, and the difference is deliberate.
+  // RecordList EXCLUDES a non-indexed problem (`field: ''`) while at least one
+  // form is mounted, on the grounds that every mounted RecordForm banners it
+  // already -- which is true there, and is why a `press.json` sort message
+  // renders once per mounted form (measured: three posts here would show one
+  // file-level message three times). This component INCLUDES it, because step
+  // 1 narrows each RecordForm's own problems to its own index, so no form
+  // banners a non-indexed problem any more and excluding it here would drop it
+  // entirely. The two rules are each correct for their own component and
+  // cannot be swapped: narrowing without this banner loses the message,
+  // this banner without the narrowing shows it once per post. Hoisting the
+  // narrowing into RecordList would fix both at once and is a real behaviour
+  // change for twelve other panels, so it belongs in its own task.
   const metaProblems = problems.filter((p) => !isBlockProblem(p.field));
   const unclaimed = problems.filter((p) => {
     const owner = arrayIndexOf(p.field);

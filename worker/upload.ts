@@ -23,11 +23,14 @@ const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 // The one place that actually ENFORCES src/shared/upload-categories.ts's
 // list -- commitFiles' ASSET_PATH regex (worker/github.ts) would accept any
 // lowercase/underscore/hyphen segment here as a "category", so this Set is
-// the thing that actually keeps a request from inventing an eighth one.
+// the thing that actually keeps a request from inventing a tenth one. (Nine
+// as of Phase 5B Task 4, which added 'posts'. The count is written out
+// because it reads as a claim about that list; nothing here is coupled to
+// the length, and the membership test below is what actually runs.)
 const CATEGORIES: Set<string> = new Set(UPLOAD_CATEGORIES);
 
-// `category=menu` (handleMenuUpload, below) is deliberately NOT a ninth
-// member of UPLOAD_CATEGORIES/CATEGORIES: that list is specifically the
+// `category=menu` (handleMenuUpload, below) is deliberately NOT a member of
+// UPLOAD_CATEGORIES/CATEGORIES at all: that list is specifically the
 // assets-source/<category>/ subfolders a photo can land in, and a menu PDF
 // commits to an entirely different tree (public/menus/, not assets-source/)
 // under commitFiles' own MENU_PATH shape (worker/github.ts), not ASSET_PATH.
