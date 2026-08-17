@@ -46,6 +46,17 @@ export function storyFileFromRow(row) {
   if (!parsed.chef || typeof parsed.chef !== 'object') {
     throw new Error('the stored body has no chef block -- refusing to write it');
   }
+  // Not just "has a chef block": src/content/__tests__/assets.test.ts finds
+  // the portrait only by walking this file for an asset-shaped string --
+  // there is no server-side schema check on the D1 write path (worker/ has
+  // no isStoryContent/validateStory import; that check lives only in
+  // src/admin/StoryForm.tsx, client-side). A row with `chef: {}` would pass
+  // every guard above and, once written here, silently stop assets.test.ts
+  // from ever checking the portrait again -- no red test, just one fewer
+  // path in the walk. Refusing here keeps that failure loud.
+  if (typeof parsed.chef.portrait !== 'string' || parsed.chef.portrait.trim() === '') {
+    throw new Error('the stored body has no chef.portrait -- refusing to write it, which would silently drop the portrait path from assets.test.ts\'s walk');
+  }
   // Reformatted rather than written verbatim: the stored body is exactly
   // what the dashboard sent, which is minified, and a minified
   // src/content/story.json would produce an unreadable diff on every sync.

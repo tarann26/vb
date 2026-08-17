@@ -31,6 +31,13 @@ describe('storyFileFromRow', () => {
     ['an array', { body: '[]' }, /not a json object/i],
     ['a document with no chef', { body: JSON.stringify({ heading: 'A', paragraphs: ['x'] }) }, /no chef block/i],
     ['a document with no paragraphs', { body: JSON.stringify({ heading: 'A', chef: {} }) }, /no paragraphs/i],
+    // A chef block missing only `portrait` is not caught by "has no chef
+    // block" above -- it IS a chef block, just an incomplete one. Without
+    // this guard, `chef: { name: 'K' }` would pass every check and get
+    // written straight into src/content/story.json, silently dropping the
+    // only string assets.test.ts's walk uses to keep checking the chef
+    // portrait's path.
+    ['a chef block with no portrait', { body: JSON.stringify({ heading: 'A', paragraphs: ['x'], chef: { name: 'K' } }) }, /chef\.portrait/i],
   ])('refuses to write %s', (_name, row, message) => {
     expect(() => storyFileFromRow(row)).toThrow(message);
   });
