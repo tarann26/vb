@@ -21,6 +21,12 @@ export type ContentSource = 'd1' | 'cache' | 'snapshot';
 // a D1 document added later is private until someone puts it here.
 export const PUBLIC_FILES: ReadonlyMap<string, string> = new Map([
   ['awards.json', 'src/content/awards.json'],
+  // Phase 4. Unlike awards.json, this document's body is the entire visible
+  // content of a homepage section rather than a list beside chrome that
+  // renders without it -- so OurStory.tsx paints the compiled-in copy
+  // first and swaps this one in when it arrives (Task 7), instead of
+  // rendering nothing until it does.
+  ['story.json', 'src/content/story.json'],
 ]);
 
 export interface PublishedEnv {

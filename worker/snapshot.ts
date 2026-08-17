@@ -16,7 +16,7 @@
 // snapshot instead of pulling and diffing the whole body, and tell a
 // snapshot that still matches what's serving from one that has quietly gone
 // stale.
-export const SNAPSHOT_BUILT_AT = "2026-08-16T06:29:37.568Z";
+export const SNAPSHOT_BUILT_AT = "2026-08-17T00:03:35.577Z";
 
 interface SnapshotEntry {
   body: string;
@@ -27,6 +27,10 @@ const SNAPSHOT: Record<string, SnapshotEntry> = {
   "awards.json": {
     "body": "[{\"id\":\"award-1\",\"title\":\"Placeholder Award Title\",\"awardedBy\":\"Placeholder Awarding Body\",\"year\":\"2026\"}]",
     "version": 3
+  },
+  "story.json": {
+    "body": "{\n  \"heading\": \"About\",\n  \"paragraphs\": [\n    \"Welcome to Via Bianca, a love letter to Italy. The interiors that are inspired by Puglia, its whitewashed streets, sunlit kitchens, and soulful food, we bring you more than a menu; we bring you a moment. One that's heartfelt, full of flavour, and kneaded with love.\",\n    \"Born from my journey through the homes and kitchens of Puglia, Le Marche, and Emilia-Romagna, Via Bianca is a tribute to the Italian way of life; slow, simple, and deeply satisfying. After years spent training in iconic kitchens across India and Italy, I didn't just return with recipes but with a dream of a place where people gather, stories simmer, and pasta is made with heart and a whole lot of love and attention.\",\n    \"At Via Bianca, we serve up age-old classics alongside rare regional dishes, and take pride in the little things- like a great cup of coffee or a perfectly blistered pizza crust. From Spaghetti all'Assassina to Corzetti, affogatos to aperitivos, you'll find seasonal plates inspired by the ingredients we love, and a menu that is a slow dance between tradition and surprise.\",\n    \"Here, we believe in good food, relaxed meals, shared bites, and memories made around the table. So slow down, stay awhile. Let Italy come to you, one plate at a time.\",\n    \"Created by emotion and travel, we hope that you fall in love with Italy, the same way I did.\",\n    \"Buon appetito e divertiti, Chef Kamalika Anand\"\n  ],\n  \"chef\": {\n    \"name\": \"Kamalika Anand\",\n    \"role\": \"Chef and owner\",\n    \"portrait\": \"/team/kamalika-anand.webp\",\n    \"portraitAlt\": \"Chef Kamalika Anand\"\n  }\n}\n",
+    "version": 1
   }
 };
 

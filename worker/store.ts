@@ -54,12 +54,26 @@ export interface StoreEnv extends GitHubEnv {
   CONTENT_STORE?: string;
 }
 
-// Paths that live in D1 regardless of CONTENT_STORE, because they exist
-// nowhere else. src/content/awards.json has never been a file in this
-// repository and never will be: Awards is built on D1 from the start rather
-// than as a JSON file that would need migrating two months later (the spec's
-// own words, Phase 4).
-export const D1_ONLY_PATHS: ReadonlySet<string> = new Set(['src/content/awards.json']);
+// Paths whose LIVE copy lives in D1, regardless of CONTENT_STORE.
+//
+// src/content/awards.json has never been a file in this repository and
+// never will be: Awards is built on D1 from the start rather than as a JSON
+// file that would need migrating two months later (the spec's own words,
+// Phase 4).
+//
+// src/content/story.json (Phase 4) is the different case, and the
+// difference matters: the file still EXISTS in the repository and is still
+// compiled into the bundle. It is no longer what the site writes to -- it
+// is the first-paint fallback OurStory.tsx renders before its runtime fetch
+// resolves (Task 7), and it is what keeps the chef portrait's path inside
+// src/content/__tests__/assets.test.ts's walk, which cannot see D1 at all.
+// Nothing currently keeps that compiled-in copy from drifting away from the
+// D1 row -- that is future work, not something this comment should claim
+// already exists.
+export const D1_ONLY_PATHS: ReadonlySet<string> = new Set([
+  'src/content/awards.json',
+  'src/content/story.json',
+]);
 
 // The GitHub store is exactly today's behaviour behind the interface. It
 // deliberately adds nothing: no retry, no caching, no extra validation. If

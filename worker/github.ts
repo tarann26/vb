@@ -57,9 +57,11 @@ const API = 'https://api.github.com';
 //     sequences, embedded whitespace/newlines, uppercase content
 //     filenames, arbitrary length), some of which only surfaced as an
 //     opaque GitHub 422 later rather than a clean rejection here.
-//     `[a-z0-9-]+\.json` matches all nine real files under src/content/
-//     today (see github.test.ts's `still accepts the real content file`
-//     block); `[A-Za-z0-9 ._-]+` matches every real
+//     `[a-z0-9-]+\.json` matches all eleven real files under src/content/
+//     today, including story.json (Phase 4: D1-backed for reads and writes
+//     via storeFor, but still a real file this allowlist has no reason to
+//     stop accepting -- see github.test.ts's `still accepts the real
+//     content file` block); `[A-Za-z0-9 ._-]+` matches every real
 //     assets-source/<category>/<file> checked in the same suite except one
 //     apostrophe'd filename -- see that test's own comment for why that
 //     specific gap is recorded, not fixed. The third shape,

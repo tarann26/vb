@@ -49,36 +49,55 @@ describe('storeFor, with CONTENT_STORE unset or "github"', () => {
   // as one more input that same branch must treat identically.
   //
   // The whole point of the interface, as an assertion rather than a promise.
-  // Every file that exists in src/content/ today keeps its GitHub path, and
-  // this fails the moment one of them is quietly moved. No D1_ONLY_PATHS skip
-  // here, deliberately: an earlier version of this test wrote
-  // `if (D1_ONLY_PATHS.has(path)) continue`, which exempts exactly the paths
-  // that would prove a regression -- adding 'src/content/site.json' to
-  // D1_ONLY_PATHS made every one of this suite's tests pass, because this
-  // loop skipped the one path that had actually moved. CONTENT_FILES today
-  // shares no path with D1_ONLY_PATHS (proven by the exact-membership test
-  // below), so this loop can check every real path unconditionally and still
-  // pass -- and if a future D1_ONLY_PATHS entry ever did collide with a real
-  // content file, that collision is exactly what this loop exists to catch,
-  // not exempt.
-  it('leaves every existing content file on GitHub when CONTENT_STORE is unset', () => {
+  // Every file that exists in src/content/ AND is not itself D1-only keeps
+  // its GitHub path, and this fails the moment one of them is quietly
+  // moved. This loop DOES skip D1_ONLY_PATHS now, and that is worth being
+  // exact about, because an earlier version of this file ran the identical
+  // loop with no skip at all, on purpose: at that point D1_ONLY_PATHS held
+  // only 'src/content/awards.json', which is not a real file and so shares
+  // no path with CONTENT_FILES -- the loop could check every real path
+  // unconditionally and still catch a regression (adding
+  // 'src/content/site.json' to D1_ONLY_PATHS made every test in that older
+  // suite pass, because an unconditional `continue` would have skipped the
+  // one path that had actually moved). Phase 4's story.json breaks that
+  // premise: it IS a real file AND a member of D1_ONLY_PATHS at the same
+  // time, so an unconditional version of this loop would now fail
+  // correctly-routed code. The skip below is therefore not the "exempt the
+  // regression" pattern the old comment warned about -- it is narrowed to
+  // exactly D1_ONLY_PATHS's current membership, which the test right after
+  // this one pins exactly, so a careless future addition still shows up as
+  // a failure in that test even though this loop no longer checks it here.
+  it('leaves every other content file on GitHub by default', () => {
     const e = env();
     for (const file of CONTENT_FILES) {
-      expect(storeFor(e, `src/content/${file}`).name, file).toBe('github');
+      const path = `src/content/${file}`;
+      if (D1_ONLY_PATHS.has(path)) continue;
+      expect(storeFor(e, path).name, file).toBe('github');
     }
   });
 
   // Growing this set is meant to be a deliberate, visible edit -- not a
   // silent side effect of some other change. Pinning its exact membership
-  // (not just "contains awards.json") is what makes an accidental or
-  // careless addition show up as a diff in THIS file, right next to the
-  // comment explaining why the set exists at all.
-  it('the D1-only set contains exactly the pilot file', () => {
-    expect([...D1_ONLY_PATHS]).toEqual(['src/content/awards.json']);
+  // (not just "contains awards.json and story.json") is what makes an
+  // accidental or careless addition show up as a diff in THIS file, right
+  // next to the comment explaining why the set exists at all.
+  //
+  // Phase 4: the second D1-only path. story.json is different from
+  // awards.json in one way worth pinning -- it IS still a real file under
+  // src/content/ (git ls-files finds it, assets.test.ts walks it), it is
+  // just no longer the file the site writes to. So this set is now "paths
+  // whose live copy lives in D1", not "paths with no file behind them".
+  it('routes exactly the two D1-only paths to D1, regardless of CONTENT_STORE', () => {
+    expect([...D1_ONLY_PATHS].sort()).toEqual(['src/content/awards.json', 'src/content/story.json']);
   });
 
   it('sends the pilot file to D1 anyway, because it exists nowhere else', () => {
     expect(storeFor(env(), 'src/content/awards.json').name).toBe('d1');
+  });
+
+  it.each([undefined, 'github'])('sends story.json to D1 even when CONTENT_STORE is %s', (setting) => {
+    const e = env({ CONTENT_STORE: setting });
+    expect(storeFor(e, 'src/content/story.json').name).toBe('d1');
   });
 
   it('sends photo and menu paths to GitHub -- R2 is bound and unused in this phase', () => {

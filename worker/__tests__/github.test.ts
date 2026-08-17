@@ -298,6 +298,19 @@ describe('commitFiles', () => {
     // recognises must still be a legal commitFiles path -- the allowlist
     // tightened in response to Minor 4 must not accidentally start
     // rejecting one of the eleven real files it exists to allow.
+    //
+    // Two files are worth naming, because both are D1-backed (worker/store.ts's
+    // D1_ONLY_PATHS) and yet they show up here in opposite ways. awards.json
+    // is the one ABSENT from this list: it has never been a file in this
+    // repository, so there is no src/content/awards.json path for
+    // commitFiles to accept or reject. story.json (Phase 4) is the opposite
+    // case and stays in this list unchanged: it is a real file on disk that
+    // commitFiles must still be able to write, even though storeFor no
+    // longer routes any publish there. This allowlist is a SECURITY
+    // boundary on which paths this function will touch at all, not a map of
+    // which store currently owns a path's live traffic -- narrowing it to
+    // match storeFor's routing would remove coverage from a check nothing
+    // else in this codebase performs, with no test exercising the removal.
     it.each([
       'copy.json',
       'dishes.json',

@@ -36,6 +36,7 @@ class FakeCache {
 }
 
 const PATH = 'src/content/awards.json';
+const STORY_PATH = 'src/content/story.json';
 
 function cache(): FakeCache {
   return new FakeCache();
@@ -47,6 +48,10 @@ function env(fake: FakeD1): PublishedEnv {
 
 function publish(fake: FakeD1, content: string, publishId: string): Promise<{ sha: null }> {
   return new D1Store(asD1(fake)).write([{ path: PATH, content, encoding: 'utf-8' as const }], 'seed', publishId);
+}
+
+function publishStory(fake: FakeD1, content: string, publishId: string): Promise<{ sha: null }> {
+  return new D1Store(asD1(fake)).write([{ path: STORY_PATH, content, encoding: 'utf-8' as const }], 'seed', publishId);
 }
 
 function req(query = 'path=awards.json'): Request {
@@ -143,6 +148,39 @@ describe('GET /api/published', () => {
     expect(response.status).toBe(200);
     expect(await response.text()).toBe(SNAPSHOT_BODY);
     expect(response.headers.get(CONTENT_SOURCE_HEADER)).toBe('snapshot');
+  });
+
+  // Phase 4: story.json is the second D1-only path, and the second one this
+  // endpoint has to serve. The fixture body below is deliberately NOT
+  // src/content/story.json's real committed text -- a fixture identical to
+  // production content cannot distinguish "this route actually reads D1"
+  // from "this route happens to return the right bytes some other way", the
+  // exact trap an earlier task in this phase fell into.
+  it('serves story.json from D1, not just awards.json', async () => {
+    const fake = new FakeD1();
+    await publishStory(fake, '{"heading":"Distinct Test Heading, Not Production Copy","paragraphs":["one"]}', 'p1');
+
+    const response = await handlePublished(req('path=story.json'), env(fake), cache() as unknown as Cache);
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get(CONTENT_SOURCE_HEADER)).toBe('d1');
+    expect(await response.text()).toBe('{"heading":"Distinct Test Heading, Not Production Copy","paragraphs":["one"]}');
+  });
+
+  // The spec's own testing requirement for this task, named directly: force
+  // a query failure and assert the snapshot serves. A database problem must
+  // cost freshness, never availability -- and About is now the section
+  // whose entire body is on the other side of this call, unlike awards.json
+  // which sits beside chrome that renders fine without it.
+  it('falls back to the snapshot when the D1 version read throws for story.json', async () => {
+    const fake = new FakeD1();
+    fake.failWith = 'D1_ERROR: no such table: content';
+
+    const response = await handlePublished(req('path=story.json'), env(fake), cache() as unknown as Cache);
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get(CONTENT_SOURCE_HEADER)).toBe('snapshot');
+    expect(JSON.parse(await response.text())).toMatchObject({ heading: expect.any(String) });
   });
 
   it('404s an unknown or non-public path rather than reading anything', async () => {
