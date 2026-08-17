@@ -33,8 +33,15 @@ test.describe('/edit loads every registered content file', () => {
     await mockEditBackend(page);
     await page.goto('/edit');
 
-    // The page is up...
-    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+    // The page is up. `.first()` deliberately: /edit has exactly one h1 today
+    // (Hero.tsx's lockup; Login.tsx's only renders logged out), but this spec's
+    // subject is the load banner, and an unqualified locator would fail on a
+    // strict-mode violation the day a second h1 lands -- red for a reason that
+    // has nothing to do with content loading. Pinning "exactly one h1" is a
+    // real assertion and it already has a home
+    // (dashboard-sections.spec.ts:312, for the dashboard); it does not belong
+    // in this file's settle step.
+    await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible();
     // ...and every one of the blanket effect's fetches has settled, so a
     // banner cannot still be on its way. EditMode renders this while
     // `loadedOrErroredCount < CONTENT_FILES.length`, which is the same

@@ -97,6 +97,39 @@ describe('AREAS covers every dashboard panel exactly once', () => {
     });
   });
 
+  // The in-gate tripwire for the phone home list's height budget. Every
+  // description above renders under its label on the 390px home list, where
+  // e2e/dashboard-sections.spec.ts:430 requires all five rows to fit one 844px
+  // screen without scrolling -- and that spec is the ONLY enforcement, sitting
+  // outside `npm run gate`, so a reword lands green here and fails at Task 12
+  // for a reason the diff does not explain. It has already happened once:
+  // Phase 5B, Task 3's first wording of the `story` description ran to 57
+  // characters, wrapped to a third line, and pushed the Numbers row to 854px.
+  //
+  // ASSERTED ON THE TOTAL, not per area, and that is the whole reason this
+  // case exists as its own thing. The review suggested a per-area bound of 48
+  // beside the `length > 0` check above; measured, it is red on the CURRENT
+  // tree -- `pages` is 55 characters and `details` is 61, and both of them fit
+  // today. A per-area bound loose enough to admit those (61) also admits the
+  // 57-character string that broke the fold, so it would catch nothing. What
+  // the viewport actually constrains is the SUM of five wrapped row heights,
+  // and the sum of the five lengths is the cheap proxy for that.
+  //
+  // The bound is the current total exactly, because the screen is at its
+  // budget: 844px holds what is there now and nothing more. Growth is not
+  // forbidden, it is priced -- pay for it by shortening another description,
+  // or re-measure with that spec and move this number in the same commit.
+  //
+  // What it does NOT catch, stated rather than implied: lengthening one
+  // description and shortening another by the same count leaves the total
+  // unchanged while moving where the rows wrap. Characters are a proxy. The
+  // browser measurement remains the real guard; this one catches the reword
+  // nobody thinks to re-measure.
+  it('the five area descriptions still fit the 390px home list, by total length', () => {
+    const total = AREAS.reduce((sum, area) => sum + area.description.length, 0);
+    expect(total).toBeLessThanOrEqual(244);
+  });
+
   it('every panel names a real content file, and every content file has a panel', () => {
     const files = EXPECTED_PANEL_IDS.map((id) => PANELS[id as PanelId].file);
     expect([...files].sort()).toEqual([...CONTENT_FILES].sort());
@@ -110,20 +143,53 @@ describe('AREAS covers every dashboard panel exactly once', () => {
     expect(findArea('story')?.panelIds).toEqual(['galleries', 'story', 'press', 'posts']);
   });
 
+  it('maps a content file back to the area and panel that edits it', () => {
+    expect(areaForFile('site.json')?.slug).toBe('details');
+    expect(panelForFile('site.json')?.id).toBe('hours');
+    expect(areaForFile('dishes.json')?.slug).toBe('menu');
+    expect(panelForFile('copy.json')?.heading).toBe('Words on the site');
+  });
+});
+
+// Its own describe: neither case below is about AREAS covering every panel
+// once, and both are about the same narrow question -- what makes
+// `PANELS[id].heading` load-bearing rather than decorative.
+//
+// The history matters, because three answers have been recorded and the first
+// two were wrong. The ledger said the constant had "no production reader".
+// A later measurement corrected that to "pinned by panel-snapshots.test.tsx
+// and owner-facing-labels.test.tsx", which is true only for a panel whose area
+// component paints a LITERAL <h2>: both files open a panel with
+// `findByRole('button', { name: heading })`, reading `heading` from PANELS, so
+// a rename moves the query away from the DOM string and the toggle is never
+// found. Those files fail at a toggle lookup, not at any assertion about a
+// heading.
+//
+// PostsArea reads the constant, so both sides of that lookup move together and
+// neither file notices. Reading the constant is what REMOVED the accidental
+// coverage that literal-painting gave -- the design change meant to make the
+// constant load-bearing is what unpinned it. These two cases are what make the
+// claim true instead of ironic.
+describe('PANELS.heading is load-bearing, not decoration', () => {
   // A SOURCE-level pin, and it says so rather than pretending to be a
-  // behavioural one. `PostsArea.tsx` is the first panel in this dashboard to
-  // paint its heading from `PANELS.posts.heading` instead of a literal, which
-  // is what finally gives that constant a reader whose change she can see.
-  // Nothing rendered can prove it: the literal `"Posts"` and the constant
-  // hold the SAME string, so every DOM assertion passes identically under
-  // both -- confirmed by running exactly that mutation (Step 8 #4). Reading
-  // the file is the only assertion that can tell two identical strings apart.
-  // `src/admin/__tests__/content.test.ts` already reads source in this suite,
-  // so this is a precedent rather than a new kind of test.
+  // behavioural one. Nothing rendered can prove it: the literal `"Posts"` and
+  // the constant hold the SAME string, so every DOM assertion passes
+  // identically under both -- confirmed by running exactly that mutation
+  // (Step 8 #4). Reading the file is the only assertion that can tell two
+  // identical strings apart. `src/admin/__tests__/content.test.ts` already
+  // reads source in this suite, including its own `git ls-files` shell-out, so
+  // both the precedent and the repo-root cwd it depends on are established.
+  //
+  // Matched as a REGEX over the JSX attribute, not `toContain('heading="Posts"')`
+  // -- review finding: a bare substring misses `heading={'Posts'}`, the form a
+  // prettier pass or a copy-paste from a sibling could just as easily produce,
+  // and it would false-red if that exact text ever appeared in a comment in
+  // this file. Anchoring on `heading=` covers both spellings and cannot match
+  // prose.
   it('PostsArea paints its heading from PANELS, not a literal of its own', () => {
     const source = readFileSync('src/admin/areas/PostsArea.tsx', 'utf8');
     expect(source).toContain('PANELS.posts.heading');
-    expect(source).not.toContain('heading="Posts"');
+    expect(source).not.toMatch(/heading=(?:["']Posts["']|\{\s*["']Posts["']\s*\})/);
   });
 
   // content.ts's own comment on CONTENT_FILE_LABELS states this as a fact --
@@ -132,26 +198,31 @@ describe('AREAS covers every dashboard panel exactly once', () => {
   // and the undo description name the same things the panels do rather than
   // inventing a second vocabulary. Nothing asserted it. Two hand-maintained
   // constants that must agree, in two different modules, is exactly the shape
-  // that drifts.
+  // that drifts, and this repo has already shipped the half-done version of it
+  // once ("Our Story" renamed to "About" in some places and not others, which
+  // is why owner-facing-labels.test.tsx exists at all).
   //
   // It is also the only thing in `npm run gate` that pins a panel HEADING's
   // value. panel-snapshots.test.tsx looks like it does, and does not: the
   // heading is part of its own test NAME, so a rename moves the snapshot KEY
   // and vitest writes the new one rather than comparing -- green locally, red
-  // only under CI, where writing is refused. Verified by running exactly that
-  // mutation (Step 8 #3): `PANELS.posts.heading` -> 'Postz' left all 83 cases
-  // in the four candidate files green, and failed only with CI=true.
+  // only under CI, where writing is refused, and `npm run gate` never sets CI.
+  // Verified by running exactly that mutation (Step 8 #3):
+  // `PANELS.posts.heading` -> 'Postz' left all 83 cases in the four candidate
+  // files green, and failed only with CI=true.
+  //
+  // ACCEPTED RESIDUAL, recorded so nobody re-litigates it: this is a
+  // cross-constant equality, so renaming BOTH constants together stays green.
+  // That is the deliberate case, not the accidental one -- nobody edits two
+  // modules by mistake -- and the realistic failure is the half-done rename,
+  // which this catches. Closing it would need a third hand-typed copy of the
+  // owner's vocabulary in this file, making every deliberate reword a
+  // three-file change; deriving either constant from the other would instead
+  // make the assertion tautological. Neither trade is worth it.
   it('every panel heading is the same word CONTENT_FILE_LABELS gives its file', () => {
     (Object.keys(PANELS) as PanelId[]).forEach((id) => {
       expect(PANELS[id].heading).toBe(CONTENT_FILE_LABELS[PANELS[id].file]);
     });
-  });
-
-  it('maps a content file back to the area and panel that edits it', () => {
-    expect(areaForFile('site.json')?.slug).toBe('details');
-    expect(panelForFile('site.json')?.id).toBe('hours');
-    expect(areaForFile('dishes.json')?.slug).toBe('menu');
-    expect(panelForFile('copy.json')?.heading).toBe('Words on the site');
   });
 });
 

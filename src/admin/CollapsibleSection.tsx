@@ -105,13 +105,38 @@ const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({ id, heading, lo
   const panelId = `section-panel-${id}`;
 
   return (
-    // A cheap, stable hook for a test to wait on. Every dashboard test that
-    // needs a panel currently finds it by role AND accessible name over the
-    // whole shell, which polls a getComputedStyle sweep every 50ms and starves
-    // the render it is waiting for -- the root cause of both timeouts this
-    // project has had, one of which failed a Cloudflare build. A `[data-panel]`
-    // lookup is 0.6ms. The expensive assertion still happens; it just happens
-    // ONCE, after this attribute says the panel is mounted.
+    // A cheap, stable hook for a test to wait on. READ THE SCOPE BEFORE
+    // USING IT, because it is narrower than the name suggests.
+    //
+    // WHAT IT PROVES: the shell mounted. That is all. ManageShell renders all
+    // five areas from the first render and hides the inactive ones with the
+    // `hidden` attribute -- see its own "areas mount once and stay mounted"
+    // header for why that is load-bearing rather than a layout choice. So
+    // every panel's attribute is in the DOM on every /edit/manage route.
+    // Measured, not assumed: on /edit/manage/menu, `[data-panel="posts"]` is
+    // already present, inside a wrapper carrying `hidden`. It says nothing
+    // about which area is showing, whether this panel is open, or whether its
+    // own fetch has landed.
+    //
+    // SO THE CONTRACT IS THE ROUTE-SCOPED SELECTOR, never the bare attribute:
+    //
+    //     [data-area="<slug>"]:not([hidden]) [data-panel="<id>"]
+    //
+    // `data-area` is ManageShell's own per-area wrapper, and `:not([hidden])`
+    // is what makes the wait mean "this area is the one on screen". Waiting on
+    // the bare attribute waits on something that was already true at first
+    // paint, so a SYNCHRONOUS getByRole after it has nothing left to retry --
+    // a race produced by the very mechanism meant to prevent one. Wait on the
+    // scoped selector, then reach for findByRole rather than getByRole for
+    // anything that arrives with a fetch.
+    //
+    // WHY AN ATTRIBUTE AT ALL: every dashboard test that needs a panel finds
+    // it by role AND accessible name over the whole shell, which polls a
+    // getComputedStyle sweep every 50ms and starves the render it is waiting
+    // for -- the root cause of both timeouts this project has had, one of
+    // which failed a Cloudflare build. This lookup is 0.6ms. The expensive
+    // assertion still happens; it happens ONCE, after the cheap one says the
+    // panel is there. Never raise a timeout instead.
     //
     // A data attribute rather than a class: it costs no CSS rule, and the
     // stylesheet has 107 bytes of headroom.

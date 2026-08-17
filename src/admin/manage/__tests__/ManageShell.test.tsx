@@ -115,7 +115,18 @@ describe.each([
   // the whole ~1200-element shell every 50ms, two thirds of the cost being
   // jsdom getComputedStyle, and burns most of its own budget on the single
   // thread React needs to commit the render it is waiting for. So: wait on a
-  // cheap attribute -- 0.6ms -- and then assert the expensive thing ONCE.
+  // cheap selector -- 0.6ms -- and then assert the expensive thing ONCE.
+  //
+  // The wait is ROUTE-SCOPED, and Tasks 4-11 should copy it in this exact
+  // shape: `[data-area="story"]:not([hidden]) [data-panel="posts"]`, never the
+  // bare `[data-panel="posts"]`. All five areas mount from the first render
+  // (see this file's own "areas mount once and stay mounted"), so all thirteen
+  // panel attributes are in the DOM on every /edit/manage route -- review
+  // measured `[data-panel="posts"]` present on /edit/manage/menu inside a
+  // wrapper carrying `hidden`. A bare-attribute wait therefore resolves on
+  // something that was already true at first paint, and a synchronous
+  // getByRole after it has nothing left to retry. See CollapsibleSection.tsx's
+  // own comment on the attribute for the whole contract.
   //
   // Never raise a timeout to make this green. Both dashboard timeouts this
   // project has had were fixed by making the query cheap.
@@ -124,7 +135,7 @@ describe.each([
     renderDashboard('/edit/manage/story', { wide });
 
     await waitFor(() => {
-      expect(document.querySelector('[data-panel="posts"]')).not.toBeNull();
+      expect(document.querySelector('[data-area="story"]:not([hidden]) [data-panel="posts"]')).not.toBeNull();
     });
     expect(screen.getByRole('heading', { name: PANELS.posts.heading })).toBeInTheDocument();
     expect(document.getElementById('section-panel-posts')).not.toBeNull();

@@ -134,9 +134,17 @@ export const AREAS: AreaDefinition[] = [
     // five rows to fit one 844px screen without scrolling. A third wrapped
     // line here pushes the Numbers row 10px below the fold and fails that
     // spec, which `npm run gate` does not run. Measured, not guessed: the
-    // 56-character 'Photo galleries, your story, press coverage and your
-    // blog' failed at 854px; this 47-character version passes. Keep any
-    // rewording at or under two lines at 390px, and re-run that spec.
+    // 57-character 'Photo galleries, your story, press coverage and your
+    // blog' failed at 854px against the 844px viewport; this 48-character
+    // version passes.
+    //
+    // The budget belongs to all five descriptions together, not to this one,
+    // because what the viewport constrains is the sum of five wrapped row
+    // heights -- `details` is 61 characters and fits. So the in-gate tripwire
+    // is on the TOTAL: areas.test.tsx's "the five area descriptions still fit
+    // the 390px home list, by total length", currently at its exact limit.
+    // Lengthening any description means shortening another or re-measuring
+    // with that spec and moving the bound in the same commit.
     description: 'Photo galleries, your story, press and your blog',
     // 'posts' last: it is the newest thing on this screen and the one she
     // will be looking for deliberately rather than stumbling into, and
