@@ -5,9 +5,14 @@
 // D1, and why it must not be allowed to rot:
 //   - it is what OurStory.tsx paints at first paint, before its runtime
 //     fetch resolves, and what a crawler or a reader with JS off sees;
-//   - it is the only thing that keeps the chef portrait's path inside
+//   - it is ONE OF THREE places that keep the chef portrait's path inside
 //     src/content/__tests__/assets.test.ts's walk, which cannot see D1 --
-//     the same accepted hole awards.json sits in, closed here instead;
+//     src/content/press.json and src/components/ChefGallery.tsx are the
+//     other two (assets.test.ts's own comment already says "reached from
+//     three places now"). It is not the last one standing, but it is this
+//     document's OWN copy of that path, and it is what OurStory.tsx's
+//     first-paint byline actually renders -- so it still needs to be a
+//     real, working path, not merely present somewhere in the walk;
 //   - src/content/__tests__/sections.test.tsx derives its About marker from
 //     the compiled-in heading.
 //
@@ -26,12 +31,18 @@ import { writeFileSync } from 'node:fs';
 const DB = 'via-bianca-content';
 const PATH = 'src/content/story.json';
 
+function isBlankString(value) {
+  return typeof value !== 'string' || value.trim() === '';
+}
+
 // Exported so scripts/__tests__/sync-story-fallback.test.mjs can exercise
 // the part that can actually go wrong without a network call. Throws rather
 // than writing anything it is unsure about: an unparseable or wrong-shaped
 // body written into src/content/story.json breaks `tsc -b` at import time
 // and blocks every subsequent deploy -- including the one that would fix
-// it.
+// it. Checks every field the type StoryContent (src/content/types.ts)
+// declares required -- heading, each paragraph, and all four chef.* --
+// not just the ones a prior pass happened to add guards for.
 export function storyFileFromRow(row) {
   if (!row || typeof row.body !== 'string') {
     throw new Error(`no row for ${PATH} in D1 -- refusing to write an empty fallback`);
@@ -40,22 +51,45 @@ export function storyFileFromRow(row) {
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
     throw new Error('the stored body is not a JSON object -- refusing to write it');
   }
+  if (isBlankString(parsed.heading)) {
+    throw new Error('the stored body has no heading -- refusing to write it');
+  }
   if (!Array.isArray(parsed.paragraphs) || parsed.paragraphs.length === 0) {
     throw new Error('the stored body has no paragraphs -- refusing to write it');
+  }
+  if (parsed.paragraphs.some(isBlankString)) {
+    throw new Error('the stored body has a blank or non-string paragraph -- refusing to write it');
   }
   if (!parsed.chef || typeof parsed.chef !== 'object') {
     throw new Error('the stored body has no chef block -- refusing to write it');
   }
-  // Not just "has a chef block": src/content/__tests__/assets.test.ts finds
-  // the portrait only by walking this file for an asset-shaped string --
-  // there is no server-side schema check on the D1 write path (worker/ has
-  // no isStoryContent/validateStory import; that check lives only in
-  // src/admin/StoryForm.tsx, client-side). A row with `chef: {}` would pass
-  // every guard above and, once written here, silently stop assets.test.ts
-  // from ever checking the portrait again -- no red test, just one fewer
-  // path in the walk. Refusing here keeps that failure loud.
-  if (typeof parsed.chef.portrait !== 'string' || parsed.chef.portrait.trim() === '') {
-    throw new Error('the stored body has no chef.portrait -- refusing to write it, which would silently drop the portrait path from assets.test.ts\'s walk');
+  if (isBlankString(parsed.chef.name)) {
+    throw new Error('the stored body has no chef.name -- refusing to write it');
+  }
+  if (isBlankString(parsed.chef.role)) {
+    throw new Error('the stored body has no chef.role -- refusing to write it');
+  }
+  // Not just "has a chef block": the Worker DOES check this document on the
+  // write path -- worker/index.ts's handlePublish runs validateContent
+  // (which dispatches to validateStory for story.json, worker/index.ts:696
+  // -> src/content/validate.ts:1240) on every publish, so a publish through
+  // /edit carrying `chef: {}` is refused with a 422 before anything reaches
+  // D1 at all. That is NOT what this guard is defending against -- it was
+  // wrongly justified that way once, and the mistake is worth naming so it
+  // is not repeated: this script's own guards are not the last thing
+  // standing between a bad row and a broken build. They are the guard for
+  // the write paths that never go through handlePublish at all --
+  // scripts/seed-story-d1.mjs, which writes straight through D1Store, and
+  // a `wrangler d1 execute` UPDATE run by hand -- neither of which comes
+  // anywhere near worker/index.ts or validateStory. A malformed row from
+  // one of those would otherwise land here unchecked and either break
+  // `tsc -b` at import time (see storyFileFromRow's own callers) or write
+  // a fallback with a broken photo that OurStory.tsx renders regardless.
+  if (isBlankString(parsed.chef.portrait)) {
+    throw new Error('the stored body has no chef.portrait -- refusing to write a fallback with a broken photo');
+  }
+  if (isBlankString(parsed.chef.portraitAlt)) {
+    throw new Error('the stored body has no chef.portraitAlt -- refusing to write it');
   }
   // Reformatted rather than written verbatim: the stored body is exactly
   // what the dashboard sent, which is minified, and a minified

@@ -65,11 +65,13 @@ export interface StoreEnv extends GitHubEnv {
 // difference matters: the file still EXISTS in the repository and is still
 // compiled into the bundle. It is no longer what the site writes to -- it
 // is the first-paint fallback OurStory.tsx renders before its runtime fetch
-// resolves (Task 7), and it is what keeps the chef portrait's path inside
-// src/content/__tests__/assets.test.ts's walk, which cannot see D1 at all.
-// Nothing currently keeps that compiled-in copy from drifting away from the
-// D1 row -- that is future work, not something this comment should claim
-// already exists.
+// resolves (Task 7), and it is ONE OF THREE places (alongside
+// src/content/press.json and src/components/ChefGallery.tsx) that keep the
+// chef portrait's path inside src/content/__tests__/assets.test.ts's walk,
+// which cannot see D1 at all -- not the only one, but the one whose own
+// value is what the first-paint byline actually renders. Nothing currently
+// keeps that compiled-in copy from drifting away from the D1 row -- that is
+// future work, not something this comment should claim already exists.
 export const D1_ONLY_PATHS: ReadonlySet<string> = new Set([
   'src/content/awards.json',
   'src/content/story.json',

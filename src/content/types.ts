@@ -185,10 +185,13 @@ export interface Galleries {
 // with no badge is simply an ordinary award.
 //
 // `portrait` is a site-relative derivative path ('/team/kamalika-anand.webp'),
-// never an absolute URL: validateStory refuses anything else, and the
-// committed story.json is what keeps this path inside
+// never an absolute URL: validateStory refuses anything else. The committed
+// story.json is ONE OF THREE places (with src/content/press.json and
+// src/components/ChefGallery.tsx) that keep this path inside
 // src/content/__tests__/assets.test.ts's walk even after Phase 4 moves this
-// document's live copy to D1 (see that task's own reasoning).
+// document's live copy to D1 (see that task's own reasoning) -- not the
+// only one, but the one this field's own value has to stay correct
+// independent of the other two.
 export interface ChefIntro {
   name: string;
   role: string;
