@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event';
 import GalleryList from '../GalleryList';
 import { GALLERY_IMAGE_FIELDS } from '../fields';
 import { useStagedFiles } from '../staged';
+import { useImagePreviews } from '../previews';
 import { validateContent } from '../../content/validate';
 import type { Galleries } from '../../content/types';
 import type { ValidationProblem } from '../../content/validate';
@@ -59,7 +60,11 @@ const GALLERIES: Galleries = {
   ourStory: [{ src: '/our_story/cut.webp', alt: 'Cutting pasta by hand' }],
   // The collage is a tree now, not a list -- two photos side by side is the
   // smallest one that still has a split in it, which is what these tests
-  // need to be non-trivial about the flattening this screen does.
+  // need to be non-trivial about the flattening this screen does. Both
+  // photos carry a blank alt deliberately -- this screen has never edited a
+  // collage photo's alt text, so their ROW NAME (Task 5) is the same
+  // fallback string for both, and several cases below have to find them by
+  // position rather than by name for exactly that reason.
   heroCollage: {
     kind: 'split',
     id: 'root',
@@ -79,11 +84,28 @@ function renderList(overrides: Partial<Parameters<typeof GalleryList>[0]> = {}) 
   return { onChange, stage };
 }
 
+// Finds the Hero collage list's own wrapper <div> -- every collage-scoped
+// query below is scoped to this, since photo-a and photo-b share the same
+// fallback row name and an unscoped query would collide with nothing (no
+// other row shares that name) but is still the right discipline to keep.
+function collageWrapper(): HTMLElement {
+  const heading = screen.getByRole('heading', { name: 'Hero collage' });
+  const wrapper = heading.closest('div');
+  if (!wrapper) throw new Error('Hero collage heading is not inside a <div>');
+  return wrapper as HTMLElement;
+}
+
 describe('GalleryList: renders all three lists, prefilled', () => {
-  it('shows every atmosphere and ourStory photo as a preview, and every alt text', () => {
+  // Task 5: a record's fields (PhotoField, the alt Field) only mount while
+  // its own editor is open -- what is left un-opened is the row itself, so
+  // this case now proves the row's own NAME is the real alt text (rather
+  // than an input's display value) and the row's own thumbnail is the real
+  // photo, neither of which needs an editor open at all.
+  it('shows every atmosphere and ourStory row named by its alt text, with the current photo in its thumbnail', () => {
     renderList();
-    const alts = screen.getAllByLabelText(GALLERY_IMAGE_FIELDS.alt.label);
-    expect(alts.map((el) => (el as HTMLInputElement).value)).toEqual(['The dining room', 'The bar', 'Cutting pasta by hand']);
+    expect(screen.getByText('The dining room')).toBeInTheDocument();
+    expect(screen.getByText('The bar')).toBeInTheDocument();
+    expect(screen.getByText('Cutting pasta by hand')).toBeInTheDocument();
     const previews = screen.getAllByRole('presentation') as HTMLImageElement[];
     expect(previews.map((img) => img.src)).toEqual(
       expect.arrayContaining([
@@ -97,19 +119,27 @@ describe('GalleryList: renders all three lists, prefilled', () => {
   // The collage's grid-placement string is gone, and with it the read-only
   // "Layout position" field this screen used to show beside every collage
   // photo. What is left is one row per photo, flattened out of the tree in
-  // document order, offering exactly one action: replace it.
-  it('shows one row per collage photo, in document order, with no layout field at all', () => {
+  // document order, offering exactly one action: open it and replace it.
+  it('lists collage photos in document order, each opening its own editor on the right photo, with no layout field at all', async () => {
+    const user = userEvent.setup();
     renderList();
     expect(screen.queryByLabelText('Layout position')).toBeNull();
-    const heading = screen.getByRole('heading', { name: 'Hero collage' });
-    const wrapper = heading.closest('div');
-    if (!wrapper) throw new Error('Hero collage heading is not inside a <div>');
-    const previews = within(wrapper).getAllByRole('presentation') as HTMLImageElement[];
-    expect(previews.map((img) => img.getAttribute('src'))).toEqual(['/hero/scene.webp', '/hero/farfalle1.webp']);
+
+    const wrapper = collageWrapper();
+    const rowIds = within(wrapper)
+      .getAllByRole('listitem')
+      .map((li) => li.getAttribute('data-item-row'));
+    expect(rowIds).toEqual(['photo-a', 'photo-b']);
+
+    const rowButtons = within(wrapper).getAllByRole('button');
+    expect(rowButtons).toHaveLength(2);
+    await user.click(rowButtons[1]);
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByRole('presentation')).toHaveAttribute('src', '/hero/farfalle1.webp');
   });
 });
 
-// The collage's own write path, which the two tests above only prove RENDERS.
+// The collage's own write path, which the test above only proves RENDERS.
 // Driven through the real PhotoField upload rather than by reaching into a
 // prop: `onChange` is what actually reaches the registry, and a screen that
 // lists the photos but writes back the wrong one (or nothing at all) looks
@@ -123,14 +153,16 @@ describe('GalleryList: replacing a collage photo rewrites exactly that photo in 
     vi.unstubAllGlobals();
   });
 
-  it('reports the whole tree with only the chosen photo\'s src changed, siblings and sizes untouched', async () => {
+  it("reports the whole tree with only the chosen photo's src changed, siblings and sizes untouched", async () => {
     const user = userEvent.setup();
     const { onChange } = renderList();
-    const photoInputs = screen.getAllByLabelText('Photo');
-    // atmosphere (2) + ourStory (1) = 3 rows before the collage's first
-    // photo; its SECOND photo is the one this drives, so a write that always
-    // hits index 0 of the flattened list is caught too.
-    await user.upload(photoInputs[4], jpegFile());
+    const wrapper = collageWrapper();
+    const rowButtons = within(wrapper).getAllByRole('button');
+    // The collage's SECOND photo is the one this drives, so a write that
+    // always hits index 0 of the flattened list is caught too.
+    await user.click(rowButtons[1]);
+    const photoInput = within(screen.getByRole('dialog')).getByLabelText('Photo');
+    await user.upload(photoInput, jpegFile());
     await waitFor(() => expect(FakeXHR.instances).toHaveLength(1));
     FakeXHR.instances[0].respond(200, { path: 'assets-source/hero/aaa111.jpg', contentPath: '/hero/aaa111.webp' });
 
@@ -154,10 +186,12 @@ describe('GalleryList: replacing a collage photo rewrites exactly that photo in 
 });
 
 describe('GalleryList: editing alt text reports the whole Galleries object, only that leaf changed', () => {
-  it("editing atmosphere[0]'s alt reports { ...GALLERIES, atmosphere: [...] }", () => {
+  it("editing atmosphere[0]'s alt reports { ...GALLERIES, atmosphere: [...] }", async () => {
+    const user = userEvent.setup();
     const { onChange } = renderList();
-    const alts = screen.getAllByLabelText(GALLERY_IMAGE_FIELDS.alt.label);
-    fireEvent.change(alts[0], { target: { value: 'Updated caption' } });
+    await user.click(screen.getByRole('button', { name: 'The dining room' }));
+    const altInput = within(screen.getByRole('dialog')).getByLabelText(GALLERY_IMAGE_FIELDS.alt.label);
+    fireEvent.change(altInput, { target: { value: 'Updated caption' } });
     expect(onChange).toHaveBeenCalledWith({
       ...GALLERIES,
       atmosphere: [{ ...GALLERIES.atmosphere[0], alt: 'Updated caption' }, GALLERIES.atmosphere[1]],
@@ -166,59 +200,54 @@ describe('GalleryList: editing alt text reports the whole Galleries object, only
 });
 
 describe('GalleryList: add, remove, and reorder -- atmosphere and ourStory only, never heroCollage', () => {
-  it('"Add an atmosphere photo" appends one blank row to atmosphere only', async () => {
+  it('"Add an atmosphere photo" appends one blank row to atmosphere only, rendered ABOVE the existing rows', async () => {
     const user = userEvent.setup();
     const { onChange } = renderList();
-    await user.click(screen.getByRole('button', { name: 'Add an atmosphere photo' }));
+    // Position, not just presence: Task 2's own rule for ItemList's Add
+    // button, re-proven here now that GalleryList renders through it too.
+    const addButton = screen.getByRole('button', { name: 'Add an atmosphere photo' });
+    const firstRow = document.querySelector('[data-item-row]');
+    expect(firstRow).not.toBeNull();
+    expect(addButton.compareDocumentPosition(firstRow as Node) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    await user.click(addButton);
     expect(onChange).toHaveBeenCalledWith({ ...GALLERIES, atmosphere: [...GALLERIES.atmosphere, { src: '', alt: '' }] });
   });
 
-  it('"Remove Atmosphere photo 1" drops only that row', async () => {
+  // D8: delete lives inside the editor and asks once -- the row itself
+  // carries no Remove button any more.
+  it('opening a row and confirming "Remove Atmosphere photo 1" drops only that row', async () => {
     const user = userEvent.setup();
     const { onChange } = renderList();
-    await user.click(screen.getByRole('button', { name: 'Remove Atmosphere photo 1' }));
+    await user.click(screen.getByRole('button', { name: 'The dining room' }));
+    const dialog = screen.getByRole('dialog');
+    await user.click(within(dialog).getByRole('button', { name: 'Remove Atmosphere photo 1' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Yes, remove atmosphere photo 1' }));
     expect(onChange).toHaveBeenCalledWith({ ...GALLERIES, atmosphere: [GALLERIES.atmosphere[1]] });
   });
 
-  it('"Move Atmosphere photo 1 down" swaps the two atmosphere rows', async () => {
+  // ItemList generates "Move {row.name} up/down" from the row's own name --
+  // the alt text now, not a fixed "Atmosphere photo N" -- so this is the
+  // renamed control the brief's own mapping calls for, keeping the same
+  // two-position assertion.
+  it('"Move The dining room down" swaps the two atmosphere rows', async () => {
     const user = userEvent.setup();
     const { onChange } = renderList();
-    await user.click(screen.getByRole('button', { name: 'Move Atmosphere photo 1 down' }));
+    await user.click(screen.getByRole('button', { name: 'Move The dining room down' }));
     expect(onChange).toHaveBeenCalledWith({ ...GALLERIES, atmosphere: [GALLERIES.atmosphere[1], GALLERIES.atmosphere[0]] });
   });
 
-  // An anchored name-pattern check (`/^Remove Hero collage/`,
-  // `/^Add.*collage/i`) can't actually catch a working Add/Remove pair
-  // named anything else (e.g. a plain "Delete photo 1", or "Add a hero
-  // photo" with no literal "collage" in it) -- an EXHAUSTIVE count of every
-  // button this section renders, compared against the exact accessible
-  // names expected, is what a rename or a differently-worded new button
-  // can't slip past.
+  // An EXHAUSTIVE count of every button this section renders, not an
+  // anchored name pattern: a pattern like /^Remove Hero collage/ cannot
+  // catch a working Add/Remove pair named anything else. With no editor
+  // open, the only two buttons in this list are the two rows themselves --
+  // Add, Remove and reorder all live one level down, inside an editor this
+  // list never opens on its own.
   it('Hero collage offers no add, no remove and no reorder -- arranging it happens on the collage itself', () => {
     renderList();
-    const heading = screen.getByRole('heading', { name: 'Hero collage' });
-    // Named `wrapper`, not the more obvious variable name here: this
-    // null-guard needs a negation check on it, and an exclamation mark
-    // sitting directly against the word this task's own report already
-    // flags as a real Tailwind utility is ALSO that utility's
-    // important-modifier syntax -- Tailwind's content scan does not parse
-    // JS, so it reads that negation the same way it would read a class
-    // list. Confirmed directly (the review's own near-miss discipline,
-    // applied here too): the more obvious spelling added a new rule (and
-    // five breakpoint variants of it) to the built CSS.
-    const wrapper = heading.closest('div');
-    if (!wrapper) throw new Error('Hero collage heading is not inside a <div>');
-    // An exhaustive count of every button this section renders, not an
-    // anchored name pattern: a pattern like /^Remove Hero collage/ cannot
-    // catch a working Add/Remove pair named anything else (a plain "Delete
-    // photo 1", say), where a count of ALL of them can't be slipped past by
-    // a rename or a differently-worded new control. PhotoField's own picker
-    // is a <label> wrapping a file input, not a button, so a correct render
-    // of this section has no buttons in it at all -- and the file inputs
-    // below are what proves that is because there is nothing else to click,
-    // not because the section failed to render.
-    expect(within(wrapper).queryAllByRole('button')).toEqual([]);
-    expect(within(wrapper).getAllByLabelText('Photo')).toHaveLength(2);
+    const wrapper = collageWrapper();
+    expect(within(wrapper).getAllByRole('button')).toHaveLength(2);
+    expect(within(wrapper).queryAllByLabelText('Photo')).toHaveLength(0);
   });
 
   // A screen that silently offers less than it used to reads as broken. This
@@ -247,8 +276,9 @@ describe("GalleryList: Task 9's collector wiring -- src stages through PhotoFiel
   it("atmosphere's photo picker uploads under category 'atmosphere'", async () => {
     const user = userEvent.setup();
     renderList();
-    const photoInputs = screen.getAllByLabelText('Photo');
-    await user.upload(photoInputs[0], jpegFile());
+    await user.click(screen.getByRole('button', { name: 'The dining room' }));
+    const photoInput = within(screen.getByRole('dialog')).getByLabelText('Photo');
+    await user.upload(photoInput, jpegFile());
     await waitFor(() => expect(FakeXHR.instances).toHaveLength(1));
     expect(FakeXHR.instances[0].sentForm?.get('category')).toBe('atmosphere');
   });
@@ -256,10 +286,9 @@ describe("GalleryList: Task 9's collector wiring -- src stages through PhotoFiel
   it("ourStory's photo picker uploads under category 'our_story', and stages under a galleries.json-prefixed key with real bytes", async () => {
     const user = userEvent.setup();
     const { stage } = renderList();
-    const photoInputs = screen.getAllByLabelText('Photo');
-    // atmosphere has two rows (indices 0-1); ourStory's own single row is
-    // index 2 in DOM order.
-    await user.upload(photoInputs[2], jpegFile());
+    await user.click(screen.getByRole('button', { name: 'Cutting pasta by hand' }));
+    const photoInput = within(screen.getByRole('dialog')).getByLabelText('Photo');
+    await user.upload(photoInput, jpegFile());
     await waitFor(() => expect(FakeXHR.instances).toHaveLength(1));
     expect(FakeXHR.instances[0].sentForm?.get('category')).toBe('our_story');
 
@@ -287,9 +316,11 @@ describe("GalleryList: Task 9's collector wiring -- src stages through PhotoFiel
   it("Hero collage's photo picker uploads under category 'hero', and stages under a galleries.json-prefixed key with real bytes", async () => {
     const user = userEvent.setup();
     const { stage } = renderList();
-    const photoInputs = screen.getAllByLabelText('Photo');
-    // atmosphere (2) + ourStory (1) = 3 rows before heroCollage's own first row.
-    await user.upload(photoInputs[3], jpegFile());
+    const wrapper = collageWrapper();
+    const rowButtons = within(wrapper).getAllByRole('button');
+    await user.click(rowButtons[0]); // photo-a, the collage's first row.
+    const photoInput = within(screen.getByRole('dialog')).getByLabelText('Photo');
+    await user.upload(photoInput, jpegFile());
     await waitFor(() => expect(FakeXHR.instances).toHaveLength(1));
     expect(FakeXHR.instances[0].sentForm?.get('category')).toBe('hero');
 
@@ -347,20 +378,26 @@ describe('GalleryList: reordering between two stages does not evict the earlier 
     render(<GalleryHarness initial={GALLERIES} />);
 
     // 1. Stage a photo on Atmosphere photo 1 (src '/atmosphere/dining.webp').
-    const firstUpload = screen.getAllByLabelText('Photo')[0];
+    // A record's fields only mount while its own editor is open -- opening
+    // it here is what makes the upload possible at all.
+    await user.click(screen.getByRole('button', { name: 'The dining room' }));
+    const firstUpload = within(screen.getByRole('dialog')).getByLabelText('Photo');
     await user.upload(firstUpload, jpegFile('first.jpg'));
     await waitFor(() => expect(FakeXHR.instances).toHaveLength(1));
     FakeXHR.instances[0].respond(200, { path: 'assets-source/atmosphere/aaa111aaa111.jpg', contentPath: '/atmosphere/aaa111aaa111.webp' });
     await waitFor(() => expect(screen.getByTestId('staged-keys')).toHaveTextContent('galleries.json:atmosphere:row-0:src'));
 
-    // 2. Reorder: "Move Atmosphere photo 1 down" -- the record (and its new
-    // contentPath) moves to index 1; row 2's own '/atmosphere/bar.webp' is
-    // now at index 0.
-    await user.click(screen.getByRole('button', { name: 'Move Atmosphere photo 1 down' }));
+    // 2. Close (Move lives on the row itself, not inside the editor -- a
+    // real reorder happens with the editor shut) and reorder: "Move The
+    // dining room down" -- the record (and its new contentPath) moves to
+    // index 1; row 2's own '/atmosphere/bar.webp' is now at index 0.
+    await user.click(screen.getByRole('button', { name: 'Done' }));
+    await user.click(screen.getByRole('button', { name: 'Move The dining room down' }));
 
-    // 3. Stage a DIFFERENT photo on the row now at index 0 (the row whose
-    // OWN src is '/atmosphere/bar.webp').
-    const secondUpload = screen.getAllByLabelText('Photo')[0];
+    // 3. Stage a DIFFERENT photo on the row now at index 0 -- the row whose
+    // OWN alt is "The bar".
+    await user.click(screen.getByRole('button', { name: 'The bar' }));
+    const secondUpload = within(screen.getByRole('dialog')).getByLabelText('Photo');
     await user.upload(secondUpload, jpegFile('second.jpg'));
     await waitFor(() => expect(FakeXHR.instances).toHaveLength(2));
     FakeXHR.instances[1].respond(200, { path: 'assets-source/atmosphere/bbb222bbb222.jpg', contentPath: '/atmosphere/bbb222bbb222.webp' });
@@ -402,15 +439,19 @@ describe('GalleryList: restaging the SAME row does not orphan the earlier upload
     const user = userEvent.setup();
     render(<GalleryHarness initial={GALLERIES} />);
 
-    const upload = screen.getAllByLabelText('Photo')[0]; // Atmosphere photo 1
-    await user.upload(upload, jpegFile('first.jpg'));
+    await user.click(screen.getByRole('button', { name: 'The dining room' }));
+    const dialog = screen.getByRole('dialog');
+    await user.upload(within(dialog).getByLabelText('Photo'), jpegFile('first.jpg'));
     await waitFor(() => expect(FakeXHR.instances).toHaveLength(1));
     FakeXHR.instances[0].respond(200, { path: 'assets-source/atmosphere/aaa111aaa111.jpg', contentPath: '/atmosphere/aaa111aaa111.webp' });
     await waitFor(() => expect(screen.getByTestId('staged-keys')).toHaveTextContent('galleries.json:atmosphere:row-0:src'));
 
-    // Pick AGAIN on the SAME row, on-screen position unchanged -- no
-    // reorder in between, the exact case index-of-src-keying missed.
-    await user.upload(screen.getAllByLabelText('Photo')[0], jpegFile('second.jpg'));
+    // Pick AGAIN on the SAME row, editor still open the whole time -- no
+    // close/reopen and no reorder in between, the exact case
+    // index-of-src-keying missed. D3 (the editor holds no buffer) is why
+    // this is even possible: every keystroke -- and every stage -- commits
+    // immediately, so the dialog never needs to be re-opened to see it.
+    await user.upload(within(dialog).getByLabelText('Photo'), jpegFile('second.jpg'));
     await waitFor(() => expect(FakeXHR.instances).toHaveLength(2));
     FakeXHR.instances[1].respond(200, { path: 'assets-source/atmosphere/ccc333ccc333.jpg', contentPath: '/atmosphere/ccc333ccc333.webp' });
 
@@ -437,17 +478,25 @@ describe('GalleryList: an EMPTY atmosphere list still surfaces the real validato
   });
 });
 
-describe('GalleryList: a malformed row\'s own message attaches to that row only', () => {
-  it('a blank alt on ourStory[0] shows up there, not on atmosphere, and not the top-level banner', () => {
+// D4: with an editor closed, nine of ten records' fields (here, every
+// record's) are unmounted and their own `role="alert"` messages with them --
+// so every list carries a list-level banner of every problem its open editor
+// (there is none, here) is not showing, plus a per-row "needs attention"
+// marker. The partition is by reference (shown/banner), never both places,
+// never neither -- RecordForm.tsx's own guarantee, applied to this screen.
+describe('GalleryList: closing an editor must not hide a validation problem (D4)', () => {
+  it("with every editor closed, a blank alt on ourStory[0] shows up in About's own banner, not on atmosphere, and the row itself still marks needing attention", () => {
     const withBlankAlt: Galleries = { ...GALLERIES, ourStory: [{ src: '/our_story/cut.webp', alt: '' }] };
     const problems = validateContent('galleries.json', withBlankAlt);
     expect(problems).toEqual([{ field: 'ourStory[0].alt', message: 'ourStory[0] needs alt text' }]);
 
     render(<GalleryList value={withBlankAlt} onChange={vi.fn()} problems={problems} stage={vi.fn()} />);
-    expect(screen.queryByRole('alert', { name: 'Problems with About' })).not.toBeInTheDocument();
-    const rows = screen.getAllByRole('listitem');
-    // ourStory's own row is the third <li> (two atmosphere rows first).
-    expect(within(rows[2]).getByText('ourStory[0] needs alt text')).toBeInTheDocument();
+    expect(screen.queryByRole('alert', { name: 'Problems with Atmosphere' })).not.toBeInTheDocument();
+    expect(screen.getByRole('alert', { name: 'Problems with About' })).toHaveTextContent('ourStory[0] needs alt text');
+    // The per-row half of the same partition: the row is still findable and
+    // still openable, marked rather than hidden.
+    const row = screen.getByRole('button', { name: /Photo with no description yet needs attention/ });
+    expect(row).toBeInTheDocument();
   });
 
   it('a problem naming a row index past the end of what is rendered still surfaces, in that list\'s banner', () => {
@@ -464,5 +513,81 @@ describe('GalleryList: a malformed row\'s own message attaches to that row only'
     const problems: ValidationProblem[] = [{ field: 'atmosphere[2].alt', message: 'a boundary problem for a row no longer here' }];
     render(<GalleryList value={GALLERIES} onChange={vi.fn()} problems={problems} stage={vi.fn()} />);
     expect(screen.getByRole('alert', { name: 'Problems with Atmosphere' })).toHaveTextContent('a boundary problem for a row no longer here');
+  });
+});
+
+// Task 5's own new coverage: the one shared open key across all three lists.
+describe('GalleryList: one open key for all three lists (Task 5)', () => {
+  it('opening an Our Story photo closes the Atmosphere one', async () => {
+    const user = userEvent.setup();
+    renderList();
+    await user.click(screen.getByRole('button', { name: 'The dining room' }));
+    expect(screen.getByRole('dialog', { name: 'The dining room' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Cutting pasta by hand' }));
+    expect(screen.queryByRole('dialog', { name: 'The dining room' })).not.toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Cutting pasta by hand' })).toBeInTheDocument();
+    // Never two dialogs at once -- each one claims aria-modal, and a second
+    // would trap focus inside the first.
+    expect(screen.getAllByRole('dialog')).toHaveLength(1);
+  });
+
+  it('a photo with no description still has a row you can click', async () => {
+    const user = userEvent.setup();
+    const noAlt: Galleries = { ...GALLERIES, atmosphere: [{ src: '/atmosphere/dining.webp', alt: '' }, GALLERIES.atmosphere[1]] };
+    render(<GalleryList value={noAlt} onChange={vi.fn()} problems={[]} stage={vi.fn()} />);
+    // Scoped to the Atmosphere list specifically: the hero collage's own two
+    // rows share this identical fallback name in the fixture (their own alt
+    // is blank too), so an unscoped query would be ambiguous.
+    const heading = screen.getByRole('heading', { name: 'Atmosphere' });
+    const wrapper = heading.closest('div') as HTMLElement;
+    await user.click(within(wrapper).getByRole('button', { name: 'Photo with no description yet' }));
+    expect(screen.getByRole('dialog', { name: 'Photo with no description yet' })).toBeInTheDocument();
+  });
+});
+
+// The photo she picked shows on the row she picked it for -- driven through
+// a real preview store, not a stub, since the defect this proves is about
+// which KEY the row's own Thumbnail reads, not merely that PhotoField calls
+// `previews.set` at all (PhotoField.test.tsx already covers that in
+// isolation).
+function GalleryPreviewHarness({ initial }: { initial: Galleries }) {
+  const [value, setValue] = useState(initial);
+  const previews = useImagePreviews();
+  return <GalleryList value={value} onChange={setValue} problems={[]} stage={vi.fn()} previews={previews} />;
+}
+
+describe('GalleryList: the photo she picked shows on the row she picked it for (Task 5)', () => {
+  beforeEach(() => {
+    FakeXHR.instances = [];
+    vi.stubGlobal('XMLHttpRequest', FakeXHR as unknown as typeof XMLHttpRequest);
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("staging a photo on Atmosphere photo 1 updates THAT row's own thumbnail to the object URL, leaving the other row's untouched", async () => {
+    const user = userEvent.setup();
+    render(<GalleryPreviewHarness initial={GALLERIES} />);
+
+    const row = screen.getByText('The dining room').closest('li') as HTMLElement;
+    const otherRow = screen.getByText('The bar').closest('li') as HTMLElement;
+    // Non-vacuous: before the pick it really is showing the committed path.
+    expect(row.querySelector('[data-thumbnail]')).toHaveAttribute('src', '/atmosphere/dining.webp');
+
+    await user.click(within(row).getByRole('button', { name: 'The dining room' }));
+    const photoInput = within(screen.getByRole('dialog')).getByLabelText('Photo');
+    await user.upload(photoInput, jpegFile());
+    await waitFor(() => expect(FakeXHR.instances).toHaveLength(1));
+    FakeXHR.instances[0].respond(200, { path: 'assets-source/atmosphere/aaa111.jpg', contentPath: '/atmosphere/aaa111.webp' });
+
+    // Mutation this guards: key the row's Thumbnail off the wrong prefix (or
+    // off `item.src` instead of `rowIdFor`) -- the object URL either never
+    // shows here or shows on the wrong row.
+    await waitFor(() => {
+      const src = row.querySelector('[data-thumbnail]')?.getAttribute('src') ?? '';
+      expect(src.startsWith('blob:')).toBe(true);
+    });
+    expect(otherRow.querySelector('[data-thumbnail]')).toHaveAttribute('src', '/atmosphere/bar.webp');
   });
 });

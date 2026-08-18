@@ -760,27 +760,36 @@ describe('AdminApp: the new prose, gallery, menus and copy screens all render, f
     expect(within(dialog).getByLabelText(MENU_FIELDS.id.label)).toHaveValue('food');
   });
 
-  it('renders Galleries, prefilled with real atmosphere/ourStory alt text and one row per collage photo', async () => {
+  it('renders Galleries, listing real atmosphere/ourStory rows by alt text and one row per collage photo', async () => {
     stubFetch();
+    const user = userEvent.setup();
     renderDashboard('/edit/manage/story');
     const section = await sectionByHeading('Galleries');
-    expect(await within(section).findByDisplayValue(GALLERIES.atmosphere[0].alt)).toBeInTheDocument();
-    expect(within(section).getByDisplayValue(GALLERIES.ourStory[0].alt)).toBeInTheDocument();
+    // Task 5: a row's own fields (PhotoField included) only mount once its
+    // editor is open -- what's provable with none open is that the real
+    // content produced the right ROWS, correctly named.
+    expect(await within(section).findByText(GALLERIES.atmosphere[0].alt)).toBeInTheDocument();
+    expect(within(section).getByText(GALLERIES.ourStory[0].alt)).toBeInTheDocument();
+
     // The collage's grid-placement string is gone, and with it the read-only
     // "Layout position" field this used to count. What is left per photo is
     // the one thing this screen still does for the collage: replace it.
     const photos = collagePhotos(GALLERIES.heroCollage!);
     expect(photos.length).toBeGreaterThan(0);
-    // One PhotoField per collage photo, on top of the atmosphere and
-    // ourStory rows this screen already renders.
-    //
-    // Counted through `photoPickers`, not `getAllByLabelText('Photo')`: that
-    // one query was 981ms of this case's 1066ms, measured -- the Galleries
-    // panel is the biggest in the dashboard, and it is the single most
-    // expensive label sweep left in this file. See photoPickers' own comment
-    // for why the association it checks is the same one.
-    const pickers = photoPickers(section, 'Photo');
-    expect(pickers.length).toBe(GALLERIES.atmosphere.length + GALLERIES.ourStory.length + photos.length);
+    // One row per atmosphere/ourStory image, plus one per collage photo --
+    // counted through `[data-item-row]` (ItemList's own row marker), rather
+    // than a `getAllByLabelText('Photo')` sweep: that query only ever finds
+    // ONE PhotoField at a time now (only the open row's own fields mount),
+    // so it can no longer stand in for the row count at all.
+    expect(section.querySelectorAll('[data-item-row]')).toHaveLength(
+      GALLERIES.atmosphere.length + GALLERIES.ourStory.length + photos.length,
+    );
+
+    // And opening one really does show the real value, not just a row named
+    // right by coincidence.
+    await user.click(within(section).getByRole('button', { name: GALLERIES.atmosphere[0].alt }));
+    const dialog = await screen.findByRole('dialog', { name: GALLERIES.atmosphere[0].alt });
+    expect(within(dialog).getByLabelText('Photo')).toBeInTheDocument();
   });
 
   it('renders About, prefilled with the real heading and first paragraph', async () => {

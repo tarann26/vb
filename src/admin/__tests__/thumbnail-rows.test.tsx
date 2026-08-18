@@ -93,16 +93,26 @@ describe('the six row types that get a thumbnail', () => {
 
   // The hero collage is deliberately excluded: it is not a list of rows, and
   // its own editor shows the real photographs at real size already.
+  //
+  // Re-pointed for Task 5: a collage row's own PhotoField now lives inside a
+  // dialog, mounted only while that row's editor is open, rather than inside
+  // an always-rendered `<li>` -- `getAllByLabelText('Photo')` can no longer
+  // find the LAST row without opening one first. `[data-item-row]`, ItemList's
+  // own row marker, is findable with no editor open at all.
   it('the hero collage rows carry none', async () => {
     markEveryAreaSeeded();
     stubFetchWithPhotos();
     renderDashboard('/edit/manage/story');
     const el = await openPanel('Galleries', 'galleries');
 
-    const photoFields = within(el).getAllByLabelText('Photo');
-    const collageRow = photoFields[photoFields.length - 1].closest('li');
-    expect(collageRow).not.toBeNull();
-    expect(thumbnails(collageRow as HTMLElement)).toHaveLength(0);
+    const heading = within(el).getByRole('heading', { name: 'Hero collage' });
+    const wrapper = heading.closest('div');
+    if (!wrapper) throw new Error('Hero collage heading is not inside a <div>');
+    const collageRows = within(wrapper as HTMLElement).getAllByRole('listitem');
+    expect(collageRows.length).toBeGreaterThan(0);
+    collageRows.forEach((row) => {
+      expect(thumbnails(row as HTMLElement)).toHaveLength(0);
+    });
   });
 
   // Menu PDFs are the one row type with no possible picture that still

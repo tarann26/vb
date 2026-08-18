@@ -946,15 +946,33 @@ exports[`the thirteen panels, as they render today > Galleries (galleries) 1`] =
         >
           Atmosphere
         </h3>
-        <ul>
-          <li
-            class="mb-6 rounded border border-gray-200 p-4"
+        <div>
+          <button
+            class="mb-3 w-full rounded border-2 border-dashed border-brand py-2 font-['Montserrat'] text-sm uppercase tracking-wide text-accent transition hover:bg-brand/10"
+            type="button"
           >
-            <div
-              class="mb-3 flex flex-wrap items-center justify-between gap-2"
+            Add an atmosphere photo
+          </button>
+          <ul
+            data-item-list="rows"
+          >
+            <li
+              class="mb-1 flex items-center gap-1 rounded border border-gray-200"
+              data-item-row="row-0"
             >
-              <div
-                class="flex items-center gap-2"
+              <span
+                aria-hidden="true"
+                class="select-none px-3 py-1 text-gray-500"
+                data-drag-handle="0"
+                draggable="true"
+                style="cursor: move;"
+                title="Drag to move The dining room laid for service"
+              >
+                ⠿
+              </span>
+              <button
+                class="flex min-w-0 flex-1 items-center gap-3 rounded p-2 text-left font-['Montserrat'] text-sm text-ink transition hover:bg-brand/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+                type="button"
               >
                 <img
                   alt=""
@@ -963,75 +981,37 @@ exports[`the thirteen panels, as they render today > Galleries (galleries) 1`] =
                   loading="lazy"
                   src="/atmosphere/dining.webp"
                 />
-                <button
-                  aria-label="Move Atmosphere photo 1 down"
-                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
-                  type="button"
+                <span
+                  class="min-w-0 flex-1 truncate"
                 >
-                  Down
-                </button>
-              </div>
+                  The dining room laid for service
+                </span>
+              </button>
               <button
-                aria-label="Remove Atmosphere photo 1"
-                class="rounded border border-red-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-red-600 transition hover:bg-red-600 hover:text-white"
+                aria-label="Move The dining room laid for service down"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                 type="button"
               >
-                Remove
+                Down
               </button>
-            </div>
-            <div
-              class="mb-4"
+            </li>
+            <li
+              class="mb-1 flex items-center gap-1 rounded border border-gray-200"
+              data-item-row="row-1"
             >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="gallery-atmosphere-0-src"
+              <span
+                aria-hidden="true"
+                class="select-none px-3 py-1 text-gray-500"
+                data-drag-handle="1"
+                draggable="true"
+                style="cursor: move;"
+                title="Drag to move Via Bianca's signage on N-Block Market"
               >
-                Photo
-              </label>
-              <img
-                alt=""
-                class="mb-2 h-24 w-24 rounded border border-gray-300 object-cover"
-                src="/atmosphere/dining.webp"
-              />
-              <input
-                accept="image/*"
-                class="block w-full text-sm text-ink file:mr-3 file:rounded file:border-0 file:bg-brand file:px-3 file:py-1.5 file:font-['Montserrat'] file:text-xs file:uppercase file:tracking-wide file:text-ink hover:file:bg-brand-dark"
-                id="gallery-atmosphere-0-src"
-                type="file"
-              />
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="gallery-atmosphere-0-alt"
-              >
-                Alt text
-              </label>
-              <input
-                aria-describedby="gallery-atmosphere-0-alt-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="gallery-atmosphere-0-alt"
-                type="text"
-                value="The dining room laid for service"
-              />
-              <p
-                class="mt-1 text-xs text-gray-500"
-                id="gallery-atmosphere-0-alt-help"
-              >
-                Describes the photo for screen readers and search engines.
-              </p>
-            </div>
-          </li>
-          <li
-            class="mb-6 rounded border border-gray-200 p-4"
-          >
-            <div
-              class="mb-3 flex flex-wrap items-center justify-between gap-2"
-            >
-              <div
-                class="flex items-center gap-2"
+                ⠿
+              </span>
+              <button
+                class="flex min-w-0 flex-1 items-center gap-3 rounded p-2 text-left font-['Montserrat'] text-sm text-ink transition hover:bg-brand/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+                type="button"
               >
                 <img
                   alt=""
@@ -1040,82 +1020,44 @@ exports[`the thirteen panels, as they render today > Galleries (galleries) 1`] =
                   loading="lazy"
                   src="/atmosphere/outsideLOGO.webp"
                 />
-                <button
-                  aria-label="Move Atmosphere photo 2 up"
-                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
-                  type="button"
+                <span
+                  class="min-w-0 flex-1 truncate"
                 >
-                  Up
-                </button>
-                <button
-                  aria-label="Move Atmosphere photo 2 down"
-                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
-                  type="button"
-                >
-                  Down
-                </button>
-              </div>
+                  Via Bianca's signage on N-Block Market
+                </span>
+              </button>
               <button
-                aria-label="Remove Atmosphere photo 2"
-                class="rounded border border-red-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-red-600 transition hover:bg-red-600 hover:text-white"
+                aria-label="Move Via Bianca's signage on N-Block Market up"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                 type="button"
               >
-                Remove
+                Up
               </button>
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="gallery-atmosphere-1-src"
+              <button
+                aria-label="Move Via Bianca's signage on N-Block Market down"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
+                type="button"
               >
-                Photo
-              </label>
-              <img
-                alt=""
-                class="mb-2 h-24 w-24 rounded border border-gray-300 object-cover"
-                src="/atmosphere/outsideLOGO.webp"
-              />
-              <input
-                accept="image/*"
-                class="block w-full text-sm text-ink file:mr-3 file:rounded file:border-0 file:bg-brand file:px-3 file:py-1.5 file:font-['Montserrat'] file:text-xs file:uppercase file:tracking-wide file:text-ink hover:file:bg-brand-dark"
-                id="gallery-atmosphere-1-src"
-                type="file"
-              />
-            </div>
-            <div
-              class="mb-4"
+                Down
+              </button>
+            </li>
+            <li
+              class="mb-1 flex items-center gap-1 rounded border border-gray-200"
+              data-item-row="row-2"
             >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="gallery-atmosphere-1-alt"
+              <span
+                aria-hidden="true"
+                class="select-none px-3 py-1 text-gray-500"
+                data-drag-handle="2"
+                draggable="true"
+                style="cursor: move;"
+                title="Drag to move Warm evening light across the restaurant"
               >
-                Alt text
-              </label>
-              <input
-                aria-describedby="gallery-atmosphere-1-alt-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="gallery-atmosphere-1-alt"
-                type="text"
-                value="Via Bianca's signage on N-Block Market"
-              />
-              <p
-                class="mt-1 text-xs text-gray-500"
-                id="gallery-atmosphere-1-alt-help"
-              >
-                Describes the photo for screen readers and search engines.
-              </p>
-            </div>
-          </li>
-          <li
-            class="mb-6 rounded border border-gray-200 p-4"
-          >
-            <div
-              class="mb-3 flex flex-wrap items-center justify-between gap-2"
-            >
-              <div
-                class="flex items-center gap-2"
+                ⠿
+              </span>
+              <button
+                class="flex min-w-0 flex-1 items-center gap-3 rounded p-2 text-left font-['Montserrat'] text-sm text-ink transition hover:bg-brand/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+                type="button"
               >
                 <img
                   alt=""
@@ -1124,82 +1066,44 @@ exports[`the thirteen panels, as they render today > Galleries (galleries) 1`] =
                   loading="lazy"
                   src="/atmosphere/ambience.webp"
                 />
-                <button
-                  aria-label="Move Atmosphere photo 3 up"
-                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
-                  type="button"
+                <span
+                  class="min-w-0 flex-1 truncate"
                 >
-                  Up
-                </button>
-                <button
-                  aria-label="Move Atmosphere photo 3 down"
-                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
-                  type="button"
-                >
-                  Down
-                </button>
-              </div>
+                  Warm evening light across the restaurant
+                </span>
+              </button>
               <button
-                aria-label="Remove Atmosphere photo 3"
-                class="rounded border border-red-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-red-600 transition hover:bg-red-600 hover:text-white"
+                aria-label="Move Warm evening light across the restaurant up"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                 type="button"
               >
-                Remove
+                Up
               </button>
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="gallery-atmosphere-2-src"
+              <button
+                aria-label="Move Warm evening light across the restaurant down"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
+                type="button"
               >
-                Photo
-              </label>
-              <img
-                alt=""
-                class="mb-2 h-24 w-24 rounded border border-gray-300 object-cover"
-                src="/atmosphere/ambience.webp"
-              />
-              <input
-                accept="image/*"
-                class="block w-full text-sm text-ink file:mr-3 file:rounded file:border-0 file:bg-brand file:px-3 file:py-1.5 file:font-['Montserrat'] file:text-xs file:uppercase file:tracking-wide file:text-ink hover:file:bg-brand-dark"
-                id="gallery-atmosphere-2-src"
-                type="file"
-              />
-            </div>
-            <div
-              class="mb-4"
+                Down
+              </button>
+            </li>
+            <li
+              class="mb-1 flex items-center gap-1 rounded border border-gray-200"
+              data-item-row="row-3"
             >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="gallery-atmosphere-2-alt"
+              <span
+                aria-hidden="true"
+                class="select-none px-3 py-1 text-gray-500"
+                data-drag-handle="3"
+                draggable="true"
+                style="cursor: move;"
+                title="Drag to move Hand-painted ceiling detail"
               >
-                Alt text
-              </label>
-              <input
-                aria-describedby="gallery-atmosphere-2-alt-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="gallery-atmosphere-2-alt"
-                type="text"
-                value="Warm evening light across the restaurant"
-              />
-              <p
-                class="mt-1 text-xs text-gray-500"
-                id="gallery-atmosphere-2-alt-help"
-              >
-                Describes the photo for screen readers and search engines.
-              </p>
-            </div>
-          </li>
-          <li
-            class="mb-6 rounded border border-gray-200 p-4"
-          >
-            <div
-              class="mb-3 flex flex-wrap items-center justify-between gap-2"
-            >
-              <div
-                class="flex items-center gap-2"
+                ⠿
+              </span>
+              <button
+                class="flex min-w-0 flex-1 items-center gap-3 rounded p-2 text-left font-['Montserrat'] text-sm text-ink transition hover:bg-brand/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+                type="button"
               >
                 <img
                   alt=""
@@ -1208,82 +1112,44 @@ exports[`the thirteen panels, as they render today > Galleries (galleries) 1`] =
                   loading="lazy"
                   src="/atmosphere/ceiling decor.webp"
                 />
-                <button
-                  aria-label="Move Atmosphere photo 4 up"
-                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
-                  type="button"
+                <span
+                  class="min-w-0 flex-1 truncate"
                 >
-                  Up
-                </button>
-                <button
-                  aria-label="Move Atmosphere photo 4 down"
-                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
-                  type="button"
-                >
-                  Down
-                </button>
-              </div>
+                  Hand-painted ceiling detail
+                </span>
+              </button>
               <button
-                aria-label="Remove Atmosphere photo 4"
-                class="rounded border border-red-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-red-600 transition hover:bg-red-600 hover:text-white"
+                aria-label="Move Hand-painted ceiling detail up"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                 type="button"
               >
-                Remove
+                Up
               </button>
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="gallery-atmosphere-3-src"
+              <button
+                aria-label="Move Hand-painted ceiling detail down"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
+                type="button"
               >
-                Photo
-              </label>
-              <img
-                alt=""
-                class="mb-2 h-24 w-24 rounded border border-gray-300 object-cover"
-                src="/atmosphere/ceiling decor.webp"
-              />
-              <input
-                accept="image/*"
-                class="block w-full text-sm text-ink file:mr-3 file:rounded file:border-0 file:bg-brand file:px-3 file:py-1.5 file:font-['Montserrat'] file:text-xs file:uppercase file:tracking-wide file:text-ink hover:file:bg-brand-dark"
-                id="gallery-atmosphere-3-src"
-                type="file"
-              />
-            </div>
-            <div
-              class="mb-4"
+                Down
+              </button>
+            </li>
+            <li
+              class="mb-1 flex items-center gap-1 rounded border border-gray-200"
+              data-item-row="row-4"
             >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="gallery-atmosphere-3-alt"
+              <span
+                aria-hidden="true"
+                class="select-none px-3 py-1 text-gray-500"
+                data-drag-handle="4"
+                draggable="true"
+                style="cursor: move;"
+                title="Drag to move The antique mirror by the entrance"
               >
-                Alt text
-              </label>
-              <input
-                aria-describedby="gallery-atmosphere-3-alt-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="gallery-atmosphere-3-alt"
-                type="text"
-                value="Hand-painted ceiling detail"
-              />
-              <p
-                class="mt-1 text-xs text-gray-500"
-                id="gallery-atmosphere-3-alt-help"
-              >
-                Describes the photo for screen readers and search engines.
-              </p>
-            </div>
-          </li>
-          <li
-            class="mb-6 rounded border border-gray-200 p-4"
-          >
-            <div
-              class="mb-3 flex flex-wrap items-center justify-between gap-2"
-            >
-              <div
-                class="flex items-center gap-2"
+                ⠿
+              </span>
+              <button
+                class="flex min-w-0 flex-1 items-center gap-3 rounded p-2 text-left font-['Montserrat'] text-sm text-ink transition hover:bg-brand/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+                type="button"
               >
                 <img
                   alt=""
@@ -1292,82 +1158,44 @@ exports[`the thirteen panels, as they render today > Galleries (galleries) 1`] =
                   loading="lazy"
                   src="/atmosphere/front mirror.webp"
                 />
-                <button
-                  aria-label="Move Atmosphere photo 5 up"
-                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
-                  type="button"
+                <span
+                  class="min-w-0 flex-1 truncate"
                 >
-                  Up
-                </button>
-                <button
-                  aria-label="Move Atmosphere photo 5 down"
-                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
-                  type="button"
-                >
-                  Down
-                </button>
-              </div>
+                  The antique mirror by the entrance
+                </span>
+              </button>
               <button
-                aria-label="Remove Atmosphere photo 5"
-                class="rounded border border-red-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-red-600 transition hover:bg-red-600 hover:text-white"
+                aria-label="Move The antique mirror by the entrance up"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                 type="button"
               >
-                Remove
+                Up
               </button>
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="gallery-atmosphere-4-src"
+              <button
+                aria-label="Move The antique mirror by the entrance down"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
+                type="button"
               >
-                Photo
-              </label>
-              <img
-                alt=""
-                class="mb-2 h-24 w-24 rounded border border-gray-300 object-cover"
-                src="/atmosphere/front mirror.webp"
-              />
-              <input
-                accept="image/*"
-                class="block w-full text-sm text-ink file:mr-3 file:rounded file:border-0 file:bg-brand file:px-3 file:py-1.5 file:font-['Montserrat'] file:text-xs file:uppercase file:tracking-wide file:text-ink hover:file:bg-brand-dark"
-                id="gallery-atmosphere-4-src"
-                type="file"
-              />
-            </div>
-            <div
-              class="mb-4"
+                Down
+              </button>
+            </li>
+            <li
+              class="mb-1 flex items-center gap-1 rounded border border-gray-200"
+              data-item-row="row-5"
             >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="gallery-atmosphere-4-alt"
+              <span
+                aria-hidden="true"
+                class="select-none px-3 py-1 text-gray-500"
+                data-drag-handle="5"
+                draggable="true"
+                style="cursor: move;"
+                title="Drag to move Painted board on the dining room wall"
               >
-                Alt text
-              </label>
-              <input
-                aria-describedby="gallery-atmosphere-4-alt-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="gallery-atmosphere-4-alt"
-                type="text"
-                value="The antique mirror by the entrance"
-              />
-              <p
-                class="mt-1 text-xs text-gray-500"
-                id="gallery-atmosphere-4-alt-help"
-              >
-                Describes the photo for screen readers and search engines.
-              </p>
-            </div>
-          </li>
-          <li
-            class="mb-6 rounded border border-gray-200 p-4"
-          >
-            <div
-              class="mb-3 flex flex-wrap items-center justify-between gap-2"
-            >
-              <div
-                class="flex items-center gap-2"
+                ⠿
+              </span>
+              <button
+                class="flex min-w-0 flex-1 items-center gap-3 rounded p-2 text-left font-['Montserrat'] text-sm text-ink transition hover:bg-brand/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+                type="button"
               >
                 <img
                   alt=""
@@ -1376,82 +1204,44 @@ exports[`the thirteen panels, as they render today > Galleries (galleries) 1`] =
                   loading="lazy"
                   src="/atmosphere/painting board.webp"
                 />
-                <button
-                  aria-label="Move Atmosphere photo 6 up"
-                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
-                  type="button"
+                <span
+                  class="min-w-0 flex-1 truncate"
                 >
-                  Up
-                </button>
-                <button
-                  aria-label="Move Atmosphere photo 6 down"
-                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
-                  type="button"
-                >
-                  Down
-                </button>
-              </div>
+                  Painted board on the dining room wall
+                </span>
+              </button>
               <button
-                aria-label="Remove Atmosphere photo 6"
-                class="rounded border border-red-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-red-600 transition hover:bg-red-600 hover:text-white"
+                aria-label="Move Painted board on the dining room wall up"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                 type="button"
               >
-                Remove
+                Up
               </button>
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="gallery-atmosphere-5-src"
+              <button
+                aria-label="Move Painted board on the dining room wall down"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
+                type="button"
               >
-                Photo
-              </label>
-              <img
-                alt=""
-                class="mb-2 h-24 w-24 rounded border border-gray-300 object-cover"
-                src="/atmosphere/painting board.webp"
-              />
-              <input
-                accept="image/*"
-                class="block w-full text-sm text-ink file:mr-3 file:rounded file:border-0 file:bg-brand file:px-3 file:py-1.5 file:font-['Montserrat'] file:text-xs file:uppercase file:tracking-wide file:text-ink hover:file:bg-brand-dark"
-                id="gallery-atmosphere-5-src"
-                type="file"
-              />
-            </div>
-            <div
-              class="mb-4"
+                Down
+              </button>
+            </li>
+            <li
+              class="mb-1 flex items-center gap-1 rounded border border-gray-200"
+              data-item-row="row-6"
             >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="gallery-atmosphere-5-alt"
+              <span
+                aria-hidden="true"
+                class="select-none px-3 py-1 text-gray-500"
+                data-drag-handle="6"
+                draggable="true"
+                style="cursor: move;"
+                title="Drag to move The main room seen from the doorway"
               >
-                Alt text
-              </label>
-              <input
-                aria-describedby="gallery-atmosphere-5-alt-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="gallery-atmosphere-5-alt"
-                type="text"
-                value="Painted board on the dining room wall"
-              />
-              <p
-                class="mt-1 text-xs text-gray-500"
-                id="gallery-atmosphere-5-alt-help"
-              >
-                Describes the photo for screen readers and search engines.
-              </p>
-            </div>
-          </li>
-          <li
-            class="mb-6 rounded border border-gray-200 p-4"
-          >
-            <div
-              class="mb-3 flex flex-wrap items-center justify-between gap-2"
-            >
-              <div
-                class="flex items-center gap-2"
+                ⠿
+              </span>
+              <button
+                class="flex min-w-0 flex-1 items-center gap-3 rounded p-2 text-left font-['Montserrat'] text-sm text-ink transition hover:bg-brand/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+                type="button"
               >
                 <img
                   alt=""
@@ -1460,82 +1250,44 @@ exports[`the thirteen panels, as they render today > Galleries (galleries) 1`] =
                   loading="lazy"
                   src="/atmosphere/room.webp"
                 />
-                <button
-                  aria-label="Move Atmosphere photo 7 up"
-                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
-                  type="button"
+                <span
+                  class="min-w-0 flex-1 truncate"
                 >
-                  Up
-                </button>
-                <button
-                  aria-label="Move Atmosphere photo 7 down"
-                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
-                  type="button"
-                >
-                  Down
-                </button>
-              </div>
+                  The main room seen from the doorway
+                </span>
+              </button>
               <button
-                aria-label="Remove Atmosphere photo 7"
-                class="rounded border border-red-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-red-600 transition hover:bg-red-600 hover:text-white"
+                aria-label="Move The main room seen from the doorway up"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                 type="button"
               >
-                Remove
+                Up
               </button>
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="gallery-atmosphere-6-src"
+              <button
+                aria-label="Move The main room seen from the doorway down"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
+                type="button"
               >
-                Photo
-              </label>
-              <img
-                alt=""
-                class="mb-2 h-24 w-24 rounded border border-gray-300 object-cover"
-                src="/atmosphere/room.webp"
-              />
-              <input
-                accept="image/*"
-                class="block w-full text-sm text-ink file:mr-3 file:rounded file:border-0 file:bg-brand file:px-3 file:py-1.5 file:font-['Montserrat'] file:text-xs file:uppercase file:tracking-wide file:text-ink hover:file:bg-brand-dark"
-                id="gallery-atmosphere-6-src"
-                type="file"
-              />
-            </div>
-            <div
-              class="mb-4"
+                Down
+              </button>
+            </li>
+            <li
+              class="mb-1 flex items-center gap-1 rounded border border-gray-200"
+              data-item-row="row-7"
             >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="gallery-atmosphere-6-alt"
+              <span
+                aria-hidden="true"
+                class="select-none px-3 py-1 text-gray-500"
+                data-drag-handle="7"
+                draggable="true"
+                style="cursor: move;"
+                title="Drag to move A set table with linen and glassware"
               >
-                Alt text
-              </label>
-              <input
-                aria-describedby="gallery-atmosphere-6-alt-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="gallery-atmosphere-6-alt"
-                type="text"
-                value="The main room seen from the doorway"
-              />
-              <p
-                class="mt-1 text-xs text-gray-500"
-                id="gallery-atmosphere-6-alt-help"
-              >
-                Describes the photo for screen readers and search engines.
-              </p>
-            </div>
-          </li>
-          <li
-            class="mb-6 rounded border border-gray-200 p-4"
-          >
-            <div
-              class="mb-3 flex flex-wrap items-center justify-between gap-2"
-            >
-              <div
-                class="flex items-center gap-2"
+                ⠿
+              </span>
+              <button
+                class="flex min-w-0 flex-1 items-center gap-3 rounded p-2 text-left font-['Montserrat'] text-sm text-ink transition hover:bg-brand/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+                type="button"
               >
                 <img
                   alt=""
@@ -1544,74 +1296,22 @@ exports[`the thirteen panels, as they render today > Galleries (galleries) 1`] =
                   loading="lazy"
                   src="/atmosphere/table.webp"
                 />
-                <button
-                  aria-label="Move Atmosphere photo 8 up"
-                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
-                  type="button"
+                <span
+                  class="min-w-0 flex-1 truncate"
                 >
-                  Up
-                </button>
-              </div>
+                  A set table with linen and glassware
+                </span>
+              </button>
               <button
-                aria-label="Remove Atmosphere photo 8"
-                class="rounded border border-red-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-red-600 transition hover:bg-red-600 hover:text-white"
+                aria-label="Move A set table with linen and glassware up"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                 type="button"
               >
-                Remove
+                Up
               </button>
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="gallery-atmosphere-7-src"
-              >
-                Photo
-              </label>
-              <img
-                alt=""
-                class="mb-2 h-24 w-24 rounded border border-gray-300 object-cover"
-                src="/atmosphere/table.webp"
-              />
-              <input
-                accept="image/*"
-                class="block w-full text-sm text-ink file:mr-3 file:rounded file:border-0 file:bg-brand file:px-3 file:py-1.5 file:font-['Montserrat'] file:text-xs file:uppercase file:tracking-wide file:text-ink hover:file:bg-brand-dark"
-                id="gallery-atmosphere-7-src"
-                type="file"
-              />
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="gallery-atmosphere-7-alt"
-              >
-                Alt text
-              </label>
-              <input
-                aria-describedby="gallery-atmosphere-7-alt-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="gallery-atmosphere-7-alt"
-                type="text"
-                value="A set table with linen and glassware"
-              />
-              <p
-                class="mt-1 text-xs text-gray-500"
-                id="gallery-atmosphere-7-alt-help"
-              >
-                Describes the photo for screen readers and search engines.
-              </p>
-            </div>
-          </li>
-        </ul>
-        <button
-          class="mt-2 w-full rounded border-2 border-dashed border-brand py-2 font-['Montserrat'] text-sm uppercase tracking-wide text-accent transition hover:bg-brand/10"
-          type="button"
-        >
-          Add an atmosphere photo
-        </button>
+            </li>
+          </ul>
+        </div>
       </div>
       <div
         class="mb-8"
@@ -1621,15 +1321,33 @@ exports[`the thirteen panels, as they render today > Galleries (galleries) 1`] =
         >
           About photos
         </h3>
-        <ul>
-          <li
-            class="mb-6 rounded border border-gray-200 p-4"
+        <div>
+          <button
+            class="mb-3 w-full rounded border-2 border-dashed border-brand py-2 font-['Montserrat'] text-sm uppercase tracking-wide text-accent transition hover:bg-brand/10"
+            type="button"
           >
-            <div
-              class="mb-3 flex flex-wrap items-center justify-between gap-2"
+            Add an About photo
+          </button>
+          <ul
+            data-item-list="rows"
+          >
+            <li
+              class="mb-1 flex items-center gap-1 rounded border border-gray-200"
+              data-item-row="row-0"
             >
-              <div
-                class="flex items-center gap-2"
+              <span
+                aria-hidden="true"
+                class="select-none px-3 py-1 text-gray-500"
+                data-drag-handle="0"
+                draggable="true"
+                style="cursor: move;"
+                title="Drag to move Cutting fresh pasta by hand"
+              >
+                ⠿
+              </span>
+              <button
+                class="flex min-w-0 flex-1 items-center gap-3 rounded p-2 text-left font-['Montserrat'] text-sm text-ink transition hover:bg-brand/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+                type="button"
               >
                 <img
                   alt=""
@@ -1638,75 +1356,37 @@ exports[`the thirteen panels, as they render today > Galleries (galleries) 1`] =
                   loading="lazy"
                   src="/our_story/cut.webp"
                 />
-                <button
-                  aria-label="Move About photo 1 down"
-                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
-                  type="button"
+                <span
+                  class="min-w-0 flex-1 truncate"
                 >
-                  Down
-                </button>
-              </div>
+                  Cutting fresh pasta by hand
+                </span>
+              </button>
               <button
-                aria-label="Remove About photo 1"
-                class="rounded border border-red-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-red-600 transition hover:bg-red-600 hover:text-white"
+                aria-label="Move Cutting fresh pasta by hand down"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                 type="button"
               >
-                Remove
+                Down
               </button>
-            </div>
-            <div
-              class="mb-4"
+            </li>
+            <li
+              class="mb-1 flex items-center gap-1 rounded border border-gray-200"
+              data-item-row="row-1"
             >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="gallery-ourStory-0-src"
+              <span
+                aria-hidden="true"
+                class="select-none px-3 py-1 text-gray-500"
+                data-drag-handle="1"
+                draggable="true"
+                style="cursor: move;"
+                title="Drag to move A finished plate at the pass"
               >
-                Photo
-              </label>
-              <img
-                alt=""
-                class="mb-2 h-24 w-24 rounded border border-gray-300 object-cover"
-                src="/our_story/cut.webp"
-              />
-              <input
-                accept="image/*"
-                class="block w-full text-sm text-ink file:mr-3 file:rounded file:border-0 file:bg-brand file:px-3 file:py-1.5 file:font-['Montserrat'] file:text-xs file:uppercase file:tracking-wide file:text-ink hover:file:bg-brand-dark"
-                id="gallery-ourStory-0-src"
-                type="file"
-              />
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="gallery-ourStory-0-alt"
-              >
-                Alt text
-              </label>
-              <input
-                aria-describedby="gallery-ourStory-0-alt-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="gallery-ourStory-0-alt"
-                type="text"
-                value="Cutting fresh pasta by hand"
-              />
-              <p
-                class="mt-1 text-xs text-gray-500"
-                id="gallery-ourStory-0-alt-help"
-              >
-                Describes the photo for screen readers and search engines.
-              </p>
-            </div>
-          </li>
-          <li
-            class="mb-6 rounded border border-gray-200 p-4"
-          >
-            <div
-              class="mb-3 flex flex-wrap items-center justify-between gap-2"
-            >
-              <div
-                class="flex items-center gap-2"
+                ⠿
+              </span>
+              <button
+                class="flex min-w-0 flex-1 items-center gap-3 rounded p-2 text-left font-['Montserrat'] text-sm text-ink transition hover:bg-brand/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+                type="button"
               >
                 <img
                   alt=""
@@ -1715,82 +1395,44 @@ exports[`the thirteen panels, as they render today > Galleries (galleries) 1`] =
                   loading="lazy"
                   src="/our_story/dinner.webp"
                 />
-                <button
-                  aria-label="Move About photo 2 up"
-                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
-                  type="button"
+                <span
+                  class="min-w-0 flex-1 truncate"
                 >
-                  Up
-                </button>
-                <button
-                  aria-label="Move About photo 2 down"
-                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
-                  type="button"
-                >
-                  Down
-                </button>
-              </div>
+                  A finished plate at the pass
+                </span>
+              </button>
               <button
-                aria-label="Remove About photo 2"
-                class="rounded border border-red-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-red-600 transition hover:bg-red-600 hover:text-white"
+                aria-label="Move A finished plate at the pass up"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                 type="button"
               >
-                Remove
+                Up
               </button>
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="gallery-ourStory-1-src"
+              <button
+                aria-label="Move A finished plate at the pass down"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
+                type="button"
               >
-                Photo
-              </label>
-              <img
-                alt=""
-                class="mb-2 h-24 w-24 rounded border border-gray-300 object-cover"
-                src="/our_story/dinner.webp"
-              />
-              <input
-                accept="image/*"
-                class="block w-full text-sm text-ink file:mr-3 file:rounded file:border-0 file:bg-brand file:px-3 file:py-1.5 file:font-['Montserrat'] file:text-xs file:uppercase file:tracking-wide file:text-ink hover:file:bg-brand-dark"
-                id="gallery-ourStory-1-src"
-                type="file"
-              />
-            </div>
-            <div
-              class="mb-4"
+                Down
+              </button>
+            </li>
+            <li
+              class="mb-1 flex items-center gap-1 rounded border border-gray-200"
+              data-item-row="row-2"
             >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="gallery-ourStory-1-alt"
+              <span
+                aria-hidden="true"
+                class="select-none px-3 py-1 text-gray-500"
+                data-drag-handle="2"
+                draggable="true"
+                style="cursor: move;"
+                title="Drag to move Working dough by hand"
               >
-                Alt text
-              </label>
-              <input
-                aria-describedby="gallery-ourStory-1-alt-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="gallery-ourStory-1-alt"
-                type="text"
-                value="A finished plate at the pass"
-              />
-              <p
-                class="mt-1 text-xs text-gray-500"
-                id="gallery-ourStory-1-alt-help"
-              >
-                Describes the photo for screen readers and search engines.
-              </p>
-            </div>
-          </li>
-          <li
-            class="mb-6 rounded border border-gray-200 p-4"
-          >
-            <div
-              class="mb-3 flex flex-wrap items-center justify-between gap-2"
-            >
-              <div
-                class="flex items-center gap-2"
+                ⠿
+              </span>
+              <button
+                class="flex min-w-0 flex-1 items-center gap-3 rounded p-2 text-left font-['Montserrat'] text-sm text-ink transition hover:bg-brand/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+                type="button"
               >
                 <img
                   alt=""
@@ -1799,82 +1441,44 @@ exports[`the thirteen panels, as they render today > Galleries (galleries) 1`] =
                   loading="lazy"
                   src="/our_story/handmaking.webp"
                 />
-                <button
-                  aria-label="Move About photo 3 up"
-                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
-                  type="button"
+                <span
+                  class="min-w-0 flex-1 truncate"
                 >
-                  Up
-                </button>
-                <button
-                  aria-label="Move About photo 3 down"
-                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
-                  type="button"
-                >
-                  Down
-                </button>
-              </div>
+                  Working dough by hand
+                </span>
+              </button>
               <button
-                aria-label="Remove About photo 3"
-                class="rounded border border-red-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-red-600 transition hover:bg-red-600 hover:text-white"
+                aria-label="Move Working dough by hand up"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                 type="button"
               >
-                Remove
+                Up
               </button>
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="gallery-ourStory-2-src"
+              <button
+                aria-label="Move Working dough by hand down"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
+                type="button"
               >
-                Photo
-              </label>
-              <img
-                alt=""
-                class="mb-2 h-24 w-24 rounded border border-gray-300 object-cover"
-                src="/our_story/handmaking.webp"
-              />
-              <input
-                accept="image/*"
-                class="block w-full text-sm text-ink file:mr-3 file:rounded file:border-0 file:bg-brand file:px-3 file:py-1.5 file:font-['Montserrat'] file:text-xs file:uppercase file:tracking-wide file:text-ink hover:file:bg-brand-dark"
-                id="gallery-ourStory-2-src"
-                type="file"
-              />
-            </div>
-            <div
-              class="mb-4"
+                Down
+              </button>
+            </li>
+            <li
+              class="mb-1 flex items-center gap-1 rounded border border-gray-200"
+              data-item-row="row-3"
             >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="gallery-ourStory-2-alt"
+              <span
+                aria-hidden="true"
+                class="select-none px-3 py-1 text-gray-500"
+                data-drag-handle="3"
+                draggable="true"
+                style="cursor: move;"
+                title="Drag to move The wood-fired oven at full heat"
               >
-                Alt text
-              </label>
-              <input
-                aria-describedby="gallery-ourStory-2-alt-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="gallery-ourStory-2-alt"
-                type="text"
-                value="Working dough by hand"
-              />
-              <p
-                class="mt-1 text-xs text-gray-500"
-                id="gallery-ourStory-2-alt-help"
-              >
-                Describes the photo for screen readers and search engines.
-              </p>
-            </div>
-          </li>
-          <li
-            class="mb-6 rounded border border-gray-200 p-4"
-          >
-            <div
-              class="mb-3 flex flex-wrap items-center justify-between gap-2"
-            >
-              <div
-                class="flex items-center gap-2"
+                ⠿
+              </span>
+              <button
+                class="flex min-w-0 flex-1 items-center gap-3 rounded p-2 text-left font-['Montserrat'] text-sm text-ink transition hover:bg-brand/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+                type="button"
               >
                 <img
                   alt=""
@@ -1883,82 +1487,44 @@ exports[`the thirteen panels, as they render today > Galleries (galleries) 1`] =
                   loading="lazy"
                   src="/our_story/oven.webp"
                 />
-                <button
-                  aria-label="Move About photo 4 up"
-                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
-                  type="button"
+                <span
+                  class="min-w-0 flex-1 truncate"
                 >
-                  Up
-                </button>
-                <button
-                  aria-label="Move About photo 4 down"
-                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
-                  type="button"
-                >
-                  Down
-                </button>
-              </div>
+                  The wood-fired oven at full heat
+                </span>
+              </button>
               <button
-                aria-label="Remove About photo 4"
-                class="rounded border border-red-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-red-600 transition hover:bg-red-600 hover:text-white"
+                aria-label="Move The wood-fired oven at full heat up"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                 type="button"
               >
-                Remove
+                Up
               </button>
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="gallery-ourStory-3-src"
+              <button
+                aria-label="Move The wood-fired oven at full heat down"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
+                type="button"
               >
-                Photo
-              </label>
-              <img
-                alt=""
-                class="mb-2 h-24 w-24 rounded border border-gray-300 object-cover"
-                src="/our_story/oven.webp"
-              />
-              <input
-                accept="image/*"
-                class="block w-full text-sm text-ink file:mr-3 file:rounded file:border-0 file:bg-brand file:px-3 file:py-1.5 file:font-['Montserrat'] file:text-xs file:uppercase file:tracking-wide file:text-ink hover:file:bg-brand-dark"
-                id="gallery-ourStory-3-src"
-                type="file"
-              />
-            </div>
-            <div
-              class="mb-4"
+                Down
+              </button>
+            </li>
+            <li
+              class="mb-1 flex items-center gap-1 rounded border border-gray-200"
+              data-item-row="row-4"
             >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="gallery-ourStory-3-alt"
+              <span
+                aria-hidden="true"
+                class="select-none px-3 py-1 text-gray-500"
+                data-drag-handle="4"
+                draggable="true"
+                style="cursor: move;"
+                title="Drag to move Shaping pasta in the pastificio"
               >
-                Alt text
-              </label>
-              <input
-                aria-describedby="gallery-ourStory-3-alt-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="gallery-ourStory-3-alt"
-                type="text"
-                value="The wood-fired oven at full heat"
-              />
-              <p
-                class="mt-1 text-xs text-gray-500"
-                id="gallery-ourStory-3-alt-help"
-              >
-                Describes the photo for screen readers and search engines.
-              </p>
-            </div>
-          </li>
-          <li
-            class="mb-6 rounded border border-gray-200 p-4"
-          >
-            <div
-              class="mb-3 flex flex-wrap items-center justify-between gap-2"
-            >
-              <div
-                class="flex items-center gap-2"
+                ⠿
+              </span>
+              <button
+                class="flex min-w-0 flex-1 items-center gap-3 rounded p-2 text-left font-['Montserrat'] text-sm text-ink transition hover:bg-brand/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+                type="button"
               >
                 <img
                   alt=""
@@ -1967,82 +1533,44 @@ exports[`the thirteen panels, as they render today > Galleries (galleries) 1`] =
                   loading="lazy"
                   src="/our_story/shape.webp"
                 />
-                <button
-                  aria-label="Move About photo 5 up"
-                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
-                  type="button"
+                <span
+                  class="min-w-0 flex-1 truncate"
                 >
-                  Up
-                </button>
-                <button
-                  aria-label="Move About photo 5 down"
-                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
-                  type="button"
-                >
-                  Down
-                </button>
-              </div>
+                  Shaping pasta in the pastificio
+                </span>
+              </button>
               <button
-                aria-label="Remove About photo 5"
-                class="rounded border border-red-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-red-600 transition hover:bg-red-600 hover:text-white"
+                aria-label="Move Shaping pasta in the pastificio up"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                 type="button"
               >
-                Remove
+                Up
               </button>
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="gallery-ourStory-4-src"
+              <button
+                aria-label="Move Shaping pasta in the pastificio down"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
+                type="button"
               >
-                Photo
-              </label>
-              <img
-                alt=""
-                class="mb-2 h-24 w-24 rounded border border-gray-300 object-cover"
-                src="/our_story/shape.webp"
-              />
-              <input
-                accept="image/*"
-                class="block w-full text-sm text-ink file:mr-3 file:rounded file:border-0 file:bg-brand file:px-3 file:py-1.5 file:font-['Montserrat'] file:text-xs file:uppercase file:tracking-wide file:text-ink hover:file:bg-brand-dark"
-                id="gallery-ourStory-4-src"
-                type="file"
-              />
-            </div>
-            <div
-              class="mb-4"
+                Down
+              </button>
+            </li>
+            <li
+              class="mb-1 flex items-center gap-1 rounded border border-gray-200"
+              data-item-row="row-5"
             >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="gallery-ourStory-4-alt"
+              <span
+                aria-hidden="true"
+                class="select-none px-3 py-1 text-gray-500"
+                data-drag-handle="5"
+                draggable="true"
+                style="cursor: move;"
+                title="Drag to move Filling fresh pasta"
               >
-                Alt text
-              </label>
-              <input
-                aria-describedby="gallery-ourStory-4-alt-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="gallery-ourStory-4-alt"
-                type="text"
-                value="Shaping pasta in the pastificio"
-              />
-              <p
-                class="mt-1 text-xs text-gray-500"
-                id="gallery-ourStory-4-alt-help"
-              >
-                Describes the photo for screen readers and search engines.
-              </p>
-            </div>
-          </li>
-          <li
-            class="mb-6 rounded border border-gray-200 p-4"
-          >
-            <div
-              class="mb-3 flex flex-wrap items-center justify-between gap-2"
-            >
-              <div
-                class="flex items-center gap-2"
+                ⠿
+              </span>
+              <button
+                class="flex min-w-0 flex-1 items-center gap-3 rounded p-2 text-left font-['Montserrat'] text-sm text-ink transition hover:bg-brand/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+                type="button"
               >
                 <img
                   alt=""
@@ -2051,74 +1579,22 @@ exports[`the thirteen panels, as they render today > Galleries (galleries) 1`] =
                   loading="lazy"
                   src="/our_story/stuff.webp"
                 />
-                <button
-                  aria-label="Move About photo 6 up"
-                  class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
-                  type="button"
+                <span
+                  class="min-w-0 flex-1 truncate"
                 >
-                  Up
-                </button>
-              </div>
+                  Filling fresh pasta
+                </span>
+              </button>
               <button
-                aria-label="Remove About photo 6"
-                class="rounded border border-red-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-red-600 transition hover:bg-red-600 hover:text-white"
+                aria-label="Move Filling fresh pasta up"
+                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
                 type="button"
               >
-                Remove
+                Up
               </button>
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="gallery-ourStory-5-src"
-              >
-                Photo
-              </label>
-              <img
-                alt=""
-                class="mb-2 h-24 w-24 rounded border border-gray-300 object-cover"
-                src="/our_story/stuff.webp"
-              />
-              <input
-                accept="image/*"
-                class="block w-full text-sm text-ink file:mr-3 file:rounded file:border-0 file:bg-brand file:px-3 file:py-1.5 file:font-['Montserrat'] file:text-xs file:uppercase file:tracking-wide file:text-ink hover:file:bg-brand-dark"
-                id="gallery-ourStory-5-src"
-                type="file"
-              />
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="gallery-ourStory-5-alt"
-              >
-                Alt text
-              </label>
-              <input
-                aria-describedby="gallery-ourStory-5-alt-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="gallery-ourStory-5-alt"
-                type="text"
-                value="Filling fresh pasta"
-              />
-              <p
-                class="mt-1 text-xs text-gray-500"
-                id="gallery-ourStory-5-alt-help"
-              >
-                Describes the photo for screen readers and search engines.
-              </p>
-            </div>
-          </li>
-        </ul>
-        <button
-          class="mt-2 w-full rounded border-2 border-dashed border-brand py-2 font-['Montserrat'] text-sm uppercase tracking-wide text-accent transition hover:bg-brand/10"
-          type="button"
-        >
-          Add an About photo
-        </button>
+            </li>
+          </ul>
+        </div>
       </div>
       <div
         class="mb-8"
@@ -2133,283 +1609,177 @@ exports[`the thirteen panels, as they render today > Galleries (galleries) 1`] =
         >
           Replace any of these photos here. To move one, change how big it is, or add and remove photos, open the homepage editor — the collage is arranged there.
         </p>
-        <ul>
-          <li
-            class="mb-6 rounded border border-gray-200 p-4"
+        <div>
+          <ul
+            data-item-list="rows"
           >
-            <div
-              class="mb-4"
+            <li
+              class="mb-1 flex items-center gap-1 rounded border border-gray-200"
+              data-item-row="photo-1"
             >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="gallery-heroCollage-photo-1-src"
+              <button
+                class="flex min-w-0 flex-1 items-center gap-3 rounded p-2 text-left font-['Montserrat'] text-sm text-ink transition hover:bg-brand/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+                type="button"
               >
-                Photo
-              </label>
-              <img
-                alt=""
-                class="mb-2 h-24 w-24 rounded border border-gray-300 object-cover"
-                src="/atmosphere/ambience.webp"
-              />
-              <input
-                accept="image/*"
-                class="block w-full text-sm text-ink file:mr-3 file:rounded file:border-0 file:bg-brand file:px-3 file:py-1.5 file:font-['Montserrat'] file:text-xs file:uppercase file:tracking-wide file:text-ink hover:file:bg-brand-dark"
-                id="gallery-heroCollage-photo-1-src"
-                type="file"
-              />
-            </div>
-          </li>
-          <li
-            class="mb-6 rounded border border-gray-200 p-4"
-          >
-            <div
-              class="mb-4"
+                <span
+                  class="min-w-0 flex-1 truncate"
+                >
+                  Photo with no description yet
+                </span>
+              </button>
+            </li>
+            <li
+              class="mb-1 flex items-center gap-1 rounded border border-gray-200"
+              data-item-row="photo-2"
             >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="gallery-heroCollage-photo-2-src"
+              <button
+                class="flex min-w-0 flex-1 items-center gap-3 rounded p-2 text-left font-['Montserrat'] text-sm text-ink transition hover:bg-brand/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+                type="button"
               >
-                Photo
-              </label>
-              <img
-                alt=""
-                class="mb-2 h-24 w-24 rounded border border-gray-300 object-cover"
-                src="/atmosphere/front mirror.webp"
-              />
-              <input
-                accept="image/*"
-                class="block w-full text-sm text-ink file:mr-3 file:rounded file:border-0 file:bg-brand file:px-3 file:py-1.5 file:font-['Montserrat'] file:text-xs file:uppercase file:tracking-wide file:text-ink hover:file:bg-brand-dark"
-                id="gallery-heroCollage-photo-2-src"
-                type="file"
-              />
-            </div>
-          </li>
-          <li
-            class="mb-6 rounded border border-gray-200 p-4"
-          >
-            <div
-              class="mb-4"
+                <span
+                  class="min-w-0 flex-1 truncate"
+                >
+                  Photo with no description yet
+                </span>
+              </button>
+            </li>
+            <li
+              class="mb-1 flex items-center gap-1 rounded border border-gray-200"
+              data-item-row="photo-3"
             >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="gallery-heroCollage-photo-3-src"
+              <button
+                class="flex min-w-0 flex-1 items-center gap-3 rounded p-2 text-left font-['Montserrat'] text-sm text-ink transition hover:bg-brand/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+                type="button"
               >
-                Photo
-              </label>
-              <img
-                alt=""
-                class="mb-2 h-24 w-24 rounded border border-gray-300 object-cover"
-                src="/our_story/stuff.webp"
-              />
-              <input
-                accept="image/*"
-                class="block w-full text-sm text-ink file:mr-3 file:rounded file:border-0 file:bg-brand file:px-3 file:py-1.5 file:font-['Montserrat'] file:text-xs file:uppercase file:tracking-wide file:text-ink hover:file:bg-brand-dark"
-                id="gallery-heroCollage-photo-3-src"
-                type="file"
-              />
-            </div>
-          </li>
-          <li
-            class="mb-6 rounded border border-gray-200 p-4"
-          >
-            <div
-              class="mb-4"
+                <span
+                  class="min-w-0 flex-1 truncate"
+                >
+                  Photo with no description yet
+                </span>
+              </button>
+            </li>
+            <li
+              class="mb-1 flex items-center gap-1 rounded border border-gray-200"
+              data-item-row="photo-6"
             >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="gallery-heroCollage-photo-6-src"
+              <button
+                class="flex min-w-0 flex-1 items-center gap-3 rounded p-2 text-left font-['Montserrat'] text-sm text-ink transition hover:bg-brand/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+                type="button"
               >
-                Photo
-              </label>
-              <img
-                alt=""
-                class="mb-2 h-24 w-24 rounded border border-gray-300 object-cover"
-                src="/atmosphere/ceiling decor.webp"
-              />
-              <input
-                accept="image/*"
-                class="block w-full text-sm text-ink file:mr-3 file:rounded file:border-0 file:bg-brand file:px-3 file:py-1.5 file:font-['Montserrat'] file:text-xs file:uppercase file:tracking-wide file:text-ink hover:file:bg-brand-dark"
-                id="gallery-heroCollage-photo-6-src"
-                type="file"
-              />
-            </div>
-          </li>
-          <li
-            class="mb-6 rounded border border-gray-200 p-4"
-          >
-            <div
-              class="mb-4"
+                <span
+                  class="min-w-0 flex-1 truncate"
+                >
+                  Photo with no description yet
+                </span>
+              </button>
+            </li>
+            <li
+              class="mb-1 flex items-center gap-1 rounded border border-gray-200"
+              data-item-row="photo-7"
             >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="gallery-heroCollage-photo-7-src"
+              <button
+                class="flex min-w-0 flex-1 items-center gap-3 rounded p-2 text-left font-['Montserrat'] text-sm text-ink transition hover:bg-brand/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+                type="button"
               >
-                Photo
-              </label>
-              <img
-                alt=""
-                class="mb-2 h-24 w-24 rounded border border-gray-300 object-cover"
-                src="/our_story/oven.webp"
-              />
-              <input
-                accept="image/*"
-                class="block w-full text-sm text-ink file:mr-3 file:rounded file:border-0 file:bg-brand file:px-3 file:py-1.5 file:font-['Montserrat'] file:text-xs file:uppercase file:tracking-wide file:text-ink hover:file:bg-brand-dark"
-                id="gallery-heroCollage-photo-7-src"
-                type="file"
-              />
-            </div>
-          </li>
-          <li
-            class="mb-6 rounded border border-gray-200 p-4"
-          >
-            <div
-              class="mb-4"
+                <span
+                  class="min-w-0 flex-1 truncate"
+                >
+                  Photo with no description yet
+                </span>
+              </button>
+            </li>
+            <li
+              class="mb-1 flex items-center gap-1 rounded border border-gray-200"
+              data-item-row="photo-8"
             >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="gallery-heroCollage-photo-8-src"
+              <button
+                class="flex min-w-0 flex-1 items-center gap-3 rounded p-2 text-left font-['Montserrat'] text-sm text-ink transition hover:bg-brand/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+                type="button"
               >
-                Photo
-              </label>
-              <img
-                alt=""
-                class="mb-2 h-24 w-24 rounded border border-gray-300 object-cover"
-                src="/hero/scene.webp"
-              />
-              <input
-                accept="image/*"
-                class="block w-full text-sm text-ink file:mr-3 file:rounded file:border-0 file:bg-brand file:px-3 file:py-1.5 file:font-['Montserrat'] file:text-xs file:uppercase file:tracking-wide file:text-ink hover:file:bg-brand-dark"
-                id="gallery-heroCollage-photo-8-src"
-                type="file"
-              />
-            </div>
-          </li>
-          <li
-            class="mb-6 rounded border border-gray-200 p-4"
-          >
-            <div
-              class="mb-4"
+                <span
+                  class="min-w-0 flex-1 truncate"
+                >
+                  Photo with no description yet
+                </span>
+              </button>
+            </li>
+            <li
+              class="mb-1 flex items-center gap-1 rounded border border-gray-200"
+              data-item-row="photo-10"
             >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="gallery-heroCollage-photo-10-src"
+              <button
+                class="flex min-w-0 flex-1 items-center gap-3 rounded p-2 text-left font-['Montserrat'] text-sm text-ink transition hover:bg-brand/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+                type="button"
               >
-                Photo
-              </label>
-              <img
-                alt=""
-                class="mb-2 h-24 w-24 rounded border border-gray-300 object-cover"
-                src="/hero/building.webp"
-              />
-              <input
-                accept="image/*"
-                class="block w-full text-sm text-ink file:mr-3 file:rounded file:border-0 file:bg-brand file:px-3 file:py-1.5 file:font-['Montserrat'] file:text-xs file:uppercase file:tracking-wide file:text-ink hover:file:bg-brand-dark"
-                id="gallery-heroCollage-photo-10-src"
-                type="file"
-              />
-            </div>
-          </li>
-          <li
-            class="mb-6 rounded border border-gray-200 p-4"
-          >
-            <div
-              class="mb-4"
+                <span
+                  class="min-w-0 flex-1 truncate"
+                >
+                  Photo with no description yet
+                </span>
+              </button>
+            </li>
+            <li
+              class="mb-1 flex items-center gap-1 rounded border border-gray-200"
+              data-item-row="photo-11"
             >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="gallery-heroCollage-photo-11-src"
+              <button
+                class="flex min-w-0 flex-1 items-center gap-3 rounded p-2 text-left font-['Montserrat'] text-sm text-ink transition hover:bg-brand/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+                type="button"
               >
-                Photo
-              </label>
-              <img
-                alt=""
-                class="mb-2 h-24 w-24 rounded border border-gray-300 object-cover"
-                src="/atmosphere/room.webp"
-              />
-              <input
-                accept="image/*"
-                class="block w-full text-sm text-ink file:mr-3 file:rounded file:border-0 file:bg-brand file:px-3 file:py-1.5 file:font-['Montserrat'] file:text-xs file:uppercase file:tracking-wide file:text-ink hover:file:bg-brand-dark"
-                id="gallery-heroCollage-photo-11-src"
-                type="file"
-              />
-            </div>
-          </li>
-          <li
-            class="mb-6 rounded border border-gray-200 p-4"
-          >
-            <div
-              class="mb-4"
+                <span
+                  class="min-w-0 flex-1 truncate"
+                >
+                  Photo with no description yet
+                </span>
+              </button>
+            </li>
+            <li
+              class="mb-1 flex items-center gap-1 rounded border border-gray-200"
+              data-item-row="photo-12"
             >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="gallery-heroCollage-photo-12-src"
+              <button
+                class="flex min-w-0 flex-1 items-center gap-3 rounded p-2 text-left font-['Montserrat'] text-sm text-ink transition hover:bg-brand/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+                type="button"
               >
-                Photo
-              </label>
-              <img
-                alt=""
-                class="mb-2 h-24 w-24 rounded border border-gray-300 object-cover"
-                src="/hero/bus.webp"
-              />
-              <input
-                accept="image/*"
-                class="block w-full text-sm text-ink file:mr-3 file:rounded file:border-0 file:bg-brand file:px-3 file:py-1.5 file:font-['Montserrat'] file:text-xs file:uppercase file:tracking-wide file:text-ink hover:file:bg-brand-dark"
-                id="gallery-heroCollage-photo-12-src"
-                type="file"
-              />
-            </div>
-          </li>
-          <li
-            class="mb-6 rounded border border-gray-200 p-4"
-          >
-            <div
-              class="mb-4"
+                <span
+                  class="min-w-0 flex-1 truncate"
+                >
+                  Photo with no description yet
+                </span>
+              </button>
+            </li>
+            <li
+              class="mb-1 flex items-center gap-1 rounded border border-gray-200"
+              data-item-row="photo-13"
             >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="gallery-heroCollage-photo-13-src"
+              <button
+                class="flex min-w-0 flex-1 items-center gap-3 rounded p-2 text-left font-['Montserrat'] text-sm text-ink transition hover:bg-brand/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+                type="button"
               >
-                Photo
-              </label>
-              <img
-                alt=""
-                class="mb-2 h-24 w-24 rounded border border-gray-300 object-cover"
-                src="/our_story/cut.webp"
-              />
-              <input
-                accept="image/*"
-                class="block w-full text-sm text-ink file:mr-3 file:rounded file:border-0 file:bg-brand file:px-3 file:py-1.5 file:font-['Montserrat'] file:text-xs file:uppercase file:tracking-wide file:text-ink hover:file:bg-brand-dark"
-                id="gallery-heroCollage-photo-13-src"
-                type="file"
-              />
-            </div>
-          </li>
-          <li
-            class="mb-6 rounded border border-gray-200 p-4"
-          >
-            <div
-              class="mb-4"
+                <span
+                  class="min-w-0 flex-1 truncate"
+                >
+                  Photo with no description yet
+                </span>
+              </button>
+            </li>
+            <li
+              class="mb-1 flex items-center gap-1 rounded border border-gray-200"
+              data-item-row="photo-15"
             >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="gallery-heroCollage-photo-15-src"
+              <button
+                class="flex min-w-0 flex-1 items-center gap-3 rounded p-2 text-left font-['Montserrat'] text-sm text-ink transition hover:bg-brand/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+                type="button"
               >
-                Photo
-              </label>
-              <img
-                alt=""
-                class="mb-2 h-24 w-24 rounded border border-gray-300 object-cover"
-                src="/atmosphere/dining.webp"
-              />
-              <input
-                accept="image/*"
-                class="block w-full text-sm text-ink file:mr-3 file:rounded file:border-0 file:bg-brand file:px-3 file:py-1.5 file:font-['Montserrat'] file:text-xs file:uppercase file:tracking-wide file:text-ink hover:file:bg-brand-dark"
-                id="gallery-heroCollage-photo-15-src"
-                type="file"
-              />
-            </div>
-          </li>
-        </ul>
+                <span
+                  class="min-w-0 flex-1 truncate"
+                >
+                  Photo with no description yet
+                </span>
+              </button>
+            </li>
+          </ul>
+        </div>
       </div>
     </div>
   </fieldset>
