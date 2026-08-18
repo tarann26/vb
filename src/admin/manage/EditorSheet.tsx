@@ -56,8 +56,17 @@ const EditorSheet: React.FC<EditorSheetProps> = ({ title, onClose, onDelete, del
   // single-press Delete inside the editor reopens that hole one level down.
   const [confirming, setConfirming] = useState(false);
 
+  // WHERE THE KEYBOARD LANDS WHEN THE EDITOR OPENS. Inside the record's own
+  // fields, never on Done. Done is the first FOCUSABLE in the panel's DOM
+  // (the heading row precedes `children`), so the obvious panel-wide query put
+  // her first keystroke on the control that CLOSES the editor she just opened
+  // -- a stray Enter shut it again. Falls back to Done, and then to the panel
+  // itself, for an editor whose fields hold nothing focusable at all: focus
+  // has to stay inside a modal dialog either way.
+  const bodyRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
-    const first = panelRef.current?.querySelector<HTMLElement>(FOCUSABLE);
+    const first = bodyRef.current?.querySelector<HTMLElement>(FOCUSABLE)
+      ?? panelRef.current?.querySelector<HTMLElement>(FOCUSABLE);
     (first ?? panelRef.current)?.focus();
   }, []);
 
@@ -107,7 +116,10 @@ const EditorSheet: React.FC<EditorSheetProps> = ({ title, onClose, onDelete, del
             Done
           </button>
         </div>
-        {children}
+        {/* A bare wrapper with no class of its own -- it exists only so the
+            mount effect above can ask for the first control INSIDE the
+            record's own fields, and it therefore ships no rule. */}
+        <div ref={bodyRef}>{children}</div>
         {onDelete !== undefined && (
           <div className="mt-6 border-t border-gray-200 pt-4">
             {confirming ? (

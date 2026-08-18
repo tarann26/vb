@@ -23,6 +23,30 @@ it('puts focus inside itself when it opens', () => {
   expect(screen.getByRole('dialog')).toContainElement(document.activeElement as HTMLElement);
 });
 
+// AND ON THE FIRST CONTROL OF THE RECORD, not on Done. Done precedes
+// `children` in the panel's DOM, so a panel-wide "first focusable" query
+// opened every editor on this dashboard with the control that CLOSES it
+// focused -- her first keystroke, if it was Enter, shut the editor she had
+// just opened. Nothing is lost when that happens (edits go into the staged
+// draft), which is why this is small; it is still not where a keyboard user
+// wants to start.
+it('opens with the keyboard on the record’s first field, not on Done', () => {
+  open();
+  expect(document.activeElement).toBe(screen.getByLabelText('Name'));
+});
+
+// The fallback, and it is not hypothetical: a record whose editor is a block
+// of read-only text has nothing in `children` to focus, and focus has to stay
+// inside a modal dialog either way.
+it('falls back to Done for an editor whose fields hold nothing focusable', () => {
+  render(
+    <EditorSheet title="Nothing to edit" onClose={vi.fn()}>
+      <p>Nothing to edit here yet.</p>
+    </EditorSheet>,
+  );
+  expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Done' }));
+});
+
 it('Done closes it', () => {
   const { onClose } = open();
   fireEvent.click(screen.getByRole('button', { name: 'Done' }));
