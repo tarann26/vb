@@ -369,8 +369,16 @@ function parseNodes(cursor: Cursor, stopAt: string | null): InlineNode[] {
 
     const char = cursor.source[cursor.index];
 
-    if (char === '\\' && ESCAPABLE.includes(cursor.source[cursor.index + 1] ?? '')) {
-      buffer += cursor.source[cursor.index + 1];
+    // `?? ''` used to stand where the undefined check does, and it was wrong
+    // in the one way a fallback of that shape always is: EVERY string
+    // `.includes('')`, so a backslash as the last character of the source
+    // passed this guard, and `buffer += source[index + 1]` then appended the
+    // nine-letter word `undefined` to her paragraph. `the path C:\` published as
+    // `the path C:undefined`. Found by Task 14's round trip, which serialised
+    // the corruption faithfully and could not tell it from prose.
+    const escaped = cursor.source[cursor.index + 1];
+    if (char === '\\' && escaped !== undefined && ESCAPABLE.includes(escaped)) {
+      buffer += escaped;
       cursor.index += 2;
       continue;
     }

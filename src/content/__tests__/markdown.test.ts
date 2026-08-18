@@ -70,6 +70,19 @@ describe('parseInline: the four inline forms', () => {
     expect(parseInline('2 \\* 3 is six')).toEqual([text('2 * 3 is six')]);
   });
 
+  // A backslash with nothing after it is a backslash. This is a REGRESSION
+  // case: the escape guard read `source[index + 1] ?? ''` and every string
+  // `.includes('')`, so a trailing backslash passed it and the next line
+  // appended the word `undefined` to the paragraph. A Windows path at the end
+  // of a sentence published as `the path C:undefined`.
+  it.each([
+    ['a backslash at the very end', 'the path C:\\', [text('the path C:\\')]],
+    ['a backslash before an ordinary letter', 'a \\b c', [text('a \\b c')]],
+    ['a doubled backslash', 'a \\\\ b', [text('a \\ b')]],
+  ])('%s', (_name, source, expected) => {
+    expect(parseInline(source)).toEqual(expected);
+  });
+
   // A link target is allowed to close over its own parentheses. The parser
   // reads the target by matching parens, not by stopping at the first `)`,
   // and this is the case that tells the two apart.
