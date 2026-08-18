@@ -1931,24 +1931,30 @@ describe('AdminApp: Phase 4 review fix -- a stale /edit draft missing `chef` is 
   });
 });
 
-// Ruled in by Task 8's review and proven here rather than in BlockList.test.tsx,
-// because the claim is about what LEAVES THE BROWSER: a photo she picked, a
-// block she then moved, and one publish request that has to carry both halves
-// in agreement. Only the whole chain can say that -- PhotoField's upload,
-// BlockList's keys, the collector every panel shares (staged.ts), and
-// buildPublishRequest assembling the body.
+// Ruled in by Task 8's review and proven here rather than in a component test,
+// because the claim is about what LEAVES THE BROWSER: a photo she picked, an
+// insert that moved the block holding it, and one publish request that has to
+// carry every half in agreement. Only the whole chain can say that -- the
+// upload, the writing surface's keys, the collector every panel shares
+// (staged.ts), and buildPublishRequest assembling the body.
 //
-// What used to happen, reproduced step for step below: the staged photo was
-// filed under the block's POSITION, so moving the block left the bytes behind
-// at the old position; the next photo picked there superseded them (the
-// collector drops whatever sits at a key the instant a new pick starts, which
-// is right and is the whole point of that contract); and the publish went out
-// naming a photo no file was ever sent for. Live, that is a broken image in
-// her post. On the next build it is an asset-existence failure that refuses
-// every publish after it until somebody edits the JSON by hand. Reported to
-// her as a success, both times.
-describe('AdminApp: a photo picked for one block, and then that block moved', () => {
-  const POST_WITH_TWO_PHOTOS = [
+// What used to happen: the staged photo and its preview were filed under the
+// block's POSITION, so anything that moved the block left both behind at the
+// old position, where the next pick superseded them -- and the publish went
+// out naming a photo no file was ever sent for. Live, that is a broken image
+// in her post; on the next build it is an asset-existence failure that refuses
+// every publish after it. Reported to her as a success, both times.
+//
+// ADMIN REDESIGN TASK 25 CHANGED THE GESTURE, NOT THE CLAIM. The moving used
+// to be a reorder: Up, Down, or the drag handle on a block row. The writing
+// surface has none of those -- no task in Section B gives it one -- so the
+// move that shifts a block here is an INSERT ABOVE IT, which is the only one
+// left. She picks the oven's photo standing in the second paragraph, then the
+// tielle's standing in the first, and the second insert pushes the oven's
+// block down one. Everything a positional key got wrong about a reorder it
+// gets wrong about that too.
+describe('AdminApp: a photo picked for one block, and then that block pushed down', () => {
+  const POST_WITH_TWO_PARAGRAPHS = [
     {
       id: 'post-1',
       slug: 'the-tielle',
@@ -1958,8 +1964,8 @@ describe('AdminApp: a photo picked for one block, and then that block moved', ()
       excerpt: 'A pie from Sète, by way of a bread oven.',
       image: '/press/hotelier.webp',
       blocks: [
-        { kind: 'image', src: '', alt: 'The tielle, sliced', caption: '' },
-        { kind: 'image', src: '', alt: 'The bread oven', caption: '' },
+        { kind: 'paragraph', text: 'The tielle, sliced' },
+        { kind: 'paragraph', text: 'The bread oven' },
       ],
     },
   ];
@@ -1972,9 +1978,59 @@ describe('AdminApp: a photo picked for one block, and then that block moved', ()
     vi.unstubAllGlobals();
   });
 
+  // The paragraph she is standing in, found by HER OWN WORDS and never by
+  // position -- position is the thing under test, so a query that used one
+  // would be assuming the answer.
+  function paragraphSaying(section: HTMLElement, words: string): HTMLElement {
+    const found = [...section.querySelectorAll<HTMLElement>('[data-slot]')].find(
+      (el) => el.textContent === words,
+    );
+    expect(found, `no slot on this panel holds "${words}"`).toBeDefined();
+    return found as HTMLElement;
+  }
+
+  // One photograph, picked while standing in one paragraph. The surface's
+  // single picker acts on the block she was LAST writing in, so the focus is
+  // part of the gesture rather than test scaffolding.
+  async function pickPhotoAfter(
+    section: HTMLElement,
+    user: ReturnType<typeof userEvent.setup>,
+    host: HTMLElement,
+    file: string,
+    contentPath: string,
+  ): Promise<void> {
+    const before = FakeXHR.instances.length;
+    const figuresBefore = section.querySelectorAll('figure').length;
+    fireEvent.focus(host);
+    // The SURFACE's own picker, by the id WritingToolbar's label points at --
+    // never the first file input on the panel, which is the post's own card
+    // photo and belongs to a different field entirely.
+    const picker = section.querySelector('input[id$="-writing-image"]') as HTMLInputElement;
+    expect(picker, 'the writing surface has no photo picker on this panel').not.toBeNull();
+    await user.upload(picker, jpegFile(file));
+    await waitFor(() => expect(FakeXHR.instances).toHaveLength(before + 1));
+    await act(async () => {
+      FakeXHR.instances[before].respond(200, { path: `assets-source/posts/${file}`, contentPath });
+    });
+    // The block itself arriving is the confirmation here: nothing is handed up
+    // until the bytes are staged and the preview filed, so a figure on screen
+    // means both have already happened.
+    await waitFor(() => expect(section.querySelectorAll('figure')).toHaveLength(figuresBefore + 1));
+  }
+
+  // Every photograph on screen, in document order, as the src its own figure
+  // is actually showing. A just-picked photo shows the LOCAL preview -- the
+  // object URL, filed under a key composed from the block's own name -- because
+  // `contentPath` names a derivative no build has produced yet. That is the
+  // half a positional preview key breaks: after the second insert pushes the
+  // oven's block down, a positional key looks up a position the URL was never
+  // stored at, and she gets a broken image where her photograph was.
+  function shownPhotos(section: HTMLElement): string[] {
+    return [...section.querySelectorAll('figure img')].map((img) => (img as HTMLImageElement).src);
+  }
 
   it('publishes the photo on the block she put it on, with the bytes for BOTH photos in the same request', async () => {
-    const publishBodies = stubFetchCapturingPublish(POST_WITH_TWO_PHOTOS);
+    const publishBodies = stubFetchCapturingPublish(POST_WITH_TWO_PARAGRAPHS);
     const user = userEvent.setup();
     renderDashboard('/edit/manage/story');
 
@@ -1982,43 +2038,19 @@ describe('AdminApp: a photo picked for one block, and then that block moved', ()
     // Fields mount only while their own post's row is open (Task 7).
     await user.click(within(section).getByRole('button', { name: 'The tielle' }));
 
-    // Each block found by the description SHE typed into it, never by
-    // position -- position is the thing under test, so a query that used one
-    // would be assuming the answer. `closest('li')` lands on the BLOCK's own
-    // item, which is nested inside the post's.
-    //
-    // A plain value scan rather than `getByDisplayValue`, and it is called
-    // four times: what it gives up is the nice failure message, what it saves
-    // is four Testing Library sweeps in a case that already spends its budget
-    // on two uploads and a publish.
-    const blockOf = (description: string): HTMLElement => {
-      const input = [...section.querySelectorAll<HTMLInputElement>('input')].find(
-        (candidate) => candidate.value === description,
-      );
-      expect(input, `no field on this panel holds "${description}"`).toBeDefined();
-      return (input as HTMLInputElement).closest('li') as HTMLElement;
-    };
+    // The oven first, standing in the SECOND paragraph...
+    await pickPhotoAfter(section, user, paragraphSaying(section, 'The bread oven'), 'oven.jpg', '/posts/oven.webp');
+    // ...then the tielle, standing in the FIRST, which pushes the oven's block
+    // down one place.
+    await pickPhotoAfter(section, user, paragraphSaying(section, 'The tielle, sliced'), 'tielle.jpg', '/posts/tielle.webp');
 
-    async function pickPhotoIn(block: HTMLElement, file: string, contentPath: string): Promise<void> {
-      const before = FakeXHR.instances.length;
-      const picker = block.querySelector('input[type="file"]') as HTMLInputElement;
-      await user.upload(picker, jpegFile(file));
-      await waitFor(() => expect(FakeXHR.instances).toHaveLength(before + 1));
-      FakeXHR.instances[before].respond(200, { path: `assets-source/posts/${file}`, contentPath });
-      // Scoped to this block, so a confirmation left over on a DIFFERENT
-      // block cannot answer for this one -- which is exactly the confusion
-      // this whole case is about.
-      await waitFor(() => expect(within(block).getByText(/Uploaded/)).toBeInTheDocument());
-    }
-
-    // A photo for the tielle, which is the first block.
-    await pickPhotoIn(blockOf('The tielle, sliced'), 'tielle.jpg', '/posts/tielle.webp');
-    // She moves it under the oven -- one gesture with the drag handle in a
-    // real browser, one click here, the same reorder either way (the buttons
-    // are not the lesser path; they are the only path on her phone).
-    await user.click(within(section).getByRole('button', { name: 'Move Photo block 1 down' }));
-    // ...and then a photo for the oven, which is now the first block.
-    await pickPhotoIn(blockOf('The bread oven'), 'oven.jpg', '/posts/oven.webp');
+    // Two photographs on screen, each its own, neither of them the broken
+    // image a key that moved with the position would leave behind.
+    const shown = shownPhotos(section);
+    expect(shown).toHaveLength(2);
+    expect(shown[0], `the first figure shows ${shown[0]}`).toMatch(/^blob:/);
+    expect(shown[1], `the second figure shows ${shown[1]}`).toMatch(/^blob:/);
+    expect(shown[0]).not.toBe(shown[1]);
 
     await user.click(screen.getByRole('button', { name: 'Publish' }));
     await user.click(screen.getByRole('button', { name: 'Yes, publish to the live site' }));
@@ -2028,97 +2060,72 @@ describe('AdminApp: a photo picked for one block, and then that block moved', ()
     const postsFile = sent.find((f) => f.path === 'src/content/posts.json');
     expect(postsFile).toBeDefined();
     const publishedBlocks = (JSON.parse(postsFile!.content) as Post[])[0].blocks as unknown as {
-      alt: string;
-      src: string;
+      kind: string;
+      text?: string;
+      src?: string;
     }[];
-    // Her order, and her pairing: the oven first because she moved it there,
-    // each block naming the photo she picked FOR IT.
-    expect(publishedBlocks.map((block) => [block.alt, block.src])).toEqual([
-      ['The bread oven', '/posts/oven.webp'],
-      ['The tielle, sliced', '/posts/tielle.webp'],
-    ]);
+    // Her order, and her pairing: each photograph directly under the words it
+    // belongs to, in the order she wrote them.
+    expect(publishedBlocks.map((block) => block.kind)).toEqual(['paragraph', 'image', 'paragraph', 'image']);
+    expect(publishedBlocks[1].src).toBe('/posts/tielle.webp');
+    expect(publishedBlocks[3].src).toBe('/posts/oven.webp');
 
     // And the bytes for both, in this same request. This is the assertion the
-    // defect failed: `assets-source/posts/tielle.jpg` was absent, because the
-    // oven's pick had superseded the tielle's photo at the position it used to
-    // occupy -- while posts.json above went on naming it. Asserted as the
-    // whole set rather than two `toContain`s, so a THIRD, orphaned copy staged
-    // under a name nothing refers to would fail here too.
+    // defect failed. Asserted as the whole set rather than two `toContain`s, so
+    // a THIRD, orphaned copy staged under a name nothing refers to would fail
+    // here too.
     expect(sent.filter((f) => f.path.startsWith('assets-source/')).map((f) => f.path).sort()).toEqual([
       'assets-source/posts/oven.jpg',
       'assets-source/posts/tielle.jpg',
     ]);
   });
 
-  // Task 7's own risk, named directly in its brief: BlockList now mounts only
-  // while its post's editor is open (D4), and its stable-names WeakMap lives
-  // in a `useRef` -- torn down on every unmount. The case above proves the
-  // reorder-eviction defect stays fixed while the editor stays open; this one
-  // proves it ALSO stays fixed across the editor closing and reopening, which
-  // is the new way the same WeakMap can be discarded. Without PostList's own
-  // per-post-id `StableNames` (kept alive above BlockList, in
-  // `blocks/stable-names.ts`'s `createStableNames`), reopening reassigns
-  // every block a name by its CURRENT position, and a second pick on a block
-  // that happens to land on a reused name overwrites -- deletes -- whatever
-  // the first pick staged under it. Same failure, one level up from a reorder.
+  // Task 7's own risk, named directly in its brief and unchanged by Task 25's
+  // swap: the block editor mounts only while its post's editor is open (D4),
+  // and its stable-names WeakMap lives in a `useRef` -- torn down on every
+  // unmount. The case above proves identity survives an insert while the
+  // editor stays open; this one proves it ALSO survives the editor closing and
+  // reopening. Without PostList's own per-post-id `StableNames` (kept alive
+  // above the surface, in `blocks/stable-names.ts`'s `createStableNames`),
+  // reopening reassigns every block a name by its CURRENT position -- and the
+  // photograph she picked is then looked up under a key nothing ever stored,
+  // so she reopens her own post and finds a broken image where it was.
   it('a staged photo survives the editor closing and reopening, and a second pick elsewhere does not delete it', async () => {
-    const publishBodies = stubFetchCapturingPublish(POST_WITH_TWO_PHOTOS);
+    const publishBodies = stubFetchCapturingPublish(POST_WITH_TWO_PARAGRAPHS);
     const user = userEvent.setup();
     renderDashboard('/edit/manage/story');
 
     const section = await openPostsPanel(user);
     await user.click(within(section).getByRole('button', { name: 'The tielle' }));
 
-    const blockOf = (description: string): HTMLElement => {
-      const input = [...section.querySelectorAll<HTMLInputElement>('input')].find(
-        (candidate) => candidate.value === description,
-      );
-      expect(input, `no field on this panel holds "${description}"`).toBeDefined();
-      return (input as HTMLInputElement).closest('li') as HTMLElement;
-    };
-
-    async function pickPhotoIn(block: HTMLElement, file: string, contentPath: string): Promise<void> {
-      const before = FakeXHR.instances.length;
-      const picker = block.querySelector('input[type="file"]') as HTMLInputElement;
-      await user.upload(picker, jpegFile(file));
-      await waitFor(() => expect(FakeXHR.instances).toHaveLength(before + 1));
-      FakeXHR.instances[before].respond(200, { path: `assets-source/posts/${file}`, contentPath });
-      await waitFor(() => expect(within(block).getByText(/Uploaded/)).toBeInTheDocument());
-    }
-
-    // A photo for the tielle, the first block.
-    await pickPhotoIn(blockOf('The tielle, sliced'), 'tielle.jpg', '/posts/tielle.webp');
-    // Reorder while the editor is still open, same as the case above.
-    await user.click(within(section).getByRole('button', { name: 'Move Photo block 1 down' }));
+    // A photograph for the tielle, in the FIRST paragraph, so the block it
+    // makes lands in the MIDDLE of the array. That detail is the whole
+    // falsifiability of this case: a name minted at pick time is handed out
+    // after both paragraphs already have theirs, so the array's order and the
+    // name order disagree -- and a fresh WeakMap on reopen, which hands names
+    // out by current position, gives this block a different one. Picked on the
+    // LAST paragraph instead, the two orders agree and a fresh map is
+    // indistinguishable from a kept one.
+    await pickPhotoAfter(section, user, paragraphSaying(section, 'The tielle, sliced'), 'tielle.jpg', '/posts/tielle.webp');
+    const beforeClosing = shownPhotos(section);
+    expect(beforeClosing[0]).toMatch(/^blob:/);
 
     // Close the editor entirely, then reopen the SAME post -- this is what
-    // unmounts and remounts BlockList, discarding a plain
+    // unmounts and remounts the surface, discarding a plain
     // `useStableNames`-only WeakMap.
     await user.click(within(section).getByRole('button', { name: 'Done' }));
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     await user.click(within(section).getByRole('button', { name: 'The tielle' }));
 
-    // What she would see: the tielle's own block, found by its own
-    // (unaffected) alt text, still shows the photo she picked for it --
-    // not a blank box, and not the oven's placeholder. Asserted on the real
-    // <img> src PhotoField renders, which is `value` (this block's own
-    // `src` field) once the field's own transient "Uploaded" status has
-    // reset on remount -- a fact about every photo field's own local state,
-    // not something this task changes. What THIS task has to keep true is
-    // that it is still the RIGHT path, on the RIGHT block.
-    // `getByRole('img')` would miss this -- an empty `alt=""` (PhotoField's
-    // own preview, decorative by design) makes it presentational rather
-    // than an accessible image, so the element is found directly instead.
-    const tielleBlockAfterReopen = blockOf('The tielle, sliced');
-    const tielleImg = tielleBlockAfterReopen.querySelector('img');
-    expect(tielleImg, 'no preview image rendered on the tielle block after reopening').not.toBeNull();
-    expect((tielleImg as HTMLImageElement).src).toContain('/posts/tielle.webp');
+    // The same photograph, under the same key, on the same block. A fresh
+    // WeakMap hands this block a name by its current position instead, and the
+    // preview store has nothing at that key -- so the figure falls back to
+    // `src`, a derivative no build has produced, and she sees a broken image.
+    await waitFor(() => expect(shownPhotos(section)).toEqual(beforeClosing));
 
-    // Now the second pick, on the OTHER block -- the exact shape that used
-    // to delete the first pick's bytes when the key was positional. If
-    // reopening reassigned names by current position, this pick's key would
-    // collide with the tielle's own (renamed) key and silently overwrite it.
-    await pickPhotoIn(blockOf('The bread oven'), 'oven.jpg', '/posts/oven.webp');
+    // Now the second pick, on the OTHER paragraph -- the exact shape that used
+    // to delete the first pick's bytes when the key was positional.
+    await pickPhotoAfter(section, user, paragraphSaying(section, 'The bread oven'), 'oven.jpg', '/posts/oven.webp');
 
     await user.click(screen.getByRole('button', { name: 'Publish' }));
     await user.click(screen.getByRole('button', { name: 'Yes, publish to the live site' }));
@@ -2128,16 +2135,15 @@ describe('AdminApp: a photo picked for one block, and then that block moved', ()
     const postsFile = sent.find((f) => f.path === 'src/content/posts.json');
     expect(postsFile).toBeDefined();
     const publishedBlocks = (JSON.parse(postsFile!.content) as Post[])[0].blocks as unknown as {
-      alt: string;
-      src: string;
+      kind: string;
+      src?: string;
     }[];
-    expect(publishedBlocks.map((block) => [block.alt, block.src])).toEqual([
-      ['The bread oven', '/posts/oven.webp'],
-      ['The tielle, sliced', '/posts/tielle.webp'],
-    ]);
+    expect(publishedBlocks.map((block) => block.kind)).toEqual(['paragraph', 'image', 'paragraph', 'image']);
+    expect(publishedBlocks[1].src).toBe('/posts/tielle.webp');
+    expect(publishedBlocks[3].src).toBe('/posts/oven.webp');
 
-    // The bytes for BOTH photos, in the publish REQUEST itself -- not just
-    // in posts.json's own text. This is what the first pick's bytes being
+    // The bytes for BOTH photos, in the publish REQUEST itself -- not just in
+    // posts.json's own text. This is what the first pick's bytes being
     // silently deleted from the collector would fail.
     expect(sent.filter((f) => f.path.startsWith('assets-source/')).map((f) => f.path).sort()).toEqual([
       'assets-source/posts/oven.jpg',
@@ -2254,10 +2260,17 @@ describe('a draft saved before the block editor existed', () => {
 
     // The block's own field carries the block's own problem, by
     // aria-describedby -- the association she actually depends on, not merely
-    // the message being somewhere on the page. Scoped to the one field block
-    // it can be answered by (fieldBlock's own comment), because a
-    // whole-panel label sweep here is what has twice nearly refused a deploy.
-    const box = await waitFor(() => within(fieldBlock(panel, 'Words')).getByLabelText('Words'));
+    // the message being somewhere on the page. Found by the writing surface's
+    // own `data-slot` marker rather than by a label: admin redesign Task 25
+    // swapped BlockList for the column, so a paragraph's words live in an
+    // editable host with no label of its own. Still one indexed selector match
+    // rather than a whole-panel label sweep, which is what has twice nearly
+    // refused a deploy from this file.
+    const box = await waitFor(() => {
+      const host = panel.querySelector<HTMLElement>('[data-slot-key="text"]');
+      expect(host, 'no paragraph slot on this panel').not.toBeNull();
+      return host as HTMLElement;
+    });
     await waitFor(() => expect(box.getAttribute('aria-describedby')).not.toBeNull());
     const describedBy = box.getAttribute('aria-describedby') as string;
     expect(document.getElementById(describedBy.split(' ').pop() as string)).toHaveTextContent(/needs some words/);
@@ -2281,7 +2294,15 @@ describe('a draft saved before the block editor existed', () => {
     // not supposed.
     await waitFor(() => expect(within(panel).getByText(/needs some words/)).toBeInTheDocument());
 
-    await user.type(within(fieldBlock(panel, 'Words')).getByLabelText('Words'), 'A real paragraph.');
+    // Spelled the way a browser spells an edit to an editable host -- the
+    // words change, then `input` fires. `user.type` drives a value, and an
+    // editable host has none.
+    const host = panel.querySelector<HTMLElement>('[data-slot-key="text"]') as HTMLElement;
+    expect(host, 'no paragraph slot on this panel').not.toBeNull();
+    await act(async () => {
+      host.textContent = 'A real paragraph.';
+      fireEvent.input(host);
+    });
 
     // The publish path is what "she could not get stuck" actually means: not
     // that the screen rendered, but that the work can leave the browser. The

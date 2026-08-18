@@ -151,8 +151,10 @@ export default function BlockList({
   //     with `insertBefore`, and jsdom does not blur a node for being moved.
   //     A browser can (that is what `Element.moveBefore()` exists for), so the
   //     refocus below stays and is the browser's fix; it is a no-op here, and
-  //     a jsdom test cannot tell whether it is there. That claim belongs in
-  //     e2e/block-editor.spec.ts, alongside the handle's cursor.
+  //     a jsdom test cannot tell whether it is there. That claim used to
+  //     belong to e2e/block-editor.spec.ts, alongside the handle's cursor;
+  //     admin redesign Task 25 unmounted this component and deleted that spec,
+  //     so nothing checks it while nothing mounts this.
   //   * Her button does NOT survive -> focus goes to `<body>`, every time, in
   //     jsdom too. This happens whenever the block reaches an end, because that
   //     direction is then omitted rather than disabled (RecordList's rule). It
@@ -275,7 +277,8 @@ export default function BlockList({
                 // all -- without it the browser refuses the drop and the drag
                 // ends with nothing happening, which is the single most common
                 // way HTML5 drag-and-drop is got wrong. No jsdom test can see
-                // it; e2e/block-editor.spec.ts is what covers it.
+                // it, and e2e/block-editor.spec.ts, which used to, was deleted
+                // with this component's last call site (Task 25).
                 event.preventDefault();
               }}
               onDrop={(event) => {

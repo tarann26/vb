@@ -3,8 +3,15 @@
 // FieldsOf<Post> is uninhabitable because Kind<Block[]> is `never` (see
 // POST_FIELDS' own comment in fields.ts, and the TS2322 the probe there
 // records). So the scalars go through RecordForm<PostMeta> and the blocks go
-// through BlockList -- the same split GalleryList.tsx and StoryForm.tsx
-// already make for an array-valued field.
+// through the writing surface -- the same split GalleryList.tsx and
+// StoryForm.tsx already make for an array-valued field.
+//
+// Admin redesign Task 25: that second half was BlockList, a stack of one boxed
+// form per block, and is now WritingSurface -- one continuous column she
+// writes in. The props are the same props, field for field, which is why the
+// swap is one element and no plumbing. BlockList.tsx stays on disk,
+// unreferenced, under the owner's never-delete constraint and because leaving
+// it is the smaller risk while the column is new.
 //
 // Task 7: PostList moves to ItemList + EditorSheet, the same list+editor
 // shape every other panel in this dashboard has taken. Open state keys on
@@ -18,7 +25,7 @@
 // HoursField/SectionList/StoryForm already read them).
 import { useRef, useState } from 'react';
 import RecordForm from './RecordForm';
-import BlockList from './blocks/BlockList';
+import WritingSurface from './writing/WritingSurface';
 import { blockProblemOf, isBlockProblem } from './blocks/block-problems';
 import { createStableNames, type StableNames } from './blocks/stable-names';
 import { moveTo } from './blocks/reorder';
@@ -116,8 +123,8 @@ function ownerOf(field: string): number | undefined {
 // CONTROL whose own error region it points at (Field, PhotoField and
 // InlineTextField all build `aria-describedby` ending in `-error` when, and
 // only when, they have a problem to show), or ANY region announcing itself as
-// an alert -- this component's own banner, RecordForm's, BlockList's, and the
-// per-block and empty-list messages inside it.
+// an alert -- this component's own banner, RecordForm's, the writing
+// surface's, and the per-block and empty-list messages inside it.
 //
 // The control comes first for a field problem, and that ordering is not an
 // accident of this selector: Field renders label, control, help, error in that
@@ -137,7 +144,8 @@ function ownerOf(field: string): number | undefined {
 //
 // Queried from the DOM rather than computed from `problems`, deliberately:
 // mapping a problem's `field` string back to a DOM id would be a fourth
-// independent copy of the id scheme (RecordForm's, BlockList's, PhotoField's),
+// independent copy of the id scheme (RecordForm's, the writing surface's,
+// PhotoField's),
 // and the thing that needs finding is "the first one SHE can see", which is a
 // fact about what rendered.
 const FIRST_PROBLEM_SELECTOR = '[aria-describedby*="-error"], [role="alert"]';
@@ -157,9 +165,9 @@ export default function PostList({
   const open = openIndex === -1 ? undefined : items[openIndex];
 
   // One StableNames instance per post id, held here rather than inside
-  // BlockList itself, and kept for as long as PostList itself is mounted --
+  // the writing surface itself, and kept for as long as PostList is mounted --
   // which, unlike the post's own EditorSheet, is the whole time the Posts
-  // panel is open. BlockList's own WeakMap lives in a `useRef`, torn down
+  // panel is open. The surface's own WeakMap lives in a `useRef`, torn down
   // the instant the component unmounts; moving the block editor inside
   // EditorSheet (this task) means it now does that on every Done, so a name
   // handed out before she closed the editor has to still mean the same
@@ -179,7 +187,7 @@ export default function PostList({
   }
 
   // The partition (D4): `shown` is everything the open editor's own
-  // RecordForm or BlockList will place; `banner` is everything else, which
+  // RecordForm or writing surface will place; `banner` is everything else, which
   // with no editor open is EVERY post's own problems -- meta and block
   // alike.
   const shown = open === undefined ? [] : problems.filter((p) => ownerOf(p.field) === openIndex);
@@ -330,7 +338,7 @@ export default function PostList({
               scope="posts"
             />
           </div>
-          <BlockList
+          <WritingSurface
             blocks={blocksOf(open)}
             postIndex={openIndex}
             onChange={(nextBlocks) => onChange(openIndex, { ...metaOf(open), blocks: nextBlocks })}

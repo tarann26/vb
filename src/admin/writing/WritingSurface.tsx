@@ -561,6 +561,16 @@ export default function WritingSurface({
     // no longer what a Backspace means. Cleared here as well as on every key
     // because a paste and a composition both commit without one.
     justFormatted.current = null;
+    // A REFUSAL IS ABOUT THE THING SHE JUST TRIED, and it stops being about
+    // anything the moment she carries on writing. InlineTextField.tsx clears
+    // its own the same way and for the same reason: left standing, the sentence
+    // is a complaint about a target she has already abandoned, and -- because
+    // it announces itself as an alert -- it also goes on winning PostList's
+    // "take me to the first one" against real validation problems further down
+    // the post. Cleared here rather than in the host's onInput so a paste and a
+    // toolbar action clear it too; the three callers that SET a notice all set
+    // it after their own commit, or instead of one.
+    setNotice(null);
     const source = serializeInline(readInline(el));
     const block = safe[index];
     if (block === undefined) return;

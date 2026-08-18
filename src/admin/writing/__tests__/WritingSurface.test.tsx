@@ -1139,6 +1139,25 @@ describe('the toolbar', () => {
     asked.mockRestore();
   });
 
+  // A refusal is about the target she just tried, and it stops being about
+  // anything the moment she carries on writing. It also announces itself as an
+  // alert, so a stale one goes on winning PostList's "take me to the first
+  // one" against real validation problems further down the post -- which is
+  // where this is proved end to end (PostList.test.tsx's own refusal case).
+  it('stops saying so once she carries on typing', () => {
+    const spy = vi.fn();
+    const view = ready([{ kind: 'paragraph', text: 'abcd' }], spy);
+    selects(view.host, 1, 3);
+    const asked = vi.spyOn(window, 'prompt').mockReturnValue('javascript:alert(1)');
+    press(view.container, 'Link');
+    expect(view.container.textContent).toContain('will not work as a link');
+
+    types(view.host, 'abcde');
+
+    expect(view.container.textContent).not.toContain('will not work as a link');
+    asked.mockRestore();
+  });
+
   it('Cancel writes nothing and says nothing', () => {
     const spy = vi.fn();
     const view = ready([{ kind: 'paragraph', text: 'abcd' }], spy);

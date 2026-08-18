@@ -44,9 +44,10 @@
 // buttons were never allowed to become optional.
 export const HANDLE_CLASSNAME = 'select-none px-3 py-1 text-gray-500';
 
-// Read off the handle itself by e2e/block-editor.spec.ts, which is the only
-// place a computed cursor can be checked at all -- jsdom has no layout engine
-// and no cascade worth asking.
+// A computed cursor can be checked in a browser and nowhere else -- jsdom has
+// no layout engine and no cascade worth asking. e2e/block-editor.spec.ts read
+// it off the handle until admin redesign Task 25 unmounted BlockList and
+// deleted that spec; the other reader of these bindings is ItemList's own row.
 export const HANDLE_STYLE = { cursor: 'move' };
 
 // The block in flight, dimmed. Once the pointer has left the row this is the

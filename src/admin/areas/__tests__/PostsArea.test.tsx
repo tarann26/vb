@@ -123,17 +123,22 @@ describe('the Posts panel', () => {
 
     const panel = await openPostsPanel();
     await user.click(await within(panel).findByRole('button', { name: 'A fixture post' }));
-    expect(await within(panel).findByDisplayValue('A fixture paragraph.')).toBeInTheDocument();
-    // The strip over the block, which is the only thing on screen that tells
-    // her what kind of block she is looking at.
-    //
-    // Scoped to that block's own <li>, because the picker under the list
-    // offers a Paragraph button by the same name -- an unscoped query finds
-    // both and throws on the ambiguity rather than asserting anything. The
-    // Remove button is what locates the block, and is the assertion below.
-    const remove = within(panel).getByRole('button', { name: 'Remove Paragraph block 1' });
-    expect(remove).toBeInTheDocument();
-    expect(within(remove.closest('li') as HTMLElement).getByText('Paragraph')).toBeInTheDocument();
+    // Her words in the column she writes in, and not in a box with a kind
+    // label over it: admin redesign Task 25 swapped BlockList for the writing
+    // surface, so there is no strip, no Remove button and no textarea to read
+    // a display value off. `data-slot` is the surface's own marker for an
+    // editable slot and is the query surface every case against it uses.
+    const host = await waitFor(() => {
+      const found = [...panel.querySelectorAll<HTMLElement>('[data-slot]')].find(
+        (el) => el.textContent === 'A fixture paragraph.',
+      );
+      expect(found, 'no slot on the panel holds the committed post’s words').toBeDefined();
+      return found as HTMLElement;
+    });
+    // The published renderer's own element for a paragraph, and editable --
+    // the two halves of "she can read it and she can change it".
+    expect(host.tagName.toLowerCase()).toBe('p');
+    expect(host.getAttribute('contenteditable')).toBe('true');
   });
 
   it('a 404 reads as no posts yet, not as a failure', async () => {

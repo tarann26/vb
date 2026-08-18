@@ -1,11 +1,26 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import PostList, { type PostListProps } from '../PostList';
 import { POST_FIELDS } from '../fields';
 import { NO_IMAGE_PREVIEWS } from '../previews';
+import { convertHeic, uploadAndEncode } from '../upload-photo';
+import type { StagedPhoto } from '../PhotoField';
 import type { Block, Post } from '../../content/types';
 import type { ValidationProblem } from '../../content/validate';
+
+// Only the two calls that would touch the network or a WASM decoder. Every
+// other export of that module, `checkPhotoSize` above all, stays REAL -- a
+// caller that skips the size check re-opens the gap upload-photo.ts's own
+// comment closed, and a stand-in here would hide it.
+vi.mock('../upload-photo', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../upload-photo')>();
+  return {
+    ...actual,
+    convertHeic: vi.fn((file: File) => Promise.resolve(file)),
+    uploadAndEncode: vi.fn(),
+  };
+});
 
 // Fixtures that differ from src/content/posts.json in EVERY field asserted
 // on. Phase 4's root cause was two fixtures equal to the real committed
@@ -501,10 +516,19 @@ describe('every problem the partition can produce is reachable from the count', 
     // she pressed (which is where a silent no-op leaves it) and not on <body>
     // (whose textContent contains every message on the page and would make the
     // assertion below meaningless).
+    //
+    // `[data-slot]` is the fourth shape, and it arrived with Task 25's swap:
+    // the block half of this panel is now editable hosts rather than
+    // textareas, so the control she has to type in for a block problem is a
+    // <p>, an <h2> or an <li>. `data-slot` is the writing surface's own marker
+    // for one -- deliberately narrower than `isContentEditable`, which is
+    // inherited and would be true of anything nested inside a host as well.
     await waitFor(() => {
       const active = document.activeElement as HTMLElement;
       expect(
-        ['INPUT', 'TEXTAREA', 'SELECT'].includes(active.tagName) || active.getAttribute('role') === 'alert',
+        ['INPUT', 'TEXTAREA', 'SELECT'].includes(active.tagName)
+        || active.getAttribute('role') === 'alert'
+        || active.hasAttribute('data-slot'),
         `focus went to <${active.tagName.toLowerCase()}> "${(active.textContent ?? '').slice(0, 40)}"`,
       ).toBe(true);
       expect(focusedProblemText()).toContain(message);
@@ -561,7 +585,7 @@ describe('a link refusal is reachable while it lasts, within the one editor that
     // is what this case is about.
     vi.spyOn(window, 'prompt').mockReturnValue('javascript:alert(1)');
     const message = 'this photo grid has nothing in it yet';
-    renderList({ items: GUARD_POSTS, problems: [{ field: '[0].blocks[3].images', message }] });
+    const { container } = renderList({ items: GUARD_POSTS, problems: [{ field: '[0].blocks[3].images', message }] });
 
     // Baseline: with no refusal yet, the count sends her to the gallery
     // block's own problem.
@@ -570,7 +594,15 @@ describe('a link refusal is reachable while it lasts, within the one editor that
 
     // A refusal on the SAME post's paragraph, earlier in document order than
     // the gallery block below it.
-    const group = screen.getByRole('group', { name: 'Formatting for Words' });
+    //
+    // Task 25 re-points this half from InlineTextField's own per-field toolbar
+    // to the writing surface's single one -- same three gates, same sentence,
+    // imported rather than retyped. The surface acts on the host she was LAST
+    // writing in rather than on a field it is attached to, so standing in the
+    // paragraph is part of the gesture and not test scaffolding.
+    const paragraph = container.querySelector<HTMLElement>('[data-slot]') as HTMLElement;
+    fireEvent.focus(paragraph);
+    const group = screen.getByRole('group', { name: 'Formatting' });
     await user.click(within(group).getByRole('button', { name: 'Link' }));
     const refusal = screen.getByText(/will not work as a link/);
     expect(refusal).toHaveAttribute('role', 'alert');
@@ -583,11 +615,148 @@ describe('a link refusal is reachable while it lasts, within the one editor that
     await user.click(screen.getByRole('button', { name: 'Take me to the first one' }));
     await waitFor(() => expect(document.activeElement).toBe(refusal));
 
-    // The bound. Her next keystroke in that box ends the refusal, and the
-    // count and the destination agree again.
-    await user.type(screen.getByLabelText('Words'), '!');
+    // The bound. Her next keystroke in that block ends the refusal, and the
+    // count and the destination agree again. Spelled the way a browser spells
+    // an edit to an editable host -- the words change, then `input` fires.
+    paragraph.textContent = 'A guard paragraph, and more.';
+    fireEvent.input(paragraph);
     expect(screen.queryByText(/will not work as a link/)).toBeNull();
     await user.click(screen.getByRole('button', { name: 'Take me to the first one' }));
     await waitFor(() => expect(focusedProblemText()).toContain(message));
+  });
+});
+
+// The three claims the swap from BlockList to WritingSurface rests on, at the
+// only level either component's props are actually composed.
+//
+// What jsdom cannot say is that the swap HAPPENED as a matter of what she sees
+// on screen -- the caret, the marks, the column. DEFERRED TO TASK 28:
+// e2e/writing-surface.spec.ts is the only check that PostList mounts the
+// writing surface at all, which is why its "revert PostList.tsx to BlockList"
+// mutation row reddens every test in that file.
+describe('PostList hands the post’s blocks to the writing surface', () => {
+  const STAGED: StagedPhoto = {
+    path: 'assets-source/posts/abc123.jpg',
+    contentPath: '/posts/abc123.webp',
+    content: 'AAAA',
+    encoding: 'base64',
+  };
+
+  beforeEach(() => {
+    vi.mocked(convertHeic).mockImplementation((file: File) => Promise.resolve(file));
+    vi.mocked(uploadAndEncode).mockReset();
+    vi.mocked(uploadAndEncode).mockResolvedValue(STAGED);
+  });
+
+  // THE KEY THE BYTES ARE FILED UNDER, on the SECOND post rather than the
+  // first, because a prefix built from the wrong post reads identically to no
+  // prefix at all when only one post exists. A publish sends one file per
+  // staged entry: a key nothing publishes means she uploads a picture,
+  // presses Publish, and the live post names a file that was never sent --
+  // a broken image on the site and an asset-existence failure on every build
+  // after it.
+  it('files a photo staged on the second post under that post’s own id', async () => {
+    const user = userEvent.setup();
+    const onStaged = vi.fn();
+    renderList({ onStaged });
+    await openRow(user, 'A second fixture post');
+
+    // The surface's own picker, whose id carries the post's INDEX -- so this
+    // query also fails if `postIndex` stops being the row's own position.
+    const picker = document.querySelector<HTMLInputElement>('#posts-1-writing-image');
+    expect(picker).not.toBeNull();
+    await act(async () => {
+      fireEvent.change(picker as HTMLInputElement, {
+        target: { files: [new File([new Uint8Array(64)], 'photo.jpg', { type: 'image/jpeg' })] },
+      });
+    });
+
+    expect(onStaged).toHaveBeenCalledTimes(1);
+    const [key, staged] = onStaged.mock.calls[0] as [string, StagedPhoto];
+    expect(staged.contentPath).toBe('/posts/abc123.webp');
+    // Named rather than matched whole: the block's own name is minted at pick
+    // time and is not something this test may assert a literal for without
+    // asserting the naming scheme along with it.
+    expect(key.startsWith('fixture-b:blocks[')).toBe(true);
+    expect(key.endsWith('].src')).toBe(true);
+    expect(key).not.toContain('fixture-a');
+  });
+
+  // ONE editor, not two. With both the old block list and the writing surface
+  // mounted, every control BlockFields draws renders twice -- a `<label for>`
+  // click lands on whichever came first and a screen reader cannot tell the
+  // pair apart. The recipe pair is the fixture because both are drawn by
+  // BlockFields on BOTH surfaces, so a duplicate here is a duplicate of a real
+  // control rather than of a heading.
+  //
+  // The scan is over the WHOLE open editor, meta fields included, rather than
+  // over the block half alone -- a second RecordForm would be as bad as a
+  // second block editor and this is the only level either is visible from.
+  //
+  // NO CITATION BLOCK IN THIS FIXTURE, and the reason is a real collision this
+  // scan found rather than a fixture convenience: POST_FIELDS.date is called
+  // "Published on" (fields.ts) and so is a citation block's own date
+  // (BlockFields.tsx's CITATION_DATE_SPEC), so a post carrying a citation puts
+  // two controls with that one label on one screen. It predates this task --
+  // BlockList drew the same field with the same words -- and renaming an
+  // owner-facing label belongs to a task that owns it. Recorded here so the
+  // next person to widen this scan finds the reason rather than the symptom.
+  it('mounts one editor for the open post, so no two controls share a label', async () => {
+    const user = userEvent.setup();
+    const withRecipe: Post[] = [
+      {
+        ...POSTS[0],
+        blocks: [
+          { kind: 'heading', text: 'A fixture heading' },
+          { kind: 'ingredients', heading: 'For the sauce', items: ['400g flour'] },
+          { kind: 'steps', heading: 'Method', items: ['Make a well'] },
+        ],
+      },
+      POSTS[1],
+    ];
+    const { container } = renderList({ items: withRecipe });
+    await openRow(user, 'A fixture post');
+
+    const labels = [...container.querySelectorAll('label')].map((el) => el.textContent ?? '');
+    const duplicated = labels.filter((label, i) => labels.indexOf(label) !== i);
+    expect(duplicated, `these labels appear more than once: ${[...new Set(duplicated)].join(', ')}`).toEqual([]);
+    // ...and the recipe controls are genuinely there, so the scan above is
+    // not passing on an editor that rendered nothing at all.
+    expect(screen.getByLabelText('Heading for the ingredients')).toHaveValue('For the sauce');
+    expect(screen.getByLabelText('Step 1')).toHaveValue('Make a well');
+  });
+
+  // `postIndex` is the row's OWN position. Hard-coded to 0 the surface picks
+  // no problem out of the list at all for any post but the first -- and
+  // PostList has already excluded it from its own banner as belonging to the
+  // open editor, so the message vanishes from the screen entirely while the
+  // count above still names it.
+  it('routes the open post’s own block problem to its editor, whichever row it is', async () => {
+    const user = userEvent.setup();
+    const message = 'the second post’s heading needs some words';
+    const { container } = renderList({ problems: [{ field: '[1].blocks[0].text', message }] });
+    await openRow(user, 'A second fixture post');
+
+    const hits = [...container.querySelectorAll('*')].filter(
+      (el) => el.children.length === 0 && el.textContent === message,
+    );
+    expect(hits, `"${message}" appears ${hits.length} times`).toHaveLength(1);
+    expect(screen.queryByRole('alert', { name: 'Problems with the whole list of posts' })).toBeNull();
+  });
+
+  // The blocks that come back up are the post's own, and the meta half is
+  // carried across untouched -- `{ ...metaOf(post), blocks: nextBlocks }`.
+  it('commits a block edit against the open post’s index, keeping its scalars', async () => {
+    const user = userEvent.setup();
+    const { onChange, container } = renderList();
+    await openRow(user, 'A second fixture post');
+    const host = container.querySelector<HTMLElement>('[data-slot]') as HTMLElement;
+    host.textContent = 'A fixture heading, edited';
+    fireEvent.input(host);
+
+    const [index, next] = lastEdit(onChange);
+    expect(index).toBe(1);
+    expect(next.blocks).toEqual([{ kind: 'heading', text: 'A fixture heading, edited' }]);
+    expect(next.title).toBe('A second fixture post');
   });
 });
