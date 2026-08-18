@@ -74,11 +74,16 @@ export default function WritingToolbar({
           was warning about. This comment did it too, on its first draft: it
           spelled out the text-transform that turns capitals into small
           letters, and shipped that rule at a cost of 36 bytes. The ceiling
-          caught that it happened -- 38836 has no headroom at all, so
-          `npm run build` refuses -- and a rule-level diff of the built
-          stylesheet against the pre-task one is what said WHICH rule and
-          therefore which word. Do not respell this label, and do not write
-          either of those two words out in this file. */}
+          caught that it happened -- the sheet stood at 38836 against a
+          ceiling of 38836, so `npm run build` refused -- and a rule-level
+          diff of the built stylesheet against the pre-task one is what said
+          WHICH rule and therefore which word.
+
+          DO NOT READ THAT AS A GUARANTEE ANY MORE. Task 27 raised the ceiling
+          to 39000, so the same 36-byte leak would now pass the byte assertion
+          in silence; the rule-level diff is the check that would still catch
+          it, and it is the one to run. Do not respell this label, and do not
+          write either of those two words out in this file. */}
       <Tool onPress={() => onMark('em')}>Italic</Tool>
       <Tool onPress={() => onMark('underline')}>Underline</Tool>
       <Tool onPress={() => onMark('strike')}>Strikethrough</Tool>
