@@ -231,11 +231,22 @@ for (const viewport of VIEWPORTS) {
       expect(box!.height, 'thumbnail height').toBeGreaterThanOrEqual(46);
       expect(box!.height, 'thumbnail height').toBeLessThanOrEqual(50);
 
-      // The row's first control sits to the RIGHT of the picture and is
-      // still inside the viewport -- a thumbnail that pushed it off the
-      // edge would satisfy any "non-zero" assertion while making the row
-      // unusable at 390px.
-      const control = row.getByRole('button').first();
+      // A control genuinely BESIDE the picture, still inside the viewport --
+      // a thumbnail that pushed it off the edge would satisfy any
+      // "non-zero" assertion while making the row unusable at 390px.
+      //
+      // STALE UNTIL THIS ROUND: `row.getByRole('button').first()` used to be
+      // that control, back when a row's own thumbnail sat next to a
+      // SEPARATE clickable element. ItemList.tsx (Tasks 1-2 of this same
+      // plan, already on this branch when this spec was last green) made
+      // the row's own picture-and-name button its own single control, with
+      // the thumbnail as that button's FIRST CHILD -- so ".first()" started
+      // matching that same button, whose box always begins at the
+      // thumbnail's own x. The Move button is the first control that is
+      // actually beside the picture rather than around it, and the first
+      // row never has an "up" one (RecordList's own omit-at-the-ends rule),
+      // so "down" is what a real dishes.json is guaranteed to offer here.
+      const control = row.getByRole('button', { name: /down$/ });
       const controlBox = await control.boundingBox();
       expect(controlBox).not.toBeNull();
       expect(controlBox!.x).toBeGreaterThanOrEqual(box!.x + box!.width);
@@ -264,10 +275,23 @@ for (const viewport of VIEWPORTS) {
 // PhotoField already requests, because there is no width-derivative pipeline
 // in this repo and adding a second URL per photo would double the page's
 // image traffic.
+//
+// NARROWED THIS ROUND, and said so rather than left implicit: the original
+// version compared EVERY thumbnail's src against SOME other <img> on the
+// page, which worked when every row's own PhotoField was always mounted.
+// Tasks 3-5 (this same plan) put each PhotoField inside its own row's
+// editor, mounted only while that ONE row is open -- so with no editor open
+// there is no "other" <img> for ANY thumbnail to be compared against at
+// all, and with one open there is exactly one. The claim this keeps is the
+// one Thumbnail.tsx's own header comment makes and the one a regression
+// here would actually break: the OPEN row's own thumbnail and its own
+// field's preview name the identical asset, not two differently-derived
+// ones -- proven for one dish because one dish's editor is the most this
+// architecture ever has open at once (D4).
 test.describe('thumbnails add no image traffic of their own', () => {
   test.use({ viewport: { width: 1440, height: 900 } });
 
-  test('every thumbnail reuses an asset the row already requests, and nothing is fetched twice', async ({ page }) => {
+  test('the open row’s thumbnail and its own field preview name the identical asset, and nothing is fetched twice', async ({ page }) => {
     const photoRequests: string[] = [];
     page.on('request', (request) => {
       if (/\/(food|mocktails|press|atmosphere|hero)\/[^?]*\.(webp|jpg|jpeg|png)$/.test(request.url())) {
@@ -278,24 +302,26 @@ test.describe('thumbnails add no image traffic of their own', () => {
     await asReturningVisitor(page);
     await openDashboard(page, '/edit/manage/menu');
     await page.getByRole('button', { name: 'Dishes' }).click();
-    await expect(page.locator('[data-thumbnail]').first()).toBeVisible();
+    const firstRow = page.locator('#section-panel-dishes li').first();
+    await expect(firstRow.locator('[data-thumbnail]').first()).toBeVisible();
+    const thumbSrc = await firstRow.locator('img[data-thumbnail]').getAttribute('src');
+    expect(thumbSrc).not.toBeNull();
+
+    // PhotoField mounts only while this row's own editor is open (Task 3-5's
+    // list/editor split) -- the first moment its own preview <img> exists on
+    // the page at all to compare the thumbnail against.
+    await firstRow.getByRole('button').first().click();
+    const dialog = page.getByRole('dialog');
+    await dialog.waitFor();
+    const fieldSrc = await dialog.locator('img').first().getAttribute('src');
+    expect(fieldSrc).toBe(thumbSrc);
+
     await page.waitForTimeout(500);
 
-    // Each asset is fetched once, not once per <img> that names it.
+    // Each asset is fetched once, not once per <img> that names it -- now
+    // provable for real, with both the thumbnail and the field's own
+    // preview naming the same URL on screen at once.
     expect(new Set(photoRequests).size).toBe(photoRequests.length);
-
-    // And no thumbnail names a URL nothing else on the page does. A
-    // derivative path invented for the 48px box would fail here, which is
-    // the regression this is shaped to catch.
-    const { thumbSrcs, otherSrcs } = await page.evaluate(() => {
-      const all = Array.from(document.querySelectorAll('img'));
-      return {
-        thumbSrcs: all.filter((el) => el.hasAttribute('data-thumbnail')).map((el) => el.src),
-        otherSrcs: all.filter((el) => !el.hasAttribute('data-thumbnail')).map((el) => el.src),
-      };
-    });
-    expect(thumbSrcs.length).toBeGreaterThan(0);
-    thumbSrcs.forEach((src) => expect(otherSrcs).toContain(src));
   });
 });
 

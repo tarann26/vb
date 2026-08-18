@@ -63,25 +63,23 @@ async function openPostsPanel(page: Page): Promise<Locator> {
 // mounted form at a time and so can no longer tell "how many posts exist"
 // from "is one open".
 //
-// This is deliberately the ONE place in this file that opens a row.
-// EditorSheet is `fixed inset-0` (D1 -- not portalled, so the publish-pause
-// fieldset still reaches it, but that also means its backdrop covers the
-// WHOLE panel, "Add a post" included) and only one editor is ever open at
-// once, so `openPostsPanel` itself must NOT open a row: doing that would
-// leave the button this function clicks unreachable behind whichever post's
-// dialog it opened, for every single caller of this helper -- every one of
-// which calls this function immediately afterwards.
+// FIX (e2e round): the first version of this also clicked `rows.last()`
+// after adding, on the theory that Add only adds a row and opening it is a
+// separate step. Measured wrong, against a real browser: clicking "Add a
+// post" reaches RecordList's own Add-opens-the-editor contract (Task 3) and
+// the new post's dialog is already open the instant that click returns.
+// The row click that used to follow it was then a click on a row already
+// sitting BEHIND that dialog's own full-viewport overlay (D1 -- not
+// portalled, so the publish-pause fieldset still reaches it, but that also
+// means the backdrop covers the whole panel) -- Playwright reported the row
+// itself as "visible, enabled, stable" right up until the click, and then
+// timed out with "<div class="fixed inset-0 flex">...</div> intercepts
+// pointer events". `openPostsPanel` opens no row for the identical reason,
+// so this is the only place in the file that ever needs to.
 async function addPost(panel: Locator): Promise<Locator> {
   const before = await panel.locator('[data-item-row]').count();
   await panel.getByRole('button', { name: 'Add a post' }).click();
-  const rows = panel.locator('[data-item-row]');
-  await expect(rows).toHaveCount(before + 1);
-  // The LAST row, always: this is the post PostList's own `onAdd` just
-  // opened the list to (RecordList's own Add-opens-the-editor contract), and
-  // it is what every caller of this helper wants blocks added to. Never the
-  // FIRST row -- that would open whichever of the three real committed
-  // posts happens to sort first, not the blank one this call just created.
-  await rows.last().click();
+  await expect(panel.locator('[data-item-row]')).toHaveCount(before + 1);
   const dialog = panel.locator('[role="dialog"]');
   await dialog.waitFor();
   return dialog;
