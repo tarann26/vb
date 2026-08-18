@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import BlogIndex from '../BlogIndex';
@@ -300,4 +300,47 @@ describe('BlogIndex', () => {
     expect(screen.queryAllByRole('button', { name: /^\d+$/ })).toHaveLength(0);
   });
 
+  // Task 31. The one claim in the spec no other case in this file makes: the
+  // search runs over what is already loaded in the browser, so it keeps
+  // working from the compiled-in list when D1 is unreachable. Every case
+  // above runs against a fetch that never settles -- the LOADING state, not
+  // the ERROR one.
+
+  it('still filters, sorts and searches with the database unreachable', async () => {
+    // Not a pending fetch -- a REJECTED one. usePosts settles to
+    // `status: 'error'` and keeps the compiled-in list, and the controls have
+    // to work over that list, because that is the whole reason search is
+    // client-side and has no endpoint of its own.
+    const fetchMock = vi.fn(() => Promise.reject(new Error('D1 is down')));
+    stubFetch(fetchMock);
+    const { container } = renderIndex([post(1), post(2), post(3), post(4)]);
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Recipe' }));
+    expect(cardHeadings(container)).toEqual(['Fixture post 4', 'Fixture post 2']);
+
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Search stories' }), 'Excerpt 2');
+    expect(cardHeadings(container)).toEqual(['Fixture post 2']);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Oldest first' }));
+    expect(cardHeadings(container)).toEqual(['Fixture post 2']);
+  });
+
+  it('sends no request of its own when a control is used', async () => {
+    const calls = vi.fn(() => new Promise(() => undefined));
+    vi.stubGlobal('fetch', calls);
+    renderIndex([post(1), post(2)]);
+    const before = calls.mock.calls.length;
+    await userEvent.click(screen.getByRole('button', { name: 'Recipe' }));
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Search stories' }), 'lemon');
+    await userEvent.click(screen.getByRole('button', { name: 'Oldest first' }));
+    // The one call usePosts makes on mount, and not one more. A control that
+    // quietly grew an endpoint is the thing this refuses.
+    expect(calls.mock.calls.length).toBe(before);
+    expect(before).toBe(1);
+  });
 });
