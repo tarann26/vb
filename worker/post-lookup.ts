@@ -66,6 +66,22 @@ export async function lookupPost(db: D1Database, slug: string): Promise<PostLook
   }
   if (posts === null) return null;
 
+  // Review fix (F2). `posts` can be a HEALTHY, empty array here -- a D1 body
+  // of "[]", which assertPosts accepts by design (guards.ts's own comment:
+  // an emptied blog is a legal state). That is not an outage, so it never
+  // reaches the fallback block above, and `find` below returns undefined for
+  // every slug: this function answers null for a reason that has nothing to
+  // do with D1 being unreachable. That is deliberate, not a gap the fallback
+  // forgot -- the snapshot must not resurrect a post that was genuinely
+  // removed, and there is no way from inside this function to tell "removed
+  // on purpose" from "posts.json got wiped by accident".
+  //
+  // What that null becomes is Decision D5 (the plan doc), not D4: an
+  // unresolvable slug gets the Pages shell unmodified at its own 200, never
+  // a 404. So the cost of this branch is "this one post loses its own
+  // metadata for a crawl", the same shape of cost D4 already accepts for an
+  // outage -- not a de-indexing event, and not this module's problem to
+  // solve differently.
   const post = posts.find((candidate) => candidate.slug === slug);
   return post ? { post, source } : null;
 }
