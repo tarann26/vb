@@ -35,10 +35,14 @@ compatibility_date = "2026-01-01"
 # it to the two /api/* entries and re-running `npx wrangler deploy` is the
 # whole rollback -- Pages answers /blog/* again immediately, and the handler is
 # unreachable without a route. See docs/cloudflare-cutover.md section 20.
+# vb.aionxxxi.uk was the owner's personal testing host, used before
+# viabiancarestaurant.com was bought. Its routes are removed here because the
+# owner is deleting the aionxxxi.uk zone from Cloudflare outright, and a
+# route naming a zone absent from the account makes every future
+# `npx wrangler deploy` fail. This is a route removal, not a host drop --
+# the site has served canonically from viabiancarestaurant.com for a while.
 routes = [
-  { pattern = "vb.aionxxxi.uk/api/*", zone_name = "aionxxxi.uk" },
   { pattern = "viabiancarestaurant.com/api/*", zone_name = "viabiancarestaurant.com" },
-  { pattern = "vb.aionxxxi.uk/blog/*", zone_name = "aionxxxi.uk" },
   { pattern = "viabiancarestaurant.com/blog/*", zone_name = "viabiancarestaurant.com" },
 ]
 

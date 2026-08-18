@@ -114,9 +114,22 @@ describe('cloudflare hosting config', () => {
   // scope, because two tests below now depend on it being complete -- the
   // /api/* one and the /blog/* one -- and two copies of this list is two
   // things that must be updated together by somebody who remembers both.
-  // This test cannot discover served hostnames by itself: update this list
-  // whenever a hostname is added.
-  const SERVED_HOSTNAMES = ['viabiancarestaurant.com', 'vb.aionxxxi.uk'];
+  //
+  // Derived from site.json's own seo.url -- the same source the /api/*
+  // test below already trusts for its single-domain check -- and NOT from
+  // wrangler.toml's own route patterns. Reading the route list to build the
+  // list of hostnames these tests then check the route list against would
+  // make the check circular: both sides would move together, so a route
+  // silently pointed at the wrong host (or dropped) would still "cover"
+  // whatever hostname it happened to name, and nothing would ever redden.
+  // seo.url is a genuinely independent source -- it names the host the site
+  // is meant to serve from, not the routes that currently claim to serve it.
+  // There is exactly one served hostname today (vb.aionxxxi.uk, the former
+  // testing host, was retired from wrangler.toml's routes), so this list
+  // has one entry -- but it stays a list, and stays derived, so a second
+  // hostname added the same way seo.url's move was is covered automatically
+  // rather than requiring someone to remember a second, hand-maintained copy.
+  const SERVED_HOSTNAMES = [new URL(site.seo.url).host];
 
   function parseRoutes(wrangler: string): { pattern: string; zoneName: string }[] {
     const routesArray = wrangler.match(/routes\s*=\s*\[([\s\S]*?)\]/);
