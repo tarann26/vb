@@ -112,7 +112,11 @@ function ExperiencesSection({
         const byId = new Map(items.map((item) => [item.id, item]));
         commit(ids.map((id) => byId.get(id) as Experience));
       }}
-      onAdd={() => commit([...items, blankExperience()])}
+      onAdd={() => {
+        const blank = blankExperience();
+        commit([...items, blank]);
+        return blank.id;
+      }}
       onRemove={(index) => commit(items.filter((_, i) => i !== index))}
       noun="coming-soon item"
       itemLabel={(item) => item.title || 'Untitled item'}

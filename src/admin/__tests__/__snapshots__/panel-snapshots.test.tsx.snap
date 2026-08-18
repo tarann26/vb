@@ -421,13 +421,17 @@ exports[`the thirteen panels, as they render today > Awards (awards) 1`] = `
     style="border: 0px; padding: 0px; margin: 0px; min-inline-size: 0;"
   >
     <div>
-      <ul />
-      <button
-        class="mt-2 w-full rounded border-2 border-dashed border-brand py-2 font-['Montserrat'] text-sm uppercase tracking-wide text-accent transition hover:bg-brand/10"
-        type="button"
-      >
-        Add a award
-      </button>
+      <div>
+        <button
+          class="mb-3 w-full rounded border-2 border-dashed border-brand py-2 font-['Montserrat'] text-sm uppercase tracking-wide text-accent transition hover:bg-brand/10"
+          type="button"
+        >
+          Add a award
+        </button>
+        <ul
+          data-item-list="rows"
+        />
+      </div>
     </div>
   </fieldset>
 </div>
@@ -442,15 +446,33 @@ exports[`the thirteen panels, as they render today > Dishes (dishes) 1`] = `
     style="border: 0px; padding: 0px; margin: 0px; min-inline-size: 0;"
   >
     <div>
-      <ul>
-        <li
-          class="mb-6 rounded border border-gray-200 p-4"
+      <div>
+        <button
+          class="mb-3 w-full rounded border-2 border-dashed border-brand py-2 font-['Montserrat'] text-sm uppercase tracking-wide text-accent transition hover:bg-brand/10"
+          type="button"
         >
-          <div
-            class="mb-3 flex flex-wrap items-center justify-between gap-2"
+          Add a dish
+        </button>
+        <ul
+          data-item-list="rows"
+        >
+          <li
+            class="mb-1 flex items-center gap-1 rounded border border-gray-200"
+            data-item-row="a"
           >
-            <div
-              class="flex items-center gap-2"
+            <span
+              aria-hidden="true"
+              class="select-none px-3 py-1 text-gray-500"
+              data-drag-handle="0"
+              draggable="true"
+              style="cursor: move;"
+              title="Drag to move Dish A"
+            >
+              ⠿
+            </span>
+            <button
+              class="flex min-w-0 flex-1 items-center gap-3 rounded p-2 text-left font-['Montserrat'] text-sm text-ink transition hover:bg-brand/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+              type="button"
             >
               <img
                 alt=""
@@ -459,132 +481,37 @@ exports[`the thirteen panels, as they render today > Dishes (dishes) 1`] = `
                 loading="lazy"
                 src="/food/a.webp"
               />
-              <button
-                aria-label="Move Dish A down"
-                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
-                type="button"
+              <span
+                class="min-w-0 flex-1 truncate"
               >
-                Down
-              </button>
-            </div>
+                Dish A
+              </span>
+            </button>
             <button
-              aria-label="Remove Dish A"
-              class="rounded border border-red-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-red-600 transition hover:bg-red-600 hover:text-white"
+              aria-label="Move Dish A down"
+              class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
               type="button"
             >
-              Remove
+              Down
             </button>
-          </div>
-          <div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="dishes-field-id-0"
-              >
-                ID
-              </label>
-              <input
-                aria-describedby="dishes-field-id-0-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="dishes-field-id-0"
-                type="text"
-                value="a"
-              />
-              <p
-                class="mt-1 text-xs text-gray-500"
-                id="dishes-field-id-0-help"
-              >
-                A short identifier used only to tell dishes apart -- changing it does not rename or relink anything else.
-              </p>
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="dishes-field-name-0"
-              >
-                Name
-              </label>
-              <input
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="dishes-field-name-0"
-                type="text"
-                value="Dish A"
-              />
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="dishes-field-description-0"
-              >
-                Description
-              </label>
-              <textarea
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="dishes-field-description-0"
-              >
-                Dish A, described.
-              </textarea>
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="dishes-field-image-0"
-              >
-                Photo
-              </label>
-              <img
-                alt=""
-                class="mb-2 h-24 w-24 rounded border border-gray-300 object-cover"
-                src="/food/a.webp"
-              />
-              <input
-                accept="image/*"
-                class="block w-full text-sm text-ink file:mr-3 file:rounded file:border-0 file:bg-brand file:px-3 file:py-1.5 file:font-['Montserrat'] file:text-xs file:uppercase file:tracking-wide file:text-ink hover:file:bg-brand-dark"
-                id="dishes-field-image-0"
-                type="file"
-              />
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="dishes-field-tags-0"
-              >
-                Dietary tags
-              </label>
-              <input
-                aria-describedby="dishes-field-tags-0-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="dishes-field-tags-0"
-                type="text"
-                value=""
-              />
-              <p
-                class="mt-1 text-xs text-gray-500"
-                id="dishes-field-tags-0-help"
-              >
-                Recorded for later use but not shown anywhere on the site today -- no page renders these yet, so editing this list changes nothing a diner sees.
-              </p>
-            </div>
-          </div>
-        </li>
-        <li
-          class="mb-6 rounded border border-gray-200 p-4"
-        >
-          <div
-            class="mb-3 flex flex-wrap items-center justify-between gap-2"
+          </li>
+          <li
+            class="mb-1 flex items-center gap-1 rounded border border-gray-200"
+            data-item-row="b"
           >
-            <div
-              class="flex items-center gap-2"
+            <span
+              aria-hidden="true"
+              class="select-none px-3 py-1 text-gray-500"
+              data-drag-handle="1"
+              draggable="true"
+              style="cursor: move;"
+              title="Drag to move Dish B"
+            >
+              ⠿
+            </span>
+            <button
+              class="flex min-w-0 flex-1 items-center gap-3 rounded p-2 text-left font-['Montserrat'] text-sm text-ink transition hover:bg-brand/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+              type="button"
             >
               <img
                 alt=""
@@ -593,131 +520,22 @@ exports[`the thirteen panels, as they render today > Dishes (dishes) 1`] = `
                 loading="lazy"
                 src="/food/b.webp"
               />
-              <button
-                aria-label="Move Dish B up"
-                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
-                type="button"
+              <span
+                class="min-w-0 flex-1 truncate"
               >
-                Up
-              </button>
-            </div>
+                Dish B
+              </span>
+            </button>
             <button
-              aria-label="Remove Dish B"
-              class="rounded border border-red-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-red-600 transition hover:bg-red-600 hover:text-white"
+              aria-label="Move Dish B up"
+              class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
               type="button"
             >
-              Remove
+              Up
             </button>
-          </div>
-          <div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="dishes-field-id-1"
-              >
-                ID
-              </label>
-              <input
-                aria-describedby="dishes-field-id-1-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="dishes-field-id-1"
-                type="text"
-                value="b"
-              />
-              <p
-                class="mt-1 text-xs text-gray-500"
-                id="dishes-field-id-1-help"
-              >
-                A short identifier used only to tell dishes apart -- changing it does not rename or relink anything else.
-              </p>
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="dishes-field-name-1"
-              >
-                Name
-              </label>
-              <input
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="dishes-field-name-1"
-                type="text"
-                value="Dish B"
-              />
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="dishes-field-description-1"
-              >
-                Description
-              </label>
-              <textarea
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="dishes-field-description-1"
-              >
-                Dish B, described.
-              </textarea>
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="dishes-field-image-1"
-              >
-                Photo
-              </label>
-              <img
-                alt=""
-                class="mb-2 h-24 w-24 rounded border border-gray-300 object-cover"
-                src="/food/b.webp"
-              />
-              <input
-                accept="image/*"
-                class="block w-full text-sm text-ink file:mr-3 file:rounded file:border-0 file:bg-brand file:px-3 file:py-1.5 file:font-['Montserrat'] file:text-xs file:uppercase file:tracking-wide file:text-ink hover:file:bg-brand-dark"
-                id="dishes-field-image-1"
-                type="file"
-              />
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="dishes-field-tags-1"
-              >
-                Dietary tags
-              </label>
-              <input
-                aria-describedby="dishes-field-tags-1-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="dishes-field-tags-1"
-                type="text"
-                value=""
-              />
-              <p
-                class="mt-1 text-xs text-gray-500"
-                id="dishes-field-tags-1-help"
-              >
-                Recorded for later use but not shown anywhere on the site today -- no page renders these yet, so editing this list changes nothing a diner sees.
-              </p>
-            </div>
-          </div>
-        </li>
-      </ul>
-      <button
-        class="mt-2 w-full rounded border-2 border-dashed border-brand py-2 font-['Montserrat'] text-sm uppercase tracking-wide text-accent transition hover:bg-brand/10"
-        type="button"
-      >
-        Add a dish
-      </button>
+          </li>
+        </ul>
+      </div>
     </div>
   </fieldset>
 </div>
@@ -732,296 +550,92 @@ exports[`the thirteen panels, as they render today > Drinks (drinks) 1`] = `
     style="border: 0px; padding: 0px; margin: 0px; min-inline-size: 0;"
   >
     <div>
-      <ul>
-        <li
-          class="mb-6 rounded border border-gray-200 p-4"
+      <div>
+        <button
+          class="mb-3 w-full rounded border-2 border-dashed border-brand py-2 font-['Montserrat'] text-sm uppercase tracking-wide text-accent transition hover:bg-brand/10"
+          type="button"
         >
-          <div
-            class="mb-3 flex flex-wrap items-center justify-between gap-2"
+          Add a drink
+        </button>
+        <ul
+          data-item-list="rows"
+        >
+          <li
+            class="mb-1 flex items-center gap-1 rounded border border-gray-200"
+            data-item-row="x"
           >
-            <div
-              class="flex items-center gap-2"
+            <span
+              aria-hidden="true"
+              class="select-none px-3 py-1 text-gray-500"
+              data-drag-handle="0"
+              draggable="true"
+              style="cursor: move;"
+              title="Drag to move Drink X"
+            >
+              ⠿
+            </span>
+            <button
+              class="flex min-w-0 flex-1 items-center gap-3 rounded p-2 text-left font-['Montserrat'] text-sm text-ink transition hover:bg-brand/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+              type="button"
             >
               <div
                 aria-hidden="true"
                 class="h-12 w-12 shrink-0 rounded border border-brand/40 bg-[#f7f5f0]"
                 data-thumbnail="row"
               />
-              <button
-                aria-label="Move Drink X down"
-                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
-                type="button"
+              <span
+                class="min-w-0 flex-1 truncate"
               >
-                Down
-              </button>
-            </div>
+                Drink X
+              </span>
+            </button>
             <button
-              aria-label="Remove Drink X"
-              class="rounded border border-red-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-red-600 transition hover:bg-red-600 hover:text-white"
+              aria-label="Move Drink X down"
+              class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
               type="button"
             >
-              Remove
+              Down
             </button>
-          </div>
-          <div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="drinks-field-id-0"
-              >
-                ID
-              </label>
-              <input
-                aria-describedby="drinks-field-id-0-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="drinks-field-id-0"
-                type="text"
-                value="x"
-              />
-              <p
-                class="mt-1 text-xs text-gray-500"
-                id="drinks-field-id-0-help"
-              >
-                A short identifier used only to tell drinks apart -- changing it does not rename or relink anything else.
-              </p>
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="drinks-field-name-0"
-              >
-                Name
-              </label>
-              <input
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="drinks-field-name-0"
-                type="text"
-                value="Drink X"
-              />
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="drinks-field-description-0"
-              >
-                Description
-              </label>
-              <textarea
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="drinks-field-description-0"
-              >
-                Drink X, described.
-              </textarea>
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="drinks-field-category-0"
-              >
-                Category
-              </label>
-              <select
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="drinks-field-category-0"
-              >
-                <option
-                  value="mocktail"
-                >
-                  mocktail
-                </option>
-                <option
-                  value="cocktail"
-                >
-                  cocktail
-                </option>
-                <option
-                  value="wine"
-                >
-                  wine
-                </option>
-              </select>
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="drinks-field-image-0"
-              >
-                Photo
-              </label>
-              <input
-                accept="image/*"
-                aria-describedby="drinks-field-image-0-help"
-                class="block w-full text-sm text-ink file:mr-3 file:rounded file:border-0 file:bg-brand file:px-3 file:py-1.5 file:font-['Montserrat'] file:text-xs file:uppercase file:tracking-wide file:text-ink hover:file:bg-brand-dark"
-                id="drinks-field-image-0"
-                type="file"
-              />
-              <p
-                class="mt-1 text-xs text-gray-500"
-                id="drinks-field-image-0-help"
-              >
-                Optional -- leave empty for no photo.
-              </p>
-            </div>
-          </div>
-        </li>
-        <li
-          class="mb-6 rounded border border-gray-200 p-4"
-        >
-          <div
-            class="mb-3 flex flex-wrap items-center justify-between gap-2"
+          </li>
+          <li
+            class="mb-1 flex items-center gap-1 rounded border border-gray-200"
+            data-item-row="y"
           >
-            <div
-              class="flex items-center gap-2"
+            <span
+              aria-hidden="true"
+              class="select-none px-3 py-1 text-gray-500"
+              data-drag-handle="1"
+              draggable="true"
+              style="cursor: move;"
+              title="Drag to move Drink Y"
+            >
+              ⠿
+            </span>
+            <button
+              class="flex min-w-0 flex-1 items-center gap-3 rounded p-2 text-left font-['Montserrat'] text-sm text-ink transition hover:bg-brand/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+              type="button"
             >
               <div
                 aria-hidden="true"
                 class="h-12 w-12 shrink-0 rounded border border-brand/40 bg-[#f7f5f0]"
                 data-thumbnail="row"
               />
-              <button
-                aria-label="Move Drink Y up"
-                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
-                type="button"
+              <span
+                class="min-w-0 flex-1 truncate"
               >
-                Up
-              </button>
-            </div>
+                Drink Y
+              </span>
+            </button>
             <button
-              aria-label="Remove Drink Y"
-              class="rounded border border-red-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-red-600 transition hover:bg-red-600 hover:text-white"
+              aria-label="Move Drink Y up"
+              class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
               type="button"
             >
-              Remove
+              Up
             </button>
-          </div>
-          <div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="drinks-field-id-1"
-              >
-                ID
-              </label>
-              <input
-                aria-describedby="drinks-field-id-1-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="drinks-field-id-1"
-                type="text"
-                value="y"
-              />
-              <p
-                class="mt-1 text-xs text-gray-500"
-                id="drinks-field-id-1-help"
-              >
-                A short identifier used only to tell drinks apart -- changing it does not rename or relink anything else.
-              </p>
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="drinks-field-name-1"
-              >
-                Name
-              </label>
-              <input
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="drinks-field-name-1"
-                type="text"
-                value="Drink Y"
-              />
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="drinks-field-description-1"
-              >
-                Description
-              </label>
-              <textarea
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="drinks-field-description-1"
-              >
-                Drink Y, described.
-              </textarea>
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="drinks-field-category-1"
-              >
-                Category
-              </label>
-              <select
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="drinks-field-category-1"
-              >
-                <option
-                  value="mocktail"
-                >
-                  mocktail
-                </option>
-                <option
-                  value="cocktail"
-                >
-                  cocktail
-                </option>
-                <option
-                  value="wine"
-                >
-                  wine
-                </option>
-              </select>
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="drinks-field-image-1"
-              >
-                Photo
-              </label>
-              <input
-                accept="image/*"
-                aria-describedby="drinks-field-image-1-help"
-                class="block w-full text-sm text-ink file:mr-3 file:rounded file:border-0 file:bg-brand file:px-3 file:py-1.5 file:font-['Montserrat'] file:text-xs file:uppercase file:tracking-wide file:text-ink hover:file:bg-brand-dark"
-                id="drinks-field-image-1"
-                type="file"
-              />
-              <p
-                class="mt-1 text-xs text-gray-500"
-                id="drinks-field-image-1-help"
-              >
-                Optional -- leave empty for no photo.
-              </p>
-            </div>
-          </div>
-        </li>
-      </ul>
-      <button
-        class="mt-2 w-full rounded border-2 border-dashed border-brand py-2 font-['Montserrat'] text-sm uppercase tracking-wide text-accent transition hover:bg-brand/10"
-        type="button"
-      >
-        Add a drink
-      </button>
+          </li>
+        </ul>
+      </div>
     </div>
   </fieldset>
 </div>
@@ -1036,15 +650,33 @@ exports[`the thirteen panels, as they render today > Experiences (experiences) 1
     style="border: 0px; padding: 0px; margin: 0px; min-inline-size: 0;"
   >
     <div>
-      <ul>
-        <li
-          class="mb-6 rounded border border-gray-200 p-4"
+      <div>
+        <button
+          class="mb-3 w-full rounded border-2 border-dashed border-brand py-2 font-['Montserrat'] text-sm uppercase tracking-wide text-accent transition hover:bg-brand/10"
+          type="button"
         >
-          <div
-            class="mb-3 flex flex-wrap items-center justify-between gap-2"
+          Add a coming-soon item
+        </button>
+        <ul
+          data-item-list="rows"
+        >
+          <li
+            class="mb-1 flex items-center gap-1 rounded border border-gray-200"
+            data-item-row="catering"
           >
-            <div
-              class="flex items-center gap-2"
+            <span
+              aria-hidden="true"
+              class="select-none px-3 py-1 text-gray-500"
+              data-drag-handle="0"
+              draggable="true"
+              style="cursor: move;"
+              title="Drag to move Catering"
+            >
+              ⠿
+            </span>
+            <button
+              class="flex min-w-0 flex-1 items-center gap-3 rounded p-2 text-left font-['Montserrat'] text-sm text-ink transition hover:bg-brand/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+              type="button"
             >
               <img
                 alt=""
@@ -1053,168 +685,37 @@ exports[`the thirteen panels, as they render today > Experiences (experiences) 1
                 loading="lazy"
                 src="/atmosphere/table.webp"
               />
-              <button
-                aria-label="Move Catering down"
-                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
-                type="button"
+              <span
+                class="min-w-0 flex-1 truncate"
               >
-                Down
-              </button>
-            </div>
+                Catering
+              </span>
+            </button>
             <button
-              aria-label="Remove Catering"
-              class="rounded border border-red-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-red-600 transition hover:bg-red-600 hover:text-white"
+              aria-label="Move Catering down"
+              class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
               type="button"
             >
-              Remove
+              Down
             </button>
-          </div>
-          <div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="experiences-field-id-0"
-              >
-                ID
-              </label>
-              <input
-                aria-describedby="experiences-field-id-0-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="experiences-field-id-0"
-                type="text"
-                value="catering"
-              />
-              <p
-                class="mt-1 text-xs text-gray-500"
-                id="experiences-field-id-0-help"
-              >
-                A short identifier used only to tell items apart -- changing it does not rename or relink anything else.
-              </p>
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="experiences-field-title-0"
-              >
-                Title
-              </label>
-              <input
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="experiences-field-title-0"
-                type="text"
-                value="Catering"
-              />
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="experiences-field-description-0"
-              >
-                Short description
-              </label>
-              <textarea
-                aria-describedby="experiences-field-description-0-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="experiences-field-description-0"
-              >
-                Bespoke and curated menus for up to 100 guests, cooked by our kitchen and brought to your event.
-              </textarea>
-              <p
-                class="mt-1 text-xs text-gray-500"
-                id="experiences-field-description-0-help"
-              >
-                One line, shown under the title on the card.
-              </p>
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="experiences-field-image-0"
-              >
-                Photo
-              </label>
-              <img
-                alt=""
-                class="mb-2 h-24 w-24 rounded border border-gray-300 object-cover"
-                src="/atmosphere/table.webp"
-              />
-              <input
-                accept="image/*"
-                aria-describedby="experiences-field-image-0-help"
-                class="block w-full text-sm text-ink file:mr-3 file:rounded file:border-0 file:bg-brand file:px-3 file:py-1.5 file:font-['Montserrat'] file:text-xs file:uppercase file:tracking-wide file:text-ink hover:file:bg-brand-dark"
-                id="experiences-field-image-0"
-                type="file"
-              />
-              <p
-                class="mt-1 text-xs text-gray-500"
-                id="experiences-field-image-0-help"
-              >
-                Every card needs a photo -- the card is mostly photo.
-              </p>
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="experiences-field-link-0"
-              >
-                Opens page
-              </label>
-              <input
-                aria-describedby="experiences-field-link-0-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="experiences-field-link-0"
-                type="text"
-                value="/catering"
-              />
-              <p
-                class="mt-1 text-xs text-gray-500"
-                id="experiences-field-link-0-help"
-              >
-                Leave this blank for a coming-soon item. Otherwise a page on this site, like /catering.
-              </p>
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="experiences-field-comingSoon-0"
-              >
-                Coming soon
-              </label>
-              <input
-                aria-describedby="experiences-field-comingSoon-0-help"
-                class="h-5 w-5 rounded border-gray-300"
-                id="experiences-field-comingSoon-0"
-                type="checkbox"
-              />
-              <p
-                class="mt-1 text-xs text-gray-500"
-                id="experiences-field-comingSoon-0-help"
-              >
-                A coming-soon item shows a stamp and does not open anything. Turn this off only once it has a page to open.
-              </p>
-            </div>
-          </div>
-        </li>
-        <li
-          class="mb-6 rounded border border-gray-200 p-4"
-        >
-          <div
-            class="mb-3 flex flex-wrap items-center justify-between gap-2"
+          </li>
+          <li
+            class="mb-1 flex items-center gap-1 rounded border border-gray-200"
+            data-item-row="cheeseboards"
           >
-            <div
-              class="flex items-center gap-2"
+            <span
+              aria-hidden="true"
+              class="select-none px-3 py-1 text-gray-500"
+              data-drag-handle="1"
+              draggable="true"
+              style="cursor: move;"
+              title="Drag to move Cheeseboards"
+            >
+              ⠿
+            </span>
+            <button
+              class="flex min-w-0 flex-1 items-center gap-3 rounded p-2 text-left font-['Montserrat'] text-sm text-ink transition hover:bg-brand/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+              type="button"
             >
               <img
                 alt=""
@@ -1223,175 +724,44 @@ exports[`the thirteen panels, as they render today > Experiences (experiences) 1
                 loading="lazy"
                 src="/atmosphere/dining.webp"
               />
-              <button
-                aria-label="Move Cheeseboards up"
-                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
-                type="button"
+              <span
+                class="min-w-0 flex-1 truncate"
               >
-                Up
-              </button>
-              <button
-                aria-label="Move Cheeseboards down"
-                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
-                type="button"
-              >
-                Down
-              </button>
-            </div>
+                Cheeseboards
+              </span>
+            </button>
             <button
-              aria-label="Remove Cheeseboards"
-              class="rounded border border-red-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-red-600 transition hover:bg-red-600 hover:text-white"
+              aria-label="Move Cheeseboards up"
+              class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
               type="button"
             >
-              Remove
+              Up
             </button>
-          </div>
-          <div>
-            <div
-              class="mb-4"
+            <button
+              aria-label="Move Cheeseboards down"
+              class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
+              type="button"
             >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="experiences-field-id-1"
-              >
-                ID
-              </label>
-              <input
-                aria-describedby="experiences-field-id-1-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="experiences-field-id-1"
-                type="text"
-                value="cheeseboards"
-              />
-              <p
-                class="mt-1 text-xs text-gray-500"
-                id="experiences-field-id-1-help"
-              >
-                A short identifier used only to tell items apart -- changing it does not rename or relink anything else.
-              </p>
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="experiences-field-title-1"
-              >
-                Title
-              </label>
-              <input
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="experiences-field-title-1"
-                type="text"
-                value="Cheeseboards"
-              />
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="experiences-field-description-1"
-              >
-                Short description
-              </label>
-              <textarea
-                aria-describedby="experiences-field-description-1-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="experiences-field-description-1"
-              >
-                Boards put together by the kitchen and delivered across Delhi.
-              </textarea>
-              <p
-                class="mt-1 text-xs text-gray-500"
-                id="experiences-field-description-1-help"
-              >
-                One line, shown under the title on the card.
-              </p>
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="experiences-field-image-1"
-              >
-                Photo
-              </label>
-              <img
-                alt=""
-                class="mb-2 h-24 w-24 rounded border border-gray-300 object-cover"
-                src="/atmosphere/dining.webp"
-              />
-              <input
-                accept="image/*"
-                aria-describedby="experiences-field-image-1-help"
-                class="block w-full text-sm text-ink file:mr-3 file:rounded file:border-0 file:bg-brand file:px-3 file:py-1.5 file:font-['Montserrat'] file:text-xs file:uppercase file:tracking-wide file:text-ink hover:file:bg-brand-dark"
-                id="experiences-field-image-1"
-                type="file"
-              />
-              <p
-                class="mt-1 text-xs text-gray-500"
-                id="experiences-field-image-1-help"
-              >
-                Every card needs a photo -- the card is mostly photo.
-              </p>
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="experiences-field-link-1"
-              >
-                Opens page
-              </label>
-              <input
-                aria-describedby="experiences-field-link-1-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="experiences-field-link-1"
-                type="text"
-                value="/cheeseboards"
-              />
-              <p
-                class="mt-1 text-xs text-gray-500"
-                id="experiences-field-link-1-help"
-              >
-                Leave this blank for a coming-soon item. Otherwise a page on this site, like /catering.
-              </p>
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="experiences-field-comingSoon-1"
-              >
-                Coming soon
-              </label>
-              <input
-                aria-describedby="experiences-field-comingSoon-1-help"
-                class="h-5 w-5 rounded border-gray-300"
-                id="experiences-field-comingSoon-1"
-                type="checkbox"
-              />
-              <p
-                class="mt-1 text-xs text-gray-500"
-                id="experiences-field-comingSoon-1-help"
-              >
-                A coming-soon item shows a stamp and does not open anything. Turn this off only once it has a page to open.
-              </p>
-            </div>
-          </div>
-        </li>
-        <li
-          class="mb-6 rounded border border-gray-200 p-4"
-        >
-          <div
-            class="mb-3 flex flex-wrap items-center justify-between gap-2"
+              Down
+            </button>
+          </li>
+          <li
+            class="mb-1 flex items-center gap-1 rounded border border-gray-200"
+            data-item-row="cooking-class"
           >
-            <div
-              class="flex items-center gap-2"
+            <span
+              aria-hidden="true"
+              class="select-none px-3 py-1 text-gray-500"
+              data-drag-handle="2"
+              draggable="true"
+              style="cursor: move;"
+              title="Drag to move Cooking Class"
+            >
+              ⠿
+            </span>
+            <button
+              class="flex min-w-0 flex-1 items-center gap-3 rounded p-2 text-left font-['Montserrat'] text-sm text-ink transition hover:bg-brand/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+              type="button"
             >
               <img
                 alt=""
@@ -1400,175 +770,44 @@ exports[`the thirteen panels, as they render today > Experiences (experiences) 1
                 loading="lazy"
                 src="/experiences/pamphlet.webp"
               />
-              <button
-                aria-label="Move Cooking Class up"
-                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
-                type="button"
+              <span
+                class="min-w-0 flex-1 truncate"
               >
-                Up
-              </button>
-              <button
-                aria-label="Move Cooking Class down"
-                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
-                type="button"
-              >
-                Down
-              </button>
-            </div>
+                Cooking Class
+              </span>
+            </button>
             <button
-              aria-label="Remove Cooking Class"
-              class="rounded border border-red-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-red-600 transition hover:bg-red-600 hover:text-white"
+              aria-label="Move Cooking Class up"
+              class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
               type="button"
             >
-              Remove
+              Up
             </button>
-          </div>
-          <div>
-            <div
-              class="mb-4"
+            <button
+              aria-label="Move Cooking Class down"
+              class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
+              type="button"
             >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="experiences-field-id-2"
-              >
-                ID
-              </label>
-              <input
-                aria-describedby="experiences-field-id-2-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="experiences-field-id-2"
-                type="text"
-                value="cooking-class"
-              />
-              <p
-                class="mt-1 text-xs text-gray-500"
-                id="experiences-field-id-2-help"
-              >
-                A short identifier used only to tell items apart -- changing it does not rename or relink anything else.
-              </p>
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="experiences-field-title-2"
-              >
-                Title
-              </label>
-              <input
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="experiences-field-title-2"
-                type="text"
-                value="Cooking Class"
-              />
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="experiences-field-description-2"
-              >
-                Short description
-              </label>
-              <textarea
-                aria-describedby="experiences-field-description-2-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="experiences-field-description-2"
-              >
-                Every Sunday, four children cook four dishes with our kitchen.
-              </textarea>
-              <p
-                class="mt-1 text-xs text-gray-500"
-                id="experiences-field-description-2-help"
-              >
-                One line, shown under the title on the card.
-              </p>
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="experiences-field-image-2"
-              >
-                Photo
-              </label>
-              <img
-                alt=""
-                class="mb-2 h-24 w-24 rounded border border-gray-300 object-cover"
-                src="/experiences/pamphlet.webp"
-              />
-              <input
-                accept="image/*"
-                aria-describedby="experiences-field-image-2-help"
-                class="block w-full text-sm text-ink file:mr-3 file:rounded file:border-0 file:bg-brand file:px-3 file:py-1.5 file:font-['Montserrat'] file:text-xs file:uppercase file:tracking-wide file:text-ink hover:file:bg-brand-dark"
-                id="experiences-field-image-2"
-                type="file"
-              />
-              <p
-                class="mt-1 text-xs text-gray-500"
-                id="experiences-field-image-2-help"
-              >
-                Every card needs a photo -- the card is mostly photo.
-              </p>
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="experiences-field-link-2"
-              >
-                Opens page
-              </label>
-              <input
-                aria-describedby="experiences-field-link-2-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="experiences-field-link-2"
-                type="text"
-                value="/cooking-class"
-              />
-              <p
-                class="mt-1 text-xs text-gray-500"
-                id="experiences-field-link-2-help"
-              >
-                Leave this blank for a coming-soon item. Otherwise a page on this site, like /catering.
-              </p>
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="experiences-field-comingSoon-2"
-              >
-                Coming soon
-              </label>
-              <input
-                aria-describedby="experiences-field-comingSoon-2-help"
-                class="h-5 w-5 rounded border-gray-300"
-                id="experiences-field-comingSoon-2"
-                type="checkbox"
-              />
-              <p
-                class="mt-1 text-xs text-gray-500"
-                id="experiences-field-comingSoon-2-help"
-              >
-                A coming-soon item shows a stamp and does not open anything. Turn this off only once it has a page to open.
-              </p>
-            </div>
-          </div>
-        </li>
-        <li
-          class="mb-6 rounded border border-gray-200 p-4"
-        >
-          <div
-            class="mb-3 flex flex-wrap items-center justify-between gap-2"
+              Down
+            </button>
+          </li>
+          <li
+            class="mb-1 flex items-center gap-1 rounded border border-gray-200"
+            data-item-row="membership"
           >
-            <div
-              class="flex items-center gap-2"
+            <span
+              aria-hidden="true"
+              class="select-none px-3 py-1 text-gray-500"
+              data-drag-handle="3"
+              draggable="true"
+              style="cursor: move;"
+              title="Drag to move Membership"
+            >
+              ⠿
+            </span>
+            <button
+              class="flex min-w-0 flex-1 items-center gap-3 rounded p-2 text-left font-['Montserrat'] text-sm text-ink transition hover:bg-brand/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+              type="button"
             >
               <img
                 alt=""
@@ -1577,175 +816,44 @@ exports[`the thirteen panels, as they render today > Experiences (experiences) 1
                 loading="lazy"
                 src="/atmosphere/ambience.webp"
               />
-              <button
-                aria-label="Move Membership up"
-                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
-                type="button"
+              <span
+                class="min-w-0 flex-1 truncate"
               >
-                Up
-              </button>
-              <button
-                aria-label="Move Membership down"
-                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
-                type="button"
-              >
-                Down
-              </button>
-            </div>
+                Membership
+              </span>
+            </button>
             <button
-              aria-label="Remove Membership"
-              class="rounded border border-red-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-red-600 transition hover:bg-red-600 hover:text-white"
+              aria-label="Move Membership up"
+              class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
               type="button"
             >
-              Remove
+              Up
             </button>
-          </div>
-          <div>
-            <div
-              class="mb-4"
+            <button
+              aria-label="Move Membership down"
+              class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
+              type="button"
             >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="experiences-field-id-3"
-              >
-                ID
-              </label>
-              <input
-                aria-describedby="experiences-field-id-3-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="experiences-field-id-3"
-                type="text"
-                value="membership"
-              />
-              <p
-                class="mt-1 text-xs text-gray-500"
-                id="experiences-field-id-3-help"
-              >
-                A short identifier used only to tell items apart -- changing it does not rename or relink anything else.
-              </p>
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="experiences-field-title-3"
-              >
-                Title
-              </label>
-              <input
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="experiences-field-title-3"
-                type="text"
-                value="Membership"
-              />
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="experiences-field-description-3"
-              >
-                Short description
-              </label>
-              <textarea
-                aria-describedby="experiences-field-description-3-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="experiences-field-description-3"
-              >
-                A booklet limited to one hundred a year, handpicked by Chef Kamalika.
-              </textarea>
-              <p
-                class="mt-1 text-xs text-gray-500"
-                id="experiences-field-description-3-help"
-              >
-                One line, shown under the title on the card.
-              </p>
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="experiences-field-image-3"
-              >
-                Photo
-              </label>
-              <img
-                alt=""
-                class="mb-2 h-24 w-24 rounded border border-gray-300 object-cover"
-                src="/atmosphere/ambience.webp"
-              />
-              <input
-                accept="image/*"
-                aria-describedby="experiences-field-image-3-help"
-                class="block w-full text-sm text-ink file:mr-3 file:rounded file:border-0 file:bg-brand file:px-3 file:py-1.5 file:font-['Montserrat'] file:text-xs file:uppercase file:tracking-wide file:text-ink hover:file:bg-brand-dark"
-                id="experiences-field-image-3"
-                type="file"
-              />
-              <p
-                class="mt-1 text-xs text-gray-500"
-                id="experiences-field-image-3-help"
-              >
-                Every card needs a photo -- the card is mostly photo.
-              </p>
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="experiences-field-link-3"
-              >
-                Opens page
-              </label>
-              <input
-                aria-describedby="experiences-field-link-3-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="experiences-field-link-3"
-                type="text"
-                value="/membership"
-              />
-              <p
-                class="mt-1 text-xs text-gray-500"
-                id="experiences-field-link-3-help"
-              >
-                Leave this blank for a coming-soon item. Otherwise a page on this site, like /catering.
-              </p>
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="experiences-field-comingSoon-3"
-              >
-                Coming soon
-              </label>
-              <input
-                aria-describedby="experiences-field-comingSoon-3-help"
-                class="h-5 w-5 rounded border-gray-300"
-                id="experiences-field-comingSoon-3"
-                type="checkbox"
-              />
-              <p
-                class="mt-1 text-xs text-gray-500"
-                id="experiences-field-comingSoon-3-help"
-              >
-                A coming-soon item shows a stamp and does not open anything. Turn this off only once it has a page to open.
-              </p>
-            </div>
-          </div>
-        </li>
-        <li
-          class="mb-6 rounded border border-gray-200 p-4"
-        >
-          <div
-            class="mb-3 flex flex-wrap items-center justify-between gap-2"
+              Down
+            </button>
+          </li>
+          <li
+            class="mb-1 flex items-center gap-1 rounded border border-gray-200"
+            data-item-row="gifting"
           >
-            <div
-              class="flex items-center gap-2"
+            <span
+              aria-hidden="true"
+              class="select-none px-3 py-1 text-gray-500"
+              data-drag-handle="4"
+              draggable="true"
+              style="cursor: move;"
+              title="Drag to move Gifting"
+            >
+              ⠿
+            </span>
+            <button
+              class="flex min-w-0 flex-1 items-center gap-3 rounded p-2 text-left font-['Montserrat'] text-sm text-ink transition hover:bg-brand/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+              type="button"
             >
               <img
                 alt=""
@@ -1754,176 +862,44 @@ exports[`the thirteen panels, as they render today > Experiences (experiences) 1
                 loading="lazy"
                 src="/food/tiramisu.webp"
               />
-              <button
-                aria-label="Move Gifting up"
-                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
-                type="button"
+              <span
+                class="min-w-0 flex-1 truncate"
               >
-                Up
-              </button>
-              <button
-                aria-label="Move Gifting down"
-                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
-                type="button"
-              >
-                Down
-              </button>
-            </div>
+                Gifting
+              </span>
+            </button>
             <button
-              aria-label="Remove Gifting"
-              class="rounded border border-red-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-red-600 transition hover:bg-red-600 hover:text-white"
+              aria-label="Move Gifting up"
+              class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
               type="button"
             >
-              Remove
+              Up
             </button>
-          </div>
-          <div>
-            <div
-              class="mb-4"
+            <button
+              aria-label="Move Gifting down"
+              class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
+              type="button"
             >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="experiences-field-id-4"
-              >
-                ID
-              </label>
-              <input
-                aria-describedby="experiences-field-id-4-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="experiences-field-id-4"
-                type="text"
-                value="gifting"
-              />
-              <p
-                class="mt-1 text-xs text-gray-500"
-                id="experiences-field-id-4-help"
-              >
-                A short identifier used only to tell items apart -- changing it does not rename or relink anything else.
-              </p>
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="experiences-field-title-4"
-              >
-                Title
-              </label>
-              <input
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="experiences-field-title-4"
-                type="text"
-                value="Gifting"
-              />
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="experiences-field-description-4"
-              >
-                Short description
-              </label>
-              <textarea
-                aria-describedby="experiences-field-description-4-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="experiences-field-description-4"
-              >
-                Hampers and gift boxes from the kitchen, in time for the season.
-              </textarea>
-              <p
-                class="mt-1 text-xs text-gray-500"
-                id="experiences-field-description-4-help"
-              >
-                One line, shown under the title on the card.
-              </p>
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="experiences-field-image-4"
-              >
-                Photo
-              </label>
-              <img
-                alt=""
-                class="mb-2 h-24 w-24 rounded border border-gray-300 object-cover"
-                src="/food/tiramisu.webp"
-              />
-              <input
-                accept="image/*"
-                aria-describedby="experiences-field-image-4-help"
-                class="block w-full text-sm text-ink file:mr-3 file:rounded file:border-0 file:bg-brand file:px-3 file:py-1.5 file:font-['Montserrat'] file:text-xs file:uppercase file:tracking-wide file:text-ink hover:file:bg-brand-dark"
-                id="experiences-field-image-4"
-                type="file"
-              />
-              <p
-                class="mt-1 text-xs text-gray-500"
-                id="experiences-field-image-4-help"
-              >
-                Every card needs a photo -- the card is mostly photo.
-              </p>
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="experiences-field-link-4"
-              >
-                Opens page
-              </label>
-              <input
-                aria-describedby="experiences-field-link-4-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="experiences-field-link-4"
-                type="text"
-                value=""
-              />
-              <p
-                class="mt-1 text-xs text-gray-500"
-                id="experiences-field-link-4-help"
-              >
-                Leave this blank for a coming-soon item. Otherwise a page on this site, like /catering.
-              </p>
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="experiences-field-comingSoon-4"
-              >
-                Coming soon
-              </label>
-              <input
-                aria-describedby="experiences-field-comingSoon-4-help"
-                checked=""
-                class="h-5 w-5 rounded border-gray-300"
-                id="experiences-field-comingSoon-4"
-                type="checkbox"
-              />
-              <p
-                class="mt-1 text-xs text-gray-500"
-                id="experiences-field-comingSoon-4-help"
-              >
-                A coming-soon item shows a stamp and does not open anything. Turn this off only once it has a page to open.
-              </p>
-            </div>
-          </div>
-        </li>
-        <li
-          class="mb-6 rounded border border-gray-200 p-4"
-        >
-          <div
-            class="mb-3 flex flex-wrap items-center justify-between gap-2"
+              Down
+            </button>
+          </li>
+          <li
+            class="mb-1 flex items-center gap-1 rounded border border-gray-200"
+            data-item-row="retail"
           >
-            <div
-              class="flex items-center gap-2"
+            <span
+              aria-hidden="true"
+              class="select-none px-3 py-1 text-gray-500"
+              data-drag-handle="5"
+              draggable="true"
+              style="cursor: move;"
+              title="Drag to move Retail"
+            >
+              ⠿
+            </span>
+            <button
+              class="flex min-w-0 flex-1 items-center gap-3 rounded p-2 text-left font-['Montserrat'] text-sm text-ink transition hover:bg-brand/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+              type="button"
             >
               <img
                 alt=""
@@ -1932,168 +908,22 @@ exports[`the thirteen panels, as they render today > Experiences (experiences) 1
                 loading="lazy"
                 src="/experiences/retail.webp"
               />
-              <button
-                aria-label="Move Retail up"
-                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
-                type="button"
+              <span
+                class="min-w-0 flex-1 truncate"
               >
-                Up
-              </button>
-            </div>
+                Retail
+              </span>
+            </button>
             <button
-              aria-label="Remove Retail"
-              class="rounded border border-red-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-red-600 transition hover:bg-red-600 hover:text-white"
+              aria-label="Move Retail up"
+              class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
               type="button"
             >
-              Remove
+              Up
             </button>
-          </div>
-          <div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="experiences-field-id-5"
-              >
-                ID
-              </label>
-              <input
-                aria-describedby="experiences-field-id-5-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="experiences-field-id-5"
-                type="text"
-                value="retail"
-              />
-              <p
-                class="mt-1 text-xs text-gray-500"
-                id="experiences-field-id-5-help"
-              >
-                A short identifier used only to tell items apart -- changing it does not rename or relink anything else.
-              </p>
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="experiences-field-title-5"
-              >
-                Title
-              </label>
-              <input
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="experiences-field-title-5"
-                type="text"
-                value="Retail"
-              />
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="experiences-field-description-5"
-              >
-                Short description
-              </label>
-              <textarea
-                aria-describedby="experiences-field-description-5-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="experiences-field-description-5"
-              >
-                Our pantry shelf -- sauces, preserves and pasta to take home.
-              </textarea>
-              <p
-                class="mt-1 text-xs text-gray-500"
-                id="experiences-field-description-5-help"
-              >
-                One line, shown under the title on the card.
-              </p>
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="experiences-field-image-5"
-              >
-                Photo
-              </label>
-              <img
-                alt=""
-                class="mb-2 h-24 w-24 rounded border border-gray-300 object-cover"
-                src="/experiences/retail.webp"
-              />
-              <input
-                accept="image/*"
-                aria-describedby="experiences-field-image-5-help"
-                class="block w-full text-sm text-ink file:mr-3 file:rounded file:border-0 file:bg-brand file:px-3 file:py-1.5 file:font-['Montserrat'] file:text-xs file:uppercase file:tracking-wide file:text-ink hover:file:bg-brand-dark"
-                id="experiences-field-image-5"
-                type="file"
-              />
-              <p
-                class="mt-1 text-xs text-gray-500"
-                id="experiences-field-image-5-help"
-              >
-                Every card needs a photo -- the card is mostly photo.
-              </p>
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="experiences-field-link-5"
-              >
-                Opens page
-              </label>
-              <input
-                aria-describedby="experiences-field-link-5-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="experiences-field-link-5"
-                type="text"
-                value=""
-              />
-              <p
-                class="mt-1 text-xs text-gray-500"
-                id="experiences-field-link-5-help"
-              >
-                Leave this blank for a coming-soon item. Otherwise a page on this site, like /catering.
-              </p>
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="experiences-field-comingSoon-5"
-              >
-                Coming soon
-              </label>
-              <input
-                aria-describedby="experiences-field-comingSoon-5-help"
-                checked=""
-                class="h-5 w-5 rounded border-gray-300"
-                id="experiences-field-comingSoon-5"
-                type="checkbox"
-              />
-              <p
-                class="mt-1 text-xs text-gray-500"
-                id="experiences-field-comingSoon-5-help"
-              >
-                A coming-soon item shows a stamp and does not open anything. Turn this off only once it has a page to open.
-              </p>
-            </div>
-          </div>
-        </li>
-      </ul>
-      <button
-        class="mt-2 w-full rounded border-2 border-dashed border-brand py-2 font-['Montserrat'] text-sm uppercase tracking-wide text-accent transition hover:bg-brand/10"
-        type="button"
-      >
-        Add a coming-soon item
-      </button>
+          </li>
+        </ul>
+      </div>
     </div>
   </fieldset>
 </div>
@@ -3888,15 +2718,33 @@ exports[`the thirteen panels, as they render today > Press (press) 1`] = `
     style="border: 0px; padding: 0px; margin: 0px; min-inline-size: 0;"
   >
     <div>
-      <ul>
-        <li
-          class="mb-6 rounded border border-gray-200 p-4"
+      <div>
+        <button
+          class="mb-3 w-full rounded border-2 border-dashed border-brand py-2 font-['Montserrat'] text-sm uppercase tracking-wide text-accent transition hover:bg-brand/10"
+          type="button"
         >
-          <div
-            class="mb-3 flex flex-wrap items-center justify-between gap-2"
+          Add a article
+        </button>
+        <ul
+          data-item-list="rows"
+        >
+          <li
+            class="mb-1 flex items-center gap-1 rounded border border-gray-200"
+            data-item-row="p"
           >
-            <div
-              class="flex items-center gap-2"
+            <span
+              aria-hidden="true"
+              class="select-none px-3 py-1 text-gray-500"
+              data-drag-handle="0"
+              draggable="true"
+              style="cursor: move;"
+              title="Drag to move Article P"
+            >
+              ⠿
+            </span>
+            <button
+              class="flex min-w-0 flex-1 items-center gap-3 rounded p-2 text-left font-['Montserrat'] text-sm text-ink transition hover:bg-brand/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+              type="button"
             >
               <img
                 alt=""
@@ -3905,164 +2753,37 @@ exports[`the thirteen panels, as they render today > Press (press) 1`] = `
                 loading="lazy"
                 src="/press/p.webp"
               />
-              <button
-                aria-label="Move Article P down"
-                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
-                type="button"
+              <span
+                class="min-w-0 flex-1 truncate"
               >
-                Down
-              </button>
-            </div>
+                Article P
+              </span>
+            </button>
             <button
-              aria-label="Remove Article P"
-              class="rounded border border-red-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-red-600 transition hover:bg-red-600 hover:text-white"
+              aria-label="Move Article P down"
+              class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
               type="button"
             >
-              Remove
+              Down
             </button>
-          </div>
-          <div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="press-field-id-0"
-              >
-                ID
-              </label>
-              <input
-                aria-describedby="press-field-id-0-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="press-field-id-0"
-                type="text"
-                value="p"
-              />
-              <p
-                class="mt-1 text-xs text-gray-500"
-                id="press-field-id-0-help"
-              >
-                A short identifier used only to tell articles apart -- changing it does not rename or relink anything else.
-              </p>
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="press-field-title-0"
-              >
-                Title
-              </label>
-              <input
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="press-field-title-0"
-                type="text"
-                value="Article P"
-              />
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="press-field-publication-0"
-              >
-                Publication
-              </label>
-              <input
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="press-field-publication-0"
-                type="text"
-                value="Times"
-              />
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="press-field-date-0"
-              >
-                Published on
-              </label>
-              <input
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="press-field-date-0"
-                type="date"
-                value="2026-01-01"
-              />
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="press-field-excerpt-0"
-              >
-                Excerpt
-              </label>
-              <textarea
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="press-field-excerpt-0"
-              >
-                An excerpt.
-              </textarea>
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="press-field-url-0"
-              >
-                Link
-              </label>
-              <input
-                aria-describedby="press-field-url-0-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="press-field-url-0"
-                type="text"
-                value=""
-              />
-              <p
-                class="mt-1 text-xs text-gray-500"
-                id="press-field-url-0-help"
-              >
-                The article's full web address, or leave empty if it has none.
-              </p>
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="press-field-image-0"
-              >
-                Photo
-              </label>
-              <img
-                alt=""
-                class="mb-2 h-24 w-24 rounded border border-gray-300 object-cover"
-                src="/press/p.webp"
-              />
-              <input
-                accept="image/*"
-                class="block w-full text-sm text-ink file:mr-3 file:rounded file:border-0 file:bg-brand file:px-3 file:py-1.5 file:font-['Montserrat'] file:text-xs file:uppercase file:tracking-wide file:text-ink hover:file:bg-brand-dark"
-                id="press-field-image-0"
-                type="file"
-              />
-            </div>
-          </div>
-        </li>
-        <li
-          class="mb-6 rounded border border-gray-200 p-4"
-        >
-          <div
-            class="mb-3 flex flex-wrap items-center justify-between gap-2"
+          </li>
+          <li
+            class="mb-1 flex items-center gap-1 rounded border border-gray-200"
+            data-item-row="q"
           >
-            <div
-              class="flex items-center gap-2"
+            <span
+              aria-hidden="true"
+              class="select-none px-3 py-1 text-gray-500"
+              data-drag-handle="1"
+              draggable="true"
+              style="cursor: move;"
+              title="Drag to move Article Q"
+            >
+              ⠿
+            </span>
+            <button
+              class="flex min-w-0 flex-1 items-center gap-3 rounded p-2 text-left font-['Montserrat'] text-sm text-ink transition hover:bg-brand/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+              type="button"
             >
               <img
                 alt=""
@@ -4071,163 +2792,22 @@ exports[`the thirteen panels, as they render today > Press (press) 1`] = `
                 loading="lazy"
                 src="/press/q.webp"
               />
-              <button
-                aria-label="Move Article Q up"
-                class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
-                type="button"
+              <span
+                class="min-w-0 flex-1 truncate"
               >
-                Up
-              </button>
-            </div>
+                Article Q
+              </span>
+            </button>
             <button
-              aria-label="Remove Article Q"
-              class="rounded border border-red-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-red-600 transition hover:bg-red-600 hover:text-white"
+              aria-label="Move Article Q up"
+              class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
               type="button"
             >
-              Remove
+              Up
             </button>
-          </div>
-          <div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="press-field-id-1"
-              >
-                ID
-              </label>
-              <input
-                aria-describedby="press-field-id-1-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="press-field-id-1"
-                type="text"
-                value="q"
-              />
-              <p
-                class="mt-1 text-xs text-gray-500"
-                id="press-field-id-1-help"
-              >
-                A short identifier used only to tell articles apart -- changing it does not rename or relink anything else.
-              </p>
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="press-field-title-1"
-              >
-                Title
-              </label>
-              <input
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="press-field-title-1"
-                type="text"
-                value="Article Q"
-              />
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="press-field-publication-1"
-              >
-                Publication
-              </label>
-              <input
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="press-field-publication-1"
-                type="text"
-                value="Times"
-              />
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="press-field-date-1"
-              >
-                Published on
-              </label>
-              <input
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="press-field-date-1"
-                type="date"
-                value="2026-01-01"
-              />
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="press-field-excerpt-1"
-              >
-                Excerpt
-              </label>
-              <textarea
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="press-field-excerpt-1"
-              >
-                An excerpt.
-              </textarea>
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="press-field-url-1"
-              >
-                Link
-              </label>
-              <input
-                aria-describedby="press-field-url-1-help"
-                class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                id="press-field-url-1"
-                type="text"
-                value=""
-              />
-              <p
-                class="mt-1 text-xs text-gray-500"
-                id="press-field-url-1-help"
-              >
-                The article's full web address, or leave empty if it has none.
-              </p>
-            </div>
-            <div
-              class="mb-4"
-            >
-              <label
-                class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-                for="press-field-image-1"
-              >
-                Photo
-              </label>
-              <img
-                alt=""
-                class="mb-2 h-24 w-24 rounded border border-gray-300 object-cover"
-                src="/press/q.webp"
-              />
-              <input
-                accept="image/*"
-                class="block w-full text-sm text-ink file:mr-3 file:rounded file:border-0 file:bg-brand file:px-3 file:py-1.5 file:font-['Montserrat'] file:text-xs file:uppercase file:tracking-wide file:text-ink hover:file:bg-brand-dark"
-                id="press-field-image-1"
-                type="file"
-              />
-            </div>
-          </div>
-        </li>
-      </ul>
-      <button
-        class="mt-2 w-full rounded border-2 border-dashed border-brand py-2 font-['Montserrat'] text-sm uppercase tracking-wide text-accent transition hover:bg-brand/10"
-        type="button"
-      >
-        Add a article
-      </button>
+          </li>
+        </ul>
+      </div>
     </div>
   </fieldset>
 </div>

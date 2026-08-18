@@ -191,7 +191,7 @@ function DishesHarness({ initial }: { initial: Dish[] }) {
         items={items}
         onChange={(index, next) => setItems((prev) => replaceAt(prev, index, next))}
         onReorder={() => {}}
-        onAdd={() => {}}
+        onAdd={() => ''}
         onRemove={() => {}}
         noun="dish"
         itemLabel={(d) => d.name}
@@ -212,10 +212,15 @@ function readPublishedDishes(): (Dish & { futureField?: string })[] {
 describe('the whole-file round trip never drops a field', () => {
   it("editing one dish's description preserves EVERY dish's tags -- a field the public site renders nowhere, so a silent drop would have no other symptom", async () => {
     const user = userEvent.setup();
-    render(<DishesHarness initial={REAL_DISHES} />);
+    const { container } = render(<DishesHarness initial={REAL_DISHES} />);
 
-    const descriptionInputs = screen.getAllByLabelText(DISH_FIELDS.description.label);
-    await user.type(descriptionInputs[0], ' Now with extra basil.');
+    // A record's own fields mount only while ITS OWN editor is open (Task
+    // 3's list+editor redesign) -- open the first dish's row before
+    // reaching for its description field.
+    const firstRow = container.querySelector(`[data-item-row="${REAL_DISHES[0].id}"] button:not([aria-label])`) as HTMLElement;
+    await user.click(firstRow);
+    const descriptionInput = screen.getByLabelText(DISH_FIELDS.description.label);
+    await user.type(descriptionInput, ' Now with extra basil.');
 
     const published = readPublishedDishes();
     expect(published).toHaveLength(REAL_DISHES.length);
@@ -248,10 +253,15 @@ describe('the whole-file round trip never drops a field', () => {
     // is total over Dish's own declared keys, so nothing here would even
     // compile without it).
     const withExtra = { ...dish(), futureField: 'x' } as Dish & { futureField: string };
-    render(<DishesHarness initial={[withExtra, dish({ id: 'second' })]} />);
+    const { container } = render(<DishesHarness initial={[withExtra, dish({ id: 'second' })]} />);
 
-    const nameInputs = screen.getAllByLabelText(DISH_FIELDS.name.label);
-    await user.type(nameInputs[0], '!');
+    // Both dishes share the same name (`dish()`'s own default) -- a
+    // `data-item-row` lookup by id, not a role/name query, is what still
+    // finds the FIRST one unambiguously.
+    const firstRow = container.querySelector(`[data-item-row="${withExtra.id}"] button:not([aria-label])`) as HTMLElement;
+    await user.click(firstRow);
+    const nameInput = screen.getByLabelText(DISH_FIELDS.name.label);
+    await user.type(nameInput, '!');
 
     const published = readPublishedDishes();
     expect(published[0]).toHaveProperty('futureField', 'x');
@@ -272,7 +282,7 @@ function SectionsHarness({ initial }: { initial: BespokeSection[] }) {
         items={items}
         onChange={(index, next) => setItems((prev) => replaceAt(prev, index, next))}
         onReorder={() => {}}
-        onAdd={() => {}}
+        onAdd={() => ''}
         onRemove={() => {}}
         noun="section"
         itemLabel={(s) => s.id}
@@ -291,12 +301,13 @@ describe('the whole-file round trip preserves a readonly-descriptor field too', 
       { kind: 'bespoke', id: 'ourStory', enabled: true },
     ];
     render(<SectionsHarness initial={initial} />);
+    await user.click(screen.getByRole('button', { name: 'ourStory' }));
 
     // SECTION_FIELDS.id is `kind: 'readonly'` -- rendered disabled, with no
     // way for this interaction to touch it directly. The only thing this
     // test edits is `enabled`.
-    const toggles = screen.getAllByLabelText(SECTION_FIELDS.enabled.label);
-    await user.click(toggles[1]);
+    const toggle = screen.getByLabelText(SECTION_FIELDS.enabled.label);
+    await user.click(toggle);
 
     const published: BespokeSection[] = JSON.parse(screen.getByTestId('published').textContent ?? 'null');
     expect(published[1]).toEqual({ kind: 'bespoke', id: 'ourStory', enabled: false });

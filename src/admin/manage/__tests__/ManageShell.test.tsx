@@ -47,6 +47,7 @@ describe('areas mount once and stay mounted', () => {
     const user = userEvent.setup();
     renderDashboard('/edit/manage/menu', { wide: true });
 
+    await user.click(await screen.findByRole('button', { name: 'Dish A' }));
     const dishName = await screen.findByDisplayValue('Dish A');
     await user.clear(dishName);
     await user.type(dishName, 'Dish A Edited');
@@ -316,6 +317,7 @@ describe('a publish in flight pauses editing, never navigation', () => {
       const user = userEvent.setup();
       renderDashboard('/edit/manage/menu', { wide: true });
 
+      await user.click(await screen.findByRole('button', { name: 'Dish A' }));
       const input = (await screen.findByDisplayValue('Dish A')) as HTMLInputElement;
       await user.type(input, '!');
       await user.click(screen.getByRole('button', { name: 'Publish' }));
@@ -556,6 +558,7 @@ describe('the nav says which area needs attention, and which has unsaved work', 
     // Non-vacuous: nothing is marked before she types.
     expect(within(nav).queryByRole('img', { name: /unpublished changes/ })).not.toBeInTheDocument();
 
+    await user.click(await screen.findByRole('button', { name: 'Dish A' }));
     const dishName = await screen.findByDisplayValue('Dish A');
     await user.type(dishName, '!');
 
@@ -573,6 +576,7 @@ describe('the nav says which area needs attention, and which has unsaved work', 
     const user = userEvent.setup();
     renderDashboard('/edit/manage/menu', { wide: true });
 
+    await user.click(await screen.findByRole('button', { name: 'Dish A' }));
     const dishName = await screen.findByDisplayValue('Dish A');
     await user.clear(dishName);
 
@@ -588,6 +592,7 @@ describe('the nav says which area needs attention, and which has unsaved work', 
     const user = userEvent.setup();
     renderDashboard('/edit/manage/menu');
 
+    await user.click(await screen.findByRole('button', { name: 'Dish A' }));
     const dishName = await screen.findByDisplayValue('Dish A');
     await user.type(dishName, '!');
 

@@ -97,20 +97,29 @@ afterEach(() => {
 });
 
 describe('ExperiencesArea', () => {
+  // Task 3's redesign: only one record's fields are on screen at a time, so
+  // "both editable" is now proven one editor at a time -- open the first
+  // item's row, check its Title/description, Done, then the same for the
+  // second.
   it('renders two loaded items, both editable', async () => {
     stubFetch(() => jsonResponse(200, { content: JSON.stringify(TWO_EXPERIENCES), sha: 'experiences-sha-1' }));
     const { registry } = fakeRegistry();
     renderExperiences(registry);
 
-    const titles = await screen.findAllByLabelText('Title');
-    expect(titles).toHaveLength(2);
-    expect((titles[0] as HTMLInputElement).value).toBe('Catering');
-    expect((titles[1] as HTMLInputElement).value).toBe('Retail');
-    titles.forEach((input) => expect(input).not.toBeDisabled());
+    fireEvent.click(await screen.findByRole('button', { name: 'Catering' }));
+    const firstTitle = await screen.findByLabelText('Title');
+    expect((firstTitle as HTMLInputElement).value).toBe('Catering');
+    expect(firstTitle).not.toBeDisabled();
+    expect((screen.getByLabelText('Short description') as HTMLTextAreaElement).value).toBe(
+      'Bespoke menus for up to 100 guests.',
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }));
 
-    const descriptions = screen.getAllByLabelText('Short description');
-    expect((descriptions[0] as HTMLTextAreaElement).value).toBe('Bespoke menus for up to 100 guests.');
-    expect((descriptions[1] as HTMLTextAreaElement).value).toBe('Our pantry shelf.');
+    fireEvent.click(await screen.findByRole('button', { name: 'Retail' }));
+    const secondTitle = await screen.findByLabelText('Title');
+    expect((secondTitle as HTMLInputElement).value).toBe('Retail');
+    expect(secondTitle).not.toBeDisabled();
+    expect((screen.getByLabelText('Short description') as HTMLTextAreaElement).value).toBe('Our pantry shelf.');
   });
 
   it('"Add a coming-soon item" commits a new entry that is coming-soon, with no link key at all', async () => {
@@ -161,6 +170,7 @@ describe('ExperiencesArea', () => {
     const { registry, updateDataCalls } = fakeRegistry();
     renderExperiences(registry);
 
+    fireEvent.click(await screen.findByRole('button', { name: 'Catering' }));
     const title = await screen.findByLabelText('Title');
     fireEvent.change(title, { target: { value: 'Catering, Revised' } });
 
@@ -175,6 +185,7 @@ describe('ExperiencesArea', () => {
     const { registry } = fakeRegistry();
     renderExperiences(registry);
 
+    fireEvent.click(await screen.findByRole('button', { name: 'Catering' }));
     const title = await screen.findByLabelText('Title');
     // Blanking the only item's title is what validateExperience refuses --
     // see src/content/validate.ts's own `isBlank(item.title)` branch. If

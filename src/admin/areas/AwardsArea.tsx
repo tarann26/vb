@@ -129,7 +129,11 @@ function AwardsSection({
         const byId = new Map(items.map((item) => [item.id, item]));
         commit(ids.map((id) => byId.get(id) as Award));
       }}
-      onAdd={() => commit([...items, blankAward()])}
+      onAdd={() => {
+        const blank = blankAward();
+        commit([...items, blank]);
+        return blank.id;
+      }}
       onRemove={(index) => commit(items.filter((_, i) => i !== index))}
       noun="award"
       itemLabel={(award) => award.title || 'Untitled award'}

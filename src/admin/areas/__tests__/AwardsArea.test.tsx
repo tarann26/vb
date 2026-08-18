@@ -86,23 +86,29 @@ afterEach(() => {
 });
 
 describe('AwardsArea', () => {
+  // Task 3's redesign: only one record's fields are on screen at a time, so
+  // "both editable" is now proven one editor at a time -- open the first
+  // award's row, check its Title/Year, Done, then the same for the second.
   it('renders two loaded awards, both editable', async () => {
     stubFetch(() => jsonResponse(200, { content: JSON.stringify(TWO_AWARDS), sha: 'awards-sha-1' }));
     const { registry } = fakeRegistry();
     renderAwards(registry);
 
-    const titles = await screen.findAllByLabelText('Title');
-    expect(titles).toHaveLength(2);
-    expect((titles[0] as HTMLInputElement).value).toBe('Best New Restaurant');
-    expect((titles[1] as HTMLInputElement).value).toBe('Chef of the Year');
+    fireEvent.click(await screen.findByRole('button', { name: 'Best New Restaurant' }));
+    const firstTitle = await screen.findByLabelText('Title');
+    expect((firstTitle as HTMLInputElement).value).toBe('Best New Restaurant');
     // "editable": not disabled/readonly, unlike SITE_FIELDS' own
     // developer-owned readonly fields (fields.ts) -- a real, provable
     // property, not merely "present on screen".
-    titles.forEach((input) => expect(input).not.toBeDisabled());
+    expect(firstTitle).not.toBeDisabled();
+    expect((screen.getByLabelText('Year') as HTMLInputElement).value).toBe('2025');
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }));
 
-    const years = screen.getAllByLabelText('Year');
-    expect((years[0] as HTMLInputElement).value).toBe('2025');
-    expect((years[1] as HTMLInputElement).value).toBe('2024');
+    fireEvent.click(await screen.findByRole('button', { name: 'Chef of the Year' }));
+    const secondTitle = await screen.findByLabelText('Title');
+    expect((secondTitle as HTMLInputElement).value).toBe('Chef of the Year');
+    expect(secondTitle).not.toBeDisabled();
+    expect((screen.getByLabelText('Year') as HTMLInputElement).value).toBe('2024');
   });
 
   // The brief's own carried requirement: a brand-new document 404s until the
@@ -129,6 +135,7 @@ describe('AwardsArea', () => {
     const { registry, updateDataCalls } = fakeRegistry();
     renderAwards(registry);
 
+    fireEvent.click(await screen.findByRole('button', { name: 'Best New Restaurant' }));
     const title = await screen.findByLabelText('Title');
     fireEvent.change(title, { target: { value: 'Best New Restaurant, Revised' } });
 

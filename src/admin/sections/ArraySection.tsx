@@ -174,7 +174,11 @@ export function ArraySection<Item extends { id: string }>({
           const byId = new Map(items.map((item) => [item.id, item]));
           commit(ids.map((id) => byId.get(id) as Item));
         }}
-        onAdd={() => commit([...items, makeBlank()])}
+        onAdd={() => {
+          const blank = makeBlank();
+          commit([...items, blank]);
+          return blank.id;
+        }}
         onRemove={(index) => commit(items.filter((_, i) => i !== index))}
         noun={noun}
         itemLabel={itemLabel}

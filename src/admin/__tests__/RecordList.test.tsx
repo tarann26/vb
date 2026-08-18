@@ -1,5 +1,6 @@
+import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import RecordList from '../RecordList';
 import { DISH_FIELDS } from '../fields';
@@ -56,9 +57,9 @@ const THREE_DISHES: Dish[] = [dish('negroni', 'Negroni'), dish('spritz', 'Spritz
 function renderList(overrides: Partial<Parameters<typeof RecordList<Dish>>[0]> = {}) {
   const onChange = vi.fn();
   const onReorder = vi.fn();
-  const onAdd = vi.fn();
+  const onAdd = vi.fn(() => 'new-id');
   const onRemove = vi.fn();
-  render(
+  const result = render(
     <RecordList<Dish>
       fields={DISH_FIELDS}
       items={THREE_DISHES}
@@ -72,22 +73,77 @@ function renderList(overrides: Partial<Parameters<typeof RecordList<Dish>>[0]> =
       {...overrides}
     />,
   );
-  return { onChange, onReorder, onAdd, onRemove };
+  return { onChange, onReorder, onAdd, onRemove, rerender: result.rerender };
 }
 
-describe('RecordList: renders one RecordForm per item, in order', () => {
-  it('renders a labeled input for every item, prefilled with its own value', () => {
+describe('RecordList: a row opens the editor on that record', () => {
+  it('clicking a row opens a dialog named after that record, prefilled with its own value', async () => {
+    const user = userEvent.setup();
     renderList();
-    const nameInputs = screen.getAllByLabelText(DISH_FIELDS.name.label);
-    expect(nameInputs.map((el) => (el as HTMLInputElement).value)).toEqual(['Negroni', 'Spritz', 'Bellini']);
+    await user.click(screen.getByRole('button', { name: 'Spritz' }));
+
+    const dialog = screen.getByRole('dialog', { name: 'Spritz' });
+    expect(within(dialog).getByLabelText(DISH_FIELDS.name.label)).toHaveValue('Spritz');
   });
 
-  it("reports the index and the full record on a change, without touching any other item", async () => {
+  it('reports the index and the full record on a change, without touching any other item', async () => {
     const user = userEvent.setup();
     const { onChange } = renderList();
-    const [, secondNameInput] = screen.getAllByLabelText(DISH_FIELDS.name.label);
-    await user.type(secondNameInput, '!');
+    await user.click(screen.getByRole('button', { name: 'Spritz' }));
+
+    const nameInput = screen.getByLabelText(DISH_FIELDS.name.label);
+    await user.type(nameInput, '!');
     expect(onChange).toHaveBeenCalledWith(1, { ...THREE_DISHES[1], name: 'Spritz!' });
+  });
+
+  // A controlled-list harness that mirrors what every real caller does
+  // (ArraySection.tsx, AwardsArea.tsx, ExperiencesArea.tsx): mint the
+  // blank record's id, commit it into the array THIS COMPONENT owns, and
+  // hand the same id back. RecordList itself has no way to add to `items`
+  // -- it is controlled -- so proving "Add opens the editor on the record
+  // it just added" for real (not merely that some dialog opens) needs a
+  // caller that actually behaves like one.
+  it('Add opens the editor on the record it just added', async () => {
+    const user = userEvent.setup();
+    function Harness() {
+      const [items, setItems] = useState(THREE_DISHES);
+      return (
+        <RecordList<Dish>
+          fields={DISH_FIELDS}
+          items={items}
+          onChange={(index, next) => setItems((prev) => prev.map((item, i) => (i === index ? next : item)))}
+          onReorder={vi.fn()}
+          onAdd={() => {
+            const blank: Dish = { id: 'new-id', name: '', description: '', image: '', tags: [] };
+            setItems((prev) => [...prev, blank]);
+            return blank.id;
+          }}
+          onRemove={vi.fn()}
+          noun="dish"
+          itemLabel={(d) => d.name || 'Untitled dish'}
+          problems={[]}
+        />
+      );
+    }
+    render(<Harness />);
+    await user.click(screen.getByRole('button', { name: 'Add a dish' }));
+
+    expect(screen.getByRole('dialog', { name: 'Untitled dish' })).toBeInTheDocument();
+    expect(screen.getByLabelText(DISH_FIELDS.name.label)).toHaveValue('');
+  });
+
+  it('Done closes the editor and leaves the list', async () => {
+    const user = userEvent.setup();
+    renderList();
+    await user.click(screen.getByRole('button', { name: 'Spritz' }));
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Done' }));
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Negroni' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Spritz' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Bellini' })).toBeInTheDocument();
   });
 });
 
@@ -150,6 +206,39 @@ describe('RecordList: reordering hands back the new id ORDER, and never mutates 
     await user.click(screen.getByRole('button', { name: 'Move Spritz up' }));
     expect(onReorder).toHaveBeenCalledWith(['spritz', 'negroni', 'bellini']);
   });
+
+  // D3/the by-ID tracking rule: reordering while an editor is open must not
+  // swap which record she is editing under her hands. Proven by actually
+  // re-rendering with the reordered array (the real caller's own next
+  // step, per `onReorder`'s controlled-list contract) and confirming the
+  // dialog is STILL titled after the record she opened, not whatever now
+  // sits at the index she originally opened.
+  it('moving a row up while its editor is open keeps the same record open', async () => {
+    const user = userEvent.setup();
+    const { onReorder, rerender } = renderList();
+    await user.click(screen.getByRole('button', { name: 'Spritz' }));
+    expect(screen.getByRole('dialog', { name: 'Spritz' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Move Spritz up' }));
+    expect(onReorder).toHaveBeenCalledWith(['spritz', 'negroni', 'bellini']);
+
+    const reordered = [THREE_DISHES[1], THREE_DISHES[0], THREE_DISHES[2]];
+    rerender(
+      <RecordList<Dish>
+        fields={DISH_FIELDS}
+        items={reordered}
+        onChange={vi.fn()}
+        onReorder={onReorder}
+        onAdd={() => 'new-id'}
+        onRemove={vi.fn()}
+        noun="dish"
+        itemLabel={(d) => d.name}
+        problems={[]}
+      />,
+    );
+
+    expect(screen.getByRole('dialog', { name: 'Spritz' })).toBeInTheDocument();
+  });
 });
 
 describe('RecordList: add and remove', () => {
@@ -161,111 +250,103 @@ describe('RecordList: add and remove', () => {
     expect(onAdd).toHaveBeenCalledWith();
   });
 
-  it('each item has its own, individually-named remove button', async () => {
-    const user = userEvent.setup();
-    const { onRemove } = renderList();
-    await user.click(screen.getByRole('button', { name: 'Remove Spritz' }));
-    expect(onRemove).toHaveBeenCalledWith(1);
-  });
-
   it('an empty list still renders the add button and no remove/move buttons', () => {
     renderList({ items: [] });
     expect(screen.getByRole('button', { name: 'Add a dish' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^Remove/ })).not.toBeInTheDocument();
   });
+
+  // D8: delete lives inside the editor and asks once -- never on the row.
+  it('there is no Remove on any row', () => {
+    renderList();
+    expect(screen.queryByRole('button', { name: /^Remove /i })).toBeNull();
+  });
+
+  it('Delete removes the record she opened, not the first one', async () => {
+    const user = userEvent.setup();
+    const { onRemove } = renderList();
+    await user.click(screen.getByRole('button', { name: 'Bellini' }));
+    await user.click(screen.getByRole('button', { name: 'Delete Bellini' }));
+    await user.click(screen.getByRole('button', { name: 'Yes, delete bellini' }));
+
+    expect(onRemove).toHaveBeenCalledWith(2);
+  });
 });
 
-describe('RecordList: the aggregate guarantee -- a problem no mounted RecordForm claims must not vanish', () => {
-  // The exact scenario the task's brief proves by hand: a list currently
-  // rendering only indices 0-2 (THREE_DISHES) with a problem on `[40].name`
-  // -- e.g. the debounce-tick/remove race Task 6 introduces, where
-  // `problems` was computed against a longer array than what's mounted
-  // right now. Every one of the three mounted RecordForms independently
-  // concludes "not my index" and drops it (confirmed: this is exactly what
-  // RecordForm.tsx's own `belongsToAnotherIndex` does) -- RecordList is the
-  // only thing that still has it.
-  it('surfaces a problem whose index is past the end of the rendered array, in a top-level banner', () => {
-    const problems: ValidationProblem[] = [{ field: '[40].name', message: 'dish 40 needs a name' }];
+describe('RecordList: the aggregate guarantee -- closing an editor must not hide a validation problem', () => {
+  // D4's partition, restated: `shown` is whatever the open editor's own
+  // RecordForm will place (on a field or in ITS OWN banner); `banner` is
+  // everything else. With no editor open, `shown` is empty and every
+  // problem -- including one naming an index that isn't even rendered --
+  // lands in the list's own banner, plus marks its row "needs attention".
+  it('with every editor closed, a problem on the third dish is still on screen', () => {
+    const problems: ValidationProblem[] = [{ field: '[2].name', message: 'this dish needs a name' }];
     renderList({ problems });
-    expect(screen.getByRole('alert', { name: 'Problems with items no longer shown' })).toBeInTheDocument();
-    expect(screen.getByText('dish 40 needs a name')).toBeInTheDocument();
+
+    expect(screen.getByRole('alert', { name: 'Problems with this list' })).toBeInTheDocument();
+    expect(screen.getByText('this dish needs a name')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Bellini needs attention' })).toBeInTheDocument();
   });
 
-  it('does not lose it even when validating against a MUCH longer array than is rendered', () => {
-    const problems: ValidationProblem[] = [{ field: '[99].name', message: 'dish 99 needs a name' }];
-    renderList({ items: [THREE_DISHES[0]], problems });
-    expect(screen.getByText('dish 99 needs a name')).toBeInTheDocument();
-  });
-
-  it('a problem naming an index that IS rendered goes to that item alone, not to the top-level banner', () => {
-    const problems: ValidationProblem[] = [{ field: '[1].name', message: 'spritz needs a name' }];
+  it('a problem naming an index that does not exist is still on screen', () => {
+    const problems: ValidationProblem[] = [{ field: '[9].name', message: 'dish 9 needs a name' }];
     renderList({ problems });
-    // Attached to Spritz's own field...
-    const nameInputs = screen.getAllByLabelText(DISH_FIELDS.name.label);
-    expect(nameInputs[1]).toHaveAccessibleDescription('spritz needs a name');
-    // ...and NOT duplicated into RecordList's own top-level banner.
-    expect(screen.queryByRole('alert', { name: 'Problems with items no longer shown' })).not.toBeInTheDocument();
+
+    expect(screen.getByRole('alert', { name: 'Problems with this list' })).toBeInTheDocument();
+    expect(screen.getByText('dish 9 needs a name')).toBeInTheDocument();
   });
 
-  // A generic file-level rule, deliberately NOT the specific "the menu needs
-  // at least one dish" message: that message can only ever be produced by
-  // the real validator for an EMPTY array (see validateDishes,
-  // src/content/validate.ts), which can never coexist with THREE_DISHES
-  // below -- a review of this task's first draft correctly called out that
-  // testing this exact string against a non-empty list tests a
-  // configuration the real bug (see the "empty list" describe block below)
-  // cannot occur in. This test is about a DIFFERENT property: that a
-  // file-level problem, when at least one RecordForm IS mounted, is left to
-  // each RecordForm's own banner rather than also being duplicated into
-  // RecordList's aggregate one.
-  it('a file-level problem (field === "") is left to each RecordForm\'s own banner, not duplicated here', () => {
-    const problems: ValidationProblem[] = [{ field: '', message: 'dishes.json: some file-level rule failed' }];
+  it('a file-level problem appears exactly once while an editor is open', async () => {
+    const user = userEvent.setup();
+    const problems: ValidationProblem[] = [{ field: '', message: 'the menu needs at least one dish' }];
     renderList({ problems });
-    // Shown (by each RecordForm's own banner) -- but RecordList's own
-    // aggregate banner must not ALSO claim it; unclaimedProblems only
-    // concerns indexed problems that landed on an index nobody renders.
-    expect(screen.queryByRole('alert', { name: 'Problems with items no longer shown' })).not.toBeInTheDocument();
-    expect(screen.getAllByText('dishes.json: some file-level rule failed').length).toBeGreaterThan(0);
+    await user.click(screen.getByRole('button', { name: 'Negroni' }));
+
+    expect(screen.getAllByText('the menu needs at least one dish')).toHaveLength(1);
   });
 
-  it('the aggregate banner is absent when every problem is claimed by a rendered item', () => {
+  it('the aggregate banner is absent when every problem is claimed by the open editor', async () => {
+    const user = userEvent.setup();
     const problems: ValidationProblem[] = [{ field: '[0].name', message: 'negroni needs a name' }];
     renderList({ problems });
-    expect(screen.queryByRole('alert', { name: 'Problems with items no longer shown' })).not.toBeInTheDocument();
+    // Negroni's own row carries the "needs attention" marker too (D4's
+    // per-row half), so its accessible name includes it.
+    await user.click(screen.getByRole('button', { name: 'Negroni needs attention' }));
+
+    expect(screen.queryByRole('alert', { name: 'Problems with this list' })).not.toBeInTheDocument();
+    // ...and it IS shown, just inside the open editor rather than the list.
+    expect(screen.getByLabelText(DISH_FIELDS.name.label)).toHaveAccessibleDescription('negroni needs a name');
   });
 
-  // I6 review finding: `[40]`/`[99]` above are both far past THREE_DISHES'
-  // own length (3) -- neither one can tell `index >= itemCount` apart from
-  // `index > itemCount`, since both are true for either. The one index that
-  // separates them is `[3]`: one past the LAST real item, exactly the shape
-  // "she removes the last row while a 400ms debounce computed against the
-  // longer array is in flight" produces. The third and fourth instance of
-  // this project's own fixture-cannot-reach-the-boundary shape (already
-  // found in HoursField and RecordList's own empty-list case).
+  // I6 review finding (carried from before this task): `[9]` above is far
+  // past THREE_DISHES' own length (3) -- the one index that actually
+  // separates ">= itemCount" from "> itemCount" is `[3]`, one past the
+  // LAST real item, exactly the shape "she removes the last row while a
+  // 400ms debounce computed against the longer array is in flight"
+  // produces.
   it('surfaces a problem at the EXACT boundary index (itemCount itself), not only ones far past it', () => {
     const problems: ValidationProblem[] = [{ field: '[3].name', message: 'dish 3 needs a name' }];
     renderList({ problems });
-    expect(screen.getByRole('alert', { name: 'Problems with items no longer shown' })).toBeInTheDocument();
+    expect(screen.getByRole('alert', { name: 'Problems with this list' })).toBeInTheDocument();
     expect(screen.getByText('dish 3 needs a name')).toBeInTheDocument();
   });
 });
 
-// Critical review finding: when NO RecordForm is mounted at all (an empty
-// list), a problem's own field shape stopped mattering -- there is no
-// sibling form left to have "not claimed" it FOR, so the earlier
-// `index !== undefined && index >= itemCount` check dropped every problem
-// that didn't happen to look like `[N].key` too. Proven first against the
-// REAL validator, not a hand-typed string standing in for it: this is
-// EXACTLY the state `validateContent('dishes.json', [])` reaches by
-// construction (validateDishes' own empty-array check, src/content/validate.ts) --
-// she deletes her last dish, publishes, gets a 422 back, and this was the
-// one message the dashboard is supposed to show her for it.
-describe('RecordList: an EMPTY list still surfaces every problem -- nothing is mounted to claim ANY of them', () => {
-  it('surfaces the real validator\'s own empty-dishes-list message', () => {
+// Critical review finding (carried from before this task): when NO editor
+// is open at all, a problem's own field shape stopped mattering -- there is
+// no open RecordForm to have "not claimed" it FOR, so every problem is
+// unclaimed. Proven first against the REAL validator, not a hand-typed
+// string standing in for it: this is EXACTLY the state
+// `validateContent('dishes.json', [])` reaches by construction
+// (validateDishes' own empty-array check, src/content/validate.ts) -- she
+// deletes her last dish, publishes, gets a 422 back, and this was the one
+// message the dashboard is supposed to show her for it.
+describe('RecordList: an EMPTY list still surfaces every problem -- there is no editor open to claim ANY of them', () => {
+  it("surfaces the real validator's own empty-dishes-list message", () => {
     const problems = validateContent('dishes.json', []);
     expect(problems).toEqual([{ field: '', message: 'the menu needs at least one dish' }]);
     renderList({ items: [], problems });
-    expect(screen.getByRole('alert', { name: 'Problems with items no longer shown' })).toBeInTheDocument();
+    expect(screen.getByRole('alert', { name: 'Problems with this list' })).toBeInTheDocument();
     expect(screen.getByText('the menu needs at least one dish')).toBeInTheDocument();
   });
 
@@ -291,9 +372,9 @@ describe('RecordList: an EMPTY list still surfaces every problem -- nothing is m
 // ENTIRE real chain (PhotoField -> Field -> RecordForm -> RecordList's own
 // `onStaged`) -- not a synthetic StagedPhoto object handed straight to a
 // mock, which would prove nothing about whether the chain in between is
-// actually connected. This is the exact guard the brief asks for by name:
-// "assert the publish payload contains the assets-source/ entry, not just
-// the contentPath in the record."
+// actually connected. Every case here opens the record's row FIRST: since
+// Task 3, a record's own fields (its PhotoField included) mount only while
+// its editor is open.
 describe("RecordList: Task 9's collector wiring -- a staged photo reaches onStaged with a real, item-scoped key", () => {
   beforeEach(() => {
     FakeXHR.instances = [];
@@ -313,7 +394,7 @@ describe("RecordList: Task 9's collector wiring -- a staged photo reaches onStag
         items={THREE_DISHES}
         onChange={onChange}
         onReorder={vi.fn()}
-        onAdd={vi.fn()}
+        onAdd={() => 'new-id'}
         onRemove={vi.fn()}
         noun="dish"
         itemLabel={(d) => d.name}
@@ -325,8 +406,9 @@ describe("RecordList: Task 9's collector wiring -- a staged photo reaches onStag
     // Spritz is index 1 -- picking on ITS photo field, not the first item's,
     // is what proves the key is built from the ITEM's own id, not always
     // index 0.
-    const photoInputs = screen.getAllByLabelText(DISH_FIELDS.image.label);
-    await user.upload(photoInputs[1], jpegFile());
+    await user.click(screen.getByRole('button', { name: 'Spritz' }));
+    const photoInput = screen.getByLabelText(DISH_FIELDS.image.label);
+    await user.upload(photoInput, jpegFile());
     await waitFor(() => expect(FakeXHR.instances).toHaveLength(1));
     FakeXHR.instances[0].respond(200, { path: 'assets-source/food/abc123abc123.jpg', contentPath: '/food/abc123abc123.webp' });
 
@@ -365,7 +447,7 @@ describe("RecordList: Task 9's collector wiring -- a staged photo reaches onStag
         items={THREE_DISHES}
         onChange={vi.fn()}
         onReorder={vi.fn()}
-        onAdd={vi.fn()}
+        onAdd={() => 'new-id'}
         onRemove={vi.fn()}
         noun="dish"
         itemLabel={(d) => d.name}
@@ -374,13 +456,17 @@ describe("RecordList: Task 9's collector wiring -- a staged photo reaches onStag
       />,
     );
 
-    const photoInputs = screen.getAllByLabelText(DISH_FIELDS.image.label);
-    await user.upload(photoInputs[0], jpegFile('a.jpg'));
+    await user.click(screen.getByRole('button', { name: 'Negroni' }));
+    const firstPhotoInput = screen.getByLabelText(DISH_FIELDS.image.label);
+    await user.upload(firstPhotoInput, jpegFile('a.jpg'));
     await waitFor(() => expect(FakeXHR.instances).toHaveLength(1));
     FakeXHR.instances[0].respond(200, { path: 'assets-source/food/aaa111aaa111.jpg', contentPath: '/food/aaa111aaa111.webp' });
     await waitFor(() => expect(onStaged).toHaveBeenCalledWith('negroni:image', expect.objectContaining({ path: 'assets-source/food/aaa111aaa111.jpg' })));
+    await user.click(screen.getByRole('button', { name: 'Done' }));
 
-    await user.upload(photoInputs[2], jpegFile('b.jpg'));
+    await user.click(screen.getByRole('button', { name: 'Bellini' }));
+    const secondPhotoInput = screen.getByLabelText(DISH_FIELDS.image.label);
+    await user.upload(secondPhotoInput, jpegFile('b.jpg'));
     await waitFor(() => expect(FakeXHR.instances).toHaveLength(2));
     FakeXHR.instances[1].respond(200, { path: 'assets-source/food/bbb222bbb222.jpg', contentPath: '/food/bbb222bbb222.webp' });
     await waitFor(() => expect(onStaged).toHaveBeenCalledWith('bellini:image', expect.objectContaining({ path: 'assets-source/food/bbb222bbb222.jpg' })));
@@ -390,20 +476,22 @@ describe("RecordList: Task 9's collector wiring -- a staged photo reaches onStag
     expect(onStaged).toHaveBeenCalledWith('negroni:image', expect.objectContaining({ path: 'assets-source/food/aaa111aaa111.jpg' }));
   });
 
-  it('rendering the list with NO onStaged prop still renders PhotoField (never silently falls back to a text box)', () => {
+  it('rendering the list with NO onStaged prop still renders PhotoField (never silently falls back to a text box)', async () => {
+    const user = userEvent.setup();
     render(
       <RecordList<Dish>
         fields={DISH_FIELDS}
         items={THREE_DISHES}
         onChange={vi.fn()}
         onReorder={vi.fn()}
-        onAdd={vi.fn()}
+        onAdd={() => 'new-id'}
         onRemove={vi.fn()}
         noun="dish"
         itemLabel={(d) => d.name}
         problems={[]}
       />,
     );
-    expect(screen.getAllByLabelText(DISH_FIELDS.image.label)[0]).toHaveAttribute('type', 'file');
+    await user.click(screen.getByRole('button', { name: 'Negroni' }));
+    expect(screen.getByLabelText(DISH_FIELDS.image.label)).toHaveAttribute('type', 'file');
   });
 });
