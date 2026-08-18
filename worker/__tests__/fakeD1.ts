@@ -60,6 +60,16 @@ export class FakeD1 {
     return new FakeStatement(this, normalized, []);
   }
 
+  // A direct row insert, bypassing D1Store.write's sha/version machinery --
+  // for tests that only need a body present at `path` for `read` to find
+  // (worker/post-lookup.ts's tests, which don't exercise the write guard at
+  // all). published.test.ts instead seeds through D1Store(asD1(fake)).write
+  // because it DOES need real sha/version behaviour; this is the cheaper
+  // path for callers that don't.
+  seed(path: string, body: string, sha = 'test-sha', version = 1): void {
+    this.content.set(path, { path, body, sha, version, updated_at: Date.now() });
+  }
+
   async batch(statements: FakeStatement[]): Promise<unknown[]> {
     this.batchCalls += 1;
     if (this.shouldFailNow()) throw new Error(this.failWith as string);
