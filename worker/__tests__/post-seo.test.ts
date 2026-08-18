@@ -72,6 +72,7 @@ describe('post metadata', () => {
 });
 
 import { readFileSync } from 'node:fs';
+import type { PostMetadata } from '../post-seo';
 import { SHELL_ANCHORS, rewriteShellHead } from '../post-shell';
 
 const SHELL = readFileSync('index.html', 'utf8');
@@ -118,6 +119,39 @@ describe('rewriting the shell head', () => {
     // an href -- is what must be absent before the rewrite and present after.
     expect(SHELL).not.toContain('rel="canonical" href=');
     expect(out).toContain('<link rel="canonical" href="https://vb.aionxxxi.uk/blog/assassina">');
+  });
+
+  // Review fix round 1, F1 (BLOCKING). The title/description assertions
+  // above read the `<title>` text node and the `name="description"` tag,
+  // both built from local `title`/`description` variables -- neither
+  // touches `metaTag()`, which is the SOLE emitter for these seven
+  // attributes. Deleting the `escapeHtmlAttribute` call inside `metaTag()`
+  // left the full suite green (measured: 18/18, then 3472/3472) until this
+  // test existed. A title of `x"><script>alert(1)</script>` would otherwise
+  // inject a live script into every one of these attributes on a real post
+  // URL with nothing here to notice.
+  it('escapes every metaTag-built attribute, not just the title and description locals', () => {
+    const escapedTitle = 'Spaghetti all&#39;Assassina &amp; &quot;burnt&quot; pasta';
+    const escapedDescription = 'A Puglian classic &lt;cooked&gt; in tomato water, not water.';
+    expect(out).toContain(`<meta property="og:title" content="${escapedTitle}" />`);
+    expect(out).toContain(`<meta property="og:description" content="${escapedDescription}" />`);
+    expect(out).toContain(`<meta property="twitter:title" content="${escapedTitle}" />`);
+    expect(out).toContain(`<meta property="twitter:description" content="${escapedDescription}" />`);
+  });
+
+  // Review fix round 1, F2 (non-blocking, same class). `meta.canonical` is
+  // always `seo.url` plus a slug already constrained to [a-z0-9-] by
+  // isUrlSafeSlug, so POST's real canonical carries nothing for the escape
+  // to act on -- the fixture above cannot exercise this call. Built
+  // directly against a crafted PostMetadata instead, proving the call is
+  // defence in depth rather than untested: dropping
+  // `escapeHtmlAttribute(meta.canonical)` from the injected `<link>` left
+  // the suite green until this test existed.
+  it('escapes the injected canonical href too, independent of what a real slug can carry today', () => {
+    const unsafeMeta: PostMetadata = { ...meta, canonical: 'https://vb.aionxxxi.uk/blog/a"b' };
+    const unsafeOut = rewriteShellHead(SHELL, unsafeMeta)!;
+    expect(unsafeOut).toContain('<link rel="canonical" href="https://vb.aionxxxi.uk/blog/a&quot;b">');
+    expect(unsafeOut).not.toContain('href="https://vb.aionxxxi.uk/blog/a"b"');
   });
 
   it('adds exactly one Article structured-data block', () => {

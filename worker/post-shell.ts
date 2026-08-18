@@ -10,12 +10,15 @@
 // The brittleness that normally makes this a bad idea is answered two ways.
 // First, every pattern below is exported and pinned against the REAL
 // committed index.html by this module's own test, and against the REAL BUILT
-// dist/index.html by src/test/crawlers.test.ts -- so an index.html edit that
-// changes a tag's shape is a red build, not a silent stop. Second, this
-// function REFUSES: if any anchor is missing it returns null and the caller
-// serves the shell untouched. A half-rewritten head -- the post's title
-// beside the site's own og:image -- is worse than no rewrite at all, because
-// the two disagree and nothing downstream can tell which is meant.
+// dist/index.html by worker/__tests__/post-shell.dist.test.ts -- run for real
+// on every build, since `npm run build` ends with `npm run test:bundle` and
+// that script now names the dist file by path -- so an index.html edit, or a
+// Vite/plugin change that rewrites a tag's shape only in the build step, is a
+// red build, not a silent stop. Second, this function REFUSES: if any anchor
+// is missing it returns null and the caller serves the shell untouched. A
+// half-rewritten head -- the post's title beside the site's own og:image --
+// is worse than no rewrite at all, because the two disagree and nothing
+// downstream can tell which is meant.
 import { escapeHtmlAttribute, type PostMetadata } from './post-seo';
 
 // Every tag this module replaces. `name` is what a failure message says;

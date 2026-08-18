@@ -48,12 +48,23 @@ export function canonicalForSlug(slug: string, siteUrl: string = SITE_URL): stri
 }
 
 // `post.image` is guaranteed non-blank and site-relative by
-// src/content/guards.ts (a non-blank string check, then isSiteRelativePath),
-// and worker/post-lookup.ts runs that same guard on the D1 body -- so this
-// concatenation cannot produce a bare origin or an off-site URL. There is
-// deliberately no "post with no photo" branch: the content model does not
-// permit one, and a runtime fallback here would be dead code pretending to
-// be a safety net.
+// src/content/guards.ts (a non-blank string check, then isSiteRelativePath)
+// for every Post this repo can build from committed content -- confirmed
+// directly: assertPosts (guards.ts) rejects a blank or non-site-relative
+// image, and Post['image'] (src/content/types.ts) is a required string, so
+// posts.json cannot describe an imageless post.
+//
+// That guarantee does NOT yet extend to a D1 row. Task 3 is what reads posts
+// out of D1 instead of posts.json, and worker/post-lookup.ts -- the module
+// that will do that -- does not exist yet; nothing under worker/ calls
+// assertPosts or validatePosts today. Task 3 is REQUIRED to run the same (or
+// an equivalent) guard on the D1 body before a Post reaches this function --
+// until it does, this concatenation can produce a bare origin for a
+// D1-sourced row with no image. There is deliberately no "post with no
+// photo" branch here regardless of that: the content model does not permit
+// one for build-time content, and a runtime fallback would be dead code
+// standing in for the guard Task 3 must add at its own input boundary, not
+// for a branch this function should grow.
 export function absoluteImageUrl(image: string, siteUrl: string = SITE_URL): string {
   return `${siteUrl}${image}`;
 }
