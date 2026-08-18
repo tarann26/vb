@@ -38,6 +38,7 @@ import { WA_COUNTS_KV_KEY, readWaCounts } from './wa';
 import { storeFor, partitionByStore } from './store';
 import { D1ConflictError, D1Store } from './d1';
 import { handlePublished } from './published';
+import { handlePostPage, slugFromPath } from './post-page';
 
 // Grows as later tasks need more bindings -- only what this file actually
 // reads belongs here. GITHUB_OWNER/REPO/BRANCH/TOKEN come in via GitHubEnv
@@ -424,7 +425,43 @@ function isCrossOriginWrite(request: Request): boolean {
 // caching or not caching could expose either way.
 export const CACHEABLE_PATHS = new Set(['/api/published']);
 
-function withSecurityHeaders(response: Response, pathname: string): Response {
+// The one exemption from the header set above, and it is written against the
+// REQUEST rather than against a path list, because the set of responses that
+// must be exempt is exactly "the ones worker/post-page.ts produced" and
+// nothing else.
+//
+// WHAT THIS PREVENTS, exactly, because the failure is total and silent:
+// SECURITY_HEADERS sets `Content-Security-Policy: default-src 'none'` on every
+// response this Worker returns. That is the right policy for a JSON API and it
+// forbids script, style, font and image -- so the SPA shell served under it
+// renders as a completely blank white page for every visitor, at a 200, with
+// no error anywhere. public/_headers already carries the policy this site's
+// HTML needs, and Pages applies it to the /index.html response
+// worker/post-page.ts fetches. Handing that response back with its own headers
+// intact is therefore both the correct answer and the one that cannot drift:
+// there is no second copy of the policy here to fall out of step with
+// public/_headers.
+//
+// WHY THE METHOD IS PART OF IT. A pathname-only test would also exempt the
+// router's plain-text 404 for `POST /blog/anything` -- a response this Worker
+// authored, that is not HTML, and that would then be served with no nosniff,
+// no X-Frame-Options and no no-store. That is the "one notch too wide" shape:
+// invisible, because nothing about the post page itself would look wrong.
+//
+// WHY IT IS THE SAME FUNCTION THE ROUTER BRANCHES ON, below. Two predicates
+// -- one deciding who gets the handler, one deciding who gets the headers --
+// is two things that must agree forever, checked by nobody. One predicate,
+// called from both places, cannot disagree with itself. Widening this widens
+// the route too, which is loud.
+export function servesSiteHtml(request: Request): boolean {
+  return request.method === 'GET' && slugFromPath(new URL(request.url).pathname) !== null;
+}
+
+function withSecurityHeaders(response: Response, request: Request): Response {
+  // See servesSiteHtml above: this Worker's header set is API-shaped and would
+  // blank the page.
+  if (servesSiteHtml(request)) return response;
+  const pathname = new URL(request.url).pathname;
   const headers = new Headers(response.headers);
   for (const [name, value] of Object.entries(SECURITY_HEADERS)) {
     if (name === 'Cache-Control' && CACHEABLE_PATHS.has(pathname)) continue;
@@ -1279,7 +1316,7 @@ export default {
   // for why that is here rather than in the four `json` helpers scattered
   // across this Worker's modules.
   async fetch(request: Request, env: Env): Promise<Response> {
-    return withSecurityHeaders(await route(request, env), new URL(request.url).pathname);
+    return withSecurityHeaders(await route(request, env), request);
   },
 };
 
@@ -1383,6 +1420,28 @@ async function route(request: Request, env: Env): Promise<Response> {
 
   if (url.pathname === '/api/wa' && request.method === 'GET') {
     return handleReadWaCounts(request, env);
+  }
+
+  // Phase 5C. The one route in this Worker whose response is HTML rather than
+  // JSON. Placed last, after every /api/* branch, so it can never shadow one
+  // -- and gated on GET (inside servesSiteHtml), so the cross-origin POST
+  // check above is unaffected.
+  //
+  // NOT ROUTED AT THE EDGE YET. wrangler.toml still sends this Worker only
+  // /api/*, so nothing here is reachable by a visitor until Task 4 adds the
+  // /blog/* route. That gap is deliberate.
+  //
+  // Unauthenticated by design and deliberately not rate-limited, for the same
+  // reasons GET /api/published is neither: it makes one D1 row read, spends no
+  // KV write, and the limiter's own bookkeeping IS a KV write against a
+  // 1,000/day namespace-wide cap. The volumetric backstop is the same WAF rule
+  // in docs/cloudflare-cutover.md.
+  //
+  // servesSiteHtml, not a second copy of the same condition, so the set of
+  // requests this handler answers and the set exempted from SECURITY_HEADERS
+  // are the same set by construction rather than by agreement.
+  if (servesSiteHtml(request)) {
+    return handlePostPage(request, env);
   }
 
   return new Response('Not found', { status: 404 });
