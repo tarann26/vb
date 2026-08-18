@@ -495,9 +495,13 @@ describe('AdminApp: the real "Homepage sections" screen', () => {
     await user.click(within(section).getByRole('button', { name: 'Move Hero down' }));
 
     const HUMAN_NAMES = ['Hero', 'About', 'Atmosfera', 'Menu', 'Drinks', 'Blog', 'Awards', 'Visit Us'];
+    // Task 8 gave every row a drag handle glyph ahead of its name, so
+    // `li.textContent` no longer STARTS WITH the human name -- it starts
+    // with the handle. `within(li).queryByText(name)` finds the name's own
+    // span directly instead of relying on the row's whole concatenated text.
     const namesInOrder = within(section)
       .getAllByRole('listitem')
-      .map((li) => HUMAN_NAMES.find((name) => li.textContent?.startsWith(name)));
+      .map((li) => HUMAN_NAMES.find((name) => within(li).queryByText(name) !== null));
     expect(namesInOrder.slice(0, 2)).toEqual(['About', 'Hero']);
   });
 

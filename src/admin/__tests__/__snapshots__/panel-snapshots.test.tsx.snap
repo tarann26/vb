@@ -2119,7 +2119,19 @@ exports[`the thirteen panels, as they render today > What shows on the homepage 
           <div
             class="mb-3 flex items-center justify-between gap-2"
           >
-            <div>
+            <div
+              class="flex items-center gap-1"
+            >
+              <span
+                aria-hidden="true"
+                class="select-none px-3 py-1 text-gray-500"
+                data-drag-handle="0"
+                draggable="true"
+                style="cursor: move;"
+                title="Drag to move Hero"
+              >
+                ⠿
+              </span>
               <span
                 class="font-['Montserrat'] text-base text-[#222]"
               >
@@ -2168,7 +2180,19 @@ exports[`the thirteen panels, as they render today > What shows on the homepage 
           <div
             class="mb-3 flex items-center justify-between gap-2"
           >
-            <div>
+            <div
+              class="flex items-center gap-1"
+            >
+              <span
+                aria-hidden="true"
+                class="select-none px-3 py-1 text-gray-500"
+                data-drag-handle="1"
+                draggable="true"
+                style="cursor: move;"
+                title="Drag to move About"
+              >
+                ⠿
+              </span>
               <span
                 class="font-['Montserrat'] text-base text-[#222]"
               >
@@ -2218,7 +2242,19 @@ exports[`the thirteen panels, as they render today > What shows on the homepage 
           <div
             class="mb-3 flex items-center justify-between gap-2"
           >
-            <div>
+            <div
+              class="flex items-center gap-1"
+            >
+              <span
+                aria-hidden="true"
+                class="select-none px-3 py-1 text-gray-500"
+                data-drag-handle="2"
+                draggable="true"
+                style="cursor: move;"
+                title="Drag to move Atmosfera"
+              >
+                ⠿
+              </span>
               <span
                 class="font-['Montserrat'] text-base text-[#222]"
               >
@@ -2268,7 +2304,19 @@ exports[`the thirteen panels, as they render today > What shows on the homepage 
           <div
             class="mb-3 flex items-center justify-between gap-2"
           >
-            <div>
+            <div
+              class="flex items-center gap-1"
+            >
+              <span
+                aria-hidden="true"
+                class="select-none px-3 py-1 text-gray-500"
+                data-drag-handle="3"
+                draggable="true"
+                style="cursor: move;"
+                title="Drag to move Menu"
+              >
+                ⠿
+              </span>
               <span
                 class="font-['Montserrat'] text-base text-[#222]"
               >
@@ -2318,7 +2366,19 @@ exports[`the thirteen panels, as they render today > What shows on the homepage 
           <div
             class="mb-3 flex items-center justify-between gap-2"
           >
-            <div>
+            <div
+              class="flex items-center gap-1"
+            >
+              <span
+                aria-hidden="true"
+                class="select-none px-3 py-1 text-gray-500"
+                data-drag-handle="4"
+                draggable="true"
+                style="cursor: move;"
+                title="Drag to move Drinks"
+              >
+                ⠿
+              </span>
               <span
                 class="font-['Montserrat'] text-base text-[#222]"
               >
@@ -2368,7 +2428,19 @@ exports[`the thirteen panels, as they render today > What shows on the homepage 
           <div
             class="mb-3 flex items-center justify-between gap-2"
           >
-            <div>
+            <div
+              class="flex items-center gap-1"
+            >
+              <span
+                aria-hidden="true"
+                class="select-none px-3 py-1 text-gray-500"
+                data-drag-handle="5"
+                draggable="true"
+                style="cursor: move;"
+                title="Drag to move Experiences"
+              >
+                ⠿
+              </span>
               <span
                 class="font-['Montserrat'] text-base text-[#222]"
               >
@@ -2418,7 +2490,19 @@ exports[`the thirteen panels, as they render today > What shows on the homepage 
           <div
             class="mb-3 flex items-center justify-between gap-2"
           >
-            <div>
+            <div
+              class="flex items-center gap-1"
+            >
+              <span
+                aria-hidden="true"
+                class="select-none px-3 py-1 text-gray-500"
+                data-drag-handle="6"
+                draggable="true"
+                style="cursor: move;"
+                title="Drag to move Blog"
+              >
+                ⠿
+              </span>
               <span
                 class="font-['Montserrat'] text-base text-[#222]"
               >
@@ -2468,7 +2552,19 @@ exports[`the thirteen panels, as they render today > What shows on the homepage 
           <div
             class="mb-3 flex items-center justify-between gap-2"
           >
-            <div>
+            <div
+              class="flex items-center gap-1"
+            >
+              <span
+                aria-hidden="true"
+                class="select-none px-3 py-1 text-gray-500"
+                data-drag-handle="7"
+                draggable="true"
+                style="cursor: move;"
+                title="Drag to move Awards"
+              >
+                ⠿
+              </span>
               <span
                 class="font-['Montserrat'] text-base text-[#222]"
               >
@@ -2518,7 +2614,19 @@ exports[`the thirteen panels, as they render today > What shows on the homepage 
           <div
             class="mb-3 flex items-center justify-between gap-2"
           >
-            <div>
+            <div
+              class="flex items-center gap-1"
+            >
+              <span
+                aria-hidden="true"
+                class="select-none px-3 py-1 text-gray-500"
+                data-drag-handle="8"
+                draggable="true"
+                style="cursor: move;"
+                title="Drag to move Visit Us"
+              >
+                ⠿
+              </span>
               <span
                 class="font-['Montserrat'] text-base text-[#222]"
               >
