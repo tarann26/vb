@@ -379,10 +379,16 @@ describe('cloudflare hosting config', () => {
         expect(scriptSrc).not.toContain("'unsafe-inline'");
       });
 
-      // style-src is the opposite trade and worth stating: 17 components set
+      // style-src is the opposite trade and worth stating: 18 components set
       // React style props, which become element style attributes, so inline
       // styles are unavoidable here. Styles cannot execute script, so this
-      // costs far less than the script-src equivalent would.
+      // costs far less than the script-src equivalent would. (Admin
+      // redesign, Section A: EditorSheet, ItemList and SectionList joined
+      // this count -- drag-row.ts's HANDLE_STYLE/DRAGGING_STYLE and
+      // EditorSheet's own OVERLAY_STYLE, the same escape hatch BlockList
+      // already used and still uses. Recount with `grep -rl "style={{\|
+      // style={[A-Z_]*STYLE" src/ --include='*.tsx' | grep -v __tests__`,
+      // not by re-deriving a headcount from this comment.)
       it('allows inline style, which React style props require', () => {
         expect(directive('style-src')).toContain("'unsafe-inline'");
       });
