@@ -609,12 +609,12 @@ describe('AdminApp: the real "Pages" screen', () => {
 
     // Mutation this guards: `PageList` returning `null` (or `items.map`
     // never running) -- confirmed red, both assertions below.
-    const editButtons = await within(section).findAllByRole('button', { name: 'Edit' });
-    expect(editButtons).toHaveLength(2);
+    const rows = await within(section).findAllByRole('button', { name: /^(Catering|Cheeseboards)$/ });
+    expect(rows).toHaveLength(2);
     expect(within(section).getByText('Catering')).toBeInTheDocument();
     expect(within(section).getByText('Cheeseboards')).toBeInTheDocument();
 
-    await user.click(editButtons[0]);
+    await user.click(within(section).getByRole('button', { name: 'Catering' }));
     expect(within(section).getByLabelText('Page name')).toHaveValue('Catering');
     expect(within(section).getByLabelText('Web address')).toHaveValue('catering');
   });

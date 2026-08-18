@@ -1964,7 +1964,11 @@ exports[`the thirteen panels, as they render today > Pages (pages) 1`] = `
     style="border: 0px; padding: 0px; margin: 0px; min-inline-size: 0;"
   >
     <div>
-      <ul />
+      <div>
+        <ul
+          data-item-list="rows"
+        />
+      </div>
     </div>
   </fieldset>
 </div>
