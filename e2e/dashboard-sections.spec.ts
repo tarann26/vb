@@ -213,7 +213,7 @@ for (const viewport of VIEWPORTS) {
   test.describe(`row thumbnails at ${viewport.label}`, () => {
     test.use({ viewport: { width: viewport.width, height: viewport.height } });
 
-    test('are 48x48, and the row\'s own controls stay on screen beside them', async ({ page }) => {
+    test('are 48x48, and the row\'s own button stays on screen beside them', async ({ page }) => {
       await asReturningVisitor(page);
       await openDashboard(page, '/edit/manage/menu');
       await page.getByRole('button', { name: 'Dishes' }).click();
@@ -221,7 +221,7 @@ for (const viewport of VIEWPORTS) {
       // The first row of the Dishes panel, whatever the committed
       // dishes.json happens to call it -- this spec runs against the REAL
       // content, not a fixture.
-      const row = page.locator('#section-panel-dishes li').first();
+      const row = page.locator('[data-item-row]').first();
       const thumbnail = row.locator('[data-thumbnail]').first();
       await expect(thumbnail).toBeVisible();
       const box = await thumbnail.boundingBox();
@@ -231,26 +231,34 @@ for (const viewport of VIEWPORTS) {
       expect(box!.height, 'thumbnail height').toBeGreaterThanOrEqual(46);
       expect(box!.height, 'thumbnail height').toBeLessThanOrEqual(50);
 
-      // A control genuinely BESIDE the picture, still inside the viewport --
-      // a thumbnail that pushed it off the edge would satisfy any
-      // "non-zero" assertion while making the row unusable at 390px.
-      //
-      // STALE UNTIL THIS ROUND: `row.getByRole('button').first()` used to be
-      // that control, back when a row's own thumbnail sat next to a
-      // SEPARATE clickable element. ItemList.tsx (Tasks 1-2 of this same
-      // plan, already on this branch when this spec was last green) made
-      // the row's own picture-and-name button its own single control, with
-      // the thumbnail as that button's FIRST CHILD -- so ".first()" started
-      // matching that same button, whose box always begins at the
-      // thumbnail's own x. The Move button is the first control that is
-      // actually beside the picture rather than around it, and the first
+      // RE-POINTED (Task 11): the row's own picture-and-name button
+      // (ItemList.tsx's ROW_CLASSNAME) is the one control every row is
+      // guaranteed to have regardless of its position in the list, and its
+      // own box has to extend past the thumbnail to hold the name -- a
+      // thumbnail rendered OUTSIDE that button (e.g. a future refactor that
+      // moves it back out as a sibling) would not necessarily fail this on
+      // its own, which is why the Move Down button beside it is kept as the
+      // half that is actually proven to catch a real regression: the first
       // row never has an "up" one (RecordList's own omit-at-the-ends rule),
       // so "down" is what a real dishes.json is guaranteed to offer here.
-      const control = row.getByRole('button', { name: /down$/ });
+      const control = row.getByRole('button').first();
       const controlBox = await control.boundingBox();
       expect(controlBox).not.toBeNull();
-      expect(controlBox!.x).toBeGreaterThanOrEqual(box!.x + box!.width);
-      expect(controlBox!.x + controlBox!.width).toBeLessThanOrEqual(viewport.width);
+      expect(controlBox!.x + controlBox!.width, 'row button extends past the thumbnail').toBeGreaterThan(
+        box!.x + box!.width,
+      );
+
+      const moveControl = row.getByRole('button', { name: /down$/ });
+      const moveBox = await moveControl.boundingBox();
+      expect(moveBox).not.toBeNull();
+      // Mutation: drop `min-w-0` from ItemList's ROW_CLASSNAME -- at 390px
+      // the row's own button refuses to shrink, pushing this sibling off the
+      // right edge, and this reddens (unchanged at 1440px, which has
+      // headroom to tolerate it).
+      expect(moveBox!.x, 'row control stays beside the picture').toBeGreaterThanOrEqual(box!.x + box!.width);
+      expect(moveBox!.x + moveBox!.width, 'row control stays inside the viewport').toBeLessThanOrEqual(
+        viewport.width,
+      );
     });
   });
 }
