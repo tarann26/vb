@@ -942,11 +942,47 @@ describe('dist/assets/ keeps admin code out of the entry chunk', () => {
 // thinner than the entry above wanted and it is stated rather than glossed:
 // the next task adding a rule of any real size breaches this and has to raise
 // it with its own rule-level accounting, in its own commit.
+// Admin redesign Task 35 follow-ups, the /blog placeholder and touch targets:
+// 38917 -> 39037 (+120), two rules added, none removed, 513 -> 515 top-level
+// blocks. Measured by rebuilding across the change and diffing rule by rule:
+//
+//   +55  `input::placeholder,textarea::placeholder{color:#6b7280}`, written by
+//        hand in src/index.css
+//   +65  autoprefixer's `-moz-placeholder` twin of it, which is not optional
+//
+// Sum: +120, matching the whole-file delta exactly.
+//
+// THE CEILING IS RAISED, to 39200 -- 39037 rounded up to the next 100, plus
+// 100, which is the method the Task 13 entry above set. This is a breach
+// caused here and closed here rather than deferred; the last deferral cost
+// this branch eleven tasks of red build.
+//
+// What was bought, and what the alternative cost:
+//   * Tailwind preflight painted every placeholder on the site gray-400,
+//     2.54:1 on a white field. That is under AA and under even the 3:1
+//     non-text bar, on the one control a reader has to read before using it.
+//     #6B7280 is 4.83:1. e2e/blog-controls.spec.ts measures it in Chromium.
+//   * The per-field utility version of the same fix was BUILT AND MEASURED
+//     FIRST, not reasoned about: it costs 247 bytes, because Tailwind emits
+//     a `-moz-` twin of the utility as well, and it fixes exactly one field.
+//     The base-layer rule is 127 bytes cheaper and fixes every input in the
+//     app, admin included. That is why this is not a utility.
+//   * The 38px controls went to 46 in the same commit and cost NOTHING here:
+//     `py-2` -> `py-3` on BlogIndex's one shared control binding, and `py-3`
+//     already had a rule in this sheet (NavBar uses it). Verified in the
+//     rule-level diff above, where it does not appear.
+//   * Drinks.tsx's misplaced decorative dot was fixed in the same commit and
+//     also costs nothing: the utility it moved to already had a rule, because
+//     a sibling dot in the same block already used it.
+//
+// The raise leaves 163 bytes of headroom, which is the ~150 this file's Task
+// 13 entry argued a branch should carry so that one honest new rule is a
+// passing build with a raise to write rather than a red build.
 describe('dist/assets/ keeps the shared stylesheet under a byte ceiling', () => {
-  it.skipIf(!REQUIRED && !existsSync(DIST_ASSETS))('the entry CSS file stays under 39000 bytes', () => {
+  it.skipIf(!REQUIRED && !existsSync(DIST_ASSETS))('the entry CSS file stays under 39200 bytes', () => {
     const cssFiles = readdirSync(DIST_ASSETS).filter((n) => /^index-.*\.css$/.test(n));
     expect(cssFiles.length).toBeGreaterThan(0);
     const size = statSync(join(DIST_ASSETS, cssFiles[0])).size;
-    expect(size).toBeLessThan(39000);
+    expect(size).toBeLessThan(39200);
   });
 });

@@ -31,11 +31,12 @@ const BRAND = 'rgb(200, 216, 232)';
 // WCAG 1.4.11's 3:1 bar for a non-text indicator outright.
 const FOCUS_RING = 'rgb(157, 73, 73)';
 
-// Tailwind preflight's `::placeholder` colour (gray-400, #9CA3AF). Pinned as a
-// value rather than trusted, because it is a UA/base-layer colour that no
-// component in this repo sets and jsdom cannot read at all. See the placeholder
-// test for what it measures to and why that is a reported finding.
-const PLACEHOLDER = 'rgb(156, 163, 175)';
+// The placeholder colour, #6B7280, set by src/index.css's own base-layer rule.
+// Pinned as a value rather than trusted, because it is a base-layer colour that
+// no component sets and jsdom cannot read at all. It used to be Tailwind
+// preflight's gray-400, #9CA3AF, `rgb(156, 163, 175)`, which measured 2.54:1 on
+// the white field; see the placeholder test.
+const PLACEHOLDER = 'rgb(107, 114, 128)';
 
 // `max-w-2xl` on the search field. 42rem at the 16px root this site uses.
 const SEARCH_CAP = 672;
@@ -277,21 +278,23 @@ for (const size of WIDTHS) {
         const ph = getComputedStyle(el, '::placeholder');
         return { color: ph.color, opacity: ph.opacity, field: getComputedStyle(el).backgroundColor };
       });
-      // A pin, NOT a pass. Deferred claim 5 asked whether the placeholder meets
-      // AA against the white field. MEASURED: #9CA3AF on #FFFFFF is 2.54:1,
-      // which fails AA's 4.5:1 for text and fails even the 3:1 non-text bar.
-      // Nothing in this repo sets that colour -- it is Tailwind preflight's
-      // base-layer `::placeholder` -- so fixing it is a stylesheet decision
-      // with a CSS cost, and it is REPORTED rather than quietly asserted away.
-      // The equality is what forces the next person who changes it to come
-      // back here and re-measure instead of assuming.
+      // A pass now, where Task 32 could only pin a failure. Deferred claim 5
+      // asked whether the placeholder meets AA against the white field, and
+      // Tailwind preflight's own gray-400 measured 2.54:1 -- under AA's 4.5:1
+      // for text and under even the 3:1 non-text bar, on the one control a
+      // reader has to read before they can use it. src/index.css sets #6B7280
+      // in the base layer instead, which MEASURES 4.83:1 on the white field at
+      // both widths. The equality is what forces the next person who changes
+      // it to come back here and re-measure instead of assuming.
       expect(style.color).toBe(PLACEHOLDER);
       expect(style.field).toBe('rgb(255, 255, 255)');
       // Firefox halves placeholder opacity by UA default and Chromium does
       // not; reading the colour without the opacity would overstate the
-      // contrast by a factor the ratio above cannot see.
+      // contrast by a factor the ratio below cannot see. Preflight's own
+      // `opacity: 1` is still what holds this -- the override changes only the
+      // colour -- so the two go on being checked together.
       expect(style.opacity).toBe('1');
-      expect(contrast(style.color, style.field)).toBeLessThan(4.5);
+      expect(contrast(style.color, style.field)).toBeGreaterThanOrEqual(4.5);
     });
 
     test('every control shows a focus ring when it is tabbed to', async ({ page }) => {
@@ -408,7 +411,9 @@ for (const size of WIDTHS) {
 //                                      since the `py-3` change; was 38.
 // 4 search width at both widths ...... "the search field fills the column..."
 // 5 placeholder contrast ............. "the search placeholder is opaque..."
-//                                      -- 2.54:1, does NOT meet AA. Pinned.
+//                                      -- 4.83:1, meets AA, since src/index.css
+//                                      took the base-layer colour off
+//                                      preflight's gray-400; was 2.54:1.
 // 6 a visible focus ring per control . "every control shows a focus ring..."
 //                                      -- accent on the six buttons, the UA's
 //                                      own ring on the search field.

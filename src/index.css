@@ -72,6 +72,25 @@ a:focus-visible {
   outline-offset: 2px;
 }
 
+/* Tailwind preflight paints every placeholder gray-400, #9CA3AF, which is
+   2.54:1 on a white field -- under AA's 4.5:1 for text and under even the 3:1
+   bar for a non-text indicator. Nothing in this repo chose that colour and
+   nothing overrode it. On /blog the search field is the one control a reader
+   has to read before they can use it, and the owner reads this site on a
+   phone outdoors. #6B7280 is 4.83:1 on white and stays visibly lighter than
+   the #222222 a typed value paints in, so an empty field still reads empty.
+
+   A base-layer rule rather than a utility on the one field, and the reason is
+   measured: the utility version costs 247 bytes, because Tailwind emits a
+   -moz- twin of it, and that breached this branch's stylesheet ceiling on its
+   own. This costs 54 and fixes every input on the site, admin included,
+   instead of the one field a test happened to be pointed at.
+   e2e/blog-controls.spec.ts measures the result in a real browser. */
+input::placeholder,
+textarea::placeholder {
+  color: #6B7280;
+}
+
 /* Custom animation delays */
 .animation-delay-300 {
   animation-delay: 300ms;
