@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { POSTS_FILE, POSTS_PATH, lookupPost } from '../post-lookup';
-import { BLOG_POST_PREFIX, SHELL_PATH, handlePostPage, slugFromPath } from '../post-page';
+import {
+  BLOG_POST_PREFIX,
+  SHELL_HEADERS_KEPT,
+  SHELL_PATH,
+  handlePostPage,
+  slugFromPath,
+} from '../post-page';
 import worker, { servesSiteHtml } from '../index';
 import { snapshotFor } from '../snapshot';
 import { asD1, FakeD1 } from './fakeD1';
@@ -308,34 +314,158 @@ describe('serving a post page', () => {
     expect(await response.text()).toBe(broken);
   });
 
-  // Rewriting the head makes the body longer than the one Pages measured, so
-  // a Content-Length carried over from the shell describes a document that no
-  // longer exists -- and a short Content-Length is a truncated page, which is
-  // the blank-screen-at-200 failure in different clothes. Content-Encoding is
-  // the mirror image: `fetch` hands the body back already decoded, so a
-  // surviving `br` would tell the browser to inflate plain text.
-  it('does not carry the shell\'s stale Content-Length or Content-Encoding onto the rewritten body', async () => {
-    const measured = (async () =>
+  it('rewrites a body longer than the one Pages measured', async () => {
+    const response = await handlePostPage(
+      get('/blog/live-only'),
+      { DB: await dbWith(D1_POSTS) },
+      fakePages().impl,
+    );
+    const html = await response.text();
+    expect(html).toContain('"@type":"Article"');
+    expect(html.length).toBeGreaterThan(SHELL.length);
+  });
+});
+
+// THE HEADER POLICY, which is the point rather than any particular header.
+//
+// This response is a document this Worker invented: the head is not the head
+// Pages sent, and the bytes are not the bytes Pages measured. Inheriting the
+// shell's headers and pruning the ones somebody thought of shipped the same
+// defect twice -- once as Content-Length (a stale length is a truncated page),
+// once as ETag (a validator for bytes that no longer exist, and the SAME one
+// on every post, so a cache that trusts it can serve one post's body for
+// another URL). The list is therefore an allow-list, and the tests below are
+// written against the POLICY, so the next header nobody thought of is caught
+// before it is named.
+describe('what the rewritten response is allowed to carry', () => {
+  // A shell response dressed in everything Pages, Cloudflare, or some future
+  // deploy might plausibly attach to it.
+  function dressedShell(): typeof fetch {
+    return (async () =>
       new Response(SHELL, {
         status: 200,
         headers: {
           'Content-Type': 'text/html',
+          'Content-Security-Policy': "default-src 'self'",
+          'X-Content-Type-Options': 'nosniff',
+          'X-Frame-Options': 'DENY',
+          'Referrer-Policy': 'strict-origin-when-cross-origin',
+          'Permissions-Policy': 'geolocation=()',
+          'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
+          ETag: 'W/"shell-v1"',
+          'Last-Modified': 'Tue, 12 Aug 2026 00:00:00 GMT',
           'Content-Length': String(SHELL.length),
           'Content-Encoding': 'br',
+          'Set-Cookie': 'pages_session=abc; Path=/',
+          Vary: 'Accept-Encoding',
+          Age: '42',
+          'CF-Cache-Status': 'HIT',
+          'X-Invented-Next-Quarter': 'whatever',
         },
       })) as unknown as typeof fetch;
-    const response = await handlePostPage(
-      get('/blog/live-only'),
-      { DB: await dbWith(D1_POSTS) },
-      measured,
-    );
+  }
+
+  async function rewritten(): Promise<Response> {
+    return handlePostPage(get('/blog/live-only'), { DB: await dbWith(D1_POSTS) }, dressedShell());
+  }
+
+  // THE TEST THAT WOULD HAVE CAUGHT BOTH BUGS, and is written so it catches
+  // the third one too: it names no forbidden header. Anything on the shell
+  // that is not on the allow-list must be gone, whether or not anyone here
+  // has heard of it.
+  it('carries nothing the allow-list does not name', async () => {
+    const response = await rewritten();
+    const allowed = new Set([...SHELL_HEADERS_KEPT, 'Cache-Control'].map((n) => n.toLowerCase()));
+    const carried: string[] = [];
+    response.headers.forEach((_value, name) => {
+      if (!allowed.has(name.toLowerCase())) carried.push(name);
+    });
+    expect(carried, `these crossed from the shell without being allowed: ${carried.join(', ')}`)
+      .toEqual([]);
+  });
+
+  // Named individually as well, because these three are the ones with teeth
+  // and a failure message saying "ETag" is worth more at 2am than one saying
+  // "an unexpected header crossed".
+  it('drops the validators, which describe bytes it replaced', async () => {
+    const response = await rewritten();
+    // The worst of the three: every post inherits the SAME shell ETag, so a
+    // cache that trusts it can answer one post's URL with another's body.
+    expect(response.headers.get('ETag')).toBeNull();
+    expect(response.headers.get('Last-Modified')).toBeNull();
+  });
+
+  it('drops the framing, which describes a body that no longer exists', async () => {
+    const response = await rewritten();
     expect(response.headers.get('Content-Length')).toBeNull();
     expect(response.headers.get('Content-Encoding')).toBeNull();
-    // The header that must survive is still surviving.
+  });
+
+  it('does not forward a Set-Cookie onto a rewritten public document', async () => {
+    const response = await rewritten();
+    expect(response.headers.get('Set-Cookie')).toBeNull();
+  });
+
+  // The other half: an allow-list that dropped the site's security policy
+  // would be "safe" and would also undo the entire reason worker/index.ts
+  // exempts this path in the first place.
+  it('forwards the site policy Pages set, verbatim', async () => {
+    const response = await rewritten();
     expect(response.headers.get('Content-Type')).toBe('text/html');
-    const html = await response.text();
-    expect(html).toContain('"@type":"Article"');
-    expect(html.length).toBeGreaterThan(SHELL.length);
+    expect(response.headers.get('Content-Security-Policy')).toBe("default-src 'self'");
+    expect(response.headers.get('X-Content-Type-Options')).toBe('nosniff');
+    expect(response.headers.get('X-Frame-Options')).toBe('DENY');
+    expect(response.headers.get('Referrer-Policy')).toBe('strict-origin-when-cross-origin');
+    expect(response.headers.get('Permissions-Policy')).toBe('geolocation=()');
+    expect(response.headers.get('Strict-Transport-Security')).toBe(
+      'max-age=31536000; includeSubDomains',
+    );
+  });
+
+  // Authored, not inherited. Decision recorded in post-page.ts: this document
+  // is assembled per request from a D1 row and carries no validator, so there
+  // is nothing a cache could revalidate against.
+  it('says no-store, whatever the shell said', async () => {
+    const response = await rewritten();
+    expect(response.headers.get('Cache-Control')).toBe('no-store');
+  });
+
+  // The allow-list is not a place to remember things. If public/_headers grows
+  // a security header for `/*`, post pages must either forward it or somebody
+  // must decide not to -- and this is what makes that a decision rather than
+  // an omission. Reads the file directly; no network, no build artifact.
+  it('names every security header public/_headers sets on /*', () => {
+    const block = readFileSync('public/_headers', 'utf8')
+      .split(/^(?=\S)/m)
+      .find((section) => section.startsWith('/*\n'));
+    expect(block, 'no `/*` block in public/_headers').toBeDefined();
+    const names = block!
+      .split('\n')
+      .slice(1)
+      .map((line) => line.trim())
+      .filter((line) => line.includes(':'))
+      .map((line) => line.slice(0, line.indexOf(':')).trim());
+    expect(names.length).toBeGreaterThan(0);
+    const allowed = SHELL_HEADERS_KEPT.map((n) => n.toLowerCase());
+    for (const name of names) {
+      expect(allowed, `public/_headers sets ${name} on /* but post pages drop it`).toContain(
+        name.toLowerCase(),
+      );
+    }
+  });
+
+  // The distinction is deliberate and worth pinning. The allow-list governs
+  // the response this Worker AUTHORS. The passthrough paths hand back Pages'
+  // own Response with Pages' own body, and its validators are truthful there
+  // -- stripping them would be cargo cult.
+  it('leaves a passed-through shell exactly as Pages sent it, validators included', async () => {
+    const response = await handlePostPage(
+      get('/blog/no-such-post'),
+      { DB: await dbWith(D1_POSTS) },
+      dressedShell(),
+    );
+    expect(response.headers.get('ETag')).toBe('W/"shell-v1"');
+    expect(await response.text()).toBe(SHELL);
   });
 });
 

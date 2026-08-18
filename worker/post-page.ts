@@ -48,24 +48,91 @@ export function slugFromPath(pathname: string): string | null {
   return slug;
 }
 
-// A rewritten Response, built from the shell's own status and headers so the
-// Content-Type -- and the Content-Security-Policy from public/_headers -- that
-// Pages set survive. The body is a string rather than a stream because it has
-// already been read in full to rewrite it.
+// AN ALLOW-LIST, NOT A DENY-LIST, and the inversion is the actual fix rather
+// than the three names it happens to remove today.
 //
-// The two headers that are DROPPED, and why dropping them is not optional.
-// Rewriting the head makes the body longer than the one Pages measured, so a
-// Content-Length copied from the shell describes a document that no longer
-// exists -- and a Content-Length shorter than the body is a truncated page,
-// which is the blank-white-screen-at-200 failure again wearing a different
-// hat. Content-Encoding goes for the same reason in reverse: whatever Pages
-// compressed, `fetch` handed back decoded, so a surviving `br` or `gzip`
-// would tell the browser to inflate plain text. Removing both leaves the
-// runtime to frame the response from the body it actually has.
+// The rewritten response used to inherit every header Pages sent and drop the
+// ones somebody had thought of. That posture shipped the same defect twice.
+// First as Content-Length: rewriting the head makes the body longer than the
+// one Pages measured, so an inherited length describes a document that no
+// longer exists -- and a short length is a truncated page, the
+// blank-screen-at-200 failure in different clothes. Then as ETag, which is
+// worse, because an ETag fingerprints bytes that no longer exist AND every
+// post inherits the SAME one from the same shell, so a cache that trusts it
+// can hand one post's body to a request for another. That surfaces as "the
+// blog shows the wrong article sometimes" and is close to impossible to
+// reproduce on demand.
+//
+// Both were the same bug. Inheriting by default means every header Pages ever
+// adds becomes a claim this Worker makes about a document it invented, and the
+// only thing standing between that and a wrong answer is somebody remembering.
+// So: nothing crosses unless it is named here.
+//
+// WHAT IS NAMED, and the rule that decides it. A header may cross only if it
+// is a statement about the URL rather than about the bytes. Content-Type
+// survives because the rewrite does not change what kind of document this is.
+// The other six are the security policy public/_headers sets on `/*`, which
+// this Worker must forward verbatim -- the exemption in worker/index.ts exists
+// precisely so those reach the visitor instead of the API-shaped set, and
+// copying them literally here rather than forwarding them would be the second
+// copy of a policy that must not drift.
+//
+// WHAT IS THEREFORE GONE, without being enumerated: ETag and Last-Modified
+// (validators for bytes this Worker replaced), Content-Length and
+// Content-Encoding (framing for a body that no longer exists), Set-Cookie (a
+// rewritten public document has no business forwarding one), and anything
+// Pages, Cloudflare or a future deploy adds that nobody here has considered.
+//
+// worker/__tests__/post-page.test.ts pins this list against the `/*` block of
+// public/_headers, so a security header added to the site becomes a red test
+// -- a visible decision -- rather than a header that silently stops reaching
+// post pages.
+export const SHELL_HEADERS_KEPT: readonly string[] = [
+  'Content-Type',
+  'Content-Security-Policy',
+  'X-Content-Type-Options',
+  'X-Frame-Options',
+  'Referrer-Policy',
+  'Permissions-Policy',
+  'Strict-Transport-Security',
+];
+
+// Authored here, never inherited, and chosen rather than defaulted.
+//
+// This document is assembled per request from a D1 row that changes whenever
+// the owner publishes, and -- see below -- it carries no validator, so a cache
+// holding it has no way to ask whether it is still right. `no-store` is the
+// same answer every other response from this Worker gives, for the same reason
+// SECURITY_HEADERS records: the reads exist precisely because their answers
+// change. It costs nothing this route was not already paying, since decision
+// D2 makes every hit fetch the shell live regardless.
+//
+// NO ETag OF ITS OWN, decided explicitly. A correct one would have to be
+// computed over the bytes actually returned -- hashing the whole rewritten
+// document on every request -- and it would be the only validator anywhere in
+// this Worker. The honest price of going without is that a returning visitor
+// re-downloads the document instead of getting a 304. That is accepted: this
+// is one restaurant's blog, the request already costs a subrequest and a D1
+// read, and "no validator, revalidate every time" is a thing that can be
+// reasoned about, where an inherited validator is a lie that reads as a
+// feature. If it ever matters, the fix is to compute one here -- never to let
+// one cross from the shell.
+export const REWRITTEN_CACHE_CONTROL = 'no-store';
+
+// The rewritten Response. Status and statusText come from the shell (it is the
+// same document, at the same URL); the headers are built from nothing.
+//
+// This applies ONLY to the response this Worker authors. The passthrough paths
+// -- a Pages error, and decision D5's unresolvable slug -- hand back the shell
+// Response untouched, and their ETag, Content-Length and the rest are
+// truthful, because those bytes really are the ones Pages sent.
 function withBody(shell: Response, html: string): Response {
-  const headers = new Headers(shell.headers);
-  headers.delete('Content-Length');
-  headers.delete('Content-Encoding');
+  const headers = new Headers();
+  for (const name of SHELL_HEADERS_KEPT) {
+    const value = shell.headers.get(name);
+    if (value !== null) headers.set(name, value);
+  }
+  headers.set('Cache-Control', REWRITTEN_CACHE_CONTROL);
   return new Response(html, {
     status: shell.status,
     statusText: shell.statusText,
