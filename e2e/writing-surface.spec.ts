@@ -1279,6 +1279,44 @@ test.describe('the writing surface', () => {
     await panel.locator('[data-item-row]').last().getByRole('button').first().click();
     await expect(surface.locator('[data-slot]').first()).toHaveText('First words');
   });
+
+  // THE SAME DEAD END AS THE TEST ABOVE, REACHED BY THE OTHER BUTTON, and the
+  // reason Task 28c exists. `removeBlock` (WritingSurface.tsx) was a plain
+  // filter and Remove is on every block unconditionally, so removing a post's
+  // only block handed back `[]` -- no editable host, `activeHost()` null and
+  // therefore every toolbar control dead, and none of the insert menu's four
+  // kinds holding a place for a caret. A removal now leaves one empty
+  // paragraph standing, the same `blankBlock('paragraph')` a new post opens
+  // with.
+  //
+  // Mutation: drop the empty-array branch from `removeBlock` -- the count
+  // below is 0 and the click has nothing to land on.
+  test('removing the last block leaves her a paragraph to write in', async ({ page }) => {
+    const surface = await openWriting(page);
+    // The first committed post is a paragraph and a citation, so this empties
+    // a real post one real block at a time rather than a hand-built one.
+    await surface.getByRole('button', { name: 'Remove Paragraph block 1' }).click();
+    await surface.getByRole('button', { name: 'Remove Where it was published block 1' }).click();
+
+    const host = surface.locator('[data-slot]');
+    await expect(host).toHaveCount(1);
+    expect(await host.evaluate((el) => el.tagName)).toBe('P');
+    await expect(host).toHaveText('');
+
+    await host.click();
+    await expect(host).toBeFocused();
+    await page.keyboard.type('Starting over');
+    await expect(host).toHaveText('Starting over');
+
+    // AND IT IS STORED, not painted over an empty array. Done unmounts the
+    // surface and reopening writes every host from the array, so words that
+    // come back are words the draft actually holds.
+    const panel = page.locator(POSTS_PANEL);
+    await panel.getByRole('button', { name: 'Done' }).click();
+    await expect(panel.locator('[role="dialog"]')).toHaveCount(0);
+    await panel.locator('[data-item-row] button').first().click();
+    await expect(surface.locator('[data-slot]').first()).toHaveText('Starting over');
+  });
 });
 
 // ---------------------------------------------------------------------------

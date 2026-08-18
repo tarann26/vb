@@ -451,11 +451,13 @@ export default function BlockList({
           blocks at all shows validatePost's "has nothing in it yet -- add a
           paragraph before publishing it" in the banner above, and a picker
           rendered only when blocks exist would leave her reading a complaint
-          with no remedy on the same screen. A post reaches that state by
-          having its last block removed; `blankPost` (areas/PostsArea.tsx) no
-          longer starts one there, because the writing surface's own picker
-          offers four kinds where this one offers ten and none of the four is
-          a paragraph. */}
+          with no remedy on the same screen. A post reaches that state through
+          THIS list's own Remove above, which is a plain filter; neither of the
+          two routes the writing surface has can produce it any more --
+          `blankPost` (areas/PostsArea.tsx) seeds a paragraph and that
+          surface's Remove leaves one behind, because its picker offers four
+          kinds where this one offers ten and none of the four is a
+          paragraph. */}
       <BlockPicker onPick={(kind) => onChange([...safe, blankBlock(kind)])} />
     </div>
   );

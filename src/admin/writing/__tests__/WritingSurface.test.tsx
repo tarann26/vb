@@ -12,6 +12,7 @@ import { useState } from 'react';
 import { fireEvent, render, cleanup, screen, within } from '@testing-library/react';
 import WritingSurface, { type WritingSurfaceProps } from '../WritingSurface';
 import { BLOCK_KIND_LABELS, INSERT_MENU_KINDS } from '../../blocks/block-meta';
+import { blankBlock } from '../../blocks/blank-block';
 import { createStableNames, type StableNames } from '../../blocks/stable-names';
 import { NO_IMAGE_PREVIEWS } from '../../previews';
 import type { Block } from '../../../content/types';
@@ -1768,7 +1769,64 @@ describe('moving and removing a block', () => {
     cleanup();
     const second = surface({ blocks: [{ kind: 'image', src: '/x.webp', alt: 'x' }], onChange: spy });
     press(second.container, 'Remove Photo block 1');
-    expect(spy.mock.calls[1][0]).toEqual([]);
+    // The photograph is gone, and an empty paragraph is standing where it was
+    // -- see the two cases below for why that is not the same as `[]`.
+    expect(spy.mock.calls[1][0]).toEqual([{ kind: 'paragraph', text: '' }]);
+  });
+
+  // TASK 28C. Removing a post's last block used to hand back `[]`, and `[]` is
+  // a state she cannot get out of: with no entry in the array there is no
+  // editable host, `activeHost()` returns null and every toolbar control is
+  // dead, and none of the insert menu's four kinds holds a place for a caret.
+  // Task 28b measured that dead end end-to-end after Add reached it through
+  // `blankPost`; this is the same one reached by pressing Remove.
+  it('leaves an empty paragraph behind rather than emptying the post', () => {
+    const spy = vi.fn();
+    const view = surface({ blocks: [{ kind: 'gallery', images: [{ src: '/a.webp', alt: 'a' }] }], onChange: spy });
+
+    press(view.container, 'Remove Photo grid block 1');
+
+    // `blankBlock('paragraph')`, which is what `blankPost` opens a new post
+    // with: one definition of an empty paragraph on this surface, not two.
+    expect(spy.mock.calls[0][0]).toEqual([blankBlock('paragraph')]);
+  });
+
+  it('and that paragraph is a host she can type into, which is the whole point of it', () => {
+    // Through the Harness, so the array really comes back down: what makes the
+    // difference between this and `[]` is a host on the screen afterwards.
+    const spy = vi.fn();
+    const view = render(<Harness initial={[{ kind: 'citation', publication: 'Vogue', date: '2026-01-01', url: null }]} spy={spy} />);
+    expect(view.container.querySelectorAll('[data-slot]')).toHaveLength(0);
+
+    press(view.container, 'Remove Where it was published block 1');
+
+    const hosts = [...view.container.querySelectorAll<HTMLElement>('[data-slot]')];
+    expect(hosts).toHaveLength(1);
+    expect(hosts[0].tagName).toBe('P');
+    expect(hosts[0].textContent).toBe('');
+    // And it is a real entry, so what she writes into it reaches the array
+    // that publishes rather than a host painted over nothing.
+    types(hosts[0], 'Starting over');
+    expect((spy.mock.calls[spy.mock.calls.length - 1][0] as Block[])[0]).toEqual({
+      kind: 'paragraph',
+      text: 'Starting over',
+    });
+  });
+
+  it('is one step back too: Undo puts the removed last block back as the same object', () => {
+    // The seeded paragraph must not cost her the block she just removed. This
+    // is the case where the array she came from is the one the fix replaced
+    // wholesale, so there is no surviving entry for the history to hang on.
+    const spy = vi.fn();
+    const only: Block = { kind: 'image', src: '/posts/x.webp', alt: 'x' };
+    const view = render(<Harness initial={[only]} spy={spy} />);
+
+    press(view.container, 'Remove Photo block 1');
+    fireEvent.click(within(view.container).getByRole('button', { name: 'Undo' }));
+
+    const restored = spy.mock.calls[spy.mock.calls.length - 1][0] as Block[];
+    expect(restored).toHaveLength(1);
+    expect(restored[0]).toBe(only);
   });
 
   it('Move carries the SAME block objects to their new positions', () => {

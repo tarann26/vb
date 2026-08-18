@@ -1290,11 +1290,35 @@ export default function WritingSurface({
   // photograph is committed, against one of the eight staged files a publish
   // allows (PhotoField.tsx's MAX_STAGED_PHOTOS_PER_PUBLISH, which
   // publish.ts:228 enforces).
+  //
+  // AND IT NEVER EMPTIES THE POST. When the block she took out was the only
+  // one, what goes back is a single empty paragraph -- `blankBlock('paragraph')`,
+  // the same seed `blankPost` (areas/PostsArea.tsx) opens a new post with, so
+  // there is one definition of what an empty paragraph is on this surface and
+  // not two of them to drift apart.
+  //
+  // An empty array is a state she cannot get out of, and Task 28b measured that
+  // end to end from the other button that reached it. With no entry in the
+  // array there is no editable host; `activeHost()` returns null, so every
+  // toolbar control is dead; and the insert menu's four kinds carry no place
+  // for a caret between them. She would be left reading validatePost's "has
+  // nothing in it yet -- add a paragraph before publishing it" with nothing on
+  // the screen able to obey it. A Remove that can do that to the post it is
+  // editing is a worse failure than a Remove that always leaves her somewhere
+  // to write.
+  //
+  // The paragraph that goes back is REAL STORED CONTENT rather than something
+  // this surface paints over an empty array: the array is authoritative (D5)
+  // and a post's stored shape is what publishes. She still cannot publish it
+  // as it stands -- validateBlock asks that paragraph for some words, on the
+  // paragraph itself, which is a better place for the complaint than the
+  // whole-post banner that used to carry it.
   function removeBlock(index: number): void {
     if (safe[index] === undefined) return;
     setNotice(null);
     remember(active.current, 'end', true);
-    emit(safe.filter((_, i) => i !== index));
+    const rest = safe.filter((_, i) => i !== index);
+    emit(rest.length === 0 ? [blankBlock('paragraph')] : rest);
   }
 
   // The three controls every block gets, whatever kind it is.
