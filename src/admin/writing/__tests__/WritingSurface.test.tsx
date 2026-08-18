@@ -674,3 +674,178 @@ describe('Enter and Backspace', () => {
     expect(spy).not.toHaveBeenCalled();
   });
 });
+
+describe('typing a trigger', () => {
+  it('turns a paragraph into a bulleted list and takes the hyphen off the screen with it', () => {
+    // Not just the array. The trigger characters have to LEAVE the host, and
+    // the reason a host she has already typed into is rewritten at all is that
+    // the written-value memo is keyed on the element: the `li` React builds
+    // here has never been written to, so the memo has nothing to say about it.
+    const spy = vi.fn();
+    const { container } = render(<Harness initial={[{ kind: 'paragraph', text: '-' }]} spy={spy} />);
+    const host = container.querySelector<HTMLElement>('[data-slot]') as HTMLElement;
+    caretAt(host, 1);
+    expect(fireEvent.keyDown(host, { key: ' ' })).toBe(false);
+
+    expect(spy.mock.calls[0][0]).toEqual([{ kind: 'bulletList', items: [''] }]);
+    expect(container.querySelector('ul')).not.toBeNull();
+    expect(container.textContent).not.toContain('-');
+    const item = container.querySelector<HTMLElement>('[data-slot]') as HTMLElement;
+    expect(item.tagName.toLowerCase()).toBe('li');
+    expect(item.dataset.slotKey).toBe('items[0]');
+    expect(caretHost()).toBe(item);
+  });
+
+  it('turns a paragraph into a heading and puts the caret in it', () => {
+    const spy = vi.fn();
+    const { container } = render(<Harness initial={[{ kind: 'paragraph', text: '#' }]} spy={spy} />);
+    const host = container.querySelector<HTMLElement>('[data-slot]') as HTMLElement;
+    caretAt(host, 1);
+    fireEvent.keyDown(host, { key: ' ' });
+
+    expect(spy.mock.calls[0][0]).toEqual([{ kind: 'heading', text: '' }]);
+    const heading = container.querySelector<HTMLElement>('[data-slot]') as HTMLElement;
+    expect(heading.tagName.toLowerCase()).toBe('h2');
+    expect(caretHost()).toBe(heading);
+  });
+
+  it('keeps the block’s name across the conversion, so a staged photograph is not orphaned', () => {
+    const names = createStableNames('b');
+    const paragraph: Block = { kind: 'paragraph', text: '>' };
+    const spy = vi.fn();
+    const { container } = render(<Harness initial={[paragraph]} spy={spy} names={names} />);
+    const was = names.nameOf(paragraph, 0);
+    const host = container.querySelector<HTMLElement>('[data-slot]') as HTMLElement;
+    caretAt(host, 1);
+    fireEvent.keyDown(host, { key: ' ' });
+
+    const next = spy.mock.calls[0][0] as Block[];
+    expect(next).toEqual([{ kind: 'quote', text: '' }]);
+    expect(names.nameOf(next[0], 0)).toBe(was);
+  });
+
+  it('leaves every other block in the post alone, by reference', () => {
+    const spy = vi.fn();
+    const initial: Block[] = [
+      { kind: 'image', src: '/food/x.webp', alt: 'x' },
+      { kind: 'paragraph', text: '1.' },
+      { kind: 'heading', text: 'after' },
+    ];
+    const { container } = render(<Harness initial={initial} spy={spy} />);
+    const host = container.querySelectorAll<HTMLElement>('[data-slot]')[1];
+    caretAt(host, 2);
+    fireEvent.keyDown(host, { key: ' ' });
+
+    const next = spy.mock.calls[0][0] as Block[];
+    expect(next[0]).toBe(initial[0]);
+    expect(next[2]).toBe(initial[2]);
+    expect(next[1]).toEqual({ kind: 'numberList', items: [''] });
+  });
+
+  it('leaves an ordinary space completely alone', () => {
+    const spy = vi.fn();
+    const { container } = render(<Harness initial={[{ kind: 'paragraph', text: 'I paid' }]} spy={spy} />);
+    const host = container.querySelector<HTMLElement>('[data-slot]') as HTMLElement;
+    caretAt(host, 6);
+    expect(fireEvent.keyDown(host, { key: ' ' })).toBe(true);
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('leaves a space typed over a selection alone', () => {
+    const spy = vi.fn();
+    const { container } = render(<Harness initial={[{ kind: 'paragraph', text: '-x' }]} spy={spy} />);
+    const host = container.querySelector<HTMLElement>('[data-slot]') as HTMLElement;
+    selects(host, 1, 2);
+    expect(fireEvent.keyDown(host, { key: ' ' })).toBe(true);
+    expect(spy).not.toHaveBeenCalled();
+  });
+});
+
+describe('the escape hatch: Backspace straight after a conversion', () => {
+  it('puts the trigger characters and the space back, so "1. 50" can be written', () => {
+    // Without this the owner can never write a sentence that opens "1. " at
+    // all, because every attempt silently becomes a numbered list -- and it
+    // looks like the editor is simply like that, so nobody reports it.
+    const spy = vi.fn();
+    const { container } = render(<Harness initial={[{ kind: 'paragraph', text: '1.' }]} spy={spy} />);
+    const host = container.querySelector<HTMLElement>('[data-slot]') as HTMLElement;
+    caretAt(host, 2);
+    fireEvent.keyDown(host, { key: ' ' });
+
+    const item = container.querySelector<HTMLElement>('[data-slot]') as HTMLElement;
+    expect(fireEvent.keyDown(item, { key: 'Backspace' })).toBe(false);
+
+    expect(spy.mock.calls[1][0]).toEqual([{ kind: 'paragraph', text: '1. ' }]);
+    const back = container.querySelector<HTMLElement>('[data-slot]') as HTMLElement;
+    expect(back.tagName.toLowerCase()).toBe('p');
+    expect(container.querySelector('ol')).toBeNull();
+    expect(back.textContent).toBe('1. ');
+  });
+
+  it('does not fire on the SECOND Backspace, which does the ordinary thing instead', () => {
+    const spy = vi.fn();
+    const { container } = render(<Harness initial={[{ kind: 'paragraph', text: '#' }]} spy={spy} />);
+    const host = container.querySelector<HTMLElement>('[data-slot]') as HTMLElement;
+    caretAt(host, 1);
+    fireEvent.keyDown(host, { key: ' ' });
+
+    const heading = container.querySelector<HTMLElement>('[data-slot]') as HTMLElement;
+    fireEvent.keyDown(heading, { key: 'Backspace' });
+    expect(spy.mock.calls[1][0]).toEqual([{ kind: 'paragraph', text: '# ' }]);
+
+    // A second press is a Backspace at the top of the first block of the post,
+    // and there is nothing above it to merge into.
+    const back = container.querySelector<HTMLElement>('[data-slot]') as HTMLElement;
+    caretAt(back, 0);
+    expect(fireEvent.keyDown(back, { key: 'Backspace' })).toBe(true);
+    expect(spy).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not fire once she has typed anything else', () => {
+    const spy = vi.fn();
+    const { container } = render(<Harness initial={[{ kind: 'paragraph', text: '#' }]} spy={spy} />);
+    const host = container.querySelector<HTMLElement>('[data-slot]') as HTMLElement;
+    caretAt(host, 1);
+    fireEvent.keyDown(host, { key: ' ' });
+
+    const heading = container.querySelector<HTMLElement>('[data-slot]') as HTMLElement;
+    fireEvent.keyDown(heading, { key: 'a' });
+    caretAt(heading, 0);
+    fireEvent.keyDown(heading, { key: 'Backspace' });
+
+    // The ordinary rule: a heading demotes before it merges. Nothing here is a
+    // paragraph holding "# ".
+    expect(spy.mock.calls[1][0]).toEqual([{ kind: 'paragraph', text: '' }]);
+  });
+
+  it('does not fire once words have arrived without a key at all', () => {
+    // A paste and a composition both commit through `input` and never through
+    // a key. The conversion has to stop being undoable then too.
+    const spy = vi.fn();
+    const { container } = render(<Harness initial={[{ kind: 'paragraph', text: '#' }]} spy={spy} />);
+    const host = container.querySelector<HTMLElement>('[data-slot]') as HTMLElement;
+    caretAt(host, 1);
+    fireEvent.keyDown(host, { key: ' ' });
+
+    const heading = container.querySelector<HTMLElement>('[data-slot]') as HTMLElement;
+    types(heading, 'Before you start');
+    caretAt(heading, 0);
+    fireEvent.keyDown(heading, { key: 'Backspace' });
+
+    expect(spy.mock.calls[2][0]).toEqual([{ kind: 'paragraph', text: 'Before you start' }]);
+  });
+
+  it('does not fire in a DIFFERENT block from the one that was converted', () => {
+    const spy = vi.fn();
+    const initial: Block[] = [{ kind: 'paragraph', text: 'above' }, { kind: 'paragraph', text: '#' }];
+    const { container } = render(<Harness initial={initial} spy={spy} />);
+    const host = container.querySelectorAll<HTMLElement>('[data-slot]')[1];
+    caretAt(host, 1);
+    fireEvent.keyDown(host, { key: ' ' });
+
+    const first = container.querySelectorAll<HTMLElement>('[data-slot]')[0];
+    caretAt(first, 0);
+    expect(fireEvent.keyDown(first, { key: 'Backspace' })).toBe(true);
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+});

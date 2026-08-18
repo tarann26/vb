@@ -27,6 +27,7 @@ import { readInline } from './dom-inline';
 import { writeInline } from './inline-dom';
 import { slotsOf, withSlot, type Slot } from './slots';
 import { backspaceAtStart, enterAt, type Caret, type Edit } from './structure';
+import { autoformat, revertFormat } from './autoformat';
 import { serializeInline } from '../../content/inline-source';
 import { isBlockKind } from '../../content/guards';
 import type { Block, BlockKind } from '../../content/types';
@@ -213,6 +214,11 @@ export default function WritingSurface({ blocks, postIndex, onChange, problems, 
   // schedules, and a second one would only give the browser a frame in which
   // to paint the caret in the wrong place.
   const pendingCaret = useRef<Caret | null>(null);
+  // The one conversion an immediate Backspace can put back, and it survives
+  // exactly one keystroke: read and cleared at the top of every key, and
+  // cleared again by any commit, so it can never fire against words she has
+  // typed since.
+  const justFormatted = useRef<{ address: string; before: string; after: string } | null>(null);
 
   const rows: Row[] = safe.map((block, index) => ({
     block,
@@ -313,6 +319,10 @@ export default function WritingSurface({ blocks, postIndex, onChange, problems, 
   });
 
   function commitSlot(index: number, key: Slot['key'], el: HTMLElement): void {
+    // Words have arrived since the conversion, so putting the trigger back is
+    // no longer what a Backspace means. Cleared here as well as on every key
+    // because a paste and a composition both commit without one.
+    justFormatted.current = null;
     const source = serializeInline(readInline(el));
     const block = safe[index];
     if (block === undefined) return;
@@ -351,6 +361,29 @@ export default function WritingSurface({ blocks, postIndex, onChange, problems, 
   // EditableText.tsx:173-179 states.
   function onKey(row: Row, slot: Slot, event: KeyboardEvent<HTMLElement>): void {
     const el = event.currentTarget;
+    // Read once and cleared for every key, so the conversion below is undoable
+    // by the NEXT keystroke and by no later one.
+    const undoable = justFormatted.current;
+    justFormatted.current = null;
+
+    if (event.key === ' ') {
+      const around = sourceAroundCaret(el);
+      if (around === null || !around.collapsed) return;
+      const block = safe[row.index];
+      const converted = block === undefined ? null : autoformat(block, slot.key, around.before, around.after);
+      if (converted === null || block === undefined) return;
+      event.preventDefault();
+      const caretKey: Slot['key'] = LIST_KINDS[converted.kind] === true ? 'items[0]' : 'text';
+      applyEdit({
+        blocks: safe.map((existing, i) => (i === row.index ? converted : existing)),
+        caret: { blockIndex: row.index, slotKey: caretKey, offset: 'start' },
+        renames: [{ from: block, to: converted, index: row.index }],
+      });
+      // The name survives the conversion, so the slot she is about to be
+      // standing in has an address that can be recognised on the next key.
+      justFormatted.current = { address: `${row.name}/${caretKey}`, before: around.before, after: around.after };
+      return;
+    }
     if (event.key === 'Enter' && !event.shiftKey) {
       // Suppressed whatever happens next: the browser's own Enter inside a
       // host would split the tree the array is supposed to own. Shift+Enter is
@@ -363,6 +396,22 @@ export default function WritingSurface({ blocks, postIndex, onChange, problems, 
       return;
     }
     if (event.key === 'Backspace') {
+      // The escape hatch, ahead of everything else Backspace does: at this
+      // moment the caret is at the top of the block the conversion made, so
+      // the ordinary rule below would demote her new heading or step her out
+      // of her new list instead of giving her back the "1. " she typed.
+      if (undoable !== null && undoable.address === addressOf(row, slot.key)) {
+        const block = safe[row.index];
+        if (block === undefined) return;
+        const reverted = revertFormat(undoable.before, undoable.after);
+        event.preventDefault();
+        applyEdit({
+          blocks: safe.map((existing, i) => (i === row.index ? reverted : existing)),
+          caret: { blockIndex: row.index, slotKey: 'text', offset: 'end' },
+          renames: [{ from: block, to: reverted, index: row.index }],
+        });
+        return;
+      }
       const around = sourceAroundCaret(el);
       if (around === null || !around.collapsed || around.before.length > 0) return;
       const edit = backspaceAtStart(safe, { blockIndex: row.index, slotKey: slot.key, offset: 'start' });
