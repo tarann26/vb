@@ -711,11 +711,61 @@ describe('dist/assets/ keeps admin code out of the entry chunk', () => {
 // unconditional step instead of only reaching it through the browser-suite
 // branch, which is skipped entirely for a docs- or content-shaped push. A
 // skipped assertion and an unfalsifiable one cost exactly the same.
+//
+// Admin redesign Task 1, EditorSheet: 38593 -> 38749 (+156), five rules
+// added, zero removed. Measured by a rule-level diff -- EditorSheet.tsx (and
+// its test) moved out of src/ with `mv` (never a stash, never a `git
+// checkout`, since this project's git-safety rule forbids that on tracked
+// history), `vite build` run to get the 38593-byte baseline back, the file
+// restored with `mv` and rebuilt to 38749, then the two dist CSS files
+// diffed. `tsc -b --noEmit` was clean on both sides. The five new rules,
+// each traced to the one class in EditorSheet.tsx that has no other user in
+// src/ today:
+//   .overflow-y-auto{overflow-y:auto}          33 bytes  (the panel's own scroll)
+//   .sm\:m-auto{margin:auto}                   24 bytes  (interior addition to
+//                                                          the @media(min-width:
+//                                                          640px) block every
+//                                                          other sm: rule
+//                                                          already shares)
+//   .sm\:max-h-\[85vh\]{max-height:85vh}       36 bytes  (the desktop dialog cap)
+//   .sm\:w-\[32rem\]{width:32rem}              29 bytes  (the desktop dialog width)
+//   .sm\:rounded{border-radius:.25rem}         34 bytes  (the desktop dialog corner)
+//                                              --------
+//                                              156 bytes, matching the measured delta exactly
+// Every other class EditorSheet.tsx writes -- fixed, inset-0, flex, w-full,
+// bg-white, p-4, mb-4, items-center, justify-between, gap-2, the bracketed
+// Montserrat font family, text-base, uppercase, tracking-wide, text-accent,
+// rounded, bg-brand, px-4, py-2, text-sm, text-ink, transition,
+// hover:bg-brand-dark, mt-6, border-t, border-gray-200, pt-4, and every class
+// inside RecordList's imported REMOVE_BUTTON_CLASSNAME -- already had a rule
+// in the sheet before this file existed and cost nothing marginal.
+//
+// The ceiling below is 38749 itself, not 38749 plus a cushion: the plan's own
+// rule is that a raise lands on a measured number, and a margin added "to be
+// safe" is the same defect wearing a different shape. That is also why the
+// assertion below reads `toBeLessThanOrEqual` rather than `toBeLessThan` --
+// matching the ceiling to the exact measured value and then keeping the
+// stricter operator would fail this task's own build, which is the same
+// name/assertion mismatch this file already caught itself making once
+// (the 34600-vs-38700 incident above). The test's name was changed with it,
+// for the same reason.
+//
+// Schedule change, ruled after this task: the plan text above this line
+// still says the first raise is Task 12's. It isn't -- Task 1 breaches the
+// ceiling on its own, correctly and unavoidably (EditorSheet has to exist
+// before anything wires it in, and Tailwind's scanner reads the file whether
+// or not anything imports it yet), and Task 11's e2e spec cannot run at all
+// against a build that `npm run build` refuses to finish. Every rule-adding
+// task now raises this ceiling to its own measured number as it goes, rather
+// than saving it up for the three checkpoints the plan named; Task 12
+// becomes an audit of the accumulated total instead of the first raise. A
+// reader who finds more than three raise-entries in this file by the plan's
+// end should look here for why.
 describe('dist/assets/ keeps the shared stylesheet under a byte ceiling', () => {
-  it.skipIf(!REQUIRED && !existsSync(DIST_ASSETS))('the entry CSS file stays under 38700 bytes', () => {
+  it.skipIf(!REQUIRED && !existsSync(DIST_ASSETS))('the entry CSS file stays at or under 38749 bytes', () => {
     const cssFiles = readdirSync(DIST_ASSETS).filter((n) => /^index-.*\.css$/.test(n));
     expect(cssFiles.length).toBeGreaterThan(0);
     const size = statSync(join(DIST_ASSETS, cssFiles[0])).size;
-    expect(size).toBeLessThan(38700);
+    expect(size).toBeLessThanOrEqual(38749);
   });
 });
