@@ -21,6 +21,7 @@ import CollapsibleSection from '../CollapsibleSection';
 import SectionErrorBoundary from '../SectionErrorBoundary';
 import { registerLoaded } from '../sections/register-loaded';
 import PostList from '../PostList';
+import { blankBlock } from '../blocks/blank-block';
 import { PANELS } from '../manage/areas';
 import { fetchContent, ContentNotFoundError } from '../content';
 import { replaceAt, useValidation } from '../useValidation';
@@ -133,9 +134,10 @@ function PostsSection({
 // A blank starting point for "Add a post": every required field present, so
 // the freshly-added record renders and immediately shows her, through the
 // same debounced validation as everything else, exactly what it still needs.
-// AwardsArea's blankAward posture, with one difference.
+// AwardsArea's blankAward posture, with two differences -- `date` and
+// `blocks`, each taken in turn below.
 //
-// The difference is `date`, and it is pre-filled rather than left empty. A
+// The first is `date`, and it is pre-filled rather than left empty. A
 // date input with nothing in it is the one field on this form whose empty
 // state gives her no hint about the format it wants, and today is very
 // nearly always the right answer for a post she is writing now. Every other
@@ -150,10 +152,31 @@ function PostsSection({
 // accepts any well-formed date. The helper already existed for the tap
 // counter and now has two callers rather than two copies.
 //
-// `blocks: []` on purpose: validatePost refuses an empty block list with
-// "has nothing in it yet -- add a paragraph before publishing it", which is
-// exactly the sentence that should be on screen next to the block picker the
-// moment she adds a post.
+// The second is `blocks`, and it is ONE EMPTY PARAGRAPH rather than none.
+// This started as `blocks: []`, reasoning that validatePost's "has
+// nothing in it yet -- add a paragraph before publishing it" was the right
+// sentence to have on screen beside the picker. It was the right sentence and
+// there was no way to obey it: the insert menu offers the four kinds the
+// toolbar cannot reach (a photo grid, ingredients, a method, a citation), and
+// every control that makes a paragraph acts on the host she is standing in --
+// so a post with no blocks has no host, and nothing on that screen produced
+// one. She pressed Add, got a post, and had nowhere to type. Measured end to
+// end in e2e/writing-surface.spec.ts, which pinned the dead end before this
+// line fixed it.
+//
+// A blank document opens with one empty paragraph in every writing tool there
+// is, and this one is REAL STORED CONTENT rather than something the surface
+// paints over an empty array: the block array is authoritative (D5) and a
+// post's stored shape is what publishes, so a host with no array entry behind
+// it would be the one place on this surface where the DOM led and the array
+// followed. She still cannot publish it empty -- validateBlock asks the
+// paragraph for "some words in this paragraph", on the paragraph itself,
+// which is a better place for that sentence than the whole-post banner it
+// used to sit in.
+//
+// `blankBlock('paragraph')` rather than a literal, so there is one definition
+// of what an empty paragraph is and the picker's own paragraphs and this one
+// cannot drift apart.
 function blankPost(): Post {
   return {
     id: crypto.randomUUID(),
@@ -163,7 +186,7 @@ function blankPost(): Post {
     date: todayInKolkata(),
     excerpt: '',
     image: '',
-    blocks: [],
+    blocks: [blankBlock('paragraph')],
   };
 }
 

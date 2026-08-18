@@ -66,11 +66,10 @@ async function openPostsPanel(page: Page): Promise<Locator> {
 }
 
 // "Add a post" -- kept because the brief's Step 1 names it, and because the
-// state it produces is worth one assertion of its own (see the test that uses
-// it). It is deliberately NOT the fixture for the writing tests: a blank post
-// has `blocks: []` (PostsArea.tsx:157-168) and the insert menu offers only the
-// four kinds the toolbar cannot reach, so there is no prose host on that
-// screen to put a caret in at all.
+// state it produces is worth a test of its own (see the one that uses it). It
+// is deliberately NOT the fixture for the writing tests, which want a post
+// with a paragraph AND a citation in it: a blank post carries one empty
+// paragraph and nothing else.
 async function addPost(page: Page): Promise<Locator> {
   const panel = await openPostsPanel(page);
   await panel.getByRole('button', { name: 'Add a post' }).click();
@@ -1233,18 +1232,52 @@ test.describe('the writing surface', () => {
     await expect(surface.locator('[role="group"][aria-label="Formatting"]')).toHaveCount(1);
   });
 
-  // The state "Add a post" produces, which is the one screen in this panel
-  // with no prose host on it at all. Recorded here because it is a real
-  // finding rather than a claim anybody deferred: a blank post has `blocks:
-  // []`, and the insert menu offers only the four kinds the toolbar cannot
-  // reach, so there is no way to add a PARAGRAPH to a post she has just
-  // created. See this task's report.
-  test('a freshly added post offers the insert menu and no prose host', async ({ page }) => {
+  // THE CORE WORKFLOW OF THE WHOLE SECTION: press Add, and write.
+  //
+  // It did not work, and the first version of this test pinned the dead end
+  // rather than the fix. A blank post had `blocks: []`; the insert menu offers
+  // only the four kinds the toolbar cannot reach, and every control that makes
+  // a paragraph acts on the host she is standing in, which a post with no
+  // blocks does not have. She pressed Add, got a post, and had nowhere to
+  // type. `blankPost` (areas/PostsArea.tsx) now seeds one empty paragraph --
+  // what any writing tool opens a blank document with, and REAL STORED CONTENT
+  // rather than a host painted over an empty array, because the block array is
+  // authoritative (D5) and a post's stored shape is what publishes.
+  //
+  // Mutation: put `blocks: []` back in `blankPost`. There is then no
+  // `[data-slot]` anywhere on that screen and the click below has nothing to
+  // land on.
+  test('a post she has just added can be written in straight away', async ({ page }) => {
     const panel = await addPost(page);
     const surface = panel.locator('div:has(> [role="group"][aria-label="Formatting"])');
     await expect(surface).toHaveCount(1);
-    await expect(surface.locator('[data-slot]')).toHaveCount(0);
+
+    // One host, the published renderer's own element for a paragraph, and
+    // empty -- a blank document rather than a document with something in it.
+    const host = surface.locator('[data-slot]');
+    await expect(host).toHaveCount(1);
+    expect(await host.evaluate((el) => el.tagName)).toBe('P');
+    await expect(host).toHaveText('');
+
+    // Her caret in it, from a real click, and her words arriving.
+    await host.click();
+    await expect(host).toBeFocused();
+    await page.keyboard.type('First words');
+    await expect(host).toHaveText('First words');
+    expect((await caret(page)).offset).toBe('First words'.length);
+
+    // The insert menu is still on screen for the four kinds the toolbar cannot
+    // reach, which is what it was there for before the paragraph existed.
     await expect(surface.getByRole('button', { name: /Photo grid/ })).toBeVisible();
+
+    // AND THE PARAGRAPH IS STORED, not painted. Done unmounts the surface and
+    // reopening it writes every host from the array, so words that come back
+    // are words the draft actually holds -- which is what would publish. The
+    // new post is the LAST row: PostsArea appends it.
+    await panel.getByRole('button', { name: 'Done' }).click();
+    await expect(panel.locator('[role="dialog"]')).toHaveCount(0);
+    await panel.locator('[data-item-row]').last().getByRole('button').first().click();
+    await expect(surface.locator('[data-slot]').first()).toHaveText('First words');
   });
 });
 
@@ -1319,14 +1352,23 @@ test.describe('the writing surface', () => {
 //    that class on the WRAPPER instead.
 //
 // ---------------------------------------------------------------------------
-// A DEFECT THIS FILE FOUND, since fixed under `src/` by the task after it:
-// CLEAR FORMATTING DID NOTHING WHEN THE MARK FILLED THE SELECTION. Select a
-// whole paragraph, press Bold, select it again, press Clear formatting -- the
-// `<strong>` was still there, still there after the editor was closed and
-// reopened, and so was what published. Named here rather than only in the test
-// because a reader meeting the test now meets the FIX; the mechanism and the
-// phase that pins it are in the note on "a toggle and a clear both leave her
-// selection on the words she marked".
+// TWO DEFECTS THIS FILE FOUND, both since fixed under `src/` by the task after
+// it. They are named here because each one's test now pins the FIX, and a
+// reader who meets a test called "a post she has just added can be written in
+// straight away" deserves to know it was written the other way round first.
+//
+// 1. CLEAR FORMATTING DID NOTHING WHEN THE MARK FILLED THE SELECTION. Select a
+//    whole paragraph, press Bold, select it again, press Clear formatting --
+//    the `<strong>` was still there, still there after a close-and-reopen, and
+//    so was what published. Mechanism and fix: see the note on "a toggle and a
+//    clear both leave her selection on the words she marked", whose third
+//    phase is the case that was broken.
+//
+// 2. A POST SHE HAD JUST ADDED COULD NOT GET A PARAGRAPH. `blankPost` handed
+//    back `blocks: []` and nothing on that screen made a paragraph, so Add
+//    produced a post with nowhere to write in it. `blankPost` now seeds one
+//    empty paragraph. The test above was "a freshly added post offers the
+//    insert menu and no prose host" and pinned the dead end.
 
 // ---------------------------------------------------------------------------
 // DELIBERATELY ABSENT, and why -- the deferred claims this file does NOT

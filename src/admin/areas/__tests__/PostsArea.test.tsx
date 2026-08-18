@@ -177,7 +177,12 @@ describe('the Posts panel', () => {
     expect(within(panel).getByText(/needs a title/)).toBeInTheDocument();
     expect(within(panel).getByText(/needs a short summary/)).toBeInTheDocument();
     expect(within(panel).getByText(/needs a photo for its card/)).toBeInTheDocument();
-    expect(within(panel).getByText(/has nothing in it yet/)).toBeInTheDocument();
+    // The post's own emptiness, and it is now the PARAGRAPH's sentence rather
+    // than the whole post's -- validatePost's "has nothing in it yet" is
+    // unreachable from Add, because a post she has just added carries one
+    // empty paragraph (blankPost, and see the case below for why).
+    expect(within(panel).getByText(/needs some words in this paragraph/)).toBeInTheDocument();
+    expect(within(panel).queryByText(/has nothing in it yet/)).toBeNull();
 
     // The one field that is pre-filled, and the reason it is: an empty date
     // input tells her nothing about the format it wants.
@@ -199,5 +204,38 @@ describe('the Posts panel', () => {
     // settle above all still work normally.
     const date = within(panel).getByLabelText(POST_FIELDS.date.label) as HTMLInputElement;
     expect(date.value).toBe('2026-03-05');
+  });
+
+  // THE CORE WORKFLOW OF THE WHOLE PANEL: press Add, and type.
+  //
+  // It did not work. `blankPost` handed back `blocks: []`; the insert menu
+  // offers only the four kinds the toolbar cannot reach, and every control
+  // that makes a paragraph acts on the host she is standing in, which an empty
+  // post does not have. She got a post with nowhere to write in it.
+  //
+  // Falsified by putting `blocks: []` back in blankPost (PostsArea.tsx): there
+  // is then no `[data-slot]` on the panel at all and the query below finds
+  // nothing. Asserted as the ELEMENT rather than as the array, because what
+  // was missing was a place to put a caret and not a value in a record --
+  // e2e/writing-surface.spec.ts carries the half jsdom cannot say, that the
+  // caret really lands in it and her words really arrive.
+  it('a post she has just added has a paragraph she can write in straight away', async () => {
+    const user = userEvent.setup();
+    stubFetchWithPosts([]);
+    renderDashboard('/edit/manage/story');
+
+    const panel = await openPostsPanel();
+    await user.click(await within(panel).findByRole('button', { name: 'Add a post' }));
+
+    const hosts = await waitFor(() => {
+      const found = [...panel.querySelectorAll<HTMLElement>('[data-slot]')];
+      expect(found, 'a post she has just added has no editable slot in it').toHaveLength(1);
+      return found;
+    });
+    // The published renderer's own element for a paragraph, editable, and
+    // empty -- a blank document, not a document with something in it already.
+    expect(hosts[0].tagName.toLowerCase()).toBe('p');
+    expect(hosts[0].getAttribute('contenteditable')).toBe('true');
+    expect(hosts[0].textContent).toBe('');
   });
 });
