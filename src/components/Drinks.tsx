@@ -16,7 +16,7 @@ const Drinks: React.FC = () => {
         <div className="absolute top-1/4 left-1/4 w-3 h-3 bg-brand/20 rounded-full animate-ping"></div>
         <div className="absolute top-1/3 right-1/4 w-2 h-2 bg-brand/30 rounded-full animate-ping animation-delay-300"></div>
         <div className="absolute bottom-1/3 left-1/3 w-4 h-4 bg-brand/15 rounded-full animate-ping animation-delay-700"></div>
-        <div className="absolute top-1/2 right-1/6 w-2 h-2 bg-brand/25 rounded-full animate-ping animation-delay-1000"></div>
+        <div className="absolute top-1/2 right-1/4 w-2 h-2 bg-brand/25 rounded-full animate-ping animation-delay-1000"></div>
       </div>
 
       <div className="max-w-7xl mx-auto px-4 relative">

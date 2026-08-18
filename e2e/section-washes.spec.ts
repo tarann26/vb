@@ -93,6 +93,13 @@ import sharp from 'sharp';
 //    That is a real defect in the shipped page -- one of four decorative
 //    bubbles is in the wrong place on every viewport -- and it is not Task 33's
 //    to fix. It is reported.
+//
+//    FIXED after Task 35: that dot is on a real quarter utility now, the same
+//    one a sibling dot in the same block already used, so it costs no new rule
+//    and lands where a reader was always meant to see it. Both notes stay: the
+//    contamination is why the BEFORE table's drinks row reads 11.0 instead of
+//    the flat token, and deleting the explanation would leave that number
+//    looking like a measurement of something.
 
 // AFTER (measured 2026-08-18, 390x844, chromium, on Task 34, at the TOP-PADDING
 // sample this file uses from here on):
@@ -133,7 +140,9 @@ import sharp from 'sharp';
 //   x = 0, 8 and 12 and at every y from 262 to 662 in the same column. The
 //   8x8 misplaced bubble of note 3 sits on exactly that pixel. bg-brand/25
 //   over #F5EEE4 computes to (234,233,229); the sample was reading the
-//   decoration, not the band.
+//   decoration, not the band. (That dot has since been put where it belongs,
+//   which is note 3's own postscript. The sample point does not depend on
+//   that fix and is not undone by it.)
 //
 //   visit, at (4, 462): (221,227,235), 27.3 points -- constant from y = 361 to
 //   y = 661, darkening to (214,221,228) at x = 12 and hitting the white card
