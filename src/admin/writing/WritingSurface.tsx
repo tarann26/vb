@@ -24,7 +24,7 @@ import { createElement, Fragment, useEffect, useLayoutEffect, useRef, useState, 
 import { blockProblemOf, type BlockProblemTarget } from '../blocks/block-problems';
 import { linkRefusal, TARGET_SHAPES } from '../blocks/link-target';
 import { swapAt } from '../blocks/reorder';
-import { useStableNames, type StableNames } from '../blocks/stable-names';
+import { useStableNames, useStableNameGroup, type StableNames } from '../blocks/stable-names';
 import { readInline } from './dom-inline';
 import { writeInline } from './inline-dom';
 import { slotsOf, withSlot, type Slot } from './slots';
@@ -64,6 +64,14 @@ export interface WritingSurfaceProps {
   onStaged: (key: string, staged: StagedPhoto | null) => void;
   previewKeyPrefix: string;
   names?: StableNames;
+  // The names for the photos inside ONE gallery block, asked for by that
+  // block's own stable name. The same argument `names` rests on, one level
+  // down: a photo's staged key is `blocks[<block>].images[<photo>].src`, and
+  // the second half of it is minted by a WeakMap that used to live inside
+  // BlockFields -- below the sheet, and so destroyed on every Done. A caller
+  // that drops this prop hands the fallback below, which dies with this
+  // component, and a pick after a removal then deletes another photo's bytes.
+  photoNames?: (blockName: string) => StableNames;
 }
 
 interface PlacedProblem {
@@ -348,13 +356,18 @@ function uploadMessage(upload: Upload): string | null {
 type HostProps = HTMLAttributes<HTMLElement> & Attributes & Record<string, unknown>;
 
 export default function WritingSurface({
-  blocks, postIndex, onChange, problems, previews, onStaged, previewKeyPrefix, names,
+  blocks, postIndex, onChange, problems, previews, onStaged, previewKeyPrefix, names, photoNames,
 }: WritingSurfaceProps) {
   // Always called, never conditionally, so the rules of hooks hold whether or
   // not a caller supplies longer-lived storage; its result is simply ignored
   // when one does.
   const ownNames = useStableNames('b');
   const { nameOf, rename } = names ?? ownNames;
+  // One group rather than one hook per gallery block, because the number of
+  // gallery blocks is a fact about the array and hooks may not depend on one.
+  const ownPhotoNames = useStableNameGroup('g');
+  const photoNamesFor = (blockName: string): StableNames =>
+    photoNames === undefined ? ownPhotoNames.of(blockName) : photoNames(blockName);
 
   // A draft saved before this feature restores with no `blocks` key at all,
   // and the nearest error boundary is per-SECTION, so an unguarded read takes
@@ -1236,6 +1249,11 @@ export default function WritingSurface({
           previews={previews}
           onStaged={(key, staged) => onStaged(`blocks[${row.name}].${key}`, staged)}
           previewKeyPrefix={`${previewKeyPrefix}:blocks[${row.name}]`}
+          // Asked for by the BLOCK's own stable name, never by its position:
+          // the group has to hand the same photo names back to the same grid
+          // after she has moved it, and after the sheet this row is standing
+          // in has closed and reopened.
+          photoNames={photoNamesFor(row.name)}
         />
       </div>
     );

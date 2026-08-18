@@ -84,6 +84,45 @@ export function createStableNames(prefix: string): StableNames {
   };
 }
 
+// MANY LISTS, ONE PER KEY, all outliving the same remount.
+//
+// `createStableNames` fixes one list. The gallery photos inside a post need a
+// SET of them -- one per gallery block -- and every one has to outlive the
+// editor sheet exactly as the block names do, because a photo's staged key is
+// `blocks[<block name>].images[<photo name>].src` and the second half of that
+// is minted by a WeakMap of its own. Held below the sheet, that WeakMap is
+// destroyed on every Done and the photos are re-named `g1...gn` by their
+// CURRENT positions on reopen -- so a grid she has removed a photo from hands
+// the next pick a key another photo's bytes are already filed under, and
+// PhotoField's supersede (`onStaged(null)`, fired before every pick) deletes
+// them. That is the same defect `createStableNames` exists to close, one level
+// further down, and it is the third time this project has met it.
+//
+// A Map keyed by a STRING rather than a WeakMap keyed by the block, for the
+// same reason PostList keys its own by `post.id`: the block object is replaced
+// on every keystroke, and its stable name is not. Entries are never dropped --
+// one small object per gallery block she has opened in this session, which is
+// the same bound PostList's own per-post map already accepts.
+export interface StableNameGroup {
+  // The names for one list, minted on first ask and then kept for as long as
+  // this group is.
+  of: (key: string) => StableNames;
+}
+
+export function createStableNameGroup(prefix: string): StableNameGroup {
+  const groups = new Map<string, StableNames>();
+  return {
+    of: (key) => {
+      let existing = groups.get(key);
+      if (existing === undefined) {
+        existing = createStableNames(prefix);
+        groups.set(key, existing);
+      }
+      return existing;
+    },
+  };
+}
+
 // `prefix` only makes a staged-file key readable when somebody dumps the
 // collector ('b' for a block, 'g' for a gallery photo). Nothing reads it back:
 // staged.ts stores whatever string it is handed and never parses one.
@@ -96,5 +135,14 @@ export function useStableNames(prefix: string): StableNames {
   // same answer.
   const ref = useRef<StableNames>();
   if (ref.current === undefined) ref.current = createStableNames(prefix);
+  return ref.current;
+}
+
+// The same lazy hold for a whole group. Only useful in a component that does
+// NOT unmount under the editor sheet -- a group held below it dies with it,
+// which is the entire failure this exists to describe.
+export function useStableNameGroup(prefix: string): StableNameGroup {
+  const ref = useRef<StableNameGroup>();
+  if (ref.current === undefined) ref.current = createStableNameGroup(prefix);
   return ref.current;
 }

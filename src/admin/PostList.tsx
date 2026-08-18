@@ -27,7 +27,7 @@ import { useRef, useState } from 'react';
 import RecordForm from './RecordForm';
 import WritingSurface from './writing/WritingSurface';
 import { blockProblemOf, isBlockProblem } from './blocks/block-problems';
-import { createStableNames, type StableNames } from './blocks/stable-names';
+import { useStableNameGroup } from './blocks/stable-names';
 import { moveTo } from './blocks/reorder';
 import { arrayIndexOf } from './problems';
 import { MOVE_BUTTON_CLASSNAME } from './RecordList';
@@ -176,15 +176,20 @@ export default function PostList({
   // `createStableNames` names this exactly. Keyed on `post.id` rather than
   // a WeakMap on the post object: a post's own object reference changes on
   // every keystroke (never mutated in place), but its id does not.
-  const namesRef = useRef(new Map<string, StableNames>());
-  function namesFor(id: string): StableNames {
-    let existing = namesRef.current.get(id);
-    if (existing === undefined) {
-      existing = createStableNames('b');
-      namesRef.current.set(id, existing);
-    }
-    return existing;
-  }
+  const blockNames = useStableNameGroup('b');
+
+  // AND THE SAME THING AGAIN FOR THE PHOTOS INSIDE A GALLERY BLOCK, keyed by
+  // the post AND the block's own stable name. Review found the fix above
+  // applied only to the block names: the photo names still lived in
+  // BlockFields' own `useRef`, two components below the sheet, so they died on
+  // every Done and were re-minted `g1...gn` by CURRENT position on reopen.
+  // Her sequence for it needs nothing unusual -- a photo grid, a picture for
+  // two of the tiles, Remove on the first, Done, reopen, a replacement for the
+  // last tile -- and what it destroys is the OTHER photo's staged bytes, so
+  // the post publishes naming a derivative no file was sent for. That is a
+  // broken image on the live blog with nothing in the dashboard saying so, and
+  // then a deploy gate that refuses every later publish.
+  const photoNames = useStableNameGroup('g');
 
   // The partition (D4): `shown` is everything the open editor's own
   // RecordForm or writing surface will place; `banner` is everything else, which
@@ -346,7 +351,8 @@ export default function PostList({
             previews={previews}
             onStaged={(key, staged) => onStaged(`${open.id}:${key}`, staged)}
             previewKeyPrefix={`posts.json:${open.id}`}
-            names={namesFor(open.id)}
+            names={blockNames.of(open.id)}
+            photoNames={(blockName) => photoNames.of(`${open.id}/${blockName}`)}
           />
         </EditorSheet>
       )}

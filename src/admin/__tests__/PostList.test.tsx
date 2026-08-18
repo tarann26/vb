@@ -1,9 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { useState } from 'react';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import PostList, { type PostListProps } from '../PostList';
 import { POST_FIELDS } from '../fields';
-import { NO_IMAGE_PREVIEWS } from '../previews';
+import { NO_IMAGE_PREVIEWS, useImagePreviews } from '../previews';
+import { fromStagedPhoto, useStagedFiles, type StagedFile } from '../staged';
 import { convertHeic, uploadAndEncode } from '../upload-photo';
 import type { StagedPhoto } from '../PhotoField';
 import type { Block, Post } from '../../content/types';
@@ -758,5 +760,151 @@ describe('PostList hands the post’s blocks to the writing surface', () => {
     expect(index).toBe(1);
     expect(next.blocks).toEqual([{ kind: 'heading', text: 'A fixture heading, edited' }]);
     expect(next.title).toBe('A second fixture post');
+  });
+});
+
+// THE PHOTOGRAPHS INSIDE A PHOTO GRID, ACROSS A CLOSE AND A REOPEN.
+//
+// The third appearance on this project of one defect: a staged photo's key is
+// composed from a NAME, and the thing that mints the name was held somewhere
+// that does not live as long as the name has to. Task 7 fixed it for the
+// BLOCK names by holding one instance per post id up here, above the editor
+// sheet. The final whole-branch review found the same hazard one level down
+// and untouched -- the names of the photos INSIDE a gallery block lived in
+// BlockFields' own `useRef`, two components below the sheet, so they were
+// destroyed on every Done and re-minted `g1...gn` by CURRENT array position on
+// reopen.
+//
+// Nothing below asserts a key string, for the reason BlockList.test.tsx gives:
+// a test that pinned the key format would go green against a component that
+// named its keys beautifully and still lost her photograph. What is asserted
+// is what she would find out about -- every photo the grid names has bytes
+// behind it, so a publish sends a file for every reference. A grid naming a
+// derivative no file was sent for is a broken image on the live blog with
+// nothing in the dashboard saying so, and then a deploy gate that refuses
+// every later publish of anything.
+describe('a photo she picked inside a photo grid, after she closes the editor and opens it again', () => {
+  interface Sink {
+    items: Post[];
+    files: Record<string, StagedFile>;
+  }
+
+  // Controlled all the way up, and staged into the REAL collector every panel
+  // on this dashboard shares. `renderList` above hands onChange to a spy, so
+  // the list it renders never actually changes -- which is exactly the state
+  // this defect cannot be seen in, because the grid never loses a photo.
+  function StagedPosts({ initial, sink }: { initial: Post[]; sink: Sink }) {
+    const [items, setItems] = useState<Post[]>(initial);
+    const { files, stage } = useStagedFiles();
+    const previews = useImagePreviews();
+    sink.items = items;
+    sink.files = files;
+    return (
+      <PostList
+        items={items}
+        onChange={(index, next) => setItems((prev) => prev.map((item, i) => (i === index ? next : item)))}
+        onReorder={() => {}}
+        onAdd={() => 'unused'}
+        onRemove={() => {}}
+        problems={[]}
+        onStaged={(key, staged) => stage(key, fromStagedPhoto(staged))}
+        previews={previews}
+      />
+    );
+  }
+
+  function withGrid(): Post[] {
+    return [
+      {
+        ...POSTS[0],
+        blocks: [
+          {
+            kind: 'gallery',
+            images: [
+              { src: '/food/tielle.webp', alt: 'Photo A' },
+              { src: '', alt: 'Photo B' },
+              { src: '', alt: 'Photo C' },
+            ],
+          },
+        ],
+      },
+    ];
+  }
+
+  // The tile is found by the description SHE typed, never by position --
+  // position is the thing under test. `closest('div')` from the description
+  // box lands on the one wrapper BlockFields gives a tile.
+  function tileFor(alt: string): HTMLElement {
+    return screen.getByDisplayValue(alt).closest('div') as HTMLElement;
+  }
+
+  function pickerIn(tile: HTMLElement): HTMLInputElement {
+    return tile.parentElement?.querySelector('input[type="file"]') as HTMLInputElement;
+  }
+
+  async function pick(input: HTMLInputElement, name: string, contentPath: string): Promise<void> {
+    vi.mocked(uploadAndEncode).mockResolvedValueOnce({
+      path: `assets-source/posts/${name}.jpg`,
+      contentPath,
+      content: 'AAAA',
+      encoding: 'base64',
+    });
+    await act(async () => {
+      fireEvent.change(input, {
+        target: { files: [new File([new Uint8Array(64)], `${name}.jpg`, { type: 'image/jpeg' })] },
+      });
+    });
+  }
+
+  beforeEach(() => {
+    vi.mocked(convertHeic).mockImplementation((file: File) => Promise.resolve(file));
+    vi.mocked(uploadAndEncode).mockReset();
+  });
+
+  // Her sequence, and every step of it is an ordinary action: three photos in
+  // the grid, a picture for the second and the third, Remove on the first
+  // (which is what the strip itself recommends instead of a reorder control),
+  // Done, reopen, and a second thought about the last one.
+  it('still has its bytes after she removes the tile above it, presses Done, and picks again', async () => {
+    const user = userEvent.setup();
+    const sink: Sink = { items: [], files: {} };
+    render(<StagedPosts initial={withGrid()} sink={sink} />);
+
+    await openRow(user, 'A fixture post');
+    await pick(pickerIn(tileFor('Photo B')), 'bee', '/posts/bee.webp');
+    await pick(pickerIn(tileFor('Photo C')), 'sea', '/posts/sea.webp');
+    await user.click(screen.getByRole('button', { name: 'Remove photo 1' }));
+
+    // Still correct within this mount -- which is exactly why the defect
+    // needed a close and an open to be seen at all.
+    expect(Object.values(sink.files).map((file) => file.contentPath).sort()).toEqual([
+      '/posts/bee.webp',
+      '/posts/sea.webp',
+    ]);
+
+    await user.click(screen.getByRole('button', { name: 'Done' }));
+    await openRow(user, 'A fixture post');
+
+    // The pick that used to destroy the photo two tiles above it: after the
+    // remount, the LAST tile's key was the key Photo B's bytes were filed
+    // under, and PhotoField fires `onStaged(null)` -- a hard delete from the
+    // collector -- at the start of every pick, before the new upload begins.
+    await pick(pickerIn(tileFor('Photo C')), 'crab', '/posts/crab.webp');
+
+    const [block] = sink.items[0].blocks as unknown as { images: { src: string; alt: string }[] }[];
+    expect(block.images.map((image) => [image.alt, image.src])).toEqual([
+      ['Photo B', '/posts/bee.webp'],
+      ['Photo C', '/posts/crab.webp'],
+    ]);
+    // Both sets of bytes still collected, and the superseded one dropped: a
+    // publish sends one file per staged entry.
+    expect(Object.values(sink.files).map((file) => file.contentPath).sort()).toEqual([
+      '/posts/bee.webp',
+      '/posts/crab.webp',
+    ]);
+    // Said the other way round, which is the way review measured it: no photo
+    // this grid names was picked in this session without its bytes.
+    const staged = new Set(Object.values(sink.files).map((file) => file.contentPath));
+    expect(block.images.filter((image) => image.src.startsWith('/posts/') && !staged.has(image.src))).toEqual([]);
   });
 });
