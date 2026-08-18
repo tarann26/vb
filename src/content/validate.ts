@@ -345,6 +345,19 @@ function validatePress(data: unknown): ValidationProblem[] {
 // ---------------------------------------------------------------------------
 // story.json
 
+// The About section's own budget, in characters across every paragraph.
+// The section is a fixed slab on the homepage (OurStory.tsx) and its
+// neighbours are laid out around it; there is no scroll inside it, so a
+// third again as much prose does not make the section taller, it makes the
+// page's rhythm wrong.
+//
+// 2000 rather than a round-sounding number: the committed About is 1366
+// characters (six paragraphs, measured on this branch), and this leaves
+// roughly half again as much. Whitespace counts, because whitespace takes
+// space on the page. The heading and the chef byline do not -- neither
+// grows with the prose.
+export const ABOUT_MAX_CHARS = 2000;
+
 function validateStory(data: unknown): ValidationProblem[] {
   const story = asRecord(data);
   const problems: ValidationProblem[] = [];
@@ -384,6 +397,18 @@ function validateStory(data: unknown): ValidationProblem[] {
       problems.push(problem(`paragraphs[${i}]`, `paragraph ${i + 1} trails off with an ellipsis — finish the thought before publishing`));
     }
   });
+
+  const aboutLength = Array.isArray(story.paragraphs)
+    ? story.paragraphs.filter((p): p is string => typeof p === 'string').join(' ').length
+    : 0;
+  if (aboutLength > ABOUT_MAX_CHARS) {
+    problems.push(
+      problem(
+        'paragraphs',
+        `the About section is ${aboutLength} characters long — trim it to ${ABOUT_MAX_CHARS} or fewer so it still fits its place on the page`,
+      ),
+    );
+  }
   return problems;
 }
 

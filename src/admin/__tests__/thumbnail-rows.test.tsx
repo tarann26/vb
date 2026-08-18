@@ -191,3 +191,46 @@ describe('the panels that get no thumbnail at all', () => {
     expect(thumbnails(el)).toHaveLength(0);
   });
 });
+
+// Task 10: About gets the enforced length limit; Opening hours is pinned as
+// UNCHANGED -- still a form, not a list. A panel nobody's own task touches is
+// exactly the one a shared component moving underneath it can break without
+// anyone noticing, so this needs a test that would actually go red if that
+// happened.
+describe('Task 10: Opening hours stays a form, not a list', () => {
+  it('Opening hours is still a form, not a list', async () => {
+    markEveryAreaSeeded();
+    stubFetchWithPhotos();
+    renderDashboard('/edit/manage/details');
+    const el = await openPanel('Opening hours', 'hours');
+    expect(el.querySelectorAll('[data-item-row]')).toHaveLength(0);
+    expect(within(el).queryByRole('dialog')).toBeNull();
+    expect(within(el).getAllByRole('textbox').length).toBeGreaterThan(0);
+  });
+});
+
+// Task 10: the live character counter is `role="status"`, deliberately not
+// `role="alert"` -- CollapsibleSection's own MutationObserver (:90) folds a
+// "needs attention" marker onto ANY section whose content contains a
+// `role="alert"` element, and the counter is present on every render of a
+// perfectly fine paragraph, not just an overlong one.
+describe('Task 10: the About counter does not drive the folded "needs attention" marker', () => {
+  it('a well-formed About section, mounted but folded, shows no folded warning', async () => {
+    markEveryAreaSeeded();
+    stubFetchWithPhotos();
+    renderDashboard('/edit/manage/story');
+    const toggle = await screen.findByRole('button', { name: 'About' });
+    const section = toggle.closest('section');
+    if (!section) throw new Error('About toggle is not inside a <section>');
+    const panel = document.getElementById('section-panel-story');
+    if (!panel) throw new Error('no panel for story');
+    await waitFor(() => expect(within(panel).queryByText(/^Loading /)).not.toBeInTheDocument());
+    // Scoped to About's own <section>: the fold marker's TEXT is identical
+    // across every panel that carries one, so a page-wide query would pass
+    // even if About's own marker were showing, so long as some OTHER panel
+    // legitimately needs attention too.
+    expect(
+      within(section as HTMLElement).queryByText('Something in this section needs attention — open it to see.'),
+    ).not.toBeInTheDocument();
+  });
+});

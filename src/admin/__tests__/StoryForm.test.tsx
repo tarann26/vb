@@ -126,6 +126,15 @@ describe('StoryForm: add, remove, and reorder paragraphs', () => {
     await user.click(screen.getByRole('button', { name: 'Remove paragraph 1' }));
     expect(onChange).toHaveBeenCalledWith({ ...STORY, paragraphs: [STORY.paragraphs[1]] });
   });
+
+  // STORY's own two paragraphs total 62 characters joined -- see this
+  // file's own header comment on why the fixture is deliberately NOT the
+  // real, committed story.json (its length would coincide with a hardcoded
+  // literal just as easily as a real binding).
+  it('the About form says how much room is left', () => {
+    renderForm();
+    expect(screen.getByText('62 of 2000 characters')).toBeInTheDocument();
+  });
 });
 
 // The brief's own instruction: "the no-trailing-ellipsis rule already lives

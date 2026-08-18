@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { validateContent } from '../validate';
+import { ABOUT_MAX_CHARS, validateContent } from '../validate';
+import storyJson from '../story.json';
 import { MAX_COLLAGE_PHOTOS, MIN_SPLIT_CHILDREN, normalizeSizes } from '../collage';
 import type { CollageNode } from '../types';
 import type { Dish, Drink, Article, StoryContent, Copy, Section, SiteContent, Galleries, MenuFile, Award, Experience } from '../types';
@@ -1279,6 +1280,23 @@ describe('story.json chef intro', () => {
     expect(problems.map((p) => p.field).sort()).toEqual(
       ['chef.name', 'chef.portrait', 'chef.portraitAlt', 'chef.role'].sort(),
     );
+  });
+
+  it('accepts an About section at the limit exactly', () => {
+    const paragraphs = ['x'.repeat(ABOUT_MAX_CHARS)];
+    expect(validateContent('story.json', { ...VALID_STORY, paragraphs })).toEqual([]);
+  });
+  it('refuses an About section one character over', () => {
+    // TWO paragraphs of half the limit each, so the joining space is the only
+    // thing that crosses the line -- that is what makes the join(' ') vs
+    // join('') mutation below falsifiable.
+    const half = 'x'.repeat(ABOUT_MAX_CHARS / 2);
+    const problems = validateContent('story.json', { ...VALID_STORY, paragraphs: [half, half] });
+    expect(problems.map((p) => p.field)).toContain('paragraphs');
+    expect(problems[0].message).toContain(String(ABOUT_MAX_CHARS));
+  });
+  it('the committed About section is inside the limit', () => {
+    expect(storyJson.paragraphs.join(' ').length).toBeLessThanOrEqual(ABOUT_MAX_CHARS);
   });
 });
 
