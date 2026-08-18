@@ -762,6 +762,17 @@ describe('AdminApp: the new prose, gallery, menus and copy screens all render, f
     const dialog = await screen.findByRole('dialog', { name: 'Food Menu' });
     expect(within(dialog).getByLabelText(MENU_FIELDS.label.label)).toHaveValue('Food Menu');
     expect(within(dialog).getByLabelText(MENU_FIELDS.id.label)).toHaveValue('food');
+    await user.click(screen.getByRole('button', { name: 'Done' }));
+
+    // Fix round 1 (review): the FIRST row happening to show its own value is
+    // not evidence the click routed anywhere -- `items[0]` would pass the
+    // assertion above too. Opening the SECOND row and checking IT shows its
+    // own value, not the first row's, is what distinguishes "the record she
+    // clicked" from "whichever one is first".
+    await user.click(within(section).getByRole('button', { name: 'Drinks Menu' }));
+    const secondDialog = await screen.findByRole('dialog', { name: 'Drinks Menu' });
+    expect(within(secondDialog).getByLabelText(MENU_FIELDS.label.label)).toHaveValue('Drinks Menu');
+    expect(within(secondDialog).getByLabelText(MENU_FIELDS.id.label)).toHaveValue('drinks');
   });
 
   it('renders Galleries, listing real atmosphere/ourStory rows by alt text and one row per collage photo', async () => {

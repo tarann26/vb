@@ -183,17 +183,13 @@ function CopySection({ registry, restoreDraft }: { registry: ContentRegistry; re
     setState({ status: 'loaded', data: next, sha });
   }
 
-  // Every leaf problem actually rendered below, tracked by reference so the
-  // banner is simply "whatever's left over" -- the identical guarantee
-  // RecordForm.tsx's own `matched` Set documents (a problem must never be
-  // counted in both places, or in neither). Catches assertCopy's own
-  // whole-file `''` failures and drinks.intro's retired-phrase check, which
-  // COPY_FIELDS has no per-leaf entry for `''` to ever match.
-  const matched = new Set<ValidationProblem>();
+  // Every group's own leaf problems, for the row markers below -- not the
+  // partition itself. Only ONE group's Fields are ever mounted (the open
+  // one), so `openGroupMatched` below -- built from that group alone -- is
+  // what actually decides shown vs. banner; this is just `needsAttention`
+  // per row.
   function leafProblems(key: string): ValidationProblem[] {
-    const found = problemsFor(problems, undefined, key);
-    found.forEach((p) => matched.add(p));
-    return found;
+    return problemsFor(problems, undefined, key);
   }
   const rows0 = COPY_GROUPS.map((group) => ({
     ...group,

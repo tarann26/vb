@@ -116,6 +116,21 @@ describe('GalleryList: renders all three lists, prefilled', () => {
     );
   });
 
+  // Fix round 1 (review): the FIRST row happening to show its own value in
+  // its editor is not evidence the click routed anywhere -- `images[0]`
+  // would satisfy that alone. Opening the SECOND atmosphere row and reading
+  // ITS OWN alt back out is what distinguishes "the record she clicked" from
+  // "whichever one is first" -- `patchAt(openIndex, …)` on the wrong record
+  // would silently overwrite it with a copy of the first.
+  it('opening the second row shows its OWN value, not the first row\'s', async () => {
+    const user = userEvent.setup();
+    renderList();
+    await user.click(screen.getByRole('button', { name: 'The bar' }));
+    const dialog = screen.getByRole('dialog', { name: 'The bar' });
+    expect(within(dialog).getByLabelText(GALLERY_IMAGE_FIELDS.alt.label)).toHaveValue('The bar');
+    expect(within(dialog).getByLabelText('Photo')).toBeInTheDocument();
+  });
+
   // The collage's grid-placement string is gone, and with it the read-only
   // "Layout position" field this screen used to show beside every collage
   // photo. What is left is one row per photo, flattened out of the tree in
