@@ -849,3 +849,115 @@ describe('the escape hatch: Backspace straight after a conversion', () => {
     expect(spy).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('undo and redo', () => {
+  // What jsdom can honestly say here is the half that matters most: which
+  // array comes back out, and whether the objects in it are the same objects
+  // that went in. That the keystroke reaches this handler at all rather than
+  // the browser's own contenteditable undo is deferred to Task 28.
+  it('puts back the words that were there before, and the block OBJECT they were in', () => {
+    const spy = vi.fn();
+    const before: Block = { kind: 'paragraph', text: 'alpha' };
+    const { container } = render(<Harness initial={[before]} spy={spy} />);
+    const host = container.querySelector<HTMLElement>('[data-slot]') as HTMLElement;
+    fireEvent.focus(host);
+
+    types(host, 'alpha and more');
+    fireEvent.keyDown(host, { key: 'z', metaKey: true });
+
+    const restored = spy.mock.calls[spy.mock.calls.length - 1][0] as Block[];
+    // Identity, not equality. stable-names.ts keys a staged photograph's name
+    // on this object; an undo that rebuilt the block would restore her words
+    // and lose her picture.
+    expect(restored[0]).toBe(before);
+    expect(container.querySelector<HTMLElement>('[data-slot]')?.textContent).toBe('alpha');
+  });
+
+  it('leaves a staged photograph attached: the image block comes back under the name it was filed as', () => {
+    // A caption split REPLACES the image block with a new object carrying the
+    // same name (Task 18). Undo hands the original object back, and because
+    // the WeakMap still holds it -- the snapshot is what kept it reachable --
+    // its name is the one the photo's bytes are filed under.
+    const names = createStableNames('b');
+    const photo: Block = { kind: 'image', src: '/posts/x.webp', alt: 'x', caption: 'ab' };
+    const spy = vi.fn();
+    const { container } = render(<Harness initial={[photo]} spy={spy} names={names} />);
+    const filedAs = names.nameOf(photo, 0);
+    const host = container.querySelector<HTMLElement>('[data-slot]') as HTMLElement;
+    fireEvent.focus(host);
+    host.textContent = 'ab';
+    caretAt(host, 1);
+
+    fireEvent.keyDown(host, { key: 'Enter' });
+    expect((spy.mock.calls[0][0] as Block[])).toHaveLength(2);
+
+    fireEvent.keyDown(container.querySelector<HTMLElement>('[data-slot]') as HTMLElement, { key: 'z', metaKey: true });
+
+    const restored = spy.mock.calls[spy.mock.calls.length - 1][0] as Block[];
+    expect(restored).toHaveLength(1);
+    expect(restored[0]).toBe(photo);
+    expect(names.nameOf(restored[0], 0)).toBe(filedAs);
+  });
+
+  it('suppresses the browser’s own undo', () => {
+    // fireEvent returns false when the default was prevented, so the
+    // suppression itself is directly observable here -- which the plan
+    // predicted it would not be. Without it a browser runs its private
+    // contenteditable undo over DOM the array knows nothing about and the two
+    // disagree from that moment on.
+    const { container } = render(<Harness initial={[{ kind: 'paragraph', text: 'alpha' }]} spy={vi.fn()} />);
+    const host = container.querySelector<HTMLElement>('[data-slot]') as HTMLElement;
+    expect(fireEvent.keyDown(host, { key: 'z', metaKey: true })).toBe(false);
+    expect(fireEvent.keyDown(host, { key: 'z', metaKey: true, shiftKey: true })).toBe(false);
+  });
+
+  it('redoes what it undid, and Cmd+Z with nothing behind it changes nothing', () => {
+    const spy = vi.fn();
+    const { container } = render(<Harness initial={[{ kind: 'paragraph', text: 'alpha' }]} spy={spy} />);
+    const host = container.querySelector<HTMLElement>('[data-slot]') as HTMLElement;
+    fireEvent.focus(host);
+    types(host, 'alpha and more');
+    fireEvent.keyDown(host, { key: 'z', metaKey: true });
+    expect(container.textContent).toContain('alpha');
+
+    fireEvent.keyDown(
+      container.querySelector<HTMLElement>('[data-slot]') as HTMLElement,
+      { key: 'z', metaKey: true, shiftKey: true },
+    );
+    expect(container.querySelector<HTMLElement>('[data-slot]')?.textContent).toBe('alpha and more');
+
+    // Nothing left behind it. The array must not move.
+    const calls = spy.mock.calls.length;
+    fireEvent.keyDown(
+      container.querySelector<HTMLElement>('[data-slot]') as HTMLElement,
+      { key: 'z', metaKey: true, shiftKey: true },
+    );
+    expect(spy.mock.calls).toHaveLength(calls);
+  });
+
+  it('takes a whole run of typing back in one press, not one character', () => {
+    const spy = vi.fn();
+    const before: Block = { kind: 'paragraph', text: '' };
+    const { container } = render(<Harness initial={[before]} spy={spy} />);
+    const host = container.querySelector<HTMLElement>('[data-slot]') as HTMLElement;
+    fireEvent.focus(host);
+    types(host, 'a');
+    types(host, 'al');
+    types(host, 'alp');
+    types(host, 'alph');
+
+    fireEvent.keyDown(container.querySelector<HTMLElement>('[data-slot]') as HTMLElement, { key: 'z', metaKey: true });
+
+    const restored = spy.mock.calls[spy.mock.calls.length - 1][0] as Block[];
+    expect(restored[0]).toBe(before);
+  });
+
+  it('leaves every other modifier combination to the browser', () => {
+    // Cmd+A, Cmd+C and Cmd+V are hers and the browser's. A handler that
+    // swallowed them would be a worse defect than anything it bought.
+    const { container } = render(<Harness initial={[{ kind: 'paragraph', text: 'alpha' }]} spy={vi.fn()} />);
+    const host = container.querySelector<HTMLElement>('[data-slot]') as HTMLElement;
+    expect(fireEvent.keyDown(host, { key: 'a', metaKey: true })).toBe(true);
+    expect(fireEvent.keyDown(host, { key: 'v', metaKey: true })).toBe(true);
+  });
+});

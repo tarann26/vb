@@ -28,6 +28,7 @@ import { writeInline } from './inline-dom';
 import { slotsOf, withSlot, type Slot } from './slots';
 import { backspaceAtStart, enterAt, type Caret, type Edit } from './structure';
 import { autoformat, revertFormat } from './autoformat';
+import { EMPTY_HISTORY, record, redo, undo, type History, type Snapshot } from './history';
 import { serializeInline } from '../../content/inline-source';
 import { isBlockKind } from '../../content/guards';
 import type { Block, BlockKind } from '../../content/types';
@@ -219,6 +220,17 @@ export default function WritingSurface({ blocks, postIndex, onChange, problems, 
   // cleared again by any commit, so it can never fire against words she has
   // typed since.
   const justFormatted = useRef<{ address: string; before: string; after: string } | null>(null);
+  // Undo, in a ref and never in state. It must not itself cause a render: the
+  // render that matters is the one `onChange` already schedules for the array,
+  // and a second one would only give the browser a frame in which to paint the
+  // caret somewhere it is not going to stay.
+  const history = useRef<History>(EMPTY_HISTORY);
+  // The address of the host she was last writing in. Unlike `focusedRef` this
+  // is NOT cleared on blur -- it is what an undo, and the toolbar, act on.
+  // Keeping the two apart is deliberate: `focusedRef` answers "may this host
+  // be rewritten", which stops being true the instant she leaves, and this one
+  // answers "where was she working", which does not.
+  const active = useRef<string | null>(null);
 
   const rows: Row[] = safe.map((block, index) => ({
     block,
@@ -234,7 +246,34 @@ export default function WritingSurface({ blocks, postIndex, onChange, problems, 
   const addressOf = (row: Row, key: Slot['key']): string => `${row.name}/${key}`;
 
   const sourceByAddress = new Map<string, string>();
-  rows.forEach((row) => row.slots.forEach((slot) => sourceByAddress.set(addressOf(row, slot.key), slot.source)));
+  const slotByAddress = new Map<string, { row: Row; slot: Slot }>();
+  rows.forEach((row) => row.slots.forEach((slot) => {
+    sourceByAddress.set(addressOf(row, slot.key), slot.source);
+    slotByAddress.set(addressOf(row, slot.key), { row, slot });
+  }));
+
+  // Where an undo should put her back. `Caret` can say start or end and not a
+  // character offset, so what a restored step recovers is the SLOT she was
+  // working in, not the exact place in it -- stated here rather than implied,
+  // and the browser half of it is deferred to e2e/writing-surface.spec.ts.
+  function caretAt(address: string | null, offset: Caret['offset']): Caret | null {
+    if (address === null) return null;
+    const found = slotByAddress.get(address);
+    return found === undefined ? null : { blockIndex: found.row.index, slotKey: found.slot.key, offset };
+  }
+
+  function snapshot(address: string | null, offset: Caret['offset']): Snapshot {
+    // `safe` is the array as it stands BEFORE the edit about to happen, which
+    // is what makes this a state to go back to rather than a state to arrive
+    // at. The entries in it are the same objects the WeakMap already names, so
+    // restoring them restores their names and their staged photographs with
+    // them -- there is nothing to rename on the way back.
+    return { blocks: safe, caret: caretAt(address, offset), at: Date.now(), slot: address };
+  }
+
+  function remember(address: string | null, offset: Caret['offset'], structural: boolean): void {
+    history.current = record(history.current, snapshot(address, offset), structural);
+  }
 
   // Only this post's block problems, and all of them. `banner` is everything
   // no rendered slot will show and `shown` is the rest -- partitioned by
@@ -316,9 +355,10 @@ export default function WritingSurface({ blocks, postIndex, onChange, problems, 
     // say the same thing, but only if the element was focusable, which is a
     // browser fact and not one to depend on.
     focusedRef.current = address;
+    active.current = address;
   });
 
-  function commitSlot(index: number, key: Slot['key'], el: HTMLElement): void {
+  function commitSlot(index: number, key: Slot['key'], el: HTMLElement, structural = false): void {
     // Words have arrived since the conversion, so putting the trigger back is
     // no longer what a Backspace means. Cleared here as well as on every key
     // because a paste and a composition both commit without one.
@@ -326,6 +366,10 @@ export default function WritingSurface({ blocks, postIndex, onChange, problems, 
     const source = serializeInline(readInline(el));
     const block = safe[index];
     if (block === undefined) return;
+    // Before anything is replaced, and only once the edit is going through:
+    // an undo step for a commit that returned early would be a step back to
+    // the state she is already in.
+    remember(addressOf(rows[index], key), 'end', structural);
     const next = withSlot(block, key, source);
     // Before onChange, never after: the re-render this schedules is what looks
     // the name up again, and an edited block is a NEW object.
@@ -343,7 +387,11 @@ export default function WritingSurface({ blocks, postIndex, onChange, problems, 
   // Miss one and a staged photograph is left filed under a name nothing refers
   // to any more -- the same failure commitSlot's own `rename` call rules out
   // for a keystroke, at the scale of a whole split or merge.
-  function applyEdit(edit: Edit): void {
+  function applyEdit(edit: Edit, address: string, offset: Caret['offset']): void {
+    // Structural, always. Enter, a merge, a step out of a list and an
+    // autoformat conversion are the steps she will actually reach for, so none
+    // of them is ever folded into the run of typing either side of it.
+    remember(address, offset, true);
     edit.renames.forEach((entry) => rename(entry.from, entry.to, entry.index));
     // The caret is leaving this host, so "never rewrite the host she is
     // standing in" has nothing left to protect here. Leaving the address set
@@ -353,6 +401,32 @@ export default function WritingSurface({ blocks, postIndex, onChange, problems, 
     focusedRef.current = null;
     pendingCaret.current = edit.caret;
     onChange(edit.blocks);
+  }
+
+  // One step back, or one step forward. NOTHING IS RENAMED HERE and that is
+  // not an omission: the blocks in a snapshot are the identical objects that
+  // were in the array when it was taken, so `nameOf` already answers for them
+  // and a `rename` call would have no `from` to carry a name off. It is the
+  // snapshot's own reference that kept those names reachable at all.
+  function stepTo(step: { history: History; restored: Snapshot } | null): void {
+    if (step === null) return;
+    history.current = step.history;
+    // The words in every host are about to be replaced by an older version of
+    // themselves, including the one she is standing in -- which is the one
+    // case where "never rewrite the focused host" has to give way, because
+    // leaving it alone would keep on screen exactly the words the undo was
+    // asked to remove.
+    focusedRef.current = null;
+    pendingCaret.current = step.restored.caret;
+    onChange(step.restored.blocks);
+  }
+
+  function undoStep(): void {
+    stepTo(undo(history.current, snapshot(active.current, 'end')));
+  }
+
+  function redoStep(): void {
+    stepTo(redo(history.current, snapshot(active.current, 'end')));
   }
 
   // Enter and Backspace, and nothing else. This is not a general "intercept
@@ -366,6 +440,25 @@ export default function WritingSurface({ blocks, postIndex, onChange, problems, 
     const undoable = justFormatted.current;
     justFormatted.current = null;
 
+    // SUPPRESSING THE BROWSER'S OWN UNDO IS THE POINT, not a detail of it.
+    // Left alone, Cmd+Z runs contenteditable's private undo stack and puts
+    // back DOM the block array knows nothing about; from that moment the
+    // screen and the draft that would publish disagree, permanently, with
+    // nothing on screen saying so. jsdom has no such default action, so this
+    // is deferred to e2e/writing-surface.spec.ts.
+    if (event.metaKey || event.ctrlKey) {
+      const key = event.key.toLowerCase();
+      if (key === 'z') {
+        event.preventDefault();
+        if (event.shiftKey) redoStep();
+        else undoStep();
+      }
+      // Every other modifier combination is left entirely alone. Cmd+A, Cmd+C
+      // and Cmd+V are the browser's, and a handler that swallowed them would
+      // be a worse defect than anything it bought.
+      return;
+    }
+
     if (event.key === ' ') {
       const around = sourceAroundCaret(el);
       if (around === null || !around.collapsed) return;
@@ -378,7 +471,7 @@ export default function WritingSurface({ blocks, postIndex, onChange, problems, 
         blocks: safe.map((existing, i) => (i === row.index ? converted : existing)),
         caret: { blockIndex: row.index, slotKey: caretKey, offset: 'start' },
         renames: [{ from: block, to: converted, index: row.index }],
-      });
+      }, addressOf(row, slot.key), 'end');
       // The name survives the conversion, so the slot she is about to be
       // standing in has an address that can be recognised on the next key.
       justFormatted.current = { address: `${row.name}/${caretKey}`, before: around.before, after: around.after };
@@ -392,7 +485,11 @@ export default function WritingSurface({ blocks, postIndex, onChange, problems, 
       event.preventDefault();
       const around = sourceAroundCaret(el);
       if (around === null) return;
-      applyEdit(enterAt(safe, { blockIndex: row.index, slotKey: slot.key, offset: 'start' }, around.before, around.after));
+      applyEdit(
+        enterAt(safe, { blockIndex: row.index, slotKey: slot.key, offset: 'start' }, around.before, around.after),
+        addressOf(row, slot.key),
+        'end',
+      );
       return;
     }
     if (event.key === 'Backspace') {
@@ -409,7 +506,7 @@ export default function WritingSurface({ blocks, postIndex, onChange, problems, 
           blocks: safe.map((existing, i) => (i === row.index ? reverted : existing)),
           caret: { blockIndex: row.index, slotKey: 'text', offset: 'end' },
           renames: [{ from: block, to: reverted, index: row.index }],
-        });
+        }, addressOf(row, slot.key), 'start');
         return;
       }
       const around = sourceAroundCaret(el);
@@ -419,7 +516,7 @@ export default function WritingSurface({ blocks, postIndex, onChange, problems, 
       // Backspace this does not understand still behaves as the browser's.
       if (edit === null) return;
       event.preventDefault();
-      applyEdit(edit);
+      applyEdit(edit, addressOf(row, slot.key), 'start');
     }
   }
 
@@ -441,6 +538,7 @@ export default function WritingSurface({ blocks, postIndex, onChange, problems, 
       onKeyDown: (event) => onKey(row, slot, event),
       onFocus: () => {
         focusedRef.current = address;
+        active.current = address;
       },
       onBlur: () => {
         if (focusedRef.current === address) focusedRef.current = null;
