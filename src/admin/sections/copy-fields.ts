@@ -20,6 +20,14 @@ import type { Copy } from '../../content/types';
 // ambiguous). "Atmosphere gallery heading" and "Menu heading" avoid the
 // identical collision with GalleryList.tsx's own "Atmosphere" <h3> and any
 // future "Menu" heading.
+//
+// Task 9: each heading below is now ALSO an ItemList row's accessible name
+// (`getByRole('button', { name: 'Footer' })`, say) -- CopySection's rows are
+// these groups, one per row, and EditorSheet renders the same heading again
+// as its own `<h3>` once a row is opened. `copy-fields.test.ts` checks this
+// same non-collision against every PANELS heading, so a tenth group heading
+// chosen later cannot reintroduce the ambiguity this comment already fixed
+// once.
 const COPY_SECTION_HEADINGS: Record<string, string> = {
   nav: 'Navigation',
   hero: 'Hero',

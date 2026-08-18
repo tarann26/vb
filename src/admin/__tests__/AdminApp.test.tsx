@@ -37,7 +37,7 @@ import {
   stubFetch,
 } from './dashboardFixtures';
 import { collagePhotos } from '../../content/collage';
-import type { Dish, Page, Post, StoryContent } from '../../content/types';
+import type { Copy, Dish, Page, Post, StoryContent } from '../../content/types';
 import { DRAFT_STORAGE_KEY, DRAFT_STAGED_COUNT_KEY, saveDraft } from '../drafts';
 import { LOCK_TIMEOUT_MS } from '../PublishBar';
 
@@ -804,12 +804,17 @@ describe('AdminApp: the new prose, gallery, menus and copy screens all render, f
     expect(within(section).getByDisplayValue(STORY.paragraphs[0])).toBeInTheDocument();
   });
 
+  // Task 9: Words on the site is now a row per group -- the fields render
+  // only once the group's own row is opened, so this test opens Footer's
+  // row before looking for anything Footer's Fields would show.
   it('renders Page copy, grouped by section, with the real footer hours heading value', async () => {
     stubFetch();
     renderDashboard('/edit/manage/details');
     const section = await sectionByHeading('Words on the site');
-    expect(await within(section).findByDisplayValue(COPY.footer.hoursHeading)).toBeInTheDocument();
-    expect(within(section).getByRole('heading', { name: 'Footer' })).toBeInTheDocument();
+    fireEvent.click(within(section).getByRole('button', { name: 'Footer' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Footer' });
+    expect(within(dialog).getByRole('heading', { name: 'Footer' })).toBeInTheDocument();
+    expect(await within(dialog).findByDisplayValue(COPY.footer.hoursHeading)).toBeInTheDocument();
   });
 
   // The brief's own explicit requirement: footer.followLabel's U+00A0 must
@@ -819,8 +824,94 @@ describe('AdminApp: the new prose, gallery, menus and copy screens all render, f
     stubFetch();
     renderDashboard('/edit/manage/details');
     const section = await sectionByHeading('Words on the site');
-    await within(section).findByDisplayValue(COPY.footer.hoursHeading);
-    expect(within(section).getByText(/Shown with its non-breaking space marked:/)).toHaveTextContent('␣');
+    fireEvent.click(within(section).getByRole('button', { name: 'Footer' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Footer' });
+    await within(dialog).findByDisplayValue(COPY.footer.hoursHeading);
+    expect(within(dialog).getByText(/Shown with its non-breaking space marked:/)).toHaveTextContent('␣');
+  });
+});
+
+// Task 9's own partition: CopySection unmounts every group's Fields except
+// the open one's, so a leaf problem in a group nobody has opened must still
+// reach her -- on the list-level banner AND on that group's own row, never
+// on neither and never on both (D4).
+describe('AdminApp: Words on the site -- a problem in a CLOSED group is still on screen', () => {
+  function stubFetchWithCopy(copy: Copy) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url === '/api/wa') return WA_RESPONSE();
+        if (url.includes('dishes.json')) return contentResponse(DISHES, 'sha-dishes');
+        if (url.includes('drinks.json')) return contentResponse(DRINKS, 'sha-drinks');
+        if (url.includes('press.json')) return contentResponse(PRESS, 'sha-press');
+        if (url.includes('sections.json')) return contentResponse(SECTIONS, 'sha-sections');
+        if (url.includes('site.json')) return contentResponse(SITE, 'sha-site');
+        if (url.includes('galleries.json')) return contentResponse(GALLERIES, 'sha-galleries');
+        if (url.includes('menus.json')) return contentResponse(MENUS, 'sha-menus');
+        if (url.includes('story.json')) return contentResponse(STORY, 'sha-story');
+        if (url.includes('copy.json')) return contentResponse(copy, 'sha-copy');
+        if (url.includes('pages.json')) return contentResponse([], 'sha-pages');
+        if (url.includes('awards.json')) return contentResponse([], 'sha-awards');
+        if (url.includes('experiences.json')) return contentResponse(EXPERIENCES, 'sha-experiences');
+        if (url.includes('posts.json')) return contentResponse([], 'sha-posts');
+        throw new Error(`unexpected fetch to ${url}`);
+      }),
+    );
+  }
+
+  // validateCopy's own retired-drink-phrase rule (src/content/validate.ts)
+  // is the one copy.json check that lands on a REAL COPY_FIELDS key
+  // ('drinks.intro') rather than the whole-file `''` assertCopy reports for
+  // everything else -- copy-fields.ts's own comment on `matched` says why
+  // that distinction matters: only a real-key problem can ever be claimed by
+  // a group, so only this rule can prove the partition.
+  const COPY_WITH_RETIRED_DRINK: Copy = {
+    ...COPY,
+    drinks: { ...COPY.drinks, intro: `${COPY.drinks.intro} basil-lime spritz` },
+  };
+
+  it('with no group open, the message is on the banner and the Drinks copy row is marked', async () => {
+    stubFetchWithCopy(COPY_WITH_RETIRED_DRINK);
+    renderDashboard('/edit/manage/details');
+    const section = await sectionByHeading('Words on the site');
+    expect(await within(section).findByRole('alert', { name: 'Problems with page copy' })).toHaveTextContent(
+      /basil-lime spritz/,
+    );
+    expect(within(section).getByRole('button', { name: 'Drinks copy needs attention' })).toBeInTheDocument();
+  });
+
+  it('with a DIFFERENT group open, the message stays on the banner -- opening Footer does not claim it', async () => {
+    stubFetchWithCopy(COPY_WITH_RETIRED_DRINK);
+    renderDashboard('/edit/manage/details');
+    const section = await sectionByHeading('Words on the site');
+    await within(section).findByRole('alert', { name: 'Problems with page copy' });
+    fireEvent.click(within(section).getByRole('button', { name: 'Footer' }));
+    await screen.findByRole('dialog', { name: 'Footer' });
+    expect(within(section).getByRole('alert', { name: 'Problems with page copy' })).toHaveTextContent(
+      /basil-lime spritz/,
+    );
+  });
+
+  it('opening the group that actually holds the problem moves it off the banner and onto its own field', async () => {
+    stubFetchWithCopy(COPY_WITH_RETIRED_DRINK);
+    renderDashboard('/edit/manage/details');
+    const section = await sectionByHeading('Words on the site');
+    await within(section).findByRole('alert', { name: 'Problems with page copy' });
+    fireEvent.click(within(section).getByRole('button', { name: 'Drinks copy needs attention' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Drinks copy' });
+    expect(within(dialog).getByText(/basil-lime spritz.*is retired/)).toBeInTheDocument();
+    expect(within(section).queryByRole('alert', { name: 'Problems with page copy' })).not.toBeInTheDocument();
+  });
+
+  it("opening Footer shows Footer's own strings, and none of Hero's", async () => {
+    stubFetch();
+    renderDashboard('/edit/manage/details');
+    const section = await sectionByHeading('Words on the site');
+    fireEvent.click(within(section).getByRole('button', { name: 'Footer' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Footer' });
+    expect(within(dialog).getByLabelText('Footer hours heading')).toBeInTheDocument();
+    expect(within(dialog).queryByLabelText('Hero logo name')).toBeNull();
   });
 });
 

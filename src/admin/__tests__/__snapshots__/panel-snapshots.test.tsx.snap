@@ -2713,733 +2713,191 @@ exports[`the thirteen panels, as they render today > Words on the site (copy) 1`
     aria-busy="false"
     style="border: 0px; padding: 0px; margin: 0px; min-inline-size: 0;"
   >
-    <div
-      class="mb-6"
-    >
-      <h3
-        class="mb-3 font-['Montserrat'] text-base text-[#222]"
+    <div>
+      <ul
+        data-item-list="rows"
       >
-        Navigation
-      </h3>
-      <div>
-        <div
-          class="mb-4"
+        <li
+          class="mb-1 flex items-center gap-1 rounded border border-gray-200"
+          data-item-row="nav"
         >
-          <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-            for="copy-nav.wordmark"
+          <button
+            class="flex min-w-0 flex-1 items-center gap-3 rounded p-2 text-left font-['Montserrat'] text-sm text-ink transition hover:bg-brand/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+            type="button"
           >
-            Wordmark
-          </label>
-          <input
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-            id="copy-nav.wordmark"
-            type="text"
-            value="Via Bianca"
-          />
-        </div>
-      </div>
-      <div>
-        <div
-          class="mb-4"
+            <span
+              class="min-w-0 flex-1 truncate"
+            >
+              Navigation
+            </span>
+          </button>
+        </li>
+        <li
+          class="mb-1 flex items-center gap-1 rounded border border-gray-200"
+          data-item-row="hero"
         >
-          <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-            for="copy-nav.instagramLabel"
+          <button
+            class="flex min-w-0 flex-1 items-center gap-3 rounded p-2 text-left font-['Montserrat'] text-sm text-ink transition hover:bg-brand/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+            type="button"
           >
-            Instagram link label
-          </label>
-          <input
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-            id="copy-nav.instagramLabel"
-            type="text"
-            value="Follow Via Bianca on Instagram"
-          />
-        </div>
-      </div>
-      <div>
-        <div
-          class="mb-4"
+            <span
+              class="min-w-0 flex-1 truncate"
+            >
+              Hero
+            </span>
+          </button>
+        </li>
+        <li
+          class="mb-1 flex items-center gap-1 rounded border border-gray-200"
+          data-item-row="atmosphere"
         >
-          <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-            for="copy-nav.menuLabel"
+          <button
+            class="flex min-w-0 flex-1 items-center gap-3 rounded p-2 text-left font-['Montserrat'] text-sm text-ink transition hover:bg-brand/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+            type="button"
           >
-            Menu button label
-          </label>
-          <input
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-            id="copy-nav.menuLabel"
-            type="text"
-            value="Menu"
-          />
-        </div>
-      </div>
-      <div>
-        <div
-          class="mb-4"
+            <span
+              class="min-w-0 flex-1 truncate"
+            >
+              Atmosphere gallery heading
+            </span>
+          </button>
+        </li>
+        <li
+          class="mb-1 flex items-center gap-1 rounded border border-gray-200"
+          data-item-row="food"
         >
-          <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-            for="copy-nav.pagesLabel"
+          <button
+            class="flex min-w-0 flex-1 items-center gap-3 rounded p-2 text-left font-['Montserrat'] text-sm text-ink transition hover:bg-brand/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+            type="button"
           >
-            Pages menu label
-          </label>
-          <input
-            aria-describedby="copy-nav.pagesLabel-help"
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-            id="copy-nav.pagesLabel"
-            type="text"
-            value="Pages"
-          />
-          <p
-            class="mt-1 text-xs text-gray-500"
-            id="copy-nav.pagesLabel-help"
-          >
-            The one word the nav groups your separate pages under -- Catering, Cheeseboards and the rest. Only shown once you have two or more pages in the nav.
-          </p>
-        </div>
-      </div>
-    </div>
-    <div
-      class="mb-6"
-    >
-      <h3
-        class="mb-3 font-['Montserrat'] text-base text-[#222]"
-      >
-        Hero
-      </h3>
-      <div>
-        <div
-          class="mb-4"
+            <span
+              class="min-w-0 flex-1 truncate"
+            >
+              Menu heading
+            </span>
+          </button>
+        </li>
+        <li
+          class="mb-1 flex items-center gap-1 rounded border border-gray-200"
+          data-item-row="drinks"
         >
-          <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-            for="copy-hero.logoName"
+          <button
+            class="flex min-w-0 flex-1 items-center gap-3 rounded p-2 text-left font-['Montserrat'] text-sm text-ink transition hover:bg-brand/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+            type="button"
           >
-            Hero logo name
-          </label>
-          <input
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-            id="copy-hero.logoName"
-            type="text"
-            value="Via Bianca"
-          />
-        </div>
-      </div>
-      <div>
-        <div
-          class="mb-4"
+            <span
+              class="min-w-0 flex-1 truncate"
+            >
+              Drinks copy
+            </span>
+          </button>
+        </li>
+        <li
+          class="mb-1 flex items-center gap-1 rounded border border-gray-200"
+          data-item-row="experiences"
         >
-          <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-            for="copy-hero.logoTagline"
+          <button
+            class="flex min-w-0 flex-1 items-center gap-3 rounded p-2 text-left font-['Montserrat'] text-sm text-ink transition hover:bg-brand/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+            type="button"
           >
-            Hero logo tagline
-          </label>
-          <input
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-            id="copy-hero.logoTagline"
-            type="text"
-            value="Pastificio & Ristorante"
-          />
-        </div>
-      </div>
-      <div>
-        <div
-          class="mb-4"
+            <span
+              class="min-w-0 flex-1 truncate"
+            >
+              experiences
+            </span>
+          </button>
+        </li>
+        <li
+          class="mb-1 flex items-center gap-1 rounded border border-gray-200"
+          data-item-row="press"
         >
-          <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-            for="copy-hero.reservationsLabel"
+          <button
+            class="flex min-w-0 flex-1 items-center gap-3 rounded p-2 text-left font-['Montserrat'] text-sm text-ink transition hover:bg-brand/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+            type="button"
           >
-            Reservations label
-          </label>
-          <input
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-            id="copy-hero.reservationsLabel"
-            type="text"
-            value="For reservations"
-          />
-        </div>
-      </div>
-      <div>
-        <div
-          class="mb-4"
+            <span
+              class="min-w-0 flex-1 truncate"
+            >
+              Press copy
+            </span>
+          </button>
+        </li>
+        <li
+          class="mb-1 flex items-center gap-1 rounded border border-gray-200"
+          data-item-row="awards"
         >
-          <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-            for="copy-hero.reserveButton"
+          <button
+            class="flex min-w-0 flex-1 items-center gap-3 rounded p-2 text-left font-['Montserrat'] text-sm text-ink transition hover:bg-brand/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+            type="button"
           >
-            Reserve button
-          </label>
-          <input
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-            id="copy-hero.reserveButton"
-            type="text"
-            value="Reserve a Table"
-          />
-        </div>
-      </div>
-    </div>
-    <div
-      class="mb-6"
-    >
-      <h3
-        class="mb-3 font-['Montserrat'] text-base text-[#222]"
-      >
-        Atmosphere gallery heading
-      </h3>
-      <div>
-        <div
-          class="mb-4"
+            <span
+              class="min-w-0 flex-1 truncate"
+            >
+              awards
+            </span>
+          </button>
+        </li>
+        <li
+          class="mb-1 flex items-center gap-1 rounded border border-gray-200"
+          data-item-row="visit"
         >
-          <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-            for="copy-atmosphere.heading"
+          <button
+            class="flex min-w-0 flex-1 items-center gap-3 rounded p-2 text-left font-['Montserrat'] text-sm text-ink transition hover:bg-brand/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+            type="button"
           >
-            Gallery heading
-          </label>
-          <input
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-            id="copy-atmosphere.heading"
-            type="text"
-            value="Atmosfera"
-          />
-        </div>
-      </div>
-    </div>
-    <div
-      class="mb-6"
-    >
-      <h3
-        class="mb-3 font-['Montserrat'] text-base text-[#222]"
-      >
-        Menu heading
-      </h3>
-      <div>
-        <div
-          class="mb-4"
+            <span
+              class="min-w-0 flex-1 truncate"
+            >
+              Visit
+            </span>
+          </button>
+        </li>
+        <li
+          class="mb-1 flex items-center gap-1 rounded border border-gray-200"
+          data-item-row="footer"
         >
-          <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-            for="copy-food.heading"
+          <button
+            class="flex min-w-0 flex-1 items-center gap-3 rounded p-2 text-left font-['Montserrat'] text-sm text-ink transition hover:bg-brand/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+            type="button"
           >
-            Menu heading
-          </label>
-          <input
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-            id="copy-food.heading"
-            type="text"
-            value="Hand-crafted Pastas & Wood-Fired Classics"
-          />
-        </div>
-      </div>
-    </div>
-    <div
-      class="mb-6"
-    >
-      <h3
-        class="mb-3 font-['Montserrat'] text-base text-[#222]"
-      >
-        Drinks copy
-      </h3>
-      <div>
-        <div
-          class="mb-4"
+            <span
+              class="min-w-0 flex-1 truncate"
+            >
+              Footer
+            </span>
+          </button>
+        </li>
+        <li
+          class="mb-1 flex items-center gap-1 rounded border border-gray-200"
+          data-item-row="blogsPage"
         >
-          <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-            for="copy-drinks.heading"
+          <button
+            class="flex min-w-0 flex-1 items-center gap-3 rounded p-2 text-left font-['Montserrat'] text-sm text-ink transition hover:bg-brand/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+            type="button"
           >
-            Drinks heading
-          </label>
-          <input
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-            id="copy-drinks.heading"
-            type="text"
-            value="Drinks"
-          />
-        </div>
-      </div>
-      <div>
-        <div
-          class="mb-4"
+            <span
+              class="min-w-0 flex-1 truncate"
+            >
+              Stories page
+            </span>
+          </button>
+        </li>
+        <li
+          class="mb-1 flex items-center gap-1 rounded border border-gray-200"
+          data-item-row="notFound"
         >
-          <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-            for="copy-drinks.intro"
+          <button
+            class="flex min-w-0 flex-1 items-center gap-3 rounded p-2 text-left font-['Montserrat'] text-sm text-ink transition hover:bg-brand/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+            type="button"
           >
-            Drinks intro
-          </label>
-          <textarea
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-            id="copy-drinks.intro"
-          >
-            Our bar pours a full Italian programme alongside our zero-proof mocktails: prosecco spritzes, rosé and classic cocktails from the bar team, and a wine list running from everyday Chianti to a Barolo DOCG and a Brunello di Montalcino.
-          </textarea>
-        </div>
-      </div>
-    </div>
-    <div
-      class="mb-6"
-    >
-      <h3
-        class="mb-3 font-['Montserrat'] text-base text-[#222]"
-      >
-        experiences
-      </h3>
-      <div>
-        <div
-          class="mb-4"
-        >
-          <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-            for="copy-experiences.heading"
-          >
-            Experiences heading
-          </label>
-          <input
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-            id="copy-experiences.heading"
-            type="text"
-            value="Experiences"
-          />
-        </div>
-      </div>
-      <div>
-        <div
-          class="mb-4"
-        >
-          <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-            for="copy-experiences.intro"
-          >
-            Experiences intro
-          </label>
-          <textarea
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-            id="copy-experiences.intro"
-          >
-            Beyond the table -- catering, classes and gifts from our kitchen.
-          </textarea>
-        </div>
-      </div>
-    </div>
-    <div
-      class="mb-6"
-    >
-      <h3
-        class="mb-3 font-['Montserrat'] text-base text-[#222]"
-      >
-        Press copy
-      </h3>
-      <div>
-        <div
-          class="mb-4"
-        >
-          <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-            for="copy-press.heading"
-          >
-            Stories heading
-          </label>
-          <input
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-            id="copy-press.heading"
-            type="text"
-            value="Latest Stories"
-          />
-        </div>
-      </div>
-      <div>
-        <div
-          class="mb-4"
-        >
-          <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-            for="copy-press.intro"
-          >
-            Stories intro
-          </label>
-          <textarea
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-            id="copy-press.intro"
-          >
-            Discover what food critics and culinary experts are saying about Via Bianca's authentic Italian experience and Chef Kamalika's innovative approach to traditional cuisine.
-          </textarea>
-        </div>
-      </div>
-      <div>
-        <div
-          class="mb-4"
-        >
-          <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-            for="copy-press.readArticle"
-          >
-            Read-article button
-          </label>
-          <input
-            aria-describedby="copy-press.readArticle-help"
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-            id="copy-press.readArticle"
-            type="text"
-            value="Read Article"
-          />
-          <p
-            class="mt-1 text-xs text-gray-500"
-            id="copy-press.readArticle-help"
-          >
-            This one button label is used on both the homepage teaser and the /blogs page -- editing it changes both.
-          </p>
-        </div>
-      </div>
-      <div>
-        <div
-          class="mb-4"
-        >
-          <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-            for="copy-press.viewAll"
-          >
-            View-all button
-          </label>
-          <input
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-            id="copy-press.viewAll"
-            type="text"
-            value="View All Stories"
-          />
-        </div>
-      </div>
-    </div>
-    <div
-      class="mb-6"
-    >
-      <h3
-        class="mb-3 font-['Montserrat'] text-base text-[#222]"
-      >
-        awards
-      </h3>
-      <div>
-        <div
-          class="mb-4"
-        >
-          <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-            for="copy-awards.heading"
-          >
-            Awards heading
-          </label>
-          <input
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-            id="copy-awards.heading"
-            type="text"
-            value="Awards"
-          />
-        </div>
-      </div>
-      <div>
-        <div
-          class="mb-4"
-        >
-          <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-            for="copy-awards.intro"
-          >
-            Awards intro
-          </label>
-          <textarea
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-            id="copy-awards.intro"
-          >
-            Recognition the kitchen has picked up along the way.
-          </textarea>
-        </div>
-      </div>
-    </div>
-    <div
-      class="mb-6"
-    >
-      <h3
-        class="mb-3 font-['Montserrat'] text-base text-[#222]"
-      >
-        Visit
-      </h3>
-      <div>
-        <div
-          class="mb-4"
-        >
-          <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-            for="copy-visit.heading"
-          >
-            Visit heading
-          </label>
-          <input
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-            id="copy-visit.heading"
-            type="text"
-            value="Visit Us"
-          />
-        </div>
-      </div>
-      <div>
-        <div
-          class="mb-4"
-        >
-          <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-            for="copy-visit.navigateButton"
-          >
-            Navigate button
-          </label>
-          <input
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-            id="copy-visit.navigateButton"
-            type="text"
-            value="Navigate"
-          />
-        </div>
-      </div>
-      <div>
-        <div
-          class="mb-4"
-        >
-          <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-            for="copy-visit.mapTitle"
-          >
-            Map title
-          </label>
-          <input
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-            id="copy-visit.mapTitle"
-            type="text"
-            value="Via Bianca Location - N-Block Market, Greater Kailash I"
-          />
-        </div>
-      </div>
-    </div>
-    <div
-      class="mb-6"
-    >
-      <h3
-        class="mb-3 font-['Montserrat'] text-base text-[#222]"
-      >
-        Footer
-      </h3>
-      <div>
-        <div
-          class="mb-4"
-        >
-          <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-            for="copy-footer.hoursHeading"
-          >
-            Footer hours heading
-          </label>
-          <input
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-            id="copy-footer.hoursHeading"
-            type="text"
-            value="Opening Hours"
-          />
-        </div>
-      </div>
-      <div>
-        <div
-          class="mb-4"
-        >
-          <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-            for="copy-footer.followLabel"
-          >
-            Follow-us label
-          </label>
-          <input
-            aria-describedby="copy-footer.followLabel-help"
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-            id="copy-footer.followLabel"
-            type="text"
-            value="Follow Us:"
-          />
-          <p
-            class="mt-1 text-xs text-gray-500"
-            id="copy-footer.followLabel-help"
-          >
-            Keep the space between the two words a non-breaking space, the same as it is today -- publishing refuses an ordinary space there.
-          </p>
-        </div>
-        <p
-          class="-mt-3 mb-4 text-xs text-gray-500"
-        >
-          Shown with its non-breaking space marked: Follow␣Us:
-        </p>
-      </div>
-      <div>
-        <div
-          class="mb-4"
-        >
-          <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-            for="copy-footer.reservationsLabel"
-          >
-            Footer reservations label
-          </label>
-          <input
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-            id="copy-footer.reservationsLabel"
-            type="text"
-            value="For Reservations:"
-          />
-        </div>
-      </div>
-      <div>
-        <div
-          class="mb-4"
-        >
-          <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-            for="copy-footer.rightsSuffix"
-          >
-            Copyright suffix
-          </label>
-          <input
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-            id="copy-footer.rightsSuffix"
-            type="text"
-            value=". All rights reserved."
-          />
-        </div>
-      </div>
-      <div>
-        <div
-          class="mb-4"
-        >
-          <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-            for="copy-footer.instagramLabel"
-          >
-            Footer Instagram label
-          </label>
-          <input
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-            id="copy-footer.instagramLabel"
-            type="text"
-            value="Follow Via Bianca on Instagram"
-          />
-        </div>
-      </div>
-      <div>
-        <div
-          class="mb-4"
-        >
-          <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-            for="copy-footer.linkedinLabel"
-          >
-            Footer LinkedIn label
-          </label>
-          <input
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-            id="copy-footer.linkedinLabel"
-            type="text"
-            value="Connect with Via Bianca on LinkedIn"
-          />
-        </div>
-      </div>
-    </div>
-    <div
-      class="mb-6"
-    >
-      <h3
-        class="mb-3 font-['Montserrat'] text-base text-[#222]"
-      >
-        Stories page
-      </h3>
-      <div>
-        <div
-          class="mb-4"
-        >
-          <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-            for="copy-blogsPage.heading"
-          >
-            Stories page heading
-          </label>
-          <input
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-            id="copy-blogsPage.heading"
-            type="text"
-            value="All Stories"
-          />
-        </div>
-      </div>
-      <div>
-        <div
-          class="mb-4"
-        >
-          <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-            for="copy-blogsPage.intro"
-          >
-            Stories page intro
-          </label>
-          <textarea
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-            id="copy-blogsPage.intro"
-          >
-            Discover the complete collection of articles, reviews, and features about Via Bianca's culinary journey and authentic Italian dining experience.
-          </textarea>
-        </div>
-      </div>
-    </div>
-    <div
-      class="mb-6"
-    >
-      <h3
-        class="mb-3 font-['Montserrat'] text-base text-[#222]"
-      >
-        Not-found page
-      </h3>
-      <div>
-        <div
-          class="mb-4"
-        >
-          <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-            for="copy-notFound.heading"
-          >
-            404 heading
-          </label>
-          <input
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-            id="copy-notFound.heading"
-            type="text"
-            value="Page not found"
-          />
-        </div>
-      </div>
-      <div>
-        <div
-          class="mb-4"
-        >
-          <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-            for="copy-notFound.back"
-          >
-            404 back link
-          </label>
-          <input
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-            id="copy-notFound.back"
-            type="text"
-            value="Back to home"
-          />
-        </div>
-      </div>
+            <span
+              class="min-w-0 flex-1 truncate"
+            >
+              Not-found page
+            </span>
+          </button>
+        </li>
+      </ul>
     </div>
   </fieldset>
 </div>
