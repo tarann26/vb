@@ -17,6 +17,7 @@ import SeoHead from './components/SeoHead';
 import PageSeoHead from './components/PageSeoHead';
 import NotFound from './components/NotFound';
 import { useNoindexOnPreviewHost } from './components/useCanonical';
+import { useScrollReset } from './components/useScrollReset';
 import type { SectionId, Section } from './content';
 import { useContent } from './content/ContentContext';
 import TextSection from './components/templates/TextSection';
@@ -146,6 +147,15 @@ export function AppRoutes() {
   // this bundle was served from, not of any route -- and because /edit and
   // NotFound need it as much as the indexable routes do.
   useNoindexOnPreviewHost();
+
+  // Mounted here for the same reason as the line above, and it is the whole
+  // point of the fix: one hook, above <Routes>, so it covers every route
+  // there is and every route anyone adds later. Its own file carries the
+  // measurements and the three decisions (skip POP, skip a hash, scroll
+  // instantly rather than smoothly). Above <Routes> rather than inside each
+  // element so it does not remount per navigation -- it needs to observe the
+  // pathname CHANGING, which a hook that unmounts with the old route cannot.
+  useScrollReset();
 
   return (
     <Routes>
