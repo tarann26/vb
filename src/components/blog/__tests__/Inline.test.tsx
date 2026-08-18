@@ -35,6 +35,19 @@ describe('Inline', () => {
     expect(em?.getAttribute('class')).toBeNull();
   });
 
+  it('renders strikethrough and underline with no class of their own', () => {
+    // Same measurement as <strong> and <em> above: preflight ships no `s` or
+    // `u` rule, so the line through and the line under are the browser's own
+    // defaults and a class here would be stylesheet bytes for no change.
+    const { container } = renderInline('a ~~b~~ and __c__');
+    const struck = container.querySelector('s');
+    const underlined = container.querySelector('u');
+    expect(struck?.textContent).toBe('b');
+    expect(underlined?.textContent).toBe('c');
+    expect(struck?.getAttribute('class')).toBeNull();
+    expect(underlined?.getAttribute('class')).toBeNull();
+  });
+
   it('renders inline code as a code element and does not parse inside it', () => {
     const { container } = renderInline('Set it to `220 **C**`.');
     const code = container.querySelector('code');

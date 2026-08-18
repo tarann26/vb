@@ -12,12 +12,16 @@
 // surrounding tag -- a paragraph block wraps it in <p>, a list item in <li>,
 // a heading in <h2>. A wrapper here would make a heading contain a paragraph.
 //
-// NO CLASS on <strong>, <em> or <code>, and that is measured rather than
-// stylistic. Tailwind's preflight already ships `b,strong{font-weight:bolder}`
+// NO CLASS on <strong>, <em>, <code>, <s> or <u>, and that is measured rather
+// than stylistic. Tailwind's preflight already ships `b,strong{font-weight:bolder}`
 // and `code,kbd,samp,pre{font-family:ui-monospace,...}`, and has no `em` rule
 // at all, so <em> is slanted by the browser's own default. Adding the three
 // obvious utilities would cost 0, 26 and 111 bytes of stylesheet against a
-// 145-byte budget for no visible change whatsoever.
+// 145-byte budget for no visible change whatsoever. The same holds for the
+// two marks Task 13 added: preflight has no `s` or `u` rule either, so the
+// line through and the line under come from the browser, and a full rebuild
+// measured the entry stylesheet unmoved at 38836 bytes with these two cases
+// present.
 import { Fragment, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { parseInline, type InlineNode } from '../../content/markdown';
@@ -40,6 +44,10 @@ function renderNode(node: InlineNode, key: number): ReactNode {
       return <strong key={key}>{renderNodes(node.children)}</strong>;
     case 'em':
       return <em key={key}>{renderNodes(node.children)}</em>;
+    case 'strike':
+      return <s key={key}>{renderNodes(node.children)}</s>;
+    case 'underline':
+      return <u key={key}>{renderNodes(node.children)}</u>;
     case 'code':
       return (
         <code key={key} className={CODE_CLASSNAME}>
