@@ -87,7 +87,14 @@ function kindOf(block: Block): BlockKind | undefined {
 // one the list actually has -- which is exactly when BlockFields renders a
 // field for it.
 function claimsKey(block: Block, kind: BlockKind, key: string | undefined): boolean {
-  if (key === undefined || key === 'kind') return false;
+  // `levels` joins `kind` as a key the model declares that no control here
+  // edits: a list item's nesting depth is set by pressing Tab in the writing
+  // surface, and there is no box for it in these fields and no reason to add
+  // one. So its message belongs in the per-block catch-all below, exactly as
+  // `kind`'s does -- claiming it would hand it to BlockFields, which renders
+  // nothing for it, and the message would be lost with nothing on screen
+  // saying so.
+  if (key === undefined || key === 'kind' || key === 'levels') return false;
   const indexed = key.match(/^(items|images)\[(\d+)\]/);
   if (indexed !== null) {
     const list = (block as unknown as Record<string, unknown>)[indexed[1]];

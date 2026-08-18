@@ -1869,3 +1869,124 @@ describe('moving and removing a block', () => {
     expect(restored[1]).toBe(beta);
   });
 });
+
+// Admin redesign Task 26. The array transformation is proved exhaustively in
+// structure.test.ts; what this proves is the WIRING, and one thing beyond it
+// that only a DOM can answer: WHICH PRESSES ARE SWALLOWED. `fireEvent` returns
+// false when the default was prevented, and that boolean is the whole of the
+// keyboard-escape claim jsdom can make -- Tab is how a keyboard user leaves
+// this surface, so a handler that took every press would shut her inside the
+// post with no way out but a mouse.
+//
+// Whether focus really moves on the presses left alone is a browser fact
+// (jsdom runs no default action for Tab at all) and is deferred to
+// e2e/writing-surface.spec.ts, alongside whether one step of nesting is
+// legible at 390px.
+describe('Tab and Shift+Tab nest a list item', () => {
+  function listSurface(initial: Block[], spy: (next: Block[]) => void) {
+    const view = render(<Harness initial={initial} spy={spy} />);
+    return {
+      view,
+      item: (index: number) => view.container.querySelectorAll<HTMLElement>('[data-slot]')[index],
+    };
+  }
+
+  it('nests the item she is standing in under the one above it', () => {
+    const spy = vi.fn();
+    const { item } = listSurface([{ kind: 'bulletList', items: ['one', 'two'] }], spy);
+    const host = item(1);
+    caretAt(host, 3);
+
+    expect(fireEvent.keyDown(host, { key: 'Tab' })).toBe(false);
+    expect(spy.mock.calls[0][0]).toEqual([{ kind: 'bulletList', items: ['one', 'two'], levels: [0, 1] }]);
+  });
+
+  it('steps it back out on Shift+Tab, and takes the levels key with it', () => {
+    const spy = vi.fn();
+    const { item } = listSurface([{ kind: 'numberList', items: ['one', 'two'], levels: [0, 1] }], spy);
+    const host = item(1);
+    caretAt(host, 3);
+
+    expect(fireEvent.keyDown(host, { key: 'Tab', shiftKey: true })).toBe(false);
+    const next = spy.mock.calls[0][0] as Block[];
+    expect(next).toEqual([{ kind: 'numberList', items: ['one', 'two'] }]);
+    expect(Object.prototype.hasOwnProperty.call(next[0], 'levels')).toBe(false);
+  });
+
+  // Every one of these reaches the browser untouched, which is what keeps Tab
+  // working as Tab everywhere it is not a nesting gesture.
+  it.each([
+    ['the first item of a list, which has nothing to sit under', [{ kind: 'bulletList', items: ['one', 'two'] }] as Block[], 0, false],
+    ['an item already as deep as it may go', [{ kind: 'bulletList', items: ['one', 'two'], levels: [0, 1] }] as Block[], 1, false],
+    ['a paragraph', [{ kind: 'paragraph', text: 'one' }] as Block[], 0, false],
+    // A photograph's caption is a host with no list around it, and it is the
+    // reachable half of the "not a nestable kind" rule. The other half -- a
+    // recipe's ingredients, whose slot keys are spelled `items[1]` too --
+    // cannot be pressed from HERE at all, because those four kinds are drawn
+    // by BlockFields and get no editable host. structure.test.ts is where that
+    // refusal is pinned, and it matters: writing a `levels` onto an
+    // ingredients block would produce one the write boundary refuses.
+    ['a photograph’s caption', [{ kind: 'image', src: '/food/x.webp', alt: 'x', caption: 'on the terrace' }] as Block[], 0, false],
+    ['Shift+Tab on an item that is already flat', [{ kind: 'bulletList', items: ['one', 'two'] }] as Block[], 1, true],
+  ])('leaves Tab to the browser in %s', (_name, initial, index, shiftKey) => {
+    const spy = vi.fn();
+    const { item } = listSurface(initial, spy);
+    const host = item(index);
+    caretAt(host, 1);
+
+    expect(fireEvent.keyDown(host, { key: 'Tab', shiftKey })).toBe(true);
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('leaves her caret in the item she nested, rather than in the one above it', () => {
+    const spy = vi.fn();
+    const { item } = listSurface([{ kind: 'bulletList', items: ['one', 'two'] }], spy);
+    const host = item(1);
+    caretAt(host, 3);
+    fireEvent.keyDown(host, { key: 'Tab' });
+
+    // The words did not change, so this is the one caret claim jsdom can make
+    // honestly: the layout effect put the collapsed range back in the same
+    // slot. WHERE in the words it sits is a browser fact and is e2e's.
+    expect(caretHost()?.dataset.slotKey).toBe('items[1]');
+  });
+
+  // WHAT SHE SEES. Without this the array changes and the column does not, so
+  // Tab reads as a key that does nothing and she presses it again.
+  //
+  // jsdom has no layout engine, so this is the class of claim it can make --
+  // that the element carries the indent -- and not the one it cannot: whether
+  // 1.25rem is enough to read as nesting in a 390px column, which is a
+  // bounding-box measurement and belongs to e2e/writing-surface.spec.ts.
+  it('moves the nested item across on screen, a step per level', () => {
+    const spy = vi.fn();
+    const { view, item } = listSurface([{ kind: 'bulletList', items: ['one', 'two'] }], spy);
+    expect(item(1).getAttribute('style')).toBeNull();
+
+    caretAt(item(1), 3);
+    fireEvent.keyDown(item(1), { key: 'Tab' });
+    expect(view.container.querySelectorAll<HTMLElement>('[data-slot]')[1].style.marginInlineStart).toBe('1.25rem');
+  });
+
+  it('leaves a flat list with no style attribute at all, exactly as it rendered before nesting existed', () => {
+    const { view } = listSurface([{ kind: 'bulletList', items: ['one', 'two', 'three'] }], vi.fn());
+    view.container.querySelectorAll('[data-slot]').forEach((el) => {
+      expect(el.getAttribute('style')).toBeNull();
+    });
+  });
+
+  it('is one step back for Undo, not a run of typing', () => {
+    const spy = vi.fn();
+    const list: Block = { kind: 'bulletList', items: ['one', 'two'] };
+    const { view, item } = listSurface([list], spy);
+    const host = item(1);
+    caretAt(host, 3);
+    fireEvent.keyDown(host, { key: 'Tab' });
+
+    fireEvent.click(within(view.container).getByRole('button', { name: 'Undo' }));
+    const restored = spy.mock.calls[spy.mock.calls.length - 1][0] as Block[];
+    // The identical object, which is what keeps anything staged against this
+    // block filed under the name it is still filed under.
+    expect(restored[0]).toBe(list);
+  });
+});

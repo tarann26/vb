@@ -16,6 +16,12 @@ import {
 // string; ./markdown imports nothing at all, so this adds no dependency to
 // anything that already imports this file.
 import { isSafeHref, isSiteRelativePath } from './markdown';
+// The one VALUE this module takes from ./types, which is otherwise a
+// type-only file. The nesting cap has to be the same number at both ends and
+// in the editor, so it is imported rather than restated -- and it is declared
+// there rather than beside the editor that presses Tab because this file
+// reaches the Worker bundle and admin code may not.
+import { MAX_LIST_DEPTH } from './types';
 import type {
   CollageNode,
   Hours,
@@ -174,8 +180,8 @@ export const POST_KEYS: Record<keyof Post, true> = {
 export const BLOCK_KEYS: Record<BlockKind, Record<string, true>> = {
   paragraph: { kind: true, text: true },
   heading: { kind: true, text: true },
-  bulletList: { kind: true, items: true },
-  numberList: { kind: true, items: true },
+  bulletList: { kind: true, items: true, levels: true },
+  numberList: { kind: true, items: true, levels: true },
   image: { kind: true, src: true, alt: true, caption: true },
   gallery: { kind: true, images: true },
   quote: { kind: true, text: true, attribution: true },
@@ -902,9 +908,28 @@ function assertBlock(raw: unknown, context: string): Block {
       assertBlockText(record.text, 'text', context);
       break;
     case 'bulletList':
-    case 'numberList':
+    case 'numberList': {
       assertBlockTextList(record.items, 'items', context);
+      // ABSENT IS THE ORDINARY CASE and is not an error: every list committed
+      // before nesting existed carries no `levels` at all, and this branch
+      // has to keep accepting all three of them untouched. What is refused is
+      // a `levels` that is PRESENT and disagrees with `items` -- a shorter one
+      // renders items at a depth nothing chose, a longer one describes items
+      // that are not there, and there is no honest way to decide which of the
+      // two arrays the author meant.
+      if (record.levels !== undefined) {
+        const levels = record.levels;
+        if (!Array.isArray(levels) || levels.length !== (record.items as unknown[]).length) {
+          throw new Error(`content/posts.json: block ${context} has a "levels" list that does not match its items`);
+        }
+        levels.forEach((level, i) => {
+          if (typeof level !== 'number' || !Number.isInteger(level) || level < 0 || level > MAX_LIST_DEPTH) {
+            throw new Error(`content/posts.json: block ${context} levels[${i}] is not a nesting depth`);
+          }
+        });
+      }
       break;
+    }
     case 'image':
       assertBlockAssetPath(record.src, 'src', context);
       assertBlockText(record.alt, 'alt', context);

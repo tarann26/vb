@@ -12,9 +12,9 @@
 // WeakMap keyed on the block object, and either failure files those bytes
 // under a name nothing refers to any more.
 import { describe, expect, it } from 'vitest';
-import { backspaceAtStart, enterAt, type Edit } from '../structure';
+import { backspaceAtStart, enterAt, indentAt, type Edit } from '../structure';
 import { createStableNames } from '../../blocks/stable-names';
-import type { Block } from '../../../content/types';
+import { MAX_LIST_DEPTH, type Block } from '../../../content/types';
 
 // The renames an edit reports, played against the real WeakMap rather than
 // against a promise about it. `was` is what each block was called going in;
@@ -277,5 +277,220 @@ describe('backspaceAtStart', () => {
   it('does nothing to a stale draft’s missing block', () => {
     const blocks = [{ kind: 'paragraph', text: 'a' }, null] as unknown as Block[];
     expect(backspaceAtStart(blocks, { blockIndex: 1, slotKey: 'text', offset: 'start' })).toBeNull();
+  });
+});
+
+// Admin redesign Task 26. Tab and Shift+Tab, as the array transformation they
+// are. What no test here can say is whether one step of nesting is legible on
+// a 390px screen, or whether a Tab this refuses really does move focus out of
+// the surface -- both are measurements, and both are deferred to
+// e2e/writing-surface.spec.ts.
+describe('indentAt', () => {
+  it('nests an item under the one above it', () => {
+    const blocks: Block[] = [{ kind: 'bulletList', items: ['One', 'Two'] }];
+    const edit = indentAt(blocks, { blockIndex: 0, slotKey: 'items[1]', offset: 'end' }, 1);
+    expect(edit?.blocks).toEqual([{ kind: 'bulletList', items: ['One', 'Two'], levels: [0, 1] }]);
+    // The words are untouched and the caret has not moved: nesting is a change
+    // to the shape of the list, not to what it says.
+    expect(edit?.caret).toEqual({ blockIndex: 0, slotKey: 'items[1]', offset: 'end' });
+  });
+
+  it('carries the block’s name onto the new object, so a staged photograph is not orphaned', () => {
+    const blocks: Block[] = [
+      { kind: 'paragraph', text: 'Before' },
+      { kind: 'bulletList', items: ['One', 'Two'] },
+    ];
+    const edit = indentAt(blocks, { blockIndex: 1, slotKey: 'items[1]', offset: 'end' }, 1);
+    const { was, now } = namesAcross(blocks, edit as Edit);
+    expect(now[1]).toBe(was[1]);
+    // And every block it did not touch comes back as the identical object.
+    expect(edit?.blocks[0]).toBe(blocks[0]);
+    expect(edit?.blocks[1]).not.toBe(blocks[1]);
+    expect(blocks[1]).toEqual({ kind: 'bulletList', items: ['One', 'Two'] });
+  });
+
+  it('refuses to nest the first item, which has nothing to sit under', () => {
+    expect(
+      indentAt([{ kind: 'bulletList', items: ['One', 'Two'] }], { blockIndex: 0, slotKey: 'items[0]', offset: 'end' }, 1),
+    ).toBeNull();
+  });
+
+  it('refuses to nest more than one step below the item above it', () => {
+    expect(
+      indentAt(
+        [{ kind: 'bulletList', items: ['One', 'Two', 'Three'] }],
+        { blockIndex: 0, slotKey: 'items[2]', offset: 'end' },
+        1,
+      ),
+    ).toEqual({
+      blocks: [{ kind: 'bulletList', items: ['One', 'Two', 'Three'], levels: [0, 0, 1] }],
+      caret: { blockIndex: 0, slotKey: 'items[2]', offset: 'end' },
+      renames: expect.anything(),
+    });
+    // The item above is flat, so one press is all this item gets. A second one
+    // would put it two below its neighbour, which is a depth `nest` clamps at
+    // render time -- the array and the page would then disagree about which
+    // item is a sub-item of which.
+    expect(
+      indentAt(
+        [{ kind: 'bulletList', items: ['One', 'Two', 'Three'], levels: [0, 0, 1] }],
+        { blockIndex: 0, slotKey: 'items[2]', offset: 'end' },
+        1,
+      ),
+    ).toBeNull();
+  });
+
+  it('caps at MAX_LIST_DEPTH however deep the item above it is', () => {
+    const blocks: Block[] = [{ kind: 'bulletList', items: ['One', 'Two', 'Three'], levels: [0, 1, 2] }];
+    // Every item is already as deep as its neighbour allows, and the last one
+    // is at the cap itself.
+    expect(indentAt(blocks, { blockIndex: 0, slotKey: 'items[2]', offset: 'end' }, 1)).toBeNull();
+    expect(MAX_LIST_DEPTH).toBe(2);
+  });
+
+  it('steps an item back out again', () => {
+    const edit = indentAt(
+      [{ kind: 'bulletList', items: ['One', 'Two', 'Three'], levels: [0, 1, 2] }],
+      { blockIndex: 0, slotKey: 'items[2]', offset: 'end' },
+      -1,
+    );
+    expect(edit?.blocks).toEqual([{ kind: 'bulletList', items: ['One', 'Two', 'Three'], levels: [0, 1, 1] }]);
+  });
+
+  it('removes the levels key entirely once every item is flat again', () => {
+    const edit = indentAt(
+      [{ kind: 'bulletList', items: ['One', 'Two'], levels: [0, 1] }],
+      { blockIndex: 0, slotKey: 'items[1]', offset: 'end' },
+      -1,
+    );
+    expect(edit?.blocks).toEqual([{ kind: 'bulletList', items: ['One', 'Two'] }]);
+    // toEqual is blind to a key holding `undefined`, and that is exactly the
+    // shape this rule exists to prevent: JSON.stringify drops such a key but
+    // `unknownKeys` (hasOwnProperty) still sees it, so the block would be
+    // refused by the boundary the key was removed to satisfy.
+    expect(Object.prototype.hasOwnProperty.call(edit?.blocks[0] ?? {}, 'levels')).toBe(false);
+  });
+
+  it('refuses Shift+Tab on an item that is already flat', () => {
+    expect(
+      indentAt([{ kind: 'bulletList', items: ['One', 'Two'] }], { blockIndex: 0, slotKey: 'items[1]', offset: 'end' }, -1),
+    ).toBeNull();
+  });
+
+  it('does nothing outside a list item', () => {
+    expect(
+      indentAt([{ kind: 'paragraph', text: 'One' }], { blockIndex: 0, slotKey: 'text', offset: 'end' }, 1),
+    ).toBeNull();
+  });
+
+  // A recipe's ingredients and its method are `items` lists with the same slot
+  // keys, and NEITHER declares `levels` in BLOCK_KEYS. Writing one onto them
+  // would produce a block the write boundary refuses as carrying a key this
+  // site does not use, and she would find out at Publish with no idea what she
+  // had done.
+  it.each(['ingredients', 'steps'])('refuses to nest inside a %s block', (kind) => {
+    expect(
+      indentAt(
+        [{ kind, heading: 'Method', items: ['One', 'Two'] } as unknown as Block],
+        { blockIndex: 0, slotKey: 'items[1]', offset: 'end' },
+        1,
+      ),
+    ).toBeNull();
+  });
+
+  it('does nothing to a stale draft’s missing block, or to an item index it no longer has', () => {
+    const stale = [null] as unknown as Block[];
+    expect(indentAt(stale, { blockIndex: 0, slotKey: 'items[0]', offset: 'end' }, 1)).toBeNull();
+    expect(
+      indentAt(
+        [{ kind: 'bulletList', items: ['One', 'Two'] }],
+        { blockIndex: 0, slotKey: 'items[7]', offset: 'end' },
+        1,
+      ),
+    ).toBeNull();
+  });
+
+  // A draft restored from localStorage reaches here through an unchecked cast,
+  // so `levels` need not be an array, need not be the right length and need not
+  // hold numbers. None of those may throw inside the Posts panel -- the
+  // nearest error boundary is per-SECTION -- and none may be written back out
+  // in the shape it arrived in, because both boundaries refuse it.
+  it('reads a corrupted levels array as flat rather than throwing', () => {
+    const blocks = [{ kind: 'bulletList', items: ['One', 'Two'], levels: 'nonsense' }] as unknown as Block[];
+    const edit = indentAt(blocks, { blockIndex: 0, slotKey: 'items[1]', offset: 'end' }, 1);
+    expect(edit?.blocks).toEqual([{ kind: 'bulletList', items: ['One', 'Two'], levels: [0, 1] }]);
+  });
+
+  it('replaces a levels array of the wrong length with one that matches the items', () => {
+    const blocks = [{ kind: 'numberList', items: ['One', 'Two', 'Three'], levels: [0] }] as unknown as Block[];
+    const edit = indentAt(blocks, { blockIndex: 0, slotKey: 'items[1]', offset: 'end' }, 1);
+    expect(edit?.blocks).toEqual([{ kind: 'numberList', items: ['One', 'Two', 'Three'], levels: [0, 1, 0] }]);
+  });
+});
+
+// The parallel array's whole cost, and the reason every edit that changes the
+// LENGTH of `items` goes through one helper: both boundaries refuse a block
+// whose two arrays disagree, so a split that grew one of them alone would
+// leave her unable to publish the post at all. Nothing on screen would say
+// why, because nothing on screen shows a `levels`.
+describe('levels stay in step with items', () => {
+  const lengths = (block: Block) => [
+    (block as unknown as { items: unknown[] }).items.length,
+    (block as unknown as { levels?: unknown[] }).levels?.length,
+  ];
+
+  it('splits a nested item into two nested items', () => {
+    const edit = enterAt(
+      [{ kind: 'bulletList', items: ['One', 'Two three'], levels: [0, 1] }],
+      { blockIndex: 0, slotKey: 'items[1]', offset: 'start' },
+      'Two ',
+      'three',
+    );
+    expect(edit.blocks[0]).toEqual({ kind: 'bulletList', items: ['One', 'Two ', 'three'], levels: [0, 1, 1] });
+    expect(lengths(edit.blocks[0])).toEqual([3, 3]);
+  });
+
+  it('shortens both arrays when Enter on an empty last item leaves the list', () => {
+    const edit = enterAt(
+      [{ kind: 'bulletList', items: ['One', 'Two', ''], levels: [0, 1, 1] }],
+      { blockIndex: 0, slotKey: 'items[2]', offset: 'start' },
+      '',
+      '',
+    );
+    expect(edit.blocks[0]).toEqual({ kind: 'bulletList', items: ['One', 'Two'], levels: [0, 1] });
+    expect(edit.blocks[1]).toEqual({ kind: 'paragraph', text: '' });
+  });
+
+  it('shortens both arrays when the first item steps out of the list', () => {
+    const edit = backspaceAtStart(
+      [{ kind: 'bulletList', items: ['One', 'Two', 'Three'], levels: [0, 1, 1] }],
+      { blockIndex: 0, slotKey: 'items[0]', offset: 'start' },
+    );
+    // What was nested under the item that just left steps up with it: the list
+    // that remains has no item above its first one for that one to sit under.
+    expect(edit?.blocks).toEqual([
+      { kind: 'paragraph', text: 'One' },
+      { kind: 'bulletList', items: ['Two', 'Three'], levels: [0, 1] },
+    ]);
+  });
+
+  it('drops the levels key when what is left of the list is flat', () => {
+    const edit = backspaceAtStart(
+      [{ kind: 'bulletList', items: ['One', 'Two'], levels: [0, 1] }],
+      { blockIndex: 0, slotKey: 'items[0]', offset: 'start' },
+    );
+    expect(edit?.blocks[1]).toEqual({ kind: 'bulletList', items: ['Two'] });
+    expect(Object.prototype.hasOwnProperty.call(edit?.blocks[1] ?? {}, 'levels')).toBe(false);
+  });
+
+  it('leaves an ingredients list without a levels key of its own', () => {
+    const edit = enterAt(
+      [{ kind: 'ingredients', heading: 'What you need', items: ['Flour', 'Eggs'] }],
+      { blockIndex: 0, slotKey: 'items[0]', offset: 'start' },
+      'Fl',
+      'our',
+    );
+    expect(edit.blocks[0]).toEqual({ kind: 'ingredients', heading: 'What you need', items: ['Fl', 'our', 'Eggs'] });
+    expect(Object.prototype.hasOwnProperty.call(edit.blocks[0], 'levels')).toBe(false);
   });
 });

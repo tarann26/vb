@@ -19,7 +19,7 @@
 // paragraph gets a fresh name, because two entries sharing one name is two
 // slots sharing one address.
 import { withSlot, type Slot } from './slots';
-import type { Block } from '../../content/types';
+import { MAX_LIST_DEPTH, type Block } from '../../content/types';
 
 export interface Caret {
   readonly blockIndex: number;
@@ -59,6 +59,63 @@ function itemsOf(block: Block): string[] {
   return (raw as unknown[]).map((item) => (typeof item === 'string' ? item : ''));
 }
 
+// The kinds that may carry a nesting depth AT ALL. A recipe's ingredients and
+// its method are `items` lists too and their slot keys are spelled the same
+// way, but neither declares `levels` in BLOCK_KEYS -- so writing one onto them
+// would produce a block the write boundary refuses as carrying a key this site
+// does not use, and she would find out at Publish with no idea what she did.
+const NESTABLE: Record<string, true | undefined> = { bulletList: true, numberList: true };
+
+// The depths that go with `items`, always the same length as `items`.
+//
+// Every entry is read defensively for the reason `itemsOf` above gives: this
+// array reaches here through registerLoaded's unchecked cast, so neither its
+// length nor the type of anything in it is a runtime fact. A restored draft
+// whose `levels` is short, long or full of nulls reads as flat rather than
+// throwing inside the Posts panel.
+function levelsOf(block: Block, items: string[]): number[] {
+  const raw = (block as { levels?: unknown }).levels;
+  const source: unknown[] = Array.isArray(raw) ? raw : [];
+  return items.map((_item, i) => {
+    const level = source[i];
+    return typeof level === 'number' && Number.isInteger(level) && level > 0 ? Math.min(level, MAX_LIST_DEPTH) : 0;
+  });
+}
+
+// The one rule the stored depths have to satisfy, applied rather than
+// asserted: the first item has nothing to sit under, and no item is more than
+// one step deeper than the item above it. `nest` in blocks.tsx clamps the same
+// way at render time, so a violation is never a crash -- but leaving one in
+// the array means the words on screen and the words that publish disagree
+// about which item is a sub-item of which.
+function tidy(levels: number[]): number[] {
+  let ceiling = 0;
+  return levels.map((level) => {
+    const next = Math.min(level, ceiling);
+    ceiling = Math.min(next + 1, MAX_LIST_DEPTH);
+    return next;
+  });
+}
+
+// A list block with new items and the depths that go with them, in ONE place
+// so that no edit can change the length of one array without the other. That
+// desync is the whole cost of the parallel-array storage: both boundaries
+// refuse a pair whose lengths disagree, so a split or a step-out that grew
+// `items` alone would leave her unable to publish the post at all.
+//
+// `levels` is DELETED, never set to undefined, once every item is flat again.
+// An own key holding `undefined` is dropped by JSON.stringify but still seen
+// by `unknownKeys` (hasOwnProperty, guards.ts), so the block would be refused
+// by the very boundary the key was removed to satisfy. The same reason
+// `withSlot` omits a blank caption rather than blanking it.
+function withItems(block: Block, items: string[], levels: number[]): Block {
+  const next = { ...block, items } as unknown as Record<string, unknown>;
+  const tidied = tidy(levels);
+  if (tidied.every((level) => level === 0)) delete next.levels;
+  else next.levels = tidied;
+  return next as unknown as Block;
+}
+
 function stringAt(block: Block, key: string): string {
   const value = (block as unknown as Record<string, unknown>)[key];
   return typeof value === 'string' ? value : '';
@@ -92,6 +149,7 @@ export function enterAt(blocks: Block[], at: Caret, before: string, after: strin
 
   const index = Number(match[1]);
   const items = itemsOf(block);
+  const levels = levelsOf(block, items);
 
   // ENTER ON AN EMPTY ITEM LEAVES THE LIST. Only on an empty one, and only on
   // the LAST one -- pressing Enter on an empty item in the middle of a list is
@@ -108,7 +166,7 @@ export function enterAt(blocks: Block[], at: Caret, before: string, after: strin
         renames: [{ from: block, to: paragraph, index: at.blockIndex }],
       };
     }
-    const kept = { ...block, items: shortened } as Block;
+    const kept = withItems(block, shortened, levels.slice(0, index));
     return {
       blocks: splice(blocks, at.blockIndex, 1, kept, paragraph),
       caret: { blockIndex: at.blockIndex + 1, slotKey: 'text', offset: 'start' },
@@ -120,7 +178,13 @@ export function enterAt(blocks: Block[], at: Caret, before: string, after: strin
   // Replace, never insert: inserting `after` beside an untouched item leaves
   // the words she split standing in both halves.
   nextItems.splice(index, 1, before, after);
-  const grown = { ...block, items: nextItems } as Block;
+  // The new item starts at the depth of the one it was split out of, which is
+  // what pressing Enter in the middle of a sub-list means. Spliced the same
+  // way as the words above rather than pushed, so the two arrays cannot come
+  // out different lengths.
+  const nextLevels = levels.slice();
+  nextLevels.splice(index, 1, levels[index], levels[index]);
+  const grown = withItems(block, nextItems, nextLevels);
   return {
     blocks: splice(blocks, at.blockIndex, 1, grown),
     caret: { blockIndex: at.blockIndex, slotKey: `items[${index + 1}]`, offset: 'start' },
@@ -173,7 +237,10 @@ export function backspaceAtStart(blocks: Block[], at: Caret): Edit | null {
         renames: [{ from: block, to: paragraph, index: at.blockIndex }],
       };
     }
-    const rest = { ...block, items: remainder } as Block;
+    // Whatever was nested under the item that just left steps up with it:
+    // `tidy` inside withItems refuses to leave a first item indented, because
+    // there is no longer anything above it to be indented under.
+    const rest = withItems(block, remainder, levelsOf(block, items).slice(1));
     return {
       blocks: splice(blocks, at.blockIndex, 1, paragraph, rest),
       caret: { blockIndex: at.blockIndex, slotKey: 'text', offset: 'start' },
@@ -203,5 +270,54 @@ export function backspaceAtStart(blocks: Block[], at: Caret): Edit | null {
     blocks: splice(blocks, at.blockIndex - 1, 2, merged),
     caret: { blockIndex: at.blockIndex - 1, slotKey: 'text', offset: 'end' },
     renames: [{ from: previous, to: merged, index: at.blockIndex - 1 }],
+  };
+}
+
+// Tab and Shift+Tab: one step deeper, or one step back out.
+//
+// `null` means "this press was not ours", and the caller depends on it: Tab
+// with no default action left is how a keyboard user leaves the writing
+// surface at all, so every press this refuses has to reach the browser
+// untouched. That is why the no-op cases below return null rather than an
+// Edit whose blocks happen to be equal.
+//
+// Three of them, and each is a rule rather than a guard against a crash:
+//
+//   * not a list item, or not a kind that may nest -- see NESTABLE above.
+//   * THE FIRST ITEM OF A LIST NEVER NESTS. There is nothing above it to be
+//     a sub-item of, and a list whose only item is indented renders as one
+//     empty list wrapped around another.
+//   * no item may land more than one step below the item above it. A gap
+//     between the two is a depth `nest` (blocks.tsx) has to clamp at render
+//     time, which means the array and the page would disagree.
+//
+// The cap itself is MAX_LIST_DEPTH and is checked here rather than only at
+// the boundaries, so the deepest thing she can produce with the keyboard is
+// the deepest thing that can be stored.
+export function indentAt(blocks: Block[], at: Caret, delta: 1 | -1): Edit | null {
+  const match = ITEM_KEY.exec(at.slotKey);
+  if (match === null) return null;
+  const block = blocks[at.blockIndex];
+  if (block === null || block === undefined) return null;
+  const kind = (block as { kind?: unknown }).kind;
+  if (typeof kind !== 'string' || NESTABLE[kind] !== true) return null;
+  const items = itemsOf(block);
+  const index = Number(match[1]);
+  if (index >= items.length) return null;
+  const levels = levelsOf(block, items);
+  const ceiling = index === 0 ? 0 : Math.min(levels[index - 1] + 1, MAX_LIST_DEPTH);
+  const next = Math.max(0, Math.min(levels[index] + delta, ceiling));
+  if (next === levels[index]) return null;
+  const nextLevels = levels.slice();
+  nextLevels[index] = next;
+  // The block she is standing in is replaced by a new object holding the same
+  // words, which is exactly the shape that earns a rename: without it the
+  // WeakMap that files a staged photograph under this block's name has no
+  // entry for the object the array now holds.
+  const updated = withItems(block, items, nextLevels);
+  return {
+    blocks: splice(blocks, at.blockIndex, 1, updated),
+    caret: at,
+    renames: [{ from: block, to: updated, index: at.blockIndex }],
   };
 }

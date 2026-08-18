@@ -694,6 +694,51 @@ describe('assertBlock and the write boundary refuse the same broken blocks', () 
       /"images\[0\]\.src" must be a photo on this site/,
       '[0].blocks[0].images[0].src',
     ],
+    // Admin redesign Task 26. `levels` is a PARALLEL array -- one nesting
+    // depth per item -- and the two coming apart is the entire cost of
+    // storing it that way rather than nesting the items themselves. Neither
+    // end guesses which of the two arrays is right; both refuse the block.
+    //
+    // Both directions, deliberately: a `levels` shorter than `items` and a
+    // `levels` longer than it are different bugs (a truncating write and an
+    // appending one) and a length check written with the wrong comparison
+    // catches only one of them.
+    [
+      'a bullet list carrying fewer nesting depths than items',
+      { kind: 'bulletList', items: ['One', 'Two'], levels: [0] },
+      /has a "levels" list that does not match its items/,
+      '[0].blocks[0].levels',
+    ],
+    [
+      'a numbered list carrying more nesting depths than items',
+      { kind: 'numberList', items: ['One'], levels: [0, 1] },
+      /has a "levels" list that does not match its items/,
+      '[0].blocks[0].levels',
+    ],
+    [
+      'a bullet list whose levels are not an array at all',
+      { kind: 'bulletList', items: ['One'], levels: 1 },
+      /has a "levels" list that does not match its items/,
+      '[0].blocks[0].levels',
+    ],
+    [
+      'a bullet list nested deeper than MAX_LIST_DEPTH',
+      { kind: 'bulletList', items: ['One', 'Two'], levels: [0, 7] },
+      /levels\[1\] is not a nesting depth/,
+      '[0].blocks[0].levels',
+    ],
+    [
+      'a numbered list whose depth is not a whole number',
+      { kind: 'numberList', items: ['One', 'Two'], levels: [0, 1.5] },
+      /levels\[1\] is not a nesting depth/,
+      '[0].blocks[0].levels',
+    ],
+    [
+      'a bullet list with a negative depth',
+      { kind: 'bulletList', items: ['One', 'Two'], levels: [0, -1] },
+      /levels\[1\] is not a nesting depth/,
+      '[0].blocks[0].levels',
+    ],
   ])('refuses %s', (_name, block, message, field) => {
     expect(() => assertPosts(withBlock(block))).toThrow(message);
     expect(validateContent('posts.json', withBlock(block)).map((p) => p.field)).toContain(field);
@@ -705,8 +750,16 @@ describe('assertBlock and the write boundary refuse the same broken blocks', () 
   it.each([
     ['a paragraph', { kind: 'paragraph', text: 'A paragraph.' }],
     ['a heading', { kind: 'heading', text: 'A heading' }],
+    // NO `levels` KEY AT ALL is the shape every list committed before nesting
+    // existed has, and it stays valid untouched -- which is the whole of the
+    // spec's "there is no migration, because the storage never moves". If
+    // either of these two rows ever reddens, three live posts stopped
+    // building.
     ['a bullet list', { kind: 'bulletList', items: ['One', 'Two'] }],
     ['a numbered list', { kind: 'numberList', items: ['One', 'Two'] }],
+    ['a bullet list with one item nested under the one above it', { kind: 'bulletList', items: ['One', 'Two'], levels: [0, 1] }],
+    ['a numbered list nested as deep as it may go', { kind: 'numberList', items: ['One', 'Two', 'Three'], levels: [0, 1, 2] }],
+    ['a bullet list whose levels are all zero, which is a flat list spelled the long way', { kind: 'bulletList', items: ['One', 'Two'], levels: [0, 0] }],
     ['an image with a caption', { kind: 'image', src: '/food/tielle.webp', alt: 'A dish', caption: 'A caption.' }],
     ['an image with no caption key', { kind: 'image', src: '/food/tielle.webp', alt: 'A dish' }],
     ['a gallery', { kind: 'gallery', images: [{ src: '/food/tielle.webp', alt: 'A dish' }] }],
@@ -734,6 +787,28 @@ describe('assertBlock and the write boundary refuse the same broken blocks', () 
       'delhi-royale-pastificio-ristorante',
       'restaurant-india-cordon-bleu-debut',
     ]);
+  });
+
+  // Admin redesign Task 26, the migration claim stated as a fact about the
+  // committed file rather than as an intention. Nesting was added by making
+  // `levels` OPTIONAL, so the three published posts had to stay valid with no
+  // edit at all -- and this checks the stronger half of that: not merely that
+  // they still pass, but that the guard hands every block back exactly as the
+  // JSON spells it, carrying no key nobody wrote. A "migration" that quietly
+  // rewrote posts.json, or a guard that started filling a default `levels` in,
+  // would redden here.
+  //
+  // The committed posts are paragraphs and citations today and hold no list at
+  // all, which is precisely why this is written over EVERY block rather than
+  // over the lists: a list-only assertion would pass vacuously and go on
+  // passing after the first recipe is published.
+  it('hands back every committed block exactly as the file spells it', () => {
+    const blocks = assertPosts(realPosts).flatMap((post) => post.blocks);
+    expect(blocks.length).toBeGreaterThan(0);
+    expect(blocks).toEqual((realPosts as { blocks: unknown[] }[]).flatMap((post) => post.blocks));
+    blocks.forEach((block) => {
+      expect(Object.prototype.hasOwnProperty.call(block, 'levels')).toBe(false);
+    });
   });
 });
 

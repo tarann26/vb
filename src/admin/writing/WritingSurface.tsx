@@ -20,7 +20,7 @@
 // caret-restoration problem: InlineTextField.tsx's pendingSelection/forValue
 // round trip exists because a controlled textarea is rewritten on every
 // commit. Nothing here is rewritten while she is in it.
-import { createElement, Fragment, useEffect, useLayoutEffect, useRef, useState, type Attributes, type HTMLAttributes, type ClipboardEvent, type KeyboardEvent, type ReactNode } from 'react';
+import { createElement, Fragment, useEffect, useLayoutEffect, useRef, useState, type Attributes, type CSSProperties, type HTMLAttributes, type ClipboardEvent, type KeyboardEvent, type ReactNode } from 'react';
 import { blockProblemOf, type BlockProblemTarget } from '../blocks/block-problems';
 import { linkRefusal, TARGET_SHAPES } from '../blocks/link-target';
 import { swapAt } from '../blocks/reorder';
@@ -28,7 +28,7 @@ import { useStableNames, type StableNames } from '../blocks/stable-names';
 import { readInline } from './dom-inline';
 import { writeInline } from './inline-dom';
 import { slotsOf, withSlot, type Slot } from './slots';
-import { backspaceAtStart, enterAt, type Caret, type Edit } from './structure';
+import { backspaceAtStart, enterAt, indentAt, type Caret, type Edit } from './structure';
 import { autoformat, revertFormat } from './autoformat';
 import { pasteChunks } from './paste';
 import Field from '../Field';
@@ -44,7 +44,7 @@ import WritingToolbar, { type ToolbarKind } from './WritingToolbar';
 import { serializeInline } from '../../content/inline-source';
 import { isSafeHref, rawLinkTargets } from '../../content/markdown';
 import { BLOCK_KEYS, isBlockKind } from '../../content/guards';
-import type { Block, BlockKind } from '../../content/types';
+import { MAX_LIST_DEPTH, type Block, type BlockKind } from '../../content/types';
 import type { ImagePreviews } from '../previews';
 import type { StagedPhoto } from '../PhotoField';
 import type { ValidationProblem } from '../../content/validate';
@@ -155,6 +155,28 @@ function hostTagFor(kind: BlockKind, key: Slot['key']): string {
   if (key.startsWith('items[')) return 'li';
   if (kind === 'heading') return 'h2';
   return 'p';
+}
+
+// How far in a nested item sits, and NOT as a class. 1.25rem per step is the
+// same distance the published page puts between a list and the sub-list inside
+// it (blocks.tsx's NESTED_LIST is `pl-5`), so what she sees while writing is
+// what a reader gets -- and a margin rather than padding, because the marker
+// has to travel with the words. There is no shipped utility for the second
+// step of it (`ml-2` and `ml-8` are the only two in the sheet, and neither is
+// 1.25rem nor 2.5rem), so this is the inline-style escape hatch the project
+// already takes for the drag handle's cursor and the dragged row's dimming:
+// identical pixels, no new rule, and `style-src` allows it on purpose.
+//
+// `undefined` for a flat item, so nothing renders a style attribute nothing
+// needed -- and so the DOM of every list written before nesting existed is
+// unchanged.
+function indentStyle(block: Block, key: Slot['key']): CSSProperties | undefined {
+  const match = key.match(/^items\[(\d+)\]$/);
+  if (match === null) return undefined;
+  const levels = (block as { levels?: unknown }).levels;
+  const depth = Array.isArray(levels) ? (levels as unknown[])[Number(match[1])] : 0;
+  if (typeof depth !== 'number' || !(depth > 0)) return undefined;
+  return { marginInlineStart: `${Math.min(depth, MAX_LIST_DEPTH) * 1.25}rem` };
 }
 
 function hostClassFor(kind: BlockKind, key: Slot['key']): string | undefined {
@@ -1015,6 +1037,35 @@ export default function WritingSurface({
       justFormatted.current = { address: `${row.name}/${caretKey}`, before: around.before, after: around.after };
       return;
     }
+    // TAB NESTS A LIST ITEM UNDER THE ONE ABOVE IT, Shift+Tab steps it back
+    // out -- and the default is suppressed ONLY when `indentAt` says it did
+    // something. That condition is the whole of this branch's care: Tab is how
+    // a keyboard user leaves this surface at all, so a handler that swallowed
+    // every press would shut her inside the post with no way out but a mouse.
+    // Anywhere nesting does not apply -- a paragraph, a heading, a caption,
+    // the first item of a list, an item already as deep as it may go, a
+    // recipe's ingredients -- the press reaches the browser untouched and
+    // moves focus.
+    //
+    // Whether focus really does move on the presses this leaves alone is a
+    // browser fact: jsdom runs no default action for Tab, so it is deferred to
+    // e2e/writing-surface.spec.ts. What is checked here is the only thing
+    // jsdom can honestly say -- that preventDefault was called on the ones
+    // this handles and not on the ones it does not.
+    if (event.key === 'Tab') {
+      // Her place in the words, kept: nesting changes no text, so landing her
+      // at the top of an item she was halfway through writing would be a move
+      // she did not ask for. `after` empty is the caret at the end, which is
+      // where it is for the press that actually happens -- Enter, then Tab, on
+      // a new and empty item.
+      const around = sourceAroundCaret(el);
+      const offset: Caret['offset'] = around !== null && around.after.length === 0 ? 'end' : 'start';
+      const edit = indentAt(safe, { blockIndex: row.index, slotKey: slot.key, offset }, event.shiftKey ? -1 : 1);
+      if (edit === null) return;
+      event.preventDefault();
+      applyEdit(edit, addressOf(row, slot.key), offset);
+      return;
+    }
     if (event.key === 'Enter' && !event.shiftKey) {
       // Suppressed whatever happens next: the browser's own Enter inside a
       // host would split the tree the array is supposed to own. Shift+Enter is
@@ -1065,6 +1116,7 @@ export default function WritingSurface({
       key: address,
       contentEditable: true,
       className: hostClassFor(kind, slot.key),
+      style: indentStyle(row.block, slot.key),
       // The query surface for every jsdom case in this section, and for the
       // layout effect above. No hand-written `role`: an editable host with an
       // invented role is a claim about assistive behaviour nothing here can

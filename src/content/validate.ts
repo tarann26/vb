@@ -39,6 +39,9 @@ import {
 // Worker, and markdown.ts imports nothing, holds no JSX and touches no DOM,
 // so the chain stays clean (worker/__tests__/bundle.test.ts).
 import { isSafeHref, isSiteRelativePath, rawLinkTargets } from './markdown';
+// The nesting cap, read from the one place it is declared so this end and
+// assertBlock cannot come to two different answers about how deep is too deep.
+import { MAX_LIST_DEPTH } from './types';
 // The hero collage's own data structure. The rules below are the same ones
 // `assertCollageTree` (./guards) fails the BUILD on, written for her instead
 // of for a developer -- see `collageTreeProblems` for the split, and this
@@ -1317,6 +1320,31 @@ function validateBlock(raw: unknown, field: string, subject: string): Validation
     case 'bulletList':
     case 'numberList':
       problems.push(...validateInlineList(block.items, `${field}.items`, subject, 'list item'));
+      // The owner-facing half of assertBlock's own `levels` branch
+      // (guards.ts). Absent is the ordinary case and is never a problem: a
+      // list with nothing nested carries no `levels` key at all.
+      //
+      // The message is a "reload and try again" rather than a "fix this",
+      // because there is nothing on screen for her to fix -- no control edits
+      // a nesting depth, Tab does, and the only way the two arrays come apart
+      // is a draft restored from a version of this dashboard that wrote them
+      // differently.
+      if (block.levels !== undefined) {
+        const levels: unknown = block.levels;
+        const items: unknown[] = Array.isArray(block.items) ? block.items : [];
+        if (!Array.isArray(levels) || levels.length !== items.length) {
+          problems.push(problem(`${field}.levels`, `a list in ${subject} lost track of how its items are nested -- reload this page, decline any draft it offers to restore, and make the edit again`));
+        } else if (levels.some((level) => typeof level !== 'number' || !Number.isInteger(level) || level < 0 || level > MAX_LIST_DEPTH)) {
+          // NOT in the brief, and it is here for the reason the caption rule
+          // above states in its own words: without it the two ends disagree in
+          // the dangerous direction. assertBlock refuses a depth of 7 and this
+          // would have accepted one, so a write the Worker took and committed
+          // would fail every build after it -- the poisoned-main shape this
+          // file's header warns about, reachable through a restored draft
+          // because registerLoaded casts one without checking.
+          problems.push(problem(`${field}.levels`, `a list in ${subject} is nested deeper than this site can show -- reload this page, decline any draft it offers to restore, and make the edit again`));
+        }
+      }
       break;
     case 'image':
       if (isBlank(block.src)) {

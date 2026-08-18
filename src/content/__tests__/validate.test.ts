@@ -1405,6 +1405,36 @@ describe('posts.json', () => {
       expect(withBlocks([block]).map((p) => p.field)).toContain(field);
     });
 
+    // Admin redesign Task 26. The write boundary's own half of the `levels`
+    // rule -- guards.test.ts's both-ends table already pins that these exact
+    // shapes are refused at BOTH ends, and these three cases pin the message
+    // she is the one who reads. It is a "reload and try again" rather than a
+    // "fix this", because no control on this dashboard edits a nesting depth:
+    // Tab does, and a pair of arrays that came apart is not something she did.
+    it.each([
+      ['fewer depths than items', { kind: 'bulletList', items: ['One', 'Two'], levels: [0] }, /lost track of how its items are nested/],
+      ['more depths than items', { kind: 'numberList', items: ['One'], levels: [0, 1] }, /lost track of how its items are nested/],
+      ['a depth this site cannot show', { kind: 'bulletList', items: ['One', 'Two'], levels: [0, 7] }, /nested deeper than this site can show/],
+    ])('refuses a list with %s', (_name, block, message) => {
+      const problems = withBlocks([block]);
+      expect(problems.map((p) => p.field)).toContain('[0].blocks[0].levels');
+      expect(problems.map((p) => p.message).join(' ')).toMatch(message);
+    });
+
+    // The other direction, and the reason the rows above cannot be satisfied
+    // by a boundary that refuses every list. The middle one is the shape
+    // EVERY list committed before nesting existed has, and the first one is
+    // what makes `levels` a key BLOCK_KEYS has to declare -- without that
+    // declaration the unknownKeys sweep above would refuse a nested list as
+    // carrying a key this site does not use.
+    it.each([
+      ['a nested list', { kind: 'bulletList', items: ['One', 'Two'], levels: [0, 1] }],
+      ['a list with no levels key at all', { kind: 'numberList', items: ['One', 'Two'] }],
+      ['a list nested as deep as it may go', { kind: 'bulletList', items: ['One', 'Two', 'Three'], levels: [0, 1, 2] }],
+    ])('accepts %s', (_name, block) => {
+      expect(withBlocks([block])).toEqual([]);
+    });
+
     // A citation with no online copy is a real citation -- press.json's own
     // committed entries prove it. `null`, not `''`.
     it('accepts a citation with no link', () => {
