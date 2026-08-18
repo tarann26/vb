@@ -24,7 +24,7 @@ const POST: Post = {
 
 describe('post metadata', () => {
   it('reads the canonical host from site.json rather than a second literal', () => {
-    expect(SITE_URL).toBe('https://vb.aionxxxi.uk');
+    expect(SITE_URL).toBe('https://viabiancarestaurant.com');
   });
 
   it('titles the page with the post title alone, appending nothing', () => {
@@ -36,11 +36,11 @@ describe('post metadata', () => {
   });
 
   it('builds the canonical from site.seo.url and the slug, not from any request', () => {
-    expect(postMetadata(POST).canonical).toBe('https://vb.aionxxxi.uk/blog/assassina');
+    expect(postMetadata(POST).canonical).toBe('https://viabiancarestaurant.com/blog/assassina');
   });
 
   it('makes the open graph image absolute against the same host', () => {
-    expect(postMetadata(POST).imageUrl).toBe('https://vb.aionxxxi.uk/press/hotelier.webp');
+    expect(postMetadata(POST).imageUrl).toBe('https://viabiancarestaurant.com/press/hotelier.webp');
   });
 
   it('escapes quotes and angle brackets for an attribute value', () => {
@@ -53,10 +53,10 @@ describe('post metadata', () => {
     expect(json.headline).toBe(POST.title);
     expect(json.description).toBe(POST.excerpt);
     expect(json.datePublished).toBe('2026-08-10');
-    expect(json.image).toBe('https://vb.aionxxxi.uk/press/hotelier.webp');
+    expect(json.image).toBe('https://viabiancarestaurant.com/press/hotelier.webp');
     expect(json.mainEntityOfPage).toEqual({
       '@type': 'WebPage',
-      '@id': 'https://vb.aionxxxi.uk/blog/assassina',
+      '@id': 'https://viabiancarestaurant.com/blog/assassina',
     });
   });
 
@@ -102,13 +102,13 @@ describe('rewriting the shell head', () => {
   });
 
   it('points og:image and twitter:image at the post image, absolutely', () => {
-    const matches = out.match(/content="https:\/\/vb\.aionxxxi\.uk\/press\/hotelier\.webp"/g);
+    const matches = out.match(/content="https:\/\/viabiancarestaurant\.com\/press\/hotelier\.webp"/g);
     expect(matches).toHaveLength(2);
     expect(out).not.toContain('/og-image.jpg');
   });
 
   it('points og:url at the post canonical', () => {
-    expect(out).toContain('<meta property="og:url" content="https://vb.aionxxxi.uk/blog/assassina" />');
+    expect(out).toContain('<meta property="og:url" content="https://viabiancarestaurant.com/blog/assassina" />');
   });
 
   it('adds the canonical link the shell deliberately ships without', () => {
@@ -118,7 +118,7 @@ describe('rewriting the shell head', () => {
     // present in the raw shell. The functional shape -- an actual tag with
     // an href -- is what must be absent before the rewrite and present after.
     expect(SHELL).not.toContain('rel="canonical" href=');
-    expect(out).toContain('<link rel="canonical" href="https://vb.aionxxxi.uk/blog/assassina">');
+    expect(out).toContain('<link rel="canonical" href="https://viabiancarestaurant.com/blog/assassina">');
   });
 
   // Review fix round 1, F1 (BLOCKING). The title/description assertions

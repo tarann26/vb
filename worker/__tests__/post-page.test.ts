@@ -238,8 +238,8 @@ describe('serving a post page', () => {
     const html = await response.text();
     expect(response.status).toBe(200);
     expect(html).toContain('<title>A post that exists only in the database</title>');
-    expect(html).toContain('content="https://vb.aionxxxi.uk/press/royale.webp"');
-    expect(html).toContain('<link rel="canonical" href="https://vb.aionxxxi.uk/blog/live-only">');
+    expect(html).toContain('content="https://viabiancarestaurant.com/press/royale.webp"');
+    expect(html).toContain('<link rel="canonical" href="https://viabiancarestaurant.com/blog/live-only">');
     expect(html).toContain('"@type":"Article"');
     expect(html).toContain('"headline":"A post that exists only in the database"');
   });
@@ -265,7 +265,7 @@ describe('serving a post page', () => {
     const html = await (
       await handlePostPage(get(`/blog/${SNAPSHOT_SLUG}`), { DB: throwing }, fakePages().impl)
     ).text();
-    expect(html).toContain(`<link rel="canonical" href="https://vb.aionxxxi.uk/blog/${SNAPSHOT_SLUG}">`);
+    expect(html).toContain(`<link rel="canonical" href="https://viabiancarestaurant.com/blog/${SNAPSHOT_SLUG}">`);
     expect(html).toContain('"@type":"Article"');
   });
 

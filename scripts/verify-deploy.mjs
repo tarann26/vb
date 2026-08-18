@@ -32,7 +32,7 @@ import { execFileSync } from 'node:child_process';
 import { postsDriftProblems } from './published-posts-check.mjs';
 import { postSeoProblems } from './post-seo-check.mjs';
 
-const SITE = process.env.VB_SITE ?? 'https://vb.aionxxxi.uk';
+const SITE = process.env.VB_SITE ?? 'https://viabiancarestaurant.com';
 const ORIGIN = new URL(SITE).origin;
 const SITE_URL_FROM_CONTENT = JSON.parse(readFileSync('src/content/site.json', 'utf8')).seo.url;
 

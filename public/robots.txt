@@ -2,4 +2,4 @@ User-agent: *
 Allow: /
 Disallow: /edit
 
-Sitemap: https://vb.aionxxxi.uk/sitemap.xml
+Sitemap: https://viabiancarestaurant.com/sitemap.xml
