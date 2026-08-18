@@ -12,7 +12,7 @@ import { useCanonical } from '../useCanonical';
 import NavBar from '../NavBar';
 import Footer from '../Footer';
 import PostCard from './PostCard';
-import { EMPTY_POSTS_MESSAGE, pageCount, pageOf } from './posts';
+import { EMPTY_POSTS_MESSAGE, pageCount, pageSlice, sortedPosts } from './posts';
 import { usePosts } from './use-posts';
 
 // `copy.blogsPage.heading`/`.intro` are the two blogsPage.* leaves still
@@ -36,7 +36,12 @@ export default function BlogIndex() {
   useCanonical(`${site.seo.url}/blog`);
 
   const total = pageCount(posts);
-  const shown = pageOf(posts, page);
+  // The sort is spelled out here rather than hidden inside the slice, which
+  // is what `pageOf` used to do. Task 29 split the two so the controls it
+  // adds -- filter, search, sort -- can compose in front of the paging;
+  // Task 30 replaces this line with `visiblePosts`. What this page shows
+  // today is unchanged: newest first, nine to a page.
+  const shown = pageSlice(sortedPosts(posts), page);
 
   function goTo(next: number): void {
     setPage(next);
