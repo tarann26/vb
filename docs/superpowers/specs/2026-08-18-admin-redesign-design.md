@@ -202,6 +202,59 @@ mutating the code and watching it go red.
   undo restoring the previous state. These involve selection and
   `contenteditable` and cannot be honestly asserted anywhere else.
 
+---
+
+## The public blog index
+
+Three things a reader of a blog expects, none of which `/blog` has today.
+
+**Filter by kind.** The content model already carries a type on every post —
+`recipe`, `story`, `mention` — rendered today as the badge on each card
+("Recipe", "Story", "In the press"). Those become three filter controls above
+the list, plus an "All". The badge stays on the card, so the thing she filters
+by and the thing she sees on a post are visibly the same thing rather than two
+vocabularies for one idea.
+
+**Sort by most recent.** The list is already newest-first and stably sorted
+within a date. That becomes an explicit control rather than an invisible
+default, with oldest-first as the alternative.
+
+**Search.** A single field over post titles and excerpts, filtering the list as
+she types. It searches what is already loaded in the browser — no new endpoint,
+no server round trip, and it keeps working from the compiled-in fallback when
+D1 is unreachable.
+
+Filter, sort and search compose: choosing Recipes and typing "lemon" shows
+lemon recipes. An empty result says so in words rather than showing an empty
+grid, the same way the index already handles having no posts at all.
+
+## The washes on a phone
+
+Section backgrounds are currently invisible on a phone. Measured on the live
+site at 390px by sampling background pixels down the page:
+
+| Wash | Measured | Distance from white |
+|---|---|---|
+| Brand blue sections | `(247,249,251)`, `(248,250,252)` | 3–8 points |
+| Warm cream section | `(255,253,248)` | 2–7 points |
+| Grey sections | `(249,249,249)` | 6 points |
+| Footer band | `(237,237,237)` | 18 points |
+
+The brand washes are `bg-brand/8` through `bg-brand/30` — brand blue `#C8D8E8`
+at 8% to 30% over white. At 8% that computes to `rgb(251,252,253)`, which is
+white for any practical purpose. The footer at 18 points below white is the
+only band that reads as a band, and it gives the target: **the washes should
+land 15–20 points below white**, which is roughly a 15-point bump across the
+opacity scale.
+
+This stays a wash, not a colour — the point is that a section boundary is
+perceptible on a phone in daylight, not that the page becomes blue. Brand blue
+remains a surface colour only; text on these surfaces keeps using ink or accent
+`#9D4949`, and the existing contrast sweep over every text node still governs.
+
+Verified by screenshot at 390px before and after, with the pixel values
+recorded, because "looks about right" is what produced the current values.
+
 ## Sequencing
 
 Both halves are in one spec, but the plan orders them so the mechanical work
@@ -229,29 +282,43 @@ site today came from the repository, not from Drive.
 `Via Bianca Drinks Menu`), `Via Bianca Handover`, `Via Bianca's Logo`, and
 `Via Bianca's Brand Deck` as both PDF and `.ai`.
 
-**What blocks it, and it is not a scheduling problem.** The folders are owned
-by `arpit@socialtab.in` and `cykhdesigns@gmail.com` and shared with the owner.
-Google Drive indexes a *folder* shared with you, but not the individual files
-inside it — a listing of any of those folders' contents comes back empty
-through the API, while images shared with the owner directly are returned
-normally. So the folders can be seen and their contents cannot be read.
+**The images are reachable, and an earlier reading of this said otherwise.**
+Listing a shared folder's contents by parent returns nothing — Drive indexes a
+folder shared with you but not, by that route, the files inside it. Searching
+by **owner** does return them: the photo shoot exists as `NB0_75xx.JPG` files
+owned by `arpit@socialtab.in`, roughly 10MB each, dated 2025-06-09, alongside
+logo files owned by `cykhdesigns@gmail.com`. The first page alone returns
+twenty-five and paginates further. The blocker was the query, not the access.
 
-**Three ways past it**, in order of preference:
+**The filenames carry no information.** `NB0_7576.JPG` says nothing about
+whether the frame is a pasta dish, a cocktail, or the dining room. Identifying
+what each photograph shows means looking at it. That is the substance of the
+work, not a preliminary to it.
 
-1. The folder owners share the files with the owner directly, or move them into
-   a shared drive the owner is a member of.
-2. The owner copies the folders into their own Drive, which makes them owned
-   rather than shared.
-3. The owner downloads the images and they are added to the repository, which
-   is how every image on the site got there today.
+**What Phase 6 involves:**
 
-**What Phase 6 then involves.** Examining the images, updating dishes, drinks,
-press and galleries with whatever is new, running every image through the
-derivative pipeline, and uploading. Note that **R2 is not enabled on this
-account** — it is billing-gated — so image storage remains the repository plus
-the build-time derivative pipeline until that changes.
+1. Enumerate every image reachable in Drive, by owner rather than by folder.
+2. Download them.
+3. **Look at each one** and decide what it shows.
+4. Where a photograph clearly depicts a dish or a drink that exists in the
+   content, attach it to that item. **Where it cannot be identified with
+   confidence, leave it unnamed rather than guessing** — a wrong photo on a
+   menu item is worse than no photo.
+5. Run every image through the existing derivative pipeline (`npm run images`)
+   so the site serves `.webp` derivatives at the right sizes.
+6. Add them to the repository and publish.
 
-Phase 6 stays out of scope until the access question above is resolved. It
-should be its own spec, because by then it is a content migration rather than a
-feature, and it needs a decision about where the images live before a single
-one is touched.
+**Two boundaries on this work:**
+
+- **The hero collage is not touched.** Its split tree is under an explicit
+  owner constraint and has its own geometry tests; nothing in Phase 6 changes
+  it.
+- **Only sections that carry images** — dishes, drinks, galleries, experiences,
+  press — plus any new dish or drink the photographs reveal. Text-only content
+  is untouched.
+
+**R2 is not enabled on this account** — it is billing-gated — so image storage
+remains the repository plus the build-time derivative pipeline until that
+changes. At roughly 10MB per source photograph, the count that ends up
+committed matters, and the derivative pipeline's output rather than the
+originals is what belongs in the repository.
