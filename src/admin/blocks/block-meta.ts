@@ -50,6 +50,19 @@ export const BLOCK_KIND_HELP: Record<BlockKind, string> = {
   citation: 'The publication, the date, and a link to the original.',
 };
 
+// The kinds the writing surface's own insert menu offers, and the reason it is
+// a list here rather than a filter written at the call site: it is the exact
+// complement of what WritingToolbar's buttons can reach, and the two halves
+// have to stay a partition of BLOCK_KINDS. block-meta.test.ts asserts that
+// against BLOCK_KINDS itself, so an eleventh kind added to BlockContentMap
+// (src/content/types.ts) fails there rather than becoming a kind she can
+// neither type nor insert -- reachable from nowhere, and invisible in a post
+// that already has one.
+//
+// Order is hers rather than the model's, the same call PICKER_ORDER makes: the
+// recipe pair sits together, and the two she reaches for least are the ends.
+export const INSERT_MENU_KINDS: readonly BlockKind[] = ['gallery', 'ingredients', 'steps', 'citation'];
+
 // What the strip over a block says when its kind is not one of the ten. Not
 // decoration and not a placeholder for a state that cannot happen: a draft
 // saved by an older build of this dashboard restores through registerLoaded's

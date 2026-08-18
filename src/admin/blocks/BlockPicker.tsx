@@ -38,11 +38,27 @@ const PICKER_ORDER: BlockKind[] = [
   'citation',
 ];
 
-export default function BlockPicker({ onPick }: { onPick: (kind: BlockKind) => void }) {
+export interface BlockPickerProps {
+  onPick: (kind: BlockKind) => void;
+  // Which kinds to offer. Left out, this offers every kind the model has, in
+  // PICKER_ORDER -- so every caller that predates the writing surface is
+  // unaffected, which is what keeps BlockPicker.test.tsx's "exactly the
+  // model's kinds in a deliberate order" green.
+  //
+  // Supplied, it is taken VERBATIM and nothing is appended to it. That is the
+  // whole difference between an insert menu and a picker: the writing surface
+  // hands in the four kinds its toolbar cannot reach (INSERT_MENU_KINDS), and
+  // reconciling that list against BLOCK_KINDS would put the other six back on
+  // screen as a second, worse copy of the toolbar. Completeness for the narrow
+  // list is asserted one level up, against BLOCK_KINDS, in block-meta.test.ts.
+  kinds?: readonly BlockKind[];
+}
+
+export default function BlockPicker({ onPick, kinds }: BlockPickerProps) {
   // Completeness at runtime as well as in the test: a kind in BLOCK_KINDS
   // that PICKER_ORDER forgot is appended rather than lost. The test is what
   // fails; this is what keeps her able to insert it in the meantime.
-  const order = [...PICKER_ORDER, ...BLOCK_KINDS.filter((kind) => !PICKER_ORDER.includes(kind))];
+  const order = kinds ?? [...PICKER_ORDER, ...BLOCK_KINDS.filter((kind) => !PICKER_ORDER.includes(kind))];
 
   return (
     <div>

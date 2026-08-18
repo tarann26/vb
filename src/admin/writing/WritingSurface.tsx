@@ -31,14 +31,17 @@ import { backspaceAtStart, enterAt, type Caret, type Edit } from './structure';
 import { autoformat, revertFormat } from './autoformat';
 import { pasteChunks } from './paste';
 import Field from '../Field';
-import { ALT_SPEC } from '../blocks/block-meta';
+import BlockFields from '../blocks/BlockFields';
+import BlockPicker from '../blocks/BlockPicker';
+import { blankBlock } from '../blocks/blank-block';
+import { ALT_SPEC, INSERT_MENU_KINDS } from '../blocks/block-meta';
 import { checkPhotoSize, convertHeic, uploadAndEncode } from '../upload-photo';
 import { EMPTY_HISTORY, record, redo, undo, type History, type Snapshot } from './history';
 import { clearMarks, insertLink, LINK_PLACEHOLDER, marksSurviveSave, selectedWords, toggleMark, type Mark } from './marks';
 import WritingToolbar, { type ToolbarKind } from './WritingToolbar';
 import { serializeInline } from '../../content/inline-source';
 import { isSafeHref, rawLinkTargets } from '../../content/markdown';
-import { isBlockKind } from '../../content/guards';
+import { BLOCK_KEYS, isBlockKind } from '../../content/guards';
 import type { Block, BlockKind } from '../../content/types';
 import type { ImagePreviews } from '../previews';
 import type { StagedPhoto } from '../PhotoField';
@@ -99,6 +102,47 @@ const CARD_NUMBERS = `list-decimal pl-5 space-y-3 ${PROSE}`;
 const LIST_KINDS: Record<string, true | undefined> = {
   bulletList: true, numberList: true, ingredients: true, steps: true,
 };
+
+// The kinds this column hands to BlockFields instead of to an editable host,
+// DERIVED from the insert menu's own list rather than typed again: whatever
+// the menu can add is whatever this has to be able to draw, and a kind that
+// drifted out of one of the two would be addable and invisible, or visible and
+// unaddable. block-meta.ts holds the list and block-meta.test.ts pins it
+// against BLOCK_KINDS.
+//
+// Two of the four -- a photo grid and a citation -- carry no markdown at all
+// (slots.ts calls them atoms). The other two do, and are STILL sent here: a
+// recipe's list of ingredients is a set of short labelled boxes rather than
+// prose, its heading is a plain string the published renderer draws with no
+// markdown around it (blocks.tsx), and giving that heading an editable host
+// would let her make a word bold and publish the asterisks. A deliberate
+// inconsistency inside a writing surface, and the right one.
+const FIELDS_KINDS: Record<string, true | undefined> = Object.fromEntries(
+  INSERT_MENU_KINDS.map((kind) => [kind, true]),
+);
+
+// Whether one of BlockFields' own controls will actually SHOW a problem with
+// this key -- the same question BlockList.claimsKey answers, in the same words,
+// because the D4 partition below has to agree with what is on screen and these
+// four kinds put their problems on screen through a component this file does
+// not otherwise know the shape of. Three keys reach a rendered block that no
+// control of it asks for: `kind` (no control edits a block's kind), a key a
+// stale draft carries that this site dropped, and a stale index -- `items[7]`
+// on a list she has since cut to three, which is reachable because validation
+// is debounced.
+//
+// Derived from BLOCK_KEYS (guards.ts) rather than from a second hand-written
+// list of what BlockFields renders, so a key added to a kind cannot be claimed
+// here without also being declared there.
+function fieldsClaim(block: Block, kind: BlockKind, key: string | undefined): boolean {
+  if (key === undefined || key === 'kind') return false;
+  const indexed = key.match(/^(items|images)\[(\d+)\]/);
+  if (indexed !== null) {
+    const list = (block as unknown as Record<string, unknown>)[indexed[1]];
+    return Array.isArray(list) && Number(indexed[2]) < list.length;
+  }
+  return Object.prototype.hasOwnProperty.call(BLOCK_KEYS[kind], key);
+}
 
 // Keyed on `(kind, slot)` and not on kind alone: a quote has two slots and
 // they are not the same element. The shipped renderer is
@@ -434,6 +478,12 @@ export default function WritingSurface({
   // vanish from both.
   function claims(row: Row, key: string | undefined): boolean {
     if (row.slots.some((slot) => slot.key === key)) return true;
+    // The four the insert menu adds put every one of their problems on screen
+    // through BlockFields, including the ones no slot of theirs corresponds to
+    // -- a photo grid's `images`, a citation's `publication`, a recipe list's
+    // `heading`. Left out of this, each of those would be shown by the field
+    // AND repeated in the banner above it.
+    if (row.kind !== undefined && FIELDS_KINDS[row.kind] === true) return fieldsClaim(row.block, row.kind, key);
     return row.kind === 'image' && key === 'alt';
   }
 
@@ -1039,9 +1089,71 @@ export default function WritingSurface({
     );
   }
 
+  // One of the four the insert menu adds, drawn by the dashboard's existing
+  // per-kind fields rather than by this file. Every contract on the way down is
+  // the one BlockList already hands it, character for character -- so nothing
+  // about how a photo in a grid stages, previews or gets its name changes with
+  // the surface it is standing on.
+  //
+  // The surround is BlockList's own row shell, reused rather than retyped: it
+  // gives a set of labelled boxes a visible edge in a column of prose, and a
+  // retyped class string is a brand-new class to the content scanner even when
+  // it draws the identical rule.
+  function fieldsRow(row: Row): ReactNode {
+    return (
+      <div className="mb-6 rounded border border-gray-200 p-4">
+        <BlockFields
+          block={row.block}
+          onChange={(next) => {
+            // The address is synthetic and deliberately not a slot address:
+            // `caretAt` finds nothing for it, so a step restored from here puts
+            // her words back and moves no caret, which is the honest outcome
+            // for an edit that happened in a control this surface does not own.
+            // What it DOES buy is coalescing -- without an address, `record`
+            // cannot fold a run of typing and every keystroke in an ingredient
+            // becomes its own undo step.
+            remember(`${row.name}/fields`, 'end', false);
+            // Before onChange, never after, and for the reason commitSlot gives:
+            // the re-render this schedules looks the name up again, and an
+            // edited block is a NEW object. Without it a photo already staged
+            // inside this grid is left filed under a name nothing refers to.
+            rename(row.block, next, row.index);
+            emit(safe.map((existing, i) => (i === row.index ? next : existing)));
+          }}
+          idPrefix={`posts-${postIndex}-block-${row.index}`}
+          problemsFor={(key) => problemsOf(row, key)}
+          previews={previews}
+          onStaged={(key, staged) => onStaged(`blocks[${row.name}].${key}`, staged)}
+          previewKeyPrefix={`${previewKeyPrefix}:blocks[${row.name}]`}
+        />
+      </div>
+    );
+  }
+
+  // The block she is standing in, or the last one, and the new block goes
+  // directly after it -- the same anchor handleImagePick takes, and for the
+  // same reason: an insert that always appended would put her ingredients at
+  // the bottom of a post she is writing the middle of.
+  function insertNow(kind: BlockKind): void {
+    const blocks = latest.current;
+    const anchor = activeHost();
+    const found = anchor === null ? -1 : blocks.indexOf(anchor.row.block);
+    const at = found === -1 ? blocks.length - 1 : found;
+    setNotice(null);
+    remember(anchor?.address ?? null, 'end', true);
+    emit(insertAfter(blocks, at, [blankBlock(kind)]));
+  }
+
   function rowOf(row: Row): ReactNode {
     const kind = row.kind;
-    if (kind === undefined || row.slots.length === 0) return null;
+    if (kind === undefined) return null;
+    // Before the empty-slot check below, not after: a photo grid and a citation
+    // have no slots at all, and a recipe list she has emptied down to nothing
+    // has none either. Every one of those still has fields she must be able to
+    // reach, and a post opening with them invisible is a post she then edits
+    // and publishes with them gone.
+    if (FIELDS_KINDS[kind] === true) return fieldsRow(row);
+    if (row.slots.length === 0) return null;
     if (kind === 'image') return imageRow(row);
     if (LIST_KINDS[kind] === true) {
       return (
@@ -1136,6 +1248,15 @@ export default function WritingSurface({
       {rows.map((row) => (
         <Fragment key={row.name}>{rowOf(row)}</Fragment>
       ))}
+
+      {/* THE INSERT MENU, and it is unconditional for the reason BlockList's
+          own picker is: a post with nothing in it shows validatePost's "has
+          nothing in it yet" in the banner above, and a menu rendered only when
+          blocks exist would leave her reading a complaint with no remedy on the
+          same screen. Four kinds and not ten -- the other six are on the
+          toolbar, and offering them twice would be two ways to do one thing
+          with nothing on screen saying they are the same thing. */}
+      <BlockPicker kinds={INSERT_MENU_KINDS} onPick={insertNow} />
     </div>
   );
 }

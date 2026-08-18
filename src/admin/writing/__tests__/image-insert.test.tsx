@@ -370,3 +370,38 @@ describe('the photo description', () => {
     expect(at.container.querySelector('img')).toBeNull();
   });
 });
+
+// A photograph inside a photo grid, which the insert menu adds and BlockFields
+// draws. The path is a different one -- PhotoField rather than the toolbar's
+// own control -- and the claim is the same claim, because it is the only one
+// that decides what she gets live: the bytes must be filed under a key that
+// names the BLOCK, not the position it happened to be standing at.
+describe('a photograph inside a photo grid', () => {
+  it('stages under the grid block’s own name, the way the toolbar’s own picker does', async () => {
+    const at = bench([
+      { kind: 'paragraph', text: 'a' },
+      { kind: 'gallery', images: [{ src: '', alt: '' }] },
+    ]);
+    const input = at.container.querySelector<HTMLInputElement>('#posts-0-block-1-images-0-src') as HTMLInputElement;
+    expect(input).not.toBeNull();
+
+    await act(async () => {
+      fireEvent.change(input, { target: { files: [file('grid.jpg', 10)] } });
+    });
+
+    // Read back off the block the array actually holds rather than compared
+    // against a literal -- a key-shape assertion passes while the two disagree,
+    // which is how this project shipped the same defect twice.
+    expect(stagedKey(at)).toMatch(new RegExp(`^blocks\\[${nameIn(at, 1)}\\]\\.images\\[[^\\]]+\\]\\.src$`));
+  });
+
+  it('leaves the paragraph above it exactly as it was', async () => {
+    const paragraph: Block = { kind: 'paragraph', text: 'a' };
+    const at = bench([paragraph, { kind: 'gallery', images: [{ src: '', alt: '' }] }]);
+    const input = at.container.querySelector<HTMLInputElement>('#posts-0-block-1-images-0-src') as HTMLInputElement;
+    await act(async () => {
+      fireEvent.change(input, { target: { files: [file('grid.jpg', 10)] } });
+    });
+    expect(at.blocks()[0]).toBe(paragraph);
+  });
+});

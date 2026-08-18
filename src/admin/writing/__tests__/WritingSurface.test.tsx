@@ -9,8 +9,9 @@
 // rather than left to be inferred from silence.
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useState } from 'react';
-import { fireEvent, render, cleanup } from '@testing-library/react';
+import { fireEvent, render, cleanup, screen, within } from '@testing-library/react';
 import WritingSurface, { type WritingSurfaceProps } from '../WritingSurface';
+import { BLOCK_KIND_LABELS, INSERT_MENU_KINDS } from '../../blocks/block-meta';
 import { createStableNames, type StableNames } from '../../blocks/stable-names';
 import { NO_IMAGE_PREVIEWS } from '../../previews';
 import type { Block } from '../../../content/types';
@@ -1408,5 +1409,192 @@ describe('paste', () => {
     fireEvent.keyDown(back, { key: 'z', metaKey: true });
     const last = spy.mock.calls[spy.mock.calls.length - 1][0] as Block[];
     expect(last).toEqual([{ kind: 'paragraph', text: 'typed' }]);
+  });
+});
+
+// The four kinds no toolbar button can reach, and the menu that adds them.
+//
+// What is being protected here is not a menu. It is that a post which ALREADY
+// holds one of these opens with it on screen: the array is authoritative, so a
+// kind this column declined to draw would be a kind she edits around, publishes
+// over, and loses from the live site with nothing having said so.
+describe('the insert menu, and the four kinds the toolbar cannot reach', () => {
+  // The menu by its own heading rather than by "every button on the surface" --
+  // the toolbar above it is made of buttons too, and a selector that matched
+  // both would go green on the wrong row.
+  function menu(container: HTMLElement): HTMLButtonElement[] {
+    const heading = [...container.querySelectorAll('p')].find((el) => el.textContent === 'Add to this post');
+    return [...(heading?.parentElement?.querySelectorAll('button') ?? [])];
+  }
+
+  function pick(container: HTMLElement, label: string): HTMLButtonElement {
+    const found = menu(container).find((button) => (button.textContent ?? '').includes(label));
+    expect(found, `no menu entry for "${label}"`).toBeDefined();
+    return found as HTMLButtonElement;
+  }
+
+  const kindsOf = (blocks: Block[]): unknown[] => blocks.map((block) => (block as { kind?: unknown }).kind);
+
+  it('offers exactly the four, on a surface with nothing written in it yet', () => {
+    // Unconditional, and that is the case that matters: an empty post shows
+    // the validator's "has nothing in it yet" and a menu that appeared only
+    // once blocks existed would leave her reading a complaint with no remedy.
+    const view = surface({ blocks: [] });
+    expect(menu(view.container)).toHaveLength(INSERT_MENU_KINDS.length);
+    INSERT_MENU_KINDS.forEach((kind) => {
+      expect(pick(view.container, BLOCK_KIND_LABELS[kind])).toBeDefined();
+    });
+    expect(menu(view.container).some((b) => (b.textContent ?? '').includes(BLOCK_KIND_LABELS.paragraph))).toBe(false);
+  });
+
+  it('adds the kind she picked directly after the block she was writing in, and moves nothing else', () => {
+    const alpha: Block = { kind: 'paragraph', text: 'alpha' };
+    const beta: Block = { kind: 'paragraph', text: 'beta' };
+    const spy = vi.fn();
+    const view = surface({ blocks: [alpha, beta], onChange: spy });
+    fireEvent.focus(view.hosts()[0]);
+
+    fireEvent.click(pick(view.container, BLOCK_KIND_LABELS.ingredients));
+
+    const next = spy.mock.calls[0][0] as Block[];
+    expect(kindsOf(next)).toEqual(['paragraph', 'ingredients', 'paragraph']);
+    // Every block it did not add comes back as the IDENTICAL object -- the
+    // rule the whole surface is built on, and the thing that keeps a staged
+    // photograph attached to the block it was picked for.
+    expect(next[0]).toBe(alpha);
+    expect(next[2]).toBe(beta);
+    expect((next[1] as { heading?: string }).heading).toBe('Ingredients');
+  });
+
+  it('appends when she has not stood in a block yet, rather than doing nothing', () => {
+    const spy = vi.fn();
+    const view = surface({ blocks: [{ kind: 'paragraph', text: 'alpha' }], onChange: spy });
+    fireEvent.click(pick(view.container, BLOCK_KIND_LABELS.citation));
+    expect(kindsOf(spy.mock.calls[0][0] as Block[])).toEqual(['paragraph', 'citation']);
+  });
+
+  it('adds to an empty post, where there is no block to stand after at all', () => {
+    const spy = vi.fn();
+    const view = surface({ blocks: [], onChange: spy });
+    fireEvent.click(pick(view.container, BLOCK_KIND_LABELS.gallery));
+    expect(kindsOf(spy.mock.calls[0][0] as Block[])).toEqual(['gallery']);
+  });
+
+  it('gives each of the four its own fields, and none of them an editable host', () => {
+    const view = surface({
+      blocks: [
+        { kind: 'gallery', images: [{ src: '/a.webp', alt: 'a' }] },
+        { kind: 'ingredients', heading: 'For the sauce', items: ['400g flour'] },
+        { kind: 'steps', heading: 'Method', items: ['Make a well'] },
+        { kind: 'citation', publication: 'Vogue', date: '2026-01-01', url: null },
+      ],
+    });
+    expect(view.hosts()).toEqual([]);
+    expect(screen.getByLabelText('Ingredient 1')).toHaveValue('400g flour');
+    expect(screen.getByLabelText('Step 1')).toHaveValue('Make a well');
+    expect(screen.getByLabelText('Publication')).toHaveValue('Vogue');
+    expect(screen.getAllByLabelText('Photo description')).toHaveLength(1);
+  });
+
+  // A recipe list she has emptied down to nothing has no slots either, so the
+  // "no slots, draw nothing" rule the prose kinds follow would make the whole
+  // block disappear -- heading, Add button and all -- leaving her a post she
+  // cannot get back into.
+  it('draws a recipe list she has emptied down to no items at all', () => {
+    surface({ blocks: [{ kind: 'ingredients', heading: 'For the sauce', items: [] }] });
+    expect(screen.getByLabelText('Heading for the ingredients')).toHaveValue('For the sauce');
+    expect(screen.getByRole('button', { name: 'Add an ingredient' })).toBeInTheDocument();
+  });
+
+  // types.ts types a recipe heading `string` and not InlineText, and
+  // blocks.tsx draws it with no markdown around it -- so an editable host here
+  // would let her make a word bold and publish the asterisks as asterisks.
+  it('never routes a recipe heading through the markdown pipeline', () => {
+    const view = surface({ blocks: [{ kind: 'steps', heading: 'Method', items: ['x'] }] });
+    const heading = screen.getByLabelText('Heading for the method');
+    expect(heading.tagName.toLowerCase()).toBe('input');
+    expect(heading.getAttribute('contenteditable')).toBeNull();
+    expect(view.container.querySelector('[data-slot]')).toBeNull();
+  });
+
+  it('commits an edit onto a NEW object, carries the name onto it, and hands the rest back by identity', () => {
+    const names = createStableNames('b');
+    const grid: Block = { kind: 'gallery', images: [{ src: '/a.webp', alt: 'a' }] };
+    const after: Block = { kind: 'paragraph', text: 'beta' };
+    const spy = vi.fn();
+    surface({ blocks: [grid, after], onChange: spy, names });
+    const nameBefore = names.nameOf(grid, 0);
+
+    fireEvent.change(screen.getByLabelText('Photo description'), { target: { value: 'A tielle' } });
+
+    const next = spy.mock.calls[0][0] as Block[];
+    expect(next[0]).not.toBe(grid);
+    expect(next[1]).toBe(after);
+    expect(names.nameOf(next[0], 0)).toBe(nameBefore);
+  });
+
+  it('an edit inside one of the four is a step undo can put back', () => {
+    const spy = vi.fn();
+    const grid: Block = { kind: 'gallery', images: [{ src: '/a.webp', alt: 'a' }] };
+    const view = render(<Harness initial={[grid]} spy={spy} />);
+    fireEvent.change(screen.getByLabelText('Photo description'), { target: { value: 'A tielle' } });
+    fireEvent.click(within(view.container).getByRole('button', { name: 'Undo' }));
+    expect(spy.mock.calls[spy.mock.calls.length - 1][0]).toEqual([grid]);
+  });
+
+  // The D4 partition, in both directions. A problem one of these fields shows
+  // must not ALSO stand in the banner over it, and one no field of it carries
+  // must not vanish from both.
+  describe('their problems', () => {
+    const BANNER = '[aria-label="Problems with this post’s content"]';
+    const once = (container: HTMLElement, message: string): number =>
+      [...container.querySelectorAll('*')].filter(
+        (el) => el.children.length === 0 && el.textContent === message,
+      ).length;
+
+    it('shows a citation’s own problem on its own field and nowhere else', () => {
+      const view = surface({
+        blocks: [{ kind: 'citation', publication: '', date: '2026-01-01', url: null }],
+        problems: [{ field: '[0].blocks[0].publication', message: 'Say where it was published.' }],
+      });
+      expect(view.container.querySelector(BANNER)).toBeNull();
+      expect(once(view.container, 'Say where it was published.')).toBe(1);
+    });
+
+    it('shows an empty photo grid’s list-level message where the photos would be', () => {
+      const view = surface({
+        blocks: [{ kind: 'gallery', images: [] }],
+        problems: [{ field: '[0].blocks[0].images', message: 'This photo grid has nothing in it yet.' }],
+      });
+      expect(view.container.querySelector(BANNER)).toBeNull();
+      expect(once(view.container, 'This photo grid has nothing in it yet.')).toBe(1);
+    });
+
+    it('shows a recipe list’s heading problem on the heading field, not in the banner', () => {
+      const view = surface({
+        blocks: [{ kind: 'ingredients', heading: '', items: ['x'] }],
+        problems: [{ field: '[0].blocks[0].heading', message: 'This list needs a heading.' }],
+      });
+      expect(view.container.querySelector(BANNER)).toBeNull();
+      expect(once(view.container, 'This list needs a heading.')).toBe(1);
+    });
+
+    it('sends a key none of its fields carries to the banner, exactly once', () => {
+      const view = surface({
+        blocks: [{ kind: 'citation', publication: 'Vogue', date: '2026-01-01', url: null }],
+        problems: [{ field: '[0].blocks[0].level', message: 'Something this site does not use.' }],
+      });
+      expect(view.container.querySelector(BANNER)?.textContent).toContain('Something this site does not use.');
+      expect(once(view.container, 'Something this site does not use.')).toBe(1);
+    });
+
+    it('sends a stale photo index to the banner rather than dropping it', () => {
+      const view = surface({
+        blocks: [{ kind: 'gallery', images: [{ src: '/a.webp', alt: 'a' }] }],
+        problems: [{ field: '[0].blocks[0].images[7].src', message: 'A photo she has since removed.' }],
+      });
+      expect(view.container.querySelector(BANNER)?.textContent).toContain('A photo she has since removed.');
+      expect(once(view.container, 'A photo she has since removed.')).toBe(1);
+    });
   });
 });
