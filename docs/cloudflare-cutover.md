@@ -1258,3 +1258,125 @@ is host-only), the Web Analytics tag is bound to the `aionxxxi.uk` zone, six
 hostnames are hardcoded, and a nameserver switch that drops MX kills email on
 the domain silently. Screenshot GoDaddy's record list before touching
 anything.
+
+## 20. Phase 5C: deploying the `/blog/*` Worker route, and undoing it
+
+`wrangler.toml` declares four routes now, not two:
+
+| Pattern | `zone_name` |
+| --- | --- |
+| `vb.aionxxxi.uk/api/*` | `aionxxxi.uk` |
+| `viabiancarestaurant.com/api/*` | `viabiancarestaurant.com` |
+| `vb.aionxxxi.uk/blog/*` | `aionxxxi.uk` |
+| `viabiancarestaurant.com/blog/*` | `viabiancarestaurant.com` |
+
+With those live, `/blog/<slug>` on either hostname is answered by
+`worker/post-page.ts` instead of by Pages. Read that file for the mechanism;
+the short version is that it fetches `/index.html` from Pages on the request's
+own origin and rewrites the `<head>` for one post. Bare `/blog` matches no
+pattern and stays on Pages entirely.
+
+### Two things about this that bite
+
+**A push to `main` does not deploy the Worker.** Section 18 has the full
+account. It applies here with a sharper edge than usual, because the route
+list is the only thing standing between the handler and every visitor: the
+code for `/blog/<slug>` sat merged, green and completely unreachable until
+someone ran `npx wrangler deploy` with these four patterns in the file.
+
+**`wrangler deploy` replaces the whole route list with exactly what this file
+declares.** It does not merge. A route somebody adds by hand in the dashboard
+works until the next deploy of this file and then disappears with no error and
+no log line. That has already cost this project once: the
+`viabiancarestaurant.com/api/*` route was added in the dashboard, a later
+deploy wiped it, and `/edit` login on that hostname answered 405 from the
+static site until the pattern was written down here. Four patterns must appear
+in the deploy output. Anything missing from that output is gone from
+production.
+
+### Deploy order, which is the reverse of Step 19's list
+
+Pages must be green **before** the Worker deploy. `worker/post-page.ts` fetches
+the live shell rather than carrying a compiled copy, so the Worker rewrites
+whatever `/index.html` Pages is serving at that moment. If Pages is behind and
+its shell no longer carries an anchor the rewriter needs, `rewriteShellHead`
+returns `null` and the handler serves the shell untouched (decision D9). The
+visitor gets HTTP 200, a page that renders correctly, and the site-wide title
+on every post. Nothing looks wrong in a browser.
+
+    git push                                   # Pages only. Wait for it.
+    curl -s https://vb.aionxxxi.uk/build-info.json   # `commit` must equal `git rev-parse HEAD`
+    npx wrangler deploy                        # now the Worker, and read its route output
+
+Note the order against "Before a deploy that matters" in Step 19, which runs
+`npx wrangler deploy` before `git push`. That order is right for a change to
+the Worker's D1 or snapshot behaviour and wrong for this one. When a deploy
+carries both, seed and snapshot first, push, wait for Pages, then deploy the
+Worker last.
+
+### Smoke checks, with curl and not a browser
+
+```bash
+SLUG=$(node -e "console.log(require('./src/content/posts.json')[0].slug)")
+for HOST in https://vb.aionxxxi.uk https://viabiancarestaurant.com; do
+  echo "--- $HOST/blog/$SLUG"
+  curl -s -o /dev/null -w '%{http_code} %{content_type}\n' "$HOST/blog/$SLUG"
+  curl -sI "$HOST/blog/$SLUG" | grep -i 'content-security-policy'
+  curl -s "$HOST/blog/$SLUG" | grep -o '<title>[^<]*</title>'
+done
+```
+
+Three things must be right on both hostnames:
+
+- `200 text/html`.
+- A `Content-Security-Policy` that is **not** `default-src 'none'`. That
+  policy is the API header set, it forbids script and style, and under it the
+  page is blank white at a 200 for every visitor. Roll back now if you see it.
+- A `<title>` that is the post's own, not
+  `Via Bianca - Pastificio & Ristorante | Authentic Italian Dining in Delhi`.
+  The site-wide title here means the rewriter found no anchor and fell through.
+
+Then confirm nothing else moved:
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' https://vb.aionxxxi.uk/blogs   # 301 to /blog
+curl -sI https://vb.aionxxxi.uk/blog | grep -i content-type            # text/html, from Pages
+curl -s https://vb.aionxxxi.uk/api/health                              # {"ok":true}
+curl -s -o /dev/null -w '%{http_code}\n' https://vb.aionxxxi.uk/edit   # 200, the SPA
+```
+
+Last, open one post URL in a real browser. curl cannot see a blank page and a
+browser can.
+
+### Rollback
+
+Delete these two lines from `routes` in `wrangler.toml`, leaving the two
+`/api/*` entries exactly where they are:
+
+    { pattern = "vb.aionxxxi.uk/blog/*", zone_name = "aionxxxi.uk" },
+    { pattern = "viabiancarestaurant.com/blog/*", zone_name = "viabiancarestaurant.com" },
+
+Then:
+
+    npx wrangler deploy
+
+Deploying the previous commit's `wrangler.toml` does the same thing and is the
+safer move if you are not sure what else in the file has changed since. Either
+way the deployed list is whatever the file says, so check the printed output
+for two patterns and not four.
+
+Do not delete the `/api/*` entries while you are in there. Removing them takes
+`/edit` login, publishing and the WhatsApp counter down on both hostnames, and
+that is a much larger outage than the one you are fixing.
+
+Reach for `npx wrangler rollback` only after this. It moves the script back to
+an earlier version; the route list is deployment configuration rather than
+part of a version, so it is not reliably what changes here.
+
+**What a visitor sees during the window.** Until the rollback deploy finishes,
+whatever broke stays broken: a blank page, a 502, or a post page carrying the
+site-wide title. The moment it finishes, Pages answers `/blog/*` again and
+every post URL renders exactly as it did before this phase, with site-wide
+metadata in the head and the article itself rendered by the SPA as always. The
+handler cannot run without a route, so the Worker code needs no revert and no
+second deploy. Nothing outside `/blog/*` moves at any point.

@@ -110,6 +110,14 @@ describe('cloudflare hosting config', () => {
   // static site. That is exactly what happened to viabiancarestaurant.com:
   // this test's old single-object regex could not even see a second route,
   // so it had nothing to say about the hostname that broke.
+  // The hostnames the site actually answers on. Declared once, at describe
+  // scope, because two tests below now depend on it being complete -- the
+  // /api/* one and the /blog/* one -- and two copies of this list is two
+  // things that must be updated together by somebody who remembers both.
+  // This test cannot discover served hostnames by itself: update this list
+  // whenever a hostname is added.
+  const SERVED_HOSTNAMES = ['viabiancarestaurant.com', 'vb.aionxxxi.uk'];
+
   function parseRoutes(wrangler: string): { pattern: string; zoneName: string }[] {
     const routesArray = wrangler.match(/routes\s*=\s*\[([\s\S]*?)\]/);
     expect(routesArray).not.toBeNull();
@@ -156,12 +164,58 @@ describe('cloudflare hosting config', () => {
     // existing at all, and being scoped to the right zone, says nothing
     // about whether EVERY hostname the site actually answers on has one. A
     // hostname with no /api/* route here is exactly the silent 405 that hit
-    // viabiancarestaurant.com. This test cannot discover served hostnames by
-    // itself -- update this list whenever a hostname is added.
-    const SERVED_HOSTNAMES = ['viabiancarestaurant.com', 'vb.aionxxxi.uk'];
+    // viabiancarestaurant.com.
     for (const host of SERVED_HOSTNAMES) {
       const route = routes.find((r) => r.pattern === `${host}/api/*`);
       expect(route, `no /api/* route for hostname "${host}" -- this is the silent 405`).toBeDefined();
+    }
+  });
+
+  // Phase 5C. Every served hostname needs a /blog/* route as well as its
+  // /api/* one, and for the same reason the /api/* assertion above exists: a
+  // hostname with no route fails silently. There it was a 405 on login; here
+  // it is a post URL falling through to Pages and answering the site-wide
+  // title with no per-post metadata, which looks completely normal in a
+  // browser and is only visible in the raw HTML.
+  //
+  // The pattern is deliberately coarser than worker/post-page.ts's
+  // slugFromPath, which accepts a single segment only. `/blog/a/b` and bare
+  // `/blog/` reach the Worker under this route and get the router's 404;
+  // that is the intended shape and worker/__tests__/post-page.test.ts covers
+  // it. Bare `/blog` matches neither, so the index stays on Pages.
+  it('routes /blog/* to the Worker on every served hostname', () => {
+    const routes = parseRoutes(readFileSync('wrangler.toml', 'utf8'));
+    for (const host of SERVED_HOSTNAMES) {
+      const route = routes.find((r) => r.pattern === `${host}/blog/*`);
+      expect(route, `no /blog/* route for hostname "${host}" -- posts there get no per-post metadata`).toBeDefined();
+    }
+  });
+
+  // Phase 5C, decision D7. /edit suppresses its own SEO output on purpose
+  // (src/components/SeoHead.tsx: logged out, an empty site.seo.url resolves
+  // an empty href to /edit ITSELF, and the Restaurant block names a blank
+  // restaurant). The Worker cannot reproduce either state -- it never sees an
+  // /edit request and reads site.seo.url from the committed JSON -- but the
+  // first half of that is only true while no route pattern here can reach
+  // /edit. Pinned rather than left to prose, because widening a pattern to
+  // `/*` is a one-character edit that nothing else in this repo would catch,
+  // and the edit looks harmless in a diff.
+  //
+  // The other half -- that the Worker's own handler declines /edit even if a
+  // route did hand it one -- belongs to the predicate, not to this file, and
+  // worker/__tests__/post-page.test.ts pins it directly on slugFromPath and
+  // servesSiteHtml. It deliberately is not re-asserted here: importing
+  // worker/post-page into a src/ test drags worker/d1.ts's D1Database types
+  // into tsconfig.app.json's program, where @cloudflare/workers-types is not
+  // configured, and `npx tsc -b --noEmit` fails with seven errors in files
+  // this task never touched.
+  it('routes no part of the admin surface to the Worker', () => {
+    const routes = parseRoutes(readFileSync('wrangler.toml', 'utf8'));
+    for (const { pattern } of routes) {
+      const path = pattern.slice(pattern.indexOf('/'));
+      const prefix = path.endsWith('*') ? path.slice(0, -1) : path;
+      expect('/edit'.startsWith(prefix), `route "${pattern}" can match /edit`).toBe(false);
+      expect('/edit/manage'.startsWith(prefix), `route "${pattern}" can match /edit/manage`).toBe(false);
     }
   });
 

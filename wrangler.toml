@@ -10,9 +10,36 @@ compatibility_date = "2026-01-01"
 # dashboard survives until the next deploy and then disappears without a word.
 # That is not hypothetical -- it happened to viabiancarestaurant.com on the 5B
 # deploy, and /edit login on that host went back to 405 until this line existed.
+#
+# Phase 5C adds /blog/* on both hostnames: worker/post-page.ts answers a post
+# URL with the SPA shell whose <head> it has rewritten for that post. Three
+# things about this pattern are load-bearing.
+#
+#   - `/blog/*` does NOT match bare `/blog`. The index stays entirely on
+#     Pages, untouched, which is the smallest widening that satisfies the
+#     phase's requirement (which is about posts).
+#   - It does not match `/index.html`, which is exactly why the Worker can
+#     fetch the shell from Pages without recursing into itself.
+#   - It cannot reach /edit, and src/test/hosting.test.ts pins that. /edit
+#     deliberately emits no canonical and no structured data of its own
+#     (src/components/SeoHead.tsx's own comment), and a route widened to
+#     `/*` would start emitting one on its behalf.
+#
+# The pattern is coarser than the handler's own predicate, on purpose. Cloudflare
+# route patterns cannot express "one path segment", so `/blog/a/b` and bare
+# `/blog/` arrive here and get the router's 404 rather than being left to Pages.
+# worker/post-page.ts's slugFromPath is the narrower half and it is the one that
+# decides; do not try to make this pattern agree with it exactly.
+#
+# Deploying THIS list is what makes /blog/<slug> a Worker response. Reverting
+# it to the two /api/* entries and re-running `npx wrangler deploy` is the
+# whole rollback -- Pages answers /blog/* again immediately, and the handler is
+# unreachable without a route. See docs/cloudflare-cutover.md section 20.
 routes = [
   { pattern = "vb.aionxxxi.uk/api/*", zone_name = "aionxxxi.uk" },
   { pattern = "viabiancarestaurant.com/api/*", zone_name = "viabiancarestaurant.com" },
+  { pattern = "vb.aionxxxi.uk/blog/*", zone_name = "aionxxxi.uk" },
+  { pattern = "viabiancarestaurant.com/blog/*", zone_name = "viabiancarestaurant.com" },
 ]
 
 [vars]
