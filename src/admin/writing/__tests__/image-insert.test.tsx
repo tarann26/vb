@@ -520,3 +520,116 @@ describe('the photograph after she moves or removes a block', () => {
     expect(`blocks[${nameIn(at, 1)}].src`).toBe(firstKey);
   });
 });
+
+// CHANGING THE PHOTOGRAPH IN A BLOCK THAT ALREADY HAS ONE.
+//
+// The toolbar's Image control only ever INSERTS (handleImagePick ends in
+// `insertAfter`), so until the final review found it, a second thought about a
+// picture cost her the block: Remove, insert a new one, type the caption and
+// the description again. The Posts panel could do this before the writing
+// surface replaced its per-block fields, so it is a capability lost rather
+// than one never had.
+//
+// The same claim every other case in this file makes, and for the same reason:
+// what is asserted is the name the block ACTUALLY renders under against the
+// key the bytes were filed under, never a key string this file wrote.
+describe('the picker on a photograph that is already in the post', () => {
+  async function replaces(at: Bench, index: number, picked: File): Promise<void> {
+    const input = at.container.querySelector<HTMLInputElement>(
+      `#posts-0-block-${index}-src`,
+    ) as HTMLInputElement;
+    expect(input).not.toBeNull();
+    await act(async () => {
+      fireEvent.change(input, { target: { files: [picked] } });
+    });
+  }
+
+  it('replaces the photograph in place, keeping the caption and the description she typed', async () => {
+    const image: Block = { kind: 'image', src: '/food/tielle.webp', alt: 'A tielle', caption: 'On a board' };
+    const at = bench([{ kind: 'paragraph', text: 'a' }, image]);
+    const before = at.names.nameOf(image, 1);
+
+    await replaces(at, 1, file('better.jpg', 10));
+
+    // ONE block, not two. An insert here would leave her with the old
+    // photograph still in the post above the new one.
+    expect(at.blocks().map((block) => block.kind)).toEqual(['paragraph', 'image']);
+    expect(at.blocks()[1]).toMatchObject({
+      kind: 'image',
+      src: '/posts/abc123.webp',
+      alt: 'A tielle',
+      caption: 'On a board',
+    });
+    // A NEW object with the name carried onto it -- the discipline every
+    // commit on this surface follows, and the whole of why the key below
+    // still points at the bytes this pick just filed.
+    expect(at.blocks()[1]).not.toBe(image);
+    expect(nameIn(at, 1)).toBe(before);
+    expect(stagedKey(at)).toBe(`blocks[${nameIn(at, 1)}].src`);
+  });
+
+  it('drops what this block had staged before, so two uploads never claim one photograph', async () => {
+    const at = bench([{ kind: 'image', src: '', alt: '', caption: '' }]);
+    await replaces(at, 0, file('first.jpg', 10));
+    vi.mocked(uploadAndEncode).mockResolvedValue({
+      path: 'assets-source/posts/def456.jpg',
+      contentPath: '/posts/def456.webp',
+      content: 'BBBB',
+      encoding: 'base64',
+    });
+    await replaces(at, 0, file('second.jpg', 10));
+
+    // The supersede, and it has to come BEFORE the second upload's own entry:
+    // a publish assembled in the gap between the two must never see two staged
+    // uploads claiming the same field.
+    const calls = at.onStaged.mock.calls as [string, unknown][];
+    const key = `blocks[${nameIn(at, 0)}].src`;
+    expect(calls.map(([name, staged]) => [name, staged === null ? 'cleared' : 'staged'])).toEqual([
+      [key, 'cleared'],
+      [key, 'staged'],
+      [key, 'cleared'],
+      [key, 'staged'],
+    ]);
+    expect(at.blocks()[0]).toMatchObject({ src: '/posts/def456.webp' });
+  });
+
+  // What she looks at while she decides. `staged.contentPath` names a
+  // derivative no build has produced yet, so the figure must show the object
+  // URL -- written to the shared store under the key the figure reads back.
+  it('shows her the photograph she just picked at column width, not the path it will live at', async () => {
+    const at = bench([{ kind: 'image', src: '/food/tielle.webp', alt: 'A tielle', caption: 'c' }]);
+    await replaces(at, 0, file('better.jpg', 10));
+
+    const img = at.container.querySelector('img') as HTMLImageElement;
+    expect(img.closest('figure')).not.toBeNull();
+    expect(img.getAttribute('src')).toMatch(/^blob:/);
+    // And exactly one picture on screen: the picker draws no thumbnail of its
+    // own here, because a second copy would show `value` -- the derivative
+    // that has no file behind it until a publish and a rebuild -- as a
+    // broken-image glyph directly under the picture it claims to be.
+    expect(at.container.querySelectorAll('img')).toHaveLength(1);
+  });
+
+  // The message she could not obey. `validateBlock` says an image block with
+  // no photo needs one, and a Restore after a lost tab reaches exactly that
+  // state: `scrubStagedReferences` writes a just-staged reference on a newly
+  // inserted block back to `''` before the draft is saved. With no control
+  // claiming `src`, that sentence stood in the whole-post banner and the only
+  // way forward was Remove.
+  it('carries the missing-photo message on the picker, with no banner above it', async () => {
+    const at = bench(
+      [{ kind: 'image', src: '', alt: 'x', caption: 'c' }],
+      [{ field: '[0].blocks[0].src', message: 'This photo block has no photo in it.' }],
+    );
+    expect(
+      at.container.querySelector('[aria-label="Problems with this post’s content"]'),
+    ).toBeNull();
+    const error = at.container.querySelector('#posts-0-block-0-src-error');
+    expect(error?.getAttribute('role')).toBe('alert');
+    expect(error?.textContent).toBe('This photo block has no photo in it.');
+
+    // ...and the control ends it. She picks a photograph and the block has one.
+    await replaces(at, 0, file('one.jpg', 10));
+    expect(at.blocks()[0]).toMatchObject({ kind: 'image', src: '/posts/abc123.webp' });
+  });
+});

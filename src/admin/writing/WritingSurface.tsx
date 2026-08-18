@@ -32,6 +32,7 @@ import { backspaceAtStart, enterAt, indentAt, type Caret, type Edit } from './st
 import { autoformat, revertFormat } from './autoformat';
 import { pasteChunks } from './paste';
 import Field from '../Field';
+import PhotoField from '../PhotoField';
 import BlockFields from '../blocks/BlockFields';
 import BlockPicker from '../blocks/BlockPicker';
 import { blankBlock } from '../blocks/blank-block';
@@ -518,17 +519,18 @@ export default function WritingSurface({
   // Three shapes reach the banner: a list-level `[i].blocks`, a block index
   // this post no longer has (validation is debounced, so she can remove a
   // block between the run and the render), and a key no CONTROL of this kind
-  // carries -- `src`, `kind`, or a stale `items[7]` on a list she has since
-  // cut to three.
+  // carries -- `kind`, or a stale `items[7]` on a list she has since cut to
+  // three. `src` used to be on that list and no longer is: the image row
+  // draws a picker of its own now.
   const mine = problems
     .map((problem) => ({ problem, target: blockProblemOf(problem.field) }))
     .filter((entry): entry is PlacedProblem => entry.target?.post === postIndex);
 
   // The keys a row puts a CONTROL on screen for. That is every slot of it,
-  // plus `alt` on a photograph -- which is not a slot and never gets an
-  // editable host (types.ts types it `string`, not `InlineText`, so bolding a
-  // word in it would publish the asterisks), but does have a field of its own
-  // under the picture from this task onwards. The partition D4 requires is by
+  // plus `src` and `alt` on a photograph -- neither is a slot and neither ever
+  // gets an editable host (types.ts types `alt` as `string`, not `InlineText`,
+  // so bolding a word in it would publish the asterisks), but both have a
+  // field of their own under the picture. The partition D4 requires is by
   // what is ON SCREEN, not by what is a markdown slot: a problem this claims
   // must not also stand in the banner, and one it does not claim must not
   // vanish from both.
@@ -540,7 +542,11 @@ export default function WritingSurface({
     // `heading`. Left out of this, each of those would be shown by the field
     // AND repeated in the banner above it.
     if (row.kind !== undefined && FIELDS_KINDS[row.kind] === true) return fieldsClaim(row.block, row.kind, key);
-    return row.kind === 'image' && key === 'alt';
+    // `src` alongside `alt` from this task onwards: the image row draws a
+    // picker now, so "an image block in X needs a photo" belongs on that
+    // control. Left out, the sentence went to the whole-post banner and the
+    // only thing on screen that could end it was Remove.
+    return row.kind === 'image' && (key === 'alt' || key === 'src');
   }
 
   function isShown(entry: PlacedProblem): boolean {
@@ -960,6 +966,30 @@ export default function WritingSurface({
     emit(safe.map((existing, i) => (i === row.index ? changed : existing)));
   }
 
+  // THE PHOTOGRAPH ITSELF, REPLACED IN PLACE. The toolbar's Image control only
+  // ever inserts (handleImagePick ends in `insertAfter`), so until this existed
+  // the only way to change a picture was to Remove the block and type its
+  // caption and its description again -- a capability the Posts panel had
+  // before the writing surface replaced it (BlockFields' own image branch had
+  // exactly this picker). It is also what `validateBlock`'s "an image block in
+  // X needs a photo" needs on screen: without a control claiming `src`, that
+  // sentence went to the whole-post banner with nothing able to obey it, and
+  // an empty `src` is genuinely reachable -- `scrubStagedReferences`
+  // (publish.ts) writes a just-staged reference on a NEWLY inserted block back
+  // to `''` for the saved draft, so a Restore after a lost tab lands there.
+  //
+  // The block object is REPLACED and its name carried across, the same
+  // discipline setAlt follows, so the staged key composed from that name below
+  // still points at the bytes this pick is about to file under it.
+  function setSrc(row: Row, contentPath: string | null): void {
+    const block = safe[row.index];
+    if (block === undefined) return;
+    remember(addressOf(row, 'caption'), 'end', false);
+    const changed = { ...block, src: contentPath ?? '' } as Block;
+    rename(block, changed, row.index);
+    emit(safe.map((existing, i) => (i === row.index ? changed : existing)));
+  }
+
   function kindNow(kind: ToolbarKind): void {
     const at = activeHost();
     if (at === null) return;
@@ -1185,8 +1215,8 @@ export default function WritingSurface({
             reads as the published post does and this costs no rule. Omitted
             entirely when there is nothing to show: an empty `src` is a
             request for the page itself and a broken-image glyph in her
-            writing, and validateBlock's own message about the missing photo
-            is already on screen in the banner. */}
+            writing. What she gets instead is the picker below, carrying
+            validateBlock's own message about the missing photo. */}
         {shown.length > 0 && (
           <img src={shown} alt={alt} loading="lazy" className="w-full rounded-2xl object-cover" />
         )}
@@ -1196,6 +1226,33 @@ export default function WritingSurface({
             {error(row, slot)}
           </Fragment>
         ))}
+        {/* THE CONTROL THAT CHANGES THE PHOTOGRAPH. The toolbar's Image
+            button only inserts, so without this the only way to replace a
+            picture was Remove-and-start-again -- her caption and her
+            description typed a second time -- and `validateBlock`'s own
+            sentence about a block that HAS no photo had nothing on screen
+            that could answer it. Drawn by the dashboard's existing photo
+            field, so the size cap, the HEIC conversion, the progress line,
+            the retry and the error region are all the ones she already knows
+            from every other picture on this dashboard rather than a second
+            set written here.
+
+            Its own thumbnail is off: the picture above IS the preview, and
+            it is the correct one -- `previews` is written by this same field
+            under the same key, so a photo she picks here appears at column
+            width straight away. */}
+        <PhotoField
+          id={`posts-${postIndex}-block-${row.index}-src`}
+          label="Photo"
+          category="posts"
+          value={src === '' ? null : src}
+          onChange={(contentPath) => setSrc(row, contentPath)}
+          onStaged={(picked) => onStaged(stagedKeyFor(row.name), picked)}
+          previews={previews}
+          previewKey={previewKeyFor(row.name)}
+          showPreview={false}
+          problems={problemsOf(row, 'src')}
+        />
         {/* A plain Field, not an editable host: `alt` is typed `string` and
             not `InlineText` (types.ts), so a markdown host here would let her
             bold a word and publish the asterisks. A freshly inserted

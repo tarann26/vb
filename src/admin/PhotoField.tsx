@@ -81,6 +81,14 @@ export interface PhotoFieldProps {
   // CSS -- OurStory.tsx's own byline already ships it, among many other
   // circular UI elements across the site.
   previewClassName?: string;
+  // Whether this field draws its own thumbnail at all. True everywhere but
+  // the writing surface's image row, which already shows the SAME photograph
+  // at column width immediately above the picker -- and shows it correctly,
+  // out of the shared preview store. A second copy there is not merely
+  // redundant: `value` on a just-picked photo is a derivative no build has
+  // produced yet, so the thumbnail would be a broken-image glyph sitting
+  // directly under the picture it claims to be.
+  showPreview?: boolean;
   problems: ValidationProblem[];
 }
 
@@ -128,6 +136,7 @@ function PhotoField({
   previews = NO_IMAGE_PREVIEWS,
   previewKey,
   previewClassName = DEFAULT_PREVIEW_CLASSNAME,
+  showPreview = true,
   problems,
 }: PhotoFieldProps) {
   const [status, setStatus] = useState<Status>({ kind: 'idle' });
@@ -243,7 +252,7 @@ function PhotoField({
         {label}
       </label>
 
-      {previewSrc && <img src={previewSrc} alt="" className={previewClassName} />}
+      {showPreview && previewSrc && <img src={previewSrc} alt="" className={previewClassName} />}
 
       <input
         id={id}

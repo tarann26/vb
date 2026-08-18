@@ -462,20 +462,47 @@ describe('problems', () => {
   });
 
   // `alt` used to be this case's example, and Task 23 took it: the photograph
-  // now renders a description field of its own, so `alt` is claimed and the
-  // case below asserts the other half of the same partition. `src` is the
-  // field that is still on no control -- the picker inserts a block that
-  // already has one, so an empty `src` only reaches a restored draft, and
-  // dropping its message would be the silent loss D4 forbids.
+  // renders a description field of its own. `src` was the example after that,
+  // and the final review took it too -- a message she could not obey. The
+  // example left is `kind`, which no control on any surface edits and which a
+  // stale draft can genuinely carry a complaint about.
   it('puts a problem about a field no control carries into the banner, so it is never in neither place', () => {
+    const view = surface({
+      blocks: [{ kind: 'image', src: '/x.webp', alt: 'x', caption: 'c' }],
+      problems: [say('[0].blocks[0].kind', 'This block is of a sort this post cannot hold.')],
+    });
+    const banner = view.container.querySelector(BANNER) as HTMLElement;
+    expect(banner.textContent).toContain('This block is of a sort this post cannot hold.');
+    expect(banner.querySelectorAll('li')).toHaveLength(1);
+    expect(view.hosts()[0].getAttribute('aria-describedby')).toBeNull();
+  });
+
+  // THE OTHER HALF, and the finding that moved it. `validateBlock` says "an
+  // image block in X needs a photo" whenever `src` is empty, which a Restore
+  // after a lost tab reaches on its own -- `scrubStagedReferences` writes a
+  // just-staged reference on a newly inserted block back to `''`. While the
+  // image row had no picker, that sentence stood in the whole-post banner with
+  // nothing on the screen able to end it: the only way forward was Remove.
+  it('puts an empty photo’s own message on the picker that can answer it, and not in the banner', () => {
     const view = surface({
       blocks: [{ kind: 'image', src: '', alt: 'x', caption: 'c' }],
       problems: [say('[0].blocks[0].src', 'This photo block has no photo in it.')],
     });
-    const banner = view.container.querySelector(BANNER) as HTMLElement;
-    expect(banner.textContent).toContain('This photo block has no photo in it.');
-    expect(banner.querySelectorAll('li')).toHaveLength(1);
-    expect(view.hosts()[0].getAttribute('aria-describedby')).toBeNull();
+    expect(view.container.querySelector(BANNER)).toBeNull();
+    const picker = view.container.querySelector<HTMLInputElement>('#posts-0-block-0-src');
+    expect(picker).not.toBeNull();
+    const errorId = picker?.getAttribute('aria-describedby')?.split(' ')
+      .find((part) => part === 'posts-0-block-0-src-error');
+    expect(errorId).toBe('posts-0-block-0-src-error');
+    const message = document.getElementById(errorId as string);
+    expect(message?.getAttribute('role')).toBe('alert');
+    expect(message?.textContent).toBe('This photo block has no photo in it.');
+    // Once on screen, never twice: a message shown by the control AND repeated
+    // above it is the other failure this partition has.
+    const hits = [...view.container.querySelectorAll('*')].filter(
+      (el) => el.children.length === 0 && el.textContent === 'This photo block has no photo in it.',
+    );
+    expect(hits).toHaveLength(1);
   });
 
   it('never puts one problem in both places', () => {
