@@ -13,7 +13,7 @@ import Field from '../Field';
 import PhotoField from '../PhotoField';
 import InlineTextField from './InlineTextField';
 import BlockProblemMessage from './BlockProblemMessage';
-import { BLOCK_KIND_LABELS } from './block-meta';
+import { ALT_SPEC, BLOCK_KIND_LABELS } from './block-meta';
 import { swapAt } from './reorder';
 import { useStableNames } from './stable-names';
 import { MOVE_BUTTON_CLASSNAME, REMOVE_BUTTON_CLASSNAME, ADD_BUTTON_CLASSNAME } from '../RecordList';
@@ -49,15 +49,10 @@ export interface BlockFieldsProps {
 // Ad-hoc specs, declared once at module scope rather than rebuilt per render.
 // `satisfies` rather than a type annotation so the literal keeps its narrow
 // `kind`, which is what lets Field<string>'s generic resolve.
-// The help text INSTRUCTS before it explains, which is the whole difference
-// between a field she fills in and a field she skips: the first version said
-// only what the description is used for, which tells her why the box is there
-// and nothing about what to type in it.
-const ALT_SPEC = {
-  label: 'Photo description',
-  kind: 'text',
-  help: 'Say what is in the photo, in a few words. Anyone who cannot see it hears this instead.',
-} satisfies FieldSpec<string>;
+//
+// ALT_SPEC is no longer among them: the writing column renders a photo block
+// of its own now, and one instruction written twice is two instructions.
+// block-meta.ts holds it, beside every other owner-facing name for a block.
 
 // One per kind, and neither of them is "Heading" -- which is what the heading
 // BLOCK's own field is called. A post with a Heading block and an Ingredients

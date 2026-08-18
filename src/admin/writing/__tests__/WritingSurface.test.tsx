@@ -459,15 +459,19 @@ describe('problems', () => {
     expect(banner.textContent).toContain('This post has nothing in it yet.');
   });
 
-  it('puts a problem about a field no slot carries into the banner, so it is never in neither place', () => {
-    // `alt` is a real field of a real rendered block and no slot of this
-    // surface claims it. Dropping it would be the silent loss D4 forbids.
+  // `alt` used to be this case's example, and Task 23 took it: the photograph
+  // now renders a description field of its own, so `alt` is claimed and the
+  // case below asserts the other half of the same partition. `src` is the
+  // field that is still on no control -- the picker inserts a block that
+  // already has one, so an empty `src` only reaches a restored draft, and
+  // dropping its message would be the silent loss D4 forbids.
+  it('puts a problem about a field no control carries into the banner, so it is never in neither place', () => {
     const view = surface({
-      blocks: [{ kind: 'image', src: '/x.webp', alt: '', caption: 'c' }],
-      problems: [say('[0].blocks[0].alt', 'Say what is in the photo.')],
+      blocks: [{ kind: 'image', src: '', alt: 'x', caption: 'c' }],
+      problems: [say('[0].blocks[0].src', 'This photo block has no photo in it.')],
     });
     const banner = view.container.querySelector(BANNER) as HTMLElement;
-    expect(banner.textContent).toContain('Say what is in the photo.');
+    expect(banner.textContent).toContain('This photo block has no photo in it.');
     expect(banner.querySelectorAll('li')).toHaveLength(1);
     expect(view.hosts()[0].getAttribute('aria-describedby')).toBeNull();
   });

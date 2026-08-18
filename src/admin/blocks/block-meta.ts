@@ -16,6 +16,7 @@
 // fixture accident, and it has already broken two tests. Scope the query to
 // the block's own `<li>` (or to the picker) instead of asking the whole
 // screen.
+import type { FieldSpec } from '../fields';
 import type { BlockKind } from '../../content/types';
 
 export const BLOCK_KIND_LABELS: Record<BlockKind, string> = {
@@ -76,3 +77,27 @@ export const UNKNOWN_BLOCK_LABEL = 'Unknown';
 // later -- two names for one thing, the defect InlineTextField exists to avoid.
 export const UNKNOWN_BLOCK_MESSAGE =
   'This is not something this site can show. Remove it, and add one from the list instead.';
+
+// The photo description field, declared once and read by BOTH surfaces that
+// render a photo block: BlockFields' image branch and the writing column's
+// figure. Moved here from BlockFields.tsx when the writing surface grew its
+// own picture (admin redesign Task 23) rather than retyped there -- two
+// independently-worded versions of the one instruction is exactly the "two
+// names for one thing" defect the messages above exist to avoid, and this one
+// is the sentence a reader who cannot see the photograph hears instead of it.
+//
+// It lives in this module and not beside its component because BlockFields.tsx
+// and WritingSurface.tsx both default-export a component, and
+// `react-refresh/only-export-components` warns on a value exported from such a
+// file that is not a plain constant -- the same trap Task 20 hit lifting
+// TARGET_SHAPES out of InlineTextField.tsx. Nothing in here is a component.
+//
+// The help text INSTRUCTS before it explains, which is the whole difference
+// between a field she fills in and a field she skips: the first version said
+// only what the description is used for, which tells her why the box is there
+// and nothing about what to type in it.
+export const ALT_SPEC = {
+  label: 'Photo description',
+  kind: 'text',
+  help: 'Say what is in the photo, in a few words. Anyone who cannot see it hears this instead.',
+} satisfies FieldSpec<string>;

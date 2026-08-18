@@ -30,6 +30,9 @@ import { slotsOf, withSlot, type Slot } from './slots';
 import { backspaceAtStart, enterAt, type Caret, type Edit } from './structure';
 import { autoformat, revertFormat } from './autoformat';
 import { pasteChunks } from './paste';
+import Field from '../Field';
+import { ALT_SPEC } from '../blocks/block-meta';
+import { checkPhotoSize, convertHeic, uploadAndEncode } from '../upload-photo';
 import { EMPTY_HISTORY, record, redo, undo, type History, type Snapshot } from './history';
 import { clearMarks, insertLink, LINK_PLACEHOLDER, marksSurviveSave, selectedWords, toggleMark, type Mark } from './marks';
 import WritingToolbar, { type ToolbarKind } from './WritingToolbar';
@@ -250,9 +253,35 @@ function insertAfter(blocks: Block[], index: number, extra: Block[]): Block[] {
   return next;
 }
 
+// What the one picker on this surface is doing, and the one sentence saying
+// so. The same four states PhotoField.tsx:89-98 carries and the same wording,
+// minus its `staged` and its Retry: there is no Retry here because a failed
+// pick has left NOTHING behind to retry against -- no block was inserted, so
+// the way back is to press Image again, which is one press either way.
+type Upload =
+  | { kind: 'idle' }
+  | { kind: 'converting' }
+  | { kind: 'uploading'; percent: number }
+  | { kind: 'error'; message: string };
+
+function uploadMessage(upload: Upload): string | null {
+  switch (upload.kind) {
+    case 'idle':
+      return null;
+    case 'converting':
+      return 'Converting photo…';
+    case 'uploading':
+      return `Uploading… ${upload.percent}%`;
+    case 'error':
+      return upload.message;
+  }
+}
+
 type HostProps = HTMLAttributes<HTMLElement> & Attributes & Record<string, unknown>;
 
-export default function WritingSurface({ blocks, postIndex, onChange, problems, names }: WritingSurfaceProps) {
+export default function WritingSurface({
+  blocks, postIndex, onChange, problems, previews, onStaged, previewKeyPrefix, names,
+}: WritingSurfaceProps) {
   // Always called, never conditionally, so the rules of hooks hold whether or
   // not a caller supplies longer-lived storage; its result is simply ignored
   // when one does.
@@ -322,6 +351,11 @@ export default function WritingSurface({ blocks, postIndex, onChange, problems, 
   // screen. Cleared by the next action that succeeds, never left standing over
   // a problem she has already fixed.
   const [notice, setNotice] = useState<string | null>(null);
+  // The one picker's own progress. State and not a ref for the same reason:
+  // a photograph on a phone takes long enough that "is this still working?"
+  // is a real question, and XMLHttpRequest's upload progress is the only
+  // browser API that can answer it (upload-photo.ts:91-95).
+  const [upload, setUpload] = useState<Upload>({ kind: 'idle' });
 
   const rows: Row[] = safe.map((block, index) => ({
     block,
@@ -335,6 +369,17 @@ export default function WritingSurface({ blocks, postIndex, onChange, problems, 
   // the reason BlockList.tsx:223-254 gives about the React key: a positional
   // address hands one block's content to another the moment she moves one.
   const addressOf = (row: Row, key: Slot['key']): string => `${row.name}/${key}`;
+
+  // THE STAGED KEY AND THE PREVIEW KEY, both composed from the block's own
+  // NAME and never from its position. BlockList.tsx:420-431 composes exactly
+  // these two strings the same way and its comment gives the whole reason: a
+  // positional key leaves a photograph's bytes behind at the old position the
+  // instant she moves a block, where the next pick supersedes them, and the
+  // post publishes naming a file that was never sent. `previews.set` revokes
+  // whatever its key held before, so a positional preview key does not merely
+  // mislead -- it destroys the other photograph's object URL.
+  const stagedKeyFor = (name: string): string => `blocks[${name}].src`;
+  const previewKeyFor = (name: string): string => `${previewKeyPrefix}:blocks[${name}]:src`;
 
   const sourceByAddress = new Map<string, string>();
   const slotByAddress = new Map<string, { row: Row; slot: Slot }>();
@@ -372,23 +417,35 @@ export default function WritingSurface({ blocks, postIndex, onChange, problems, 
   // which is the guarantee RecordForm.tsx:146-159 documents one level up.
   // Three shapes reach the banner: a list-level `[i].blocks`, a block index
   // this post no longer has (validation is debounced, so she can remove a
-  // block between the run and the render), and a key no slot of this kind
-  // carries -- `alt`, `src`, `kind`, or a stale `items[7]` on a list she has
-  // since cut to three.
+  // block between the run and the render), and a key no CONTROL of this kind
+  // carries -- `src`, `kind`, or a stale `items[7]` on a list she has since
+  // cut to three.
   const mine = problems
     .map((problem) => ({ problem, target: blockProblemOf(problem.field) }))
     .filter((entry): entry is PlacedProblem => entry.target?.post === postIndex);
 
-  function shownBy(entry: PlacedProblem): Slot['key'] | undefined {
-    const at = entry.target.block;
-    if (at === undefined || at < 0 || at >= rows.length) return undefined;
-    const key = entry.target.key;
-    return rows[at].slots.find((slot) => slot.key === key)?.key;
+  // The keys a row puts a CONTROL on screen for. That is every slot of it,
+  // plus `alt` on a photograph -- which is not a slot and never gets an
+  // editable host (types.ts types it `string`, not `InlineText`, so bolding a
+  // word in it would publish the asterisks), but does have a field of its own
+  // under the picture from this task onwards. The partition D4 requires is by
+  // what is ON SCREEN, not by what is a markdown slot: a problem this claims
+  // must not also stand in the banner, and one it does not claim must not
+  // vanish from both.
+  function claims(row: Row, key: string | undefined): boolean {
+    if (row.slots.some((slot) => slot.key === key)) return true;
+    return row.kind === 'image' && key === 'alt';
   }
 
-  const banner = mine.filter((entry) => shownBy(entry) === undefined);
+  function isShown(entry: PlacedProblem): boolean {
+    const at = entry.target.block;
+    if (at === undefined || at < 0 || at >= rows.length) return false;
+    return claims(rows[at], entry.target.key);
+  }
 
-  function problemsOf(row: Row, key: Slot['key']): ValidationProblem[] {
+  const banner = mine.filter((entry) => !isShown(entry));
+
+  function problemsOf(row: Row, key: string): ValidationProblem[] {
     return mine
       .filter((entry) => entry.target.block === row.index && entry.target.key === key)
       .map((entry) => entry.problem);
@@ -658,6 +715,107 @@ export default function WritingSurface({ blocks, postIndex, onChange, problems, 
     commitSlot(at.row.index, at.slot.key, at.el, true);
   }
 
+  // THE PHOTOGRAPH, from the picker to the block. The picker itself is a
+  // `<label htmlFor>` over the input this component renders at the bottom of
+  // the file, never a button that clicks that input on a later render: a
+  // browser opens a file picker only under a live user activation, and by the
+  // time a freshly rendered element could be clicked that activation has
+  // expired. WritingToolbar.tsx states the same rule from its side.
+  async function handleImagePick(picked: File | undefined): Promise<void> {
+    if (picked === undefined) return;
+    // Captured BEFORE the awaits below, and captured as the block OBJECT
+    // rather than as an index. `activeHost` reads a ref she can move while
+    // the upload is in flight, and the array can gain or lose entries under
+    // her in that window -- identity is the only thing that survives it,
+    // which is the same reason stable-names.ts is a WeakMap at all.
+    //
+    // A WORD OF CAUTION FOR WHOEVER EDITS THE LINE ABOVE. It first said "can
+    // g-r-o-w or s-h-r-i-n-k", and the second of those is a real Tailwind
+    // candidate this stylesheet did not ship: the build came back 36 bytes
+    // over a ceiling with no headroom, and a rule-level diff of the built
+    // stylesheet named the rule and therefore the word. That is the fourth
+    // time a comment in this section has shipped a rule it was not writing
+    // about (WritingToolbar.tsx and InlineTextField.tsx record the other
+    // three). The scanner is a plain text extractor with no JS parser: it
+    // cannot tell a comment from a class attribute.
+    const anchor = activeHost();
+    const address = anchor?.address ?? null;
+    const standingIn = anchor?.row.block;
+
+    setUpload({ kind: 'converting' });
+    let resolved: File;
+    try {
+      resolved = await convertHeic(picked);
+    } catch {
+      setUpload({ kind: 'error', message: 'This photo could not be read. Try a JPEG or a PNG.' });
+      return;
+    }
+
+    // Before any network call, and checked here rather than trusted to the
+    // server: this is what makes MAX_STAGED_PHOTOS_PER_PUBLISH's own
+    // "8 * 5MB" arithmetic true rather than aspirational, and
+    // upload-photo.ts:82-89 names every caller that owes it.
+    const tooBig = checkPhotoSize(resolved);
+    if (tooBig !== null) {
+      setUpload({ kind: 'error', message: tooBig });
+      return;
+    }
+
+    let staged: StagedPhoto;
+    try {
+      staged = await uploadAndEncode('posts', resolved, (percent) => setUpload({ kind: 'uploading', percent }));
+    } catch (error) {
+      setUpload({ kind: 'error', message: error instanceof Error ? error.message : 'Upload failed.' });
+      return;
+    }
+    setUpload({ kind: 'idle' });
+    // `posts` is a real UPLOAD_CATEGORY (src/shared/upload-categories.ts) and
+    // assets-source/posts/ does not exist on disk yet -- deliberately, per
+    // that file's own comment. worker/upload.ts creates the path on the
+    // commit; scripts/images.mjs walks whatever is under assets-source/, so
+    // the derivative appears on the first Pages build after the first post
+    // photograph is published. Nothing needs to be pre-created.
+
+    // NOTHING WAS HANDED UP UNTIL HERE. An upload that failed leaves the block
+    // array exactly as it was, so a photograph that never arrived cannot
+    // leave a block behind pointing at nothing.
+    const blocks = latest.current;
+    const found = standingIn === undefined ? -1 : blocks.indexOf(standingIn);
+    const at = found === -1 ? blocks.length - 1 : found;
+
+    const block: Block = { kind: 'image', src: staged.contentPath, alt: '' };
+    // THE NAME IS TAKEN BEFORE THE BLOCK IS INSERTED, and it must be: the
+    // staged key is composed from the block's stable name, and there is no
+    // render between here and the collector write. `nameOf` memoises on
+    // object identity in a WeakMap (stable-names.ts:63-76) and its `index`
+    // argument is only the fallback for something that is not an object at
+    // all, so calling it from an event handler is the same operation calling
+    // it from a render is -- and the name this returns is the one the row
+    // will render under.
+    const name = nameOf(block, at + 1);
+    onStaged(stagedKeyFor(name), staged);
+    // The local preview, which is not decoration: `staged.contentPath` names
+    // a derivative that no build has produced yet, so an <img> pointed at it
+    // before a publish is a broken image. The store revokes whatever this key
+    // held before, and the key travels with the block.
+    previews.set(previewKeyFor(name), URL.createObjectURL(resolved));
+    remember(address, 'end', true);
+    emit(insertAfter(blocks, at, [block]));
+  }
+
+  // The photo description, which is not a markdown slot and so is not written
+  // through `withSlot`. Everything else about it is the same discipline every
+  // other commit on this surface follows: a NEW object, the name carried onto
+  // it before the array is handed up, and one undo step for the run.
+  function setAlt(row: Row, next: string): void {
+    const block = safe[row.index];
+    if (block === undefined) return;
+    remember(addressOf(row, 'caption'), 'end', false);
+    const changed = { ...block, alt: next } as Block;
+    rename(block, changed, row.index);
+    emit(safe.map((existing, i) => (i === row.index ? changed : existing)));
+  }
+
   function kindNow(kind: ToolbarKind): void {
     const at = activeHost();
     if (at === null) return;
@@ -834,9 +992,57 @@ export default function WritingSurface({ blocks, postIndex, onChange, problems, 
     );
   }
 
+  // A photograph, centred at column width, with its caption under it and its
+  // description under that. SHE DOES NOT POSITION IT; the block does. There is
+  // no alignment control anywhere on this surface, deliberately -- the
+  // published renderer has one shape for a figure and giving her a second here
+  // would put a choice on screen the post cannot store.
+  function imageRow(row: Row): ReactNode {
+    const fields = row.block as unknown as Record<string, unknown>;
+    const src = typeof fields.src === 'string' ? fields.src : '';
+    const alt = typeof fields.alt === 'string' ? fields.alt : '';
+    // The just-picked photograph always wins over `src`, which names a
+    // derivative no build has produced yet -- see handleImagePick.
+    const shown = previews.urls[previewKeyFor(row.name)] ?? src;
+    const id = `posts-${postIndex}-block-${row.index}-alt`;
+    return (
+      <figure className="mb-6">
+        {/* blocks.tsx:50's own <img>, character for character, so the column
+            reads as the published post does and this costs no rule. Omitted
+            entirely when there is nothing to show: an empty `src` is a
+            request for the page itself and a broken-image glyph in her
+            writing, and validateBlock's own message about the missing photo
+            is already on screen in the banner. */}
+        {shown.length > 0 && (
+          <img src={shown} alt={alt} loading="lazy" className="w-full rounded-2xl object-cover" />
+        )}
+        {row.slots.map((slot) => (
+          <Fragment key={addressOf(row, slot.key)}>
+            {host(row, 'image', slot)}
+            {error(row, slot)}
+          </Fragment>
+        ))}
+        {/* A plain Field, not an editable host: `alt` is typed `string` and
+            not `InlineText` (types.ts), so a markdown host here would let her
+            bold a word and publish the asterisks. A freshly inserted
+            photograph shows validateBlock's own sentence about needing a
+            description immediately, which is correct and is the existing
+            behaviour of the field this replaces. */}
+        <Field<string>
+          id={id}
+          spec={ALT_SPEC}
+          value={alt}
+          onChange={(next) => setAlt(row, next)}
+          problems={problemsOf(row, 'alt')}
+        />
+      </figure>
+    );
+  }
+
   function rowOf(row: Row): ReactNode {
     const kind = row.kind;
     if (kind === undefined || row.slots.length === 0) return null;
+    if (kind === 'image') return imageRow(row);
     if (LIST_KINDS[kind] === true) {
       return (
         <>
@@ -867,6 +1073,38 @@ export default function WritingSurface({ blocks, postIndex, onChange, problems, 
         onRedo={redoStep}
         imageInputId={`posts-${postIndex}-writing-image`}
       />
+      {/* THE INPUT THE TOOLBAR'S Image LABEL POINTS AT, and it lives here
+          rather than on the row because this is where the picked file has to
+          arrive. `sr-only` rather than the hidden attribute, the same call
+          CollageEditor.tsx:1046 makes: a display:none input is not reliably
+          reachable in every browser, and this one is also the control a
+          screen-reader user operates -- the label above names it. */}
+      <input
+        id={`posts-${postIndex}-writing-image`}
+        type="file"
+        accept="image/*"
+        className="sr-only"
+        disabled={upload.kind === 'converting' || upload.kind === 'uploading'}
+        onChange={(event) => {
+          void handleImagePick(event.target.files?.[0]);
+          // Reset, so picking the SAME photo again after a failure still
+          // fires this handler: an unchanged file input raises no second
+          // change event.
+          event.target.value = '';
+        }}
+      />
+      {uploadMessage(upload) !== null && (
+        // Both class strings are PhotoField.tsx:265-272's, character for
+        // character. `alert` for a failure so PostList's
+        // FIRST_PROBLEM_SELECTOR reaches it, `status` for progress so it is
+        // announced without interrupting her.
+        <p
+          role={upload.kind === 'error' ? 'alert' : 'status'}
+          className={upload.kind === 'error' ? 'mt-1 text-sm text-red-600' : 'mt-1 text-xs text-gray-500'}
+        >
+          {uploadMessage(upload)}
+        </p>
+      )}
       {notice !== null && (
         // The same class string as every other error paragraph on this screen
         // (InlineTextField.tsx:325), character for character, and `role`
