@@ -225,8 +225,17 @@ function importsContentSnapshot(source: string, filePath: string): boolean {
 // directory at all, so nothing in it can cause either. A production file
 // doing the identical thing is still caught -- proven by the case below that
 // runs `importsContentSnapshot` against a path outside this directory.
+// Written as ANY `__tests__` directory under src/admin, not just the one at
+// the top of it. Plan 10 Task 16 is where that stopped being a distinction
+// without a difference: `src/admin/writing/__tests__/inline-dom.test.ts`
+// proves the four-way loop between markdown source and the DOM, which means
+// importing `serializeInline` from `../../../content/inline-source` -- a
+// submodule that is NOT on the whitelist above and should not be, since no
+// production file imports it yet. Spelled as the top-level directory alone,
+// this scan called that test file a production offender and went red on the
+// first test written in a subdirectory.
 function isTestInfrastructure(filePath: string): boolean {
-  return filePath.startsWith('src/admin/__tests__/');
+  return filePath.startsWith('src/admin/') && filePath.includes('/__tests__/');
 }
 
 function gitLsFiles(dir: string): string[] {
@@ -276,6 +285,22 @@ describe('nothing under src/admin imports the build-time content snapshot', () =
     expect(isTestInfrastructure(path)).toBe(true);
     const scanned = gitLsFiles('src/admin').filter((f) => /\.tsx?$/.test(f) && !isTestInfrastructure(f));
     expect(scanned).not.toContain(path);
+  });
+
+  // The same, for a `__tests__` directory that is NOT the one at the top of
+  // src/admin. Without this the exclusion could be narrowed back to that one
+  // directory and stay green here, going red only in whichever subdirectory
+  // next holds a test -- which is how it was found.
+  it('a __tests__ directory deeper under src/admin is test infrastructure too, and really is excluded', () => {
+    const path = 'src/admin/writing/__tests__/inline-dom.test.ts';
+    const source = readFileSync(path, 'utf8');
+    expect(importsContentSnapshot(source, path)).toBe(true);
+    expect(isTestInfrastructure(path)).toBe(true);
+    const scanned = gitLsFiles('src/admin').filter((f) => /\.tsx?$/.test(f) && !isTestInfrastructure(f));
+    expect(scanned).not.toContain(path);
+    // And the production module beside it is still scanned, so the widening
+    // exempts the tests and nothing else.
+    expect(scanned).toContain('src/admin/writing/inline-dom.ts');
   });
 
   // The exclusion is for TEST files specifically, not a loophole that
