@@ -9,7 +9,7 @@ import BlogIndex from '../BlogIndex';
 // that file's own comment on why the split happened), which is where this
 // import actually resolves.
 import { ContentProvider, defaultBundle } from '../../../content/ContentContext';
-import { EMPTY_POSTS_MESSAGE } from '../posts';
+import { ALL_FILTER_LABEL, EMPTY_POSTS_MESSAGE, NO_MATCHING_POSTS_MESSAGE, POST_TYPE_LABELS } from '../posts';
 import type { Post } from '../../../content/types';
 
 function post(n: number): Post {
@@ -131,10 +131,16 @@ describe('BlogIndex', () => {
     expect(cardHeadings(container)).toHaveLength(0);
   });
 
-  it('shows each post\'s type as a readable badge', () => {
-    renderIndex([post(1), post(2)]);
-    expect(screen.getByText('In the press')).toBeInTheDocument();
-    expect(screen.getByText('Recipe')).toBeInTheDocument();
+  // Task 30 scoped this to the cards. Both strings now appear TWICE on the
+  // page -- once as a filter control, once as a card badge -- and
+  // `getByText` throws on multiple matches. Scoping to `article span`
+  // (PostCard.tsx:32 renders exactly one <span> per <article>) is the claim
+  // this case was always making, and the "in the same words" half is pinned
+  // against the filter row in the first control case below.
+  it("shows each post's type as a readable badge on the card, in the same words as the filter", () => {
+    const { container } = renderIndex([post(1), post(2)]);
+    const badges = [...container.querySelectorAll('article span')].map((s) => s.textContent);
+    expect(badges).toEqual(['Recipe', 'In the press']);
   });
 
   // The index's half of the runtime read, and the deliberate difference from
@@ -164,4 +170,134 @@ describe('BlogIndex', () => {
     // bare level-3 query counts the footer too.
     expect(cardHeadings(container)).toEqual(['A post only in the database']);
   });
+
+  // Task 30. The three controls the owner asked for in her own words: tell
+  // press releases from recipes from posts, sort by most recent, and look
+  // something up in a search bar.
+
+  it('starts on All, newest first, with an empty search box', () => {
+    renderIndex([post(1), post(2)]);
+    expect(screen.getByRole('button', { name: ALL_FILTER_LABEL, pressed: true })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Newest first', pressed: true })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Oldest first', pressed: false })).toBeInTheDocument();
+    expect(screen.getByRole('searchbox', { name: 'Search stories' })).toHaveValue('');
+
+    // The vocabulary claim, stated once and directly: what she filters by IS
+    // the table the card badge reads (posts.ts POST_TYPE_LABELS), plus the
+    // absence-of-a-filter label. A control reading "Press mentions" beside a
+    // card badged "In the press" fails here rather than at a reader's eye.
+    const filters = screen.getByRole('group', { name: 'Filter stories by kind' });
+    expect([...filters.querySelectorAll('button')].map((b) => b.textContent)).toEqual([
+      ALL_FILTER_LABEL,
+      ...Object.values(POST_TYPE_LABELS),
+    ]);
+  });
+
+  it('narrows to one kind when that kind is chosen', async () => {
+    // Fixture parity: even n is a recipe, odd n is a mention.
+    const { container } = renderIndex([post(1), post(2), post(3), post(4)]);
+    expect(cardHeadings(container)).toHaveLength(4);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Recipe' }));
+    expect(cardHeadings(container)).toEqual(['Fixture post 4', 'Fixture post 2']);
+    expect(screen.getByRole('button', { name: 'Recipe', pressed: true })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: ALL_FILTER_LABEL, pressed: false })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'In the press' }));
+    expect(cardHeadings(container)).toEqual(['Fixture post 3', 'Fixture post 1']);
+  });
+
+  it('turns the order round without changing which posts are shown', async () => {
+    const { container } = renderIndex([post(1), post(2), post(3)]);
+    expect(cardHeadings(container)).toEqual(['Fixture post 3', 'Fixture post 2', 'Fixture post 1']);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Oldest first' }));
+    expect(cardHeadings(container)).toEqual(['Fixture post 1', 'Fixture post 2', 'Fixture post 3']);
+    expect(screen.getByRole('button', { name: 'Oldest first', pressed: true })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Newest first' }));
+    expect(cardHeadings(container)).toEqual(['Fixture post 3', 'Fixture post 2', 'Fixture post 1']);
+  });
+
+  it('filters as she types, over titles and excerpts', async () => {
+    const { container } = renderIndex([post(1), post(2), post(3), post(4)]);
+    const box = screen.getByRole('searchbox', { name: 'Search stories' });
+
+    // A title match.
+    await userEvent.type(box, 'post 3');
+    expect(cardHeadings(container)).toEqual(['Fixture post 3']);
+
+    // An excerpt match -- the same word appears in no title, so a search that
+    // only looked at titles would find nothing here.
+    await userEvent.clear(box);
+    await userEvent.type(box, 'Excerpt 2');
+    expect(cardHeadings(container)).toEqual(['Fixture post 2']);
+
+    await userEvent.clear(box);
+    expect(cardHeadings(container)).toHaveLength(4);
+  });
+
+  it('composes a kind and a word', async () => {
+    // The spec's own example: choose Recipes, type "lemon", see lemon
+    // recipes. Both a recipe and a mention carry the word, and a second
+    // recipe does not, so neither control alone produces this answer.
+    const lemonRecipe: Post = { ...post(2), title: 'Lemon tart' };
+    const lemonMention: Post = { ...post(3), title: 'Lemon on the menu' };
+    const { container } = renderIndex([post(1), lemonRecipe, lemonMention, post(4)]);
+
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Search stories' }), 'lemon');
+    expect(cardHeadings(container)).toEqual(['Lemon on the menu', 'Lemon tart']);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Recipe' }));
+    expect(cardHeadings(container)).toEqual(['Lemon tart']);
+  });
+
+  it('says so in words when nothing matches, and does not claim the blog is empty', async () => {
+    const { container } = renderIndex([post(1), post(3)]);
+    await userEvent.click(screen.getByRole('button', { name: 'Recipe' }));
+
+    expect(screen.getByText(NO_MATCHING_POSTS_MESSAGE)).toBeInTheDocument();
+    // A blog with two posts and a filter matching none of them is NOT an
+    // empty blog, and "the first post is on its way" is plainly false on a
+    // page that has posts.
+    expect(screen.queryByText(EMPTY_POSTS_MESSAGE)).not.toBeInTheDocument();
+    expect(cardHeadings(container)).toHaveLength(0);
+  });
+
+  it('goes back to page one when a control changes', async () => {
+    const many = Array.from({ length: 12 }, (_, i) => post(i + 1));
+    const { container } = renderIndex(many);
+
+    await userEvent.click(screen.getByRole('button', { name: '2' }));
+    expect(cardHeadings(container)).toEqual(['Fixture post 3', 'Fixture post 2', 'Fixture post 1']);
+
+    // Standing on page 2, turn the order round. Without the reset this lands
+    // on page 2 of the oldest-first list (posts 10, 11, 12) with the page-1
+    // button highlighted -- cards and page number disagreeing.
+    await userEvent.click(screen.getByRole('button', { name: 'Oldest first' }));
+    expect(cardHeadings(container)).toEqual([
+      'Fixture post 1',
+      'Fixture post 2',
+      'Fixture post 3',
+      'Fixture post 4',
+      'Fixture post 5',
+      'Fixture post 6',
+      'Fixture post 7',
+      'Fixture post 8',
+      'Fixture post 9',
+    ]);
+  });
+
+  it('counts pages over the filtered list, not the whole one', async () => {
+    // Twelve posts is two pages; the six recipes among them are one. Three
+    // numbered buttons above a single-page result is the exact bug a filter
+    // introduces when a count is taken over the wrong list.
+    const many = Array.from({ length: 12 }, (_, i) => post(i + 1));
+    renderIndex(many);
+    expect(screen.queryAllByRole('button', { name: /^\d+$/ }).map((b) => b.textContent)).toEqual(['1', '2']);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Recipe' }));
+    expect(screen.queryAllByRole('button', { name: /^\d+$/ })).toHaveLength(0);
+  });
+
 });

@@ -875,6 +875,31 @@ describe('dist/assets/ keeps admin code out of the entry chunk', () => {
 // incident above), and nothing tests a test's name -- the counter-measure is
 // that they move together and that a reviewer greps this file for the old
 // number before merging.
+// Admin redesign Task 30, the filter / sort / search controls on /blog: 38836
+// -> 38836 (+0), zero rules added and zero removed. Measured with a full
+// `npm run build` on 2311319 before and after the change: the two stylesheets
+// are BYTE-IDENTICAL (`cmp` reports no difference) and Vite's own content hash
+// in the filename is unchanged, which is the stronger result the rule-level
+// diff is run to check.
+//
+// The brief for the task expected to spend the headroom the entry above left,
+// and it did not, so the measurement is recorded here rather than the
+// expectation. Why a whole row of new UI costs nothing marginal:
+//   * the three control rows' buttons share ONE binding with the numbered
+//     pagination buttons -- BlogIndex.tsx's CONTROL_CLASSNAME / CONTROL_ON /
+//     CONTROL_OFF are the exact strings those buttons already built inline, so
+//     the split moved a string and not a rule;
+//   * the two group rows reuse Drinks.tsx:67's row utilities verbatim and the
+//     bottom margin from Hero.tsx:145;
+//   * the search field's own utilities -- the full-width one, the 42rem
+//     max-width one, the padding pair, the radius, the grey border, the white
+//     surface, the Open Sans family and the small size -- each already had a
+//     user in this sheet. Checked individually against the built file, not
+//     assumed: every one of them has a selector in it.
+//
+// THE CEILING IS THEREFORE NOT MOVED. It stays at 39000 with the same
+// hundred-odd bytes of headroom the entry above argued for; a raise to a
+// number nothing measured is what this file's Task 1 entry refuses by name.
 describe('dist/assets/ keeps the shared stylesheet under a byte ceiling', () => {
   it.skipIf(!REQUIRED && !existsSync(DIST_ASSETS))('the entry CSS file stays under 39000 bytes', () => {
     const cssFiles = readdirSync(DIST_ASSETS).filter((n) => /^index-.*\.css$/.test(n));
