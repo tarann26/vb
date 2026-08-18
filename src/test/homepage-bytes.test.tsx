@@ -246,6 +246,56 @@ import { AppRoutes } from '../App';
 //         white">+91 92117 91188</p>`).
 //
 // Sum: -191 + -139 = -330, matching the whole-page delta exactly.
+//
+// Admin redesign Task 34, the section washes: 48074 -> 48134 (+60 bytes). The
+// owner's complaint is that the bands are invisible on a phone, so the eight
+// homepage sections below the hero move onto two new tokens 18 points below
+// white, seven of them also gain `relative`, and three carousel fades follow
+// their section to the new colour. All three changes are pure class strings,
+// so all three land here. Each row below is a real measurement, taken by
+// restoring that one file to its HEAD content and re-running this test with
+// the others already changed, then subtracting from 48134.
+//
+//    -1  PlaceGallery.tsx      section :8 `py-20 bg-[#F9F9F9]`
+//                              -> `py-20 relative bg-wash` (+4), and fade :35
+//                              `from-[#F9F9F9]` -> `from-wash` (-5)
+//    +8  Drinks.tsx            section :13 `py-20 bg-cream relative overflow-
+//                              hidden` -> `py-20 bg-wash-warm relative
+//                              overflow-hidden` (+4), and fade :63
+//                              `from-cream` -> `from-wash-warm` (+4)
+//   +17  Experiences.tsx       section :32 `py-20 bg-cream` -> `py-20 relative
+//                              bg-wash-warm` (+13), and fade :111
+//                              `from-cream` -> `from-wash-warm` (+4)
+//    +5  BlogSection.tsx:39    `py-20 bg-slate-50` -> `py-20 relative bg-wash`
+//    +9  OurStory.tsx:63       `py-20 bg-cream-alt`
+//                              -> `py-20 relative bg-wash-warm`
+//    +4  VisitUs.tsx:9         `py-20 bg-cream-alt` -> `py-20 relative bg-wash`
+//    +9  FoodGallery.tsx:8     `py-20 bg-white` -> `py-20 relative bg-white`
+//    +9  Awards.tsx:44         `py-20 bg-white` -> `py-20 relative bg-white`
+//     0  templates/ItemListSection.tsx took the same two swaps as PlaceGallery
+//        and moves nothing here, because it renders on the template pages and
+//        never at `/`. Measured, not assumed: reverting it alone leaves 48134.
+//
+// Sum: -1 + 8 + 17 + 5 + 9 + 4 + 9 + 9 = +60, matching the whole-page delta
+// exactly. Split by kind instead: the six section token swaps come to -6 (-5,
+// +4, +4, -4, 0, -5); ` relative` costs nine characters including its
+// separating space on each of the seven sections that did not already carry
+// it, +63; and the three homepage fades come to +3 (-5, +4, +4).
+//
+// The fades are not cosmetic tidying. Each is a 64px gradient over the right
+// edge of a horizontal-scroll strip whose opaque end has to BE the section
+// background, or a bright vertical edge appears where the strip stops.
+// src/test/bundle.post-build.test.ts's own entry for this task carries the
+// three measured step edges and the matched-fade control.
+//
+// The positioning is a rendering change and not a cosmetic one. src/index.css
+// paints a fixed, full-viewport brick pseudo-element at 10% over the whole
+// page; a static section paints UNDER it and a positioned one paints OVER it.
+// Task 33 measured that overlay's contribution at 2.3 to 23.7 points depending
+// only on where a sample lands down the viewport, so without `relative` an
+// 18-point token renders as a ~30-point drop and two sections carrying the
+// same token measure differently. e2e/section-washes.spec.ts's header carries
+// that measurement in full.
 describe('homepage byte count', () => {
   it('the public homepage is unchanged', () => {
     const { container } = render(
@@ -253,6 +303,6 @@ describe('homepage byte count', () => {
         <AppRoutes />
       </MemoryRouter>,
     );
-    expect(new TextEncoder().encode(container.innerHTML).length).toBe(48074);
+    expect(new TextEncoder().encode(container.innerHTML).length).toBe(48134);
   });
 });

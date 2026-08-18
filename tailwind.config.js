@@ -56,6 +56,26 @@ export default {
         ink: '#222222',
         cream: '#FFFDF8',
         'cream-alt': '#F9F9F9',
+        // The section washes. A band on a phone in daylight has to be visibly
+        // a band: measured at 390px, every wash on this site sat 2 to 8 points
+        // below white and only the footer read as a boundary at all. These
+        // land 18 points below white -- the brand surface colour at 45% over
+        // white for the cool one, its mirror about the neutral axis for the
+        // warm one -- which is the footer's own distance and is where
+        // e2e/section-washes.spec.ts holds them.
+        //
+        // Still a wash, not a colour. The brand blue stays a SURFACE colour
+        // (1.45:1 on white); text on these keeps using ink or the accent, and
+        // e2e/brand-contrast.spec.ts's sweep over every text node still
+        // governs. src/test/palette.test.ts holds the floors these clear.
+        //
+        // ONE CONSTRAINT THIS CREATES: the palest of Tailwind's mid greys
+        // measures 4.10:1 on the cool wash and 4.20:1 on the warm one, both
+        // under AA. That grey and these two washes are mutually exclusive
+        // from here on. Nothing on the homepage pairs them today; the sweep
+        // will say "unreadable" without saying why, so it is said here.
+        wash: '#E6EDF5',
+        'wash-warm': '#F5EEE4',
       },
     },
   },

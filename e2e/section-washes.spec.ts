@@ -17,7 +17,10 @@ import sharp from 'sharp';
 // it belongs, in e2e/brand-contrast.spec.ts, off computed style.
 
 // BEFORE (measured 2026-08-18, 390x844, chromium, on admin-redesign, on the
-// parent of this commit -- i.e. with no wash token touched):
+// parent of the commit that introduced this file -- i.e. with no wash token
+// touched, and at the MIDPOINT sample this file used until Task 34; see the
+// sample-point block further down for why the sample moved and what that does
+// to the comparability of these two tables):
 //
 //   label          kind    rgb              points
 //   atmosphere     wash    (244,242,239)     13.3
@@ -91,6 +94,74 @@ import sharp from 'sharp';
 //    bubbles is in the wrong place on every viewport -- and it is not Task 33's
 //    to fix. It is reported.
 
+// AFTER (measured 2026-08-18, 390x844, chromium, on Task 34, at the TOP-PADDING
+// sample this file uses from here on):
+//
+//   label          kind    rgb              points   sample y
+//   atmosphere     wash    (230,237,245)     17.7      230
+//   food           white   (255,255,255)      0.0      260
+//   drinks         wash    (245,238,228)     18.0       69
+//   experiences    wash    (245,238,228)     18.0      160
+//   press          wash    (230,237,245)     17.7      120
+//   awards         white   (255,255,255)      0.0      332
+//   our story      wash    (245,238,228)     18.0      120
+//   visit          wash    (230,237,245)     17.7      118
+//
+// Every band now reads its token to the byte: (230,237,245) IS #E6EDF5 and
+// (245,238,228) IS #F5EEE4, with no brick composited into either and no
+// decoration or shadow in the sample. That is what Task 34's `relative` on
+// each section wrapper bought -- note 2 above predicted exactly this, and it
+// is the whole reason the two washes now measure identically to their own
+// arithmetic (src/test/palette.test.ts computes 17.67 and 18.00 from the
+// hexes alone, with no browser involved).
+//
+// The two white bands go to a flat 0.0, from 19.3 and 8.3. Note 1's overlay
+// is gone from them for the same reason.
+//
+// TASK 34 MOVED THE SAMPLE POINT, AND THE TWO TABLES ARE THEREFORE NOT
+// ROW-COMPARABLE. What moved is WHERE this file looks, never WHAT it asserts:
+// the four thresholds below (>=15, <=20, >=8 shallowest, <=3 for white) are
+// byte-identical to the ones Task 33 shipped red.
+//
+// The old sample was the vertical middle of whatever part of the section was
+// on screen. Its premise, stated in note 3, was that x = 4 is inside the
+// section and outside its centred content column, so nothing but the section's
+// own background is painted there. On Task 34's values that premise failed on
+// two of the eight bands, both measured rather than reasoned about:
+//
+//   drinks, at (4, 462): (235,233,229), 22.7 points -- and (245,238,228) at
+//   x = 0, 8 and 12 and at every y from 262 to 662 in the same column. The
+//   8x8 misplaced bubble of note 3 sits on exactly that pixel. bg-brand/25
+//   over #F5EEE4 computes to (234,233,229); the sample was reading the
+//   decoration, not the band.
+//
+//   visit, at (4, 462): (221,227,235), 27.3 points -- constant from y = 361 to
+//   y = 661, darkening to (214,221,228) at x = 12 and hitting the white card
+//   at x = 16, and reading (230,237,245) at y = 261. That is the penumbra of
+//   `shadow-2xl` on VisitUs.tsx's white detail card, whose 50px blur at a
+//   -12px spread reaches roughly 13px past the card's own edge -- i.e. past
+//   the px-4 content column, into the gutter x = 4 was chosen for. A shadow is
+//   not text, a card or a dot, so note 3's premise did not exclude it.
+//
+// Neither is a token error. Both were invisible before Task 34 because the
+// brick overlay was contributing 8 to 22 points of its own to every row, so
+// nothing in the BEFORE table was clean enough for a 5-to-9-point contaminant
+// to show.
+//
+// The sample now sits 40px into the section's own `py-20` top padding -- 80px
+// of guaranteed-empty background above the content column, in every one of
+// these eight sections. It is the one region of a section where no card can
+// cast into the gutter and no absolutely-positioned decoration is placed
+// (Drinks' four bubbles sit at a quarter, a third, a half and a third-from-
+// bottom of a 916px section; the highest is 229px down). Verified at all eight
+// bands rather than argued: the AFTER table above is that verification, and
+// every row is the flat token.
+//
+// The sample is asserted into range rather than clamped into it. A clamp would
+// silently measure the nav, or the section above, if a future section were
+// ever scrolled past its own top -- which is the failure mode this file cannot
+// afford, since it would report a number that looks like a band and is not.
+
 type Band = { id: string; label: string; kind: 'wash' | 'white' };
 
 // The eight homepage sections below the hero, in sections.json order. The
@@ -116,16 +187,19 @@ test.use({ viewport: { width: 390, height: 844 } });
 test('every wash band lands 15 to 20 points below white on a phone', async ({ page }, testInfo) => {
   await page.goto('/');
   await page.waitForLoadState('networkidle');
-  const rows: { label: string; kind: string; rgb: string; points: number }[] = [];
+  const rows: { label: string; kind: string; rgb: string; points: number; y: number }[] = [];
 
   for (const band of BANDS) {
     const section = page.locator(`#${band.id}`);
     await expect(section, `#${band.id} is not on the homepage`).toHaveCount(1);
     await section.scrollIntoViewIfNeeded();
     const box = (await section.boundingBox())!;
-    // The vertical middle of whatever part of the section is on screen,
-    // clamped into the viewport; x = 4 is inside the section and outside its
-    // own centred content column at every width.
+    // 40px into the section's own 80px `py-20` top padding, at x = 4: inside
+    // the section, above its content column, and outside that column's px-4
+    // gutter at every width. The header block above records what this sample
+    // was until Task 34 (the section's on-screen midpoint), the two bands
+    // where that point turned out to be reading a decoration and a card
+    // shadow rather than the band, and the pixel evidence for both.
     //
     // That the gutter is load-bearing rather than arbitrary is measured, not
     // asserted. Re-running this whole file with the sample moved to x = 195,
@@ -134,8 +208,10 @@ test('every wash band lands 15 to 20 points below white on a phone', async ({ pa
     // photographs, 136 to 198 points down, and food moves from 19.3 to 29.7.
     // Four bands off by more than a hundred points is what a centre sample
     // buys. The px-4 content column starts at x = 16 at this width, so 4 is
-    // clear of it -- with the one exception in note 3, which is an absolutely
-    // positioned decoration that the column's padding does not constrain.
+    // clear of it -- with the two exceptions the AFTER block records, one an
+    // absolutely positioned decoration and one a card shadow, neither of which
+    // the column's padding constrains. Both are below the top padding this
+    // sample now sits in.
     //
     // Step 2 (coordinate spaces): boundingBox() is viewport-relative and
     // page.screenshot({ clip }) is documented as passing through to CDP,
@@ -150,12 +226,45 @@ test('every wash band lands 15 to 20 points below white on a phone', async ({ pa
     // either empty or outside the resulting image", which it could not do if
     // the clip were in page coordinates. NO scroll offset is added below, and
     // none is needed.
-    const y = Math.max(0, Math.min(box.y + box.height / 2, 843));
+    // NavBar.tsx is `fixed top-0` and fades itself in and out on every scroll
+    // over 500ms (`showNavbar`), so a sample inside its box can be reading a
+    // half-faded white bar instead of the band -- and `bg-white/90` over a
+    // wash is exactly the direction that makes a band look like it passes
+    // when it does not. This is not hypothetical: it was caught by a mutation
+    // run, on #drinks, whose box.y is 4 and whose 40px sample therefore landed
+    // at y = 44, inside a ~61px nav mid-fade. Both drinks assertions failed on
+    // a value LIGHTER than its own token, in a run where nothing about drinks
+    // had changed.
+    //
+    // The nav's own height is used rather than its current position, on
+    // purpose. Mid-fade it carries `-translate-y-full`, so boundingBox().y
+    // reports somewhere between -61 and 0 and a sample computed from it would
+    // be safe or unsafe depending on where the transition happened to be --
+    // which is the flake, not a fix for it. The height does not move.
+    const nav = (await page.locator('nav').first().boundingBox())!;
+    const y = Math.max(box.y + 40, nav.height + 8);
+    // Hard, not soft, and not a clamp. If a section is ever scrolled so that
+    // its top padding is off screen, or so far down that clearing the nav
+    // would push the sample out of that padding and into the content column,
+    // this would report a number that looks like a band and is not -- so the
+    // run has to stop rather than measure the wrong thing. Measured today:
+    // box.y runs 4 to 292 across the eight bands and the nav is 61 tall, so
+    // only #drinks is moved by the nav clause at all (44 -> 69, still 15px
+    // inside its own 80px padding) and no guard is resting on its limit.
+    expect(y, `#${band.id} top padding is off screen at y=${y}`).toBeGreaterThanOrEqual(0);
+    expect(y, `#${band.id} top padding is off screen at y=${y}`).toBeLessThan(844);
+    expect(y, `#${band.id} sample is below its own top padding`).toBeLessThan(box.y + 80);
     const shot = await page.screenshot({ clip: { x: 4, y, width: 1, height: 1 } });
     const { data } = await sharp(shot).raw().toBuffer({ resolveWithObject: true });
     const [r, g, b] = [data[0], data[1], data[2]];
     const points = pointsBelowWhite(r, g, b);
-    rows.push({ label: band.label, kind: band.kind, rgb: `(${r},${g},${b})`, points: Number(points.toFixed(1)) });
+    rows.push({
+      label: band.label,
+      kind: band.kind,
+      rgb: `(${r},${g},${b})`,
+      points: Number(points.toFixed(1)),
+      y: Math.round(y),
+    });
 
     // expect.soft, not expect, for the three numeric assertions -- the one
     // deliberate departure from the brief's own listing, and the reason is the

@@ -5,7 +5,7 @@ const FoodGallery: React.FC = () => {
   const content = useContent();
   const { dishes, copy } = content;
   return (
-    <section id ="menu" className="py-20 bg-white">
+    <section id ="menu" className="py-20 relative bg-white">
       <div className="max-w-7xl mx-auto px-4">
         <h2 className="font-['Montserrat'] text-4xl md:text-5xl font-bold text-[#222] text-center mb-16">
           {content.renderText('food.heading', copy.food.heading)}

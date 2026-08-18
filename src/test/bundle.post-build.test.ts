@@ -900,6 +900,48 @@ describe('dist/assets/ keeps admin code out of the entry chunk', () => {
 // THE CEILING IS THEREFORE NOT MOVED. It stays at 39000 with the same
 // hundred-odd bytes of headroom the entry above argued for; a raise to a
 // number nothing measured is what this file's Task 1 entry refuses by name.
+//
+// Admin redesign Task 34, the section washes: 38836 -> 38917 (+81), four rules
+// added and three removed, 512 -> 513 top-level blocks. Measured by building
+// 8ca7260 in a detached worktree and diffing the two shipped stylesheets rule
+// by rule, not by reading the summary line:
+//
+//    +88  `.bg-wash`, the cool token #E6EDF5
+//    +93  `.bg-wash-warm`, the warm token #F5EEE4
+//   +210  `.from-wash`
+//   +215  `.from-wash-warm`
+//    -96  the bracketed `#F9F9F9` background utility
+//   -218  its gradient-stop partner
+//   -211  the cream gradient stop
+//
+// Sum: 88 + 93 + 210 + 215 - 96 - 218 - 211 = +81, matching the whole-file
+// delta exactly. Each of the three removed rules lost its last user in this
+// same commit, which is why they are gone rather than merely unused.
+//
+// The four gradient-stop rules are the carousel fades, and they are here
+// because the eight sections changed colour underneath them. Each fade is a
+// 64px `bg-gradient-to-l` over the right edge of a horizontal-scroll strip,
+// and its opaque end has to BE the section background or a bright vertical
+// edge appears where the strip stops. Measured at 390px before fixing it:
+// PlaceGallery's fade ended (250,249,249) against a (230,237,245) section,
+// Drinks (255,253,249) against (245,238,228), Experiences (254,252,247)
+// against the same -- three step edges 280 to 344 pixels tall. FoodGallery's
+// `from-white` over `bg-white` measured (254,254,253) against (255,255,255)
+// in the same run, which is what a matched fade looks like and is the control
+// that says the other three were wrong rather than merely different.
+//
+// Three rules that a reader would expect to have gone did NOT, and each still
+// has a real user: `bg-cream` (blocks.tsx's ingredients and steps, NavBar's
+// dropdown, WritingSurface, SignatureMocktails), `bg-cream-alt` (NotFound,
+// ErrorBoundary) and `bg-slate-50` (BlogTeaser, NewsPress). `relative`, which
+// seven sections gained, was already in the sheet many times over and costs
+// nothing here -- the whole HTML cost of this task lands in
+// src/test/homepage-bytes.test.tsx's ledger instead.
+//
+// THE CEILING IS NOT MOVED. 38917 against 39000 leaves 83 bytes. That is
+// thinner than the entry above wanted and it is stated rather than glossed:
+// the next task adding a rule of any real size breaches this and has to raise
+// it with its own rule-level accounting, in its own commit.
 describe('dist/assets/ keeps the shared stylesheet under a byte ceiling', () => {
   it.skipIf(!REQUIRED && !existsSync(DIST_ASSETS))('the entry CSS file stays under 39000 bytes', () => {
     const cssFiles = readdirSync(DIST_ASSETS).filter((n) => /^index-.*\.css$/.test(n));
