@@ -30,9 +30,11 @@ import { chromium } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { postsDriftProblems } from './published-posts-check.mjs';
+import { postSeoProblems } from './post-seo-check.mjs';
 
 const SITE = process.env.VB_SITE ?? 'https://vb.aionxxxi.uk';
 const ORIGIN = new URL(SITE).origin;
+const SITE_URL_FROM_CONTENT = JSON.parse(readFileSync('src/content/site.json', 'utf8')).seo.url;
 
 const EXPECTED_TYPE = { '.js': /javascript|ecmascript/i, '.css': /text\/css/i };
 
@@ -279,6 +281,59 @@ if (!publishedPosts.ok) {
   failures.push(...drift);
   if (drift.length === 0) note('  ok    every committed post is live');
 }
+
+// ---------------------------------------------------------------------------
+// 2d. Does a post URL carry the head a crawler needs, or the site-wide shell?
+//
+// Phase 5C. DELIBERATELY `fetch`, not the `chromium` page this script already
+// has open. A browser executes src/components/blog/PostPage.tsx, which sets
+// document.title and rewrites the description meta on the client -- so a
+// browser-based assertion here would pass with the Worker route deleted and
+// prove nothing at all. What is being checked is what a crawler that runs no
+// JavaScript receives, which is the response body and only the response body.
+//
+// The Origin header is sent for the same reason every asset fetch in this
+// script sends one: the poisoned-cache variant this site has hit four times
+// is keyed on Origin with no Vary advertising the split, so a request without
+// it reads a different cached variant than a visitor gets.
+async function checkPostSeo(posts) {
+  const post = posts[0];
+  if (!post) return ['no committed posts to check'];
+  const url = `${SITE}/blog/${post.slug}`;
+  const response = await fetch(url, { headers: { Origin: ORIGIN } });
+  const problems = [];
+
+  const type = response.headers.get('content-type') ?? '';
+  if (!/text\/html/i.test(type)) problems.push(`${url} answered ${response.status} as "${type}", not HTML`);
+
+  // The blank-page trap, checked at the one place it is observable without a
+  // browser. worker/index.ts's own SECURITY_HEADERS carry
+  // `default-src 'none'`, which is correct for its JSON routes and forbids
+  // script, style, font and image -- so a post page carrying it renders
+  // completely blank with a perfectly healthy 200.
+  const csp = response.headers.get('content-security-policy') ?? '';
+  if (csp.includes("default-src 'none'")) {
+    problems.push(`${url} carries the Worker's API content-security-policy -- this page is blank in a browser`);
+  }
+
+  const html = await response.text();
+  return problems.concat(
+    postSeoProblems(html, {
+      siteUrl: SITE_URL_FROM_CONTENT,
+      slug: post.slug,
+      title: post.title,
+      excerpt: post.excerpt,
+      image: post.image,
+    }).map((problem) => `${url}: ${problem}`),
+  );
+}
+
+note('\npost SEO (raw response body, no browser -- what a crawler receives):');
+const committedPosts = JSON.parse(readFileSync('src/content/posts.json', 'utf8'));
+const postSeoIssues = await checkPostSeo(committedPosts);
+for (const p of postSeoIssues) note(`  FAIL  ${p}`);
+if (postSeoIssues.length === 0) note('  ok    post page carries title, description, og:image and Article structured data');
+failures.push(...postSeoIssues);
 
 // ---------------------------------------------------------------------------
 // 3. The mechanism itself, probed directly.
