@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import PostList, { type PostListProps } from '../PostList';
 import { POST_FIELDS } from '../fields';
@@ -38,7 +38,7 @@ const POSTS: Post[] = [
 function renderList(overrides: Partial<PostListProps> = {}) {
   const onChange = vi.fn();
   const onReorder = vi.fn();
-  const onAdd = vi.fn();
+  const onAdd = vi.fn(() => 'new-post-id');
   const onRemove = vi.fn();
   const view = render(
     <PostList
@@ -64,26 +64,51 @@ function lastEdit(onChange: ReturnType<typeof vi.fn>): [number, Post] {
   return calls[calls.length - 1] as [number, Post];
 }
 
-describe('PostList renders one form per post', () => {
-  it('shows every scalar field POST_FIELDS declares, and no field for blocks', () => {
+// A row's accessible name is its own text plus, when it has one, a trailing
+// " needs attention" marker (ItemList.tsx) -- a plain-substring match keeps
+// every test below from having to know or care which rows have one.
+async function openRow(user: ReturnType<typeof userEvent.setup>, name: string) {
+  await user.click(screen.getByRole('button', { name: new RegExp(`^${name}`) }));
+}
+
+describe('PostList: nothing is mounted until a row is opened', () => {
+  it('renders no post-form and no dialog with every editor closed', () => {
     renderList();
+    expect(screen.queryByTestId('post-form')).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+});
+
+describe('PostList renders one post at a time, in the open editor', () => {
+  it('opening a row shows every scalar field POST_FIELDS declares, and no field for blocks', async () => {
+    const user = userEvent.setup();
+    renderList();
+    await openRow(user, 'A fixture post');
     Object.values(POST_FIELDS).forEach((spec) => {
-      expect(screen.getAllByText(spec.label, { selector: 'label' }).length).toBe(POSTS.length);
+      expect(screen.getAllByText(spec.label, { selector: 'label' })).toHaveLength(1);
     });
     expect(screen.queryByText('Blocks', { selector: 'label' })).toBeNull();
   });
 
-  it('binds each post’s own values, not the first post’s twice', () => {
+  it('binds the opened post’s own values, and only that post’s, one row at a time', async () => {
+    const user = userEvent.setup();
     renderList();
+    await openRow(user, 'A fixture post');
     expect(screen.getByDisplayValue('A fixture post')).toBeInTheDocument();
-    expect(screen.getByDisplayValue('A second fixture post')).toBeInTheDocument();
     expect(screen.getByDisplayValue('a-fixture-post')).toBeInTheDocument();
+    expect(screen.queryByDisplayValue('A second fixture post')).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: 'Done' }));
+    await openRow(user, 'A second fixture post');
+    expect(screen.getByDisplayValue('A second fixture post')).toBeInTheDocument();
     expect(screen.getByDisplayValue('a-second-fixture-post')).toBeInTheDocument();
+    expect(screen.queryByDisplayValue('A fixture post')).toBeNull();
   });
 
   it('editing a scalar keeps the post’s blocks intact', async () => {
     const user = userEvent.setup();
     const { onChange } = renderList();
+    await openRow(user, 'A fixture post');
     const title = screen.getByDisplayValue('A fixture post');
     await user.clear(title);
     await user.type(title, 'X');
@@ -99,21 +124,14 @@ describe('PostList renders one form per post', () => {
   // component and the page is per-SECTION -- so an unguarded read would take
   // the whole panel down, heading included, rather than leaving her one
   // fixable field.
-  //
-  // Asserted through what an EDIT commits, not through `not.toThrow()`: the
-  // stub BlockList this task ships never reads `blocks`, so nothing would
-  // throw today and a toThrow-shaped test could not fail on the mutation it
-  // names (returning `post.blocks` unguarded). What that mutation really
-  // costs is a post committed with `blocks: undefined`, which validatePost
-  // reads as "needs a list of blocks" and assertPosts fails the build on.
-  it('a post with no blocks key at all renders, and an edit gives it an empty list rather than undefined', async () => {
+  it('a post with no blocks key at all opens and edits, and gives it an empty list rather than undefined', async () => {
     const user = userEvent.setup();
     const noBlocks = { ...POSTS[0] } as Partial<Post>;
     delete noBlocks.blocks;
     const { onChange } = renderList({ items: [noBlocks as Post] });
 
+    await openRow(user, 'A fixture post');
     const title = screen.getByDisplayValue('A fixture post');
-    expect(title).toBeInTheDocument();
     await user.type(title, 'X');
 
     const [, next] = lastEdit(onChange);
@@ -121,8 +139,8 @@ describe('PostList renders one form per post', () => {
   });
 });
 
-describe('PostList reorders and removes', () => {
-  it('Up is omitted on the first post and Down on the last', () => {
+describe('PostList: rows can be moved, added and deleted', () => {
+  it('Move up is omitted on the first row and Move down on the last', () => {
     renderList();
     expect(screen.queryByRole('button', { name: 'Move A fixture post up' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Move A fixture post down' })).toBeInTheDocument();
@@ -130,27 +148,106 @@ describe('PostList reorders and removes', () => {
     expect(screen.queryByRole('button', { name: 'Move A second fixture post down' })).toBeNull();
   });
 
-  it('Down hands back the swapped id order', async () => {
+  it('Move down hands back the swapped id order', async () => {
     const user = userEvent.setup();
     const { onReorder } = renderList();
     await user.click(screen.getByRole('button', { name: 'Move A fixture post down' }));
     expect(onReorder).toHaveBeenCalledWith(['fixture-b', 'fixture-a']);
   });
 
-  it('Remove names the post it removes', async () => {
+  // D8: delete lives inside the editor and asks once. There is no Remove
+  // button on a row at all any more.
+  it('there is no Remove button on any row', () => {
+    renderList();
+    expect(screen.queryByRole('button', { name: /remove/i })).not.toBeInTheDocument();
+  });
+
+  it('deleting a post happens inside its own editor, and asks once', async () => {
     const user = userEvent.setup();
     const { onRemove } = renderList();
-    await user.click(screen.getByRole('button', { name: 'Remove A second fixture post' }));
+    await openRow(user, 'A second fixture post');
+    await user.click(screen.getByRole('button', { name: 'Delete A second fixture post' }));
+    // First press only asks -- onRemove has not fired yet.
+    expect(onRemove).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'Yes, delete a second fixture post' }));
     expect(onRemove).toHaveBeenCalledWith(1);
   });
 
-  it('an untitled post is still nameable in its own buttons', () => {
+  it('an untitled post is still nameable in its own row and its own delete button', async () => {
+    const user = userEvent.setup();
     renderList({ items: [{ ...POSTS[0], title: '' }, POSTS[1]] });
-    expect(screen.getByRole('button', { name: 'Remove Untitled post' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Untitled post' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Untitled post' }));
+    expect(screen.getByRole('button', { name: 'Delete Untitled post' })).toBeInTheDocument();
+  });
+
+  // RecordList's own onAdd contract (Task 3): Add and Edit are one surface,
+  // so the list opens the editor on the record it just added rather than
+  // leaving her to find it in a list she cannot yet see it in.
+  it('Add opens the editor on the new post', async () => {
+    const user = userEvent.setup();
+    const newPost: Post = {
+      id: 'new-post-id',
+      slug: '',
+      type: 'story',
+      title: '',
+      date: '2026-01-01',
+      excerpt: '',
+      image: '',
+      blocks: [],
+    };
+    const onAdd = vi.fn(() => 'new-post-id');
+    const { onChange, onReorder, onRemove, rerender } = renderList({ onAdd });
+    await user.click(screen.getByRole('button', { name: 'Add a post' }));
+    expect(onAdd).toHaveBeenCalledTimes(1);
+
+    // The real caller (PostsArea) commits the new post and re-renders with
+    // it in `items` -- the same controlled-list contract every list in this
+    // dashboard documents, and the only way a bare-component test can
+    // observe an id PostList itself has no array entry for yet.
+    rerender(
+      <PostList
+        items={[...POSTS, newPost]}
+        onChange={onChange}
+        onReorder={onReorder}
+        onAdd={onAdd}
+        onRemove={onRemove}
+        problems={[]}
+        onStaged={vi.fn()}
+        previews={NO_IMAGE_PREVIEWS}
+      />,
+    );
+
+    expect(screen.getByRole('dialog', { name: 'Untitled post' })).toBeInTheDocument();
+  });
+
+  // The mutation table's falsifiable form: `id: post.slug` resolves BOTH
+  // untitled posts' blank slugs to the same string, so `findIndex` always
+  // opens the FIRST one -- and React still renders a row for each (a
+  // duplicate key, not a missing one), so a weaker "both have a row"
+  // assertion would stay green on this exact defect.
+  it('clicking the second untitled post opens the second one, not the first', async () => {
+    const user = userEvent.setup();
+    // Both blank in title AND slug, the same shape two posts fresh out of
+    // `blankPost()` actually have -- the id/slug distinction this case
+    // exists to prove only matters when both candidates collide, and a
+    // slug of 'a-fixture-post' on post A would make the two distinguishable
+    // by slug alone, silently hiding the defect an `id: post.slug` mutation
+    // produces.
+    const untitledA: Post = { ...POSTS[0], id: 'untitled-a', slug: '', title: '' };
+    const untitledB: Post = { ...POSTS[1], id: 'untitled-b', slug: '', title: '' };
+    renderList({ items: [untitledA, untitledB] });
+
+    const rows = screen.getAllByRole('button', { name: 'Untitled post' });
+    expect(rows).toHaveLength(2);
+    await user.click(rows[1]);
+    // The second post's own excerpt, distinct from the first's, is what
+    // proves the SECOND record's editor opened rather than the first's.
+    expect(screen.getByDisplayValue('A second fixture excerpt.')).toBeInTheDocument();
   });
 });
 
-describe('PostList places every problem somewhere, and only once', () => {
+describe('PostList: problems partition between the open editor and the list banner (D4)', () => {
   const PROBLEMS: ValidationProblem[] = [
     { field: '[0].title', message: 'the post at position 0 needs a title' },
     { field: '[0].blocks[0].text', message: 'a paragraph needs some words' },
@@ -164,27 +261,48 @@ describe('PostList places every problem somewhere, and only once', () => {
     { field: '', message: 'expected a list of posts' },
   ];
 
-  it('a scalar problem lands on its own field, not in a banner', () => {
+  it('with every editor closed, a post’s own problem is still on screen, and marks its row', () => {
     renderList({ problems: PROBLEMS });
-    const field = screen.getAllByText(POST_FIELDS.title.label, { selector: 'label' })[0].parentElement!;
-    expect(within(field).getByText('the post at position 0 needs a title')).toBeInTheDocument();
+    const banner = screen.getByRole('alert', { name: 'Problems with the whole list of posts' });
+    expect(within(banner).getByText('the post at position 0 needs a title')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^A fixture post needs attention/ })).toBeInTheDocument();
+  });
+
+  it('a scalar problem lands on its own field once its post is open, not in the banner', async () => {
+    const user = userEvent.setup();
+    renderList({ problems: PROBLEMS });
+    await openRow(user, 'A fixture post');
+    const form = screen.getByTestId('post-form');
+    expect(within(form).getByText('the post at position 0 needs a title')).toBeInTheDocument();
+    // Claimed by the open post's own form, so it does not ALSO sit in the
+    // list's banner -- which still carries the two problems nothing here
+    // claims (`[9].slug` and the bare file-level message).
+    const banner = screen.getByRole('alert', { name: 'Problems with the whole list of posts' });
+    expect(within(banner).queryByText('the post at position 0 needs a title')).toBeNull();
+    expect(within(banner).getByText('a post that is not rendered here')).toBeInTheDocument();
+    expect(within(banner).getByText('expected a list of posts')).toBeInTheDocument();
   });
 
   // The partition, asserted in the direction that catches a double
-  // display. RecordForm banners every unmatched same-index problem, so
-  // without the filter these two messages appear on the post AS WELL AS
-  // wherever BlockList puts them.
-  it('a block problem is NOT shown by the post form', () => {
+  // display: a block problem must not ALSO appear inside the post form.
+  it('a block problem is NOT shown by the post form, but IS shown by the block list', async () => {
+    const user = userEvent.setup();
     renderList({ problems: PROBLEMS });
-    const forms = screen.getAllByTestId('post-form');
-    expect(within(forms[0]).queryByText('a paragraph needs some words')).toBeNull();
-    expect(within(forms[0]).queryByText('this post has nothing in it yet')).toBeNull();
+    await openRow(user, 'A fixture post');
+    const form = screen.getByTestId('post-form');
+    expect(within(form).queryByText('a paragraph needs some words')).toBeNull();
+    expect(within(form).queryByText('this post has nothing in it yet')).toBeNull();
+    expect(screen.getByText('a paragraph needs some words')).toBeInTheDocument();
+    expect(screen.getByText('this post has nothing in it yet')).toBeInTheDocument();
   });
 
   // ...and in the direction that catches a total silent loss, which
-  // RecordList's own comment calls the worse of the two.
-  it('every problem in the list is on screen exactly once', () => {
+  // RecordList's own comment calls the worse of the two -- whether or not
+  // the problem's own post happens to be open.
+  it('every problem in the list is on screen exactly once, whichever post is open', async () => {
+    const user = userEvent.setup();
     const { container } = renderList({ problems: PROBLEMS });
+    await openRow(user, 'A fixture post');
     PROBLEMS.forEach((problem) => {
       const hits = [...container.querySelectorAll('*')].filter(
         (el) => el.children.length === 0 && el.textContent === problem.message,
@@ -193,11 +311,6 @@ describe('PostList places every problem somewhere, and only once', () => {
     });
   });
 
-  // The other half of "nobody is rendering it": a problem naming a post
-  // beyond the end of the list, and a block problem naming one. Neither can
-  // reach a mounted form or a mounted BlockList, so both belong to this
-  // component's own banner -- the RecordList unclaimedProblems guarantee,
-  // which no component below this one is able to keep.
   it('a problem naming a post that is not rendered still reaches her', () => {
     renderList({
       problems: [
@@ -214,13 +327,18 @@ describe('PostList places every problem somewhere, and only once', () => {
     renderList({ items: [], problems: [{ field: '', message: 'expected a list of posts' }] });
     expect(screen.getByText('expected a list of posts')).toBeInTheDocument();
   });
+
+  // The mutation table's own new case: a post can be clean on every META
+  // field and still need attention, if the problem is inside one of its
+  // blocks. Dropping the `blockProblemOf` half of the row's own
+  // `needsAttention` would miss exactly this.
+  it('a post whose only problem is inside a block still says needs attention', () => {
+    renderList({ problems: [{ field: '[0].blocks[0].text', message: 'a paragraph needs some words' }] });
+    expect(screen.getByRole('button', { name: /^A fixture post needs attention/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^A second fixture post needs attention/ })).toBeNull();
+  });
 });
 
-// Carried forward from this task's own review as M6. Every message now lands
-// on the field that caused it, which is the right place and also a long way
-// down: seven fields per post plus a block list under each, so a problem on
-// the third post is some twenty controls below the fold. "Open the panel to
-// see" showed her post one.
 describe('PostList says how much is wrong, and takes her to it', () => {
   it('says nothing when nothing is wrong', () => {
     renderList();
@@ -247,28 +365,29 @@ describe('PostList says how much is wrong, and takes her to it', () => {
     );
   });
 
-  // Above the first post, which is the whole point of it: a count below twenty
-  // fields of the post she is not looking for is no better than no count.
-  // DOM order, not layout -- jsdom has no layout engine and a geometry claim
-  // belongs in e2e/.
-  it('sits above the first post', () => {
+  // Above the first post, which is the whole point of it: a count below the
+  // rows is no better than no count. DOM order, not layout -- jsdom has no
+  // layout engine and a geometry claim belongs in e2e/.
+  it('sits above the first row', () => {
     const { container } = renderList({
       problems: [{ field: '[1].title', message: 'the second post needs a title' }],
     });
     const summary = screen.getByRole('status', { name: 'What still needs fixing' });
-    const firstPost = container.querySelector('li');
-    expect(firstPost).not.toBeNull();
-    expect(summary.compareDocumentPosition(firstPost!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const firstRow = container.querySelector('li');
+    expect(firstRow).not.toBeNull();
+    expect(summary.compareDocumentPosition(firstRow!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  // The half a count alone cannot do. Focus, not scroll position: a browser
-  // scrolls a newly focused control into view on its own, and a scroll
-  // assertion would be a layout claim jsdom cannot make.
-  it('takes her to the field that has the problem, not to the top of the list', async () => {
+  // Task 7 Step 4: with fields now mounted only while their own post's
+  // editor is open, the jump opens that post's editor FIRST -- there is
+  // nothing to focus in a DOM that has not rendered it yet, so the
+  // assertion has to wait rather than read the result of the click
+  // synchronously.
+  it('takes her to the field that has the problem, opening its post along the way', async () => {
     const user = userEvent.setup();
     renderList({ problems: [{ field: '[1].title', message: 'the second post needs a title' }] });
     await user.click(screen.getByRole('button', { name: 'Take me to the first one' }));
-    expect(document.activeElement).toBe(screen.getByDisplayValue('A second fixture post'));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByDisplayValue('A second fixture post')));
   });
 
   // ...and when the problem has no field to land on, to the message region
@@ -278,7 +397,18 @@ describe('PostList says how much is wrong, and takes her to it', () => {
     const user = userEvent.setup();
     renderList({ problems: [{ field: '[0].blocks', message: 'this post has nothing in it yet' }] });
     await user.click(screen.getByRole('button', { name: 'Take me to the first one' }));
-    expect(document.activeElement).toHaveTextContent('this post has nothing in it yet');
+    await waitFor(() => expect(document.activeElement).toHaveTextContent('this post has nothing in it yet'));
+  });
+
+  // A problem naming NO post at all (file-level, `field: ''`) has nothing to
+  // open -- this component's own banner is already mounted unconditionally,
+  // so the walk runs immediately rather than waiting on a render nothing
+  // scheduled.
+  it('takes her straight to a file-level problem, with no post to open first', async () => {
+    const user = userEvent.setup();
+    renderList({ problems: [{ field: '', message: 'posts must be sorted newest first' }] });
+    await user.click(screen.getByRole('button', { name: 'Take me to the first one' }));
+    expect(document.activeElement).toHaveTextContent('posts must be sorted newest first');
   });
 
   // The summary must not be its own destination, or the button reads as broken.
@@ -287,7 +417,7 @@ describe('PostList says how much is wrong, and takes her to it', () => {
     renderList({ problems: [{ field: '[1].title', message: 'the second post needs a title' }] });
     const summary = screen.getByRole('status', { name: 'What still needs fixing' });
     await user.click(screen.getByRole('button', { name: 'Take me to the first one' }));
-    expect(summary.contains(document.activeElement)).toBe(false);
+    await waitFor(() => expect(summary.contains(document.activeElement)).toBe(false));
   });
 });
 
@@ -371,12 +501,14 @@ describe('every problem the partition can produce is reachable from the count', 
     // she pressed (which is where a silent no-op leaves it) and not on <body>
     // (whose textContent contains every message on the page and would make the
     // assertion below meaningless).
-    const active = document.activeElement as HTMLElement;
-    expect(
-      ['INPUT', 'TEXTAREA', 'SELECT'].includes(active.tagName) || active.getAttribute('role') === 'alert',
-      `focus went to <${active.tagName.toLowerCase()}> "${(active.textContent ?? '').slice(0, 40)}"`,
-    ).toBe(true);
-    expect(focusedProblemText()).toContain(message);
+    await waitFor(() => {
+      const active = document.activeElement as HTMLElement;
+      expect(
+        ['INPUT', 'TEXTAREA', 'SELECT'].includes(active.tagName) || active.getAttribute('role') === 'alert',
+        `focus went to <${active.tagName.toLowerCase()}> "${(active.textContent ?? '').slice(0, 40)}"`,
+      ).toBe(true);
+      expect(focusedProblemText()).toContain(message);
+    });
   });
 
   // The fifteenth shape, and it gets its own fixture rather than a row in the
@@ -402,62 +534,60 @@ describe('every problem the partition can produce is reachable from the count', 
 
     expect(screen.getAllByText(message)).toHaveLength(1);
     await user.click(screen.getByRole('button', { name: 'Take me to the first one' }));
-    expect(document.activeElement).toHaveAttribute('role', 'alert');
-    expect(focusedProblemText()).toContain(message);
+    await waitFor(() => {
+      expect(document.activeElement).toHaveAttribute('role', 'alert');
+      expect(focusedProblemText()).toContain(message);
+    });
   });
 });
 
-// The seventeenth shape, and like the fifteenth it gets its own case rather
-// than a row in the table above -- for a stronger reason: a refused link has no
-// ValidationProblem field and no validator message at all, so a row would have
-// nothing to drive renderList with and nothing to assert.
-//
-// It is here because a review measured both of the things InlineTextField's own
-// comment used to claim, and both were false. "After the textarea, so a real
-// validation problem still wins" is true only inside one field:
-// FIRST_PROBLEM_SELECTOR is queried with querySelector, which answers in
-// document order across the whole panel, so a refusal on post ONE beats a title
-// problem on post TWO. And "it only exists moments after she clicked Link" was
-// false outright -- it cleared on a successful insert and on nothing else.
-//
-// Both halves are pinned: that a live refusal wins the jump (the honest,
-// now-bounded imprecision) and that it stops winning the moment she types,
-// which is what makes the bound real.
-describe('a link refusal is reachable while it lasts, and lasts exactly as long as it is about something', () => {
+// Task 7's own version of Task 4's "a link refusal is reachable while it
+// lasts" case. The original proved a live refusal on ONE post's field beat a
+// LATER post's own validation problem, because every post's fields used to be
+// mounted at once and document order alone decided the race. That premise is
+// gone: only the open post's fields exist in the DOM at all now, and opening
+// a DIFFERENT post's editor to reach its problem necessarily unmounts the
+// one carrying the refusal (D4 -- one editor at a time) along with it. So
+// this proves the race the new architecture can still HAVE: a live refusal
+// beating a validation problem further down the SAME open post's own blocks.
+describe('a link refusal is reachable while it lasts, within the one editor that can be open', () => {
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
-  it('beats a later post’s problem while it is up, and gives the jump back once she types', async () => {
+  it('beats a block problem further down the same post, and gives the jump back once she types', async () => {
     const user = userEvent.setup();
     // Spied per-test, never globally: jsdom has no prompt, and its RETURN VALUE
     // is what this case is about.
     vi.spyOn(window, 'prompt').mockReturnValue('javascript:alert(1)');
-    const message = 'this post needs a title';
-    renderList({ problems: [{ field: '[1].title', message }] });
+    const message = 'this photo grid has nothing in it yet';
+    renderList({ items: GUARD_POSTS, problems: [{ field: '[0].blocks[3].images', message }] });
 
-    // Baseline. The count is about post two's title, and that is where it sends
-    // her -- without this the assertions below could pass on a button that
-    // never worked.
+    // Baseline: with no refusal yet, the count sends her to the gallery
+    // block's own problem.
     await user.click(screen.getByRole('button', { name: 'Take me to the first one' }));
-    expect(focusedProblemText()).toContain(message);
+    await waitFor(() => expect(focusedProblemText()).toContain(message));
 
-    // A refusal on post ONE's paragraph, which is earlier in document order
-    // than post two's title.
+    // A refusal on the SAME post's paragraph, earlier in document order than
+    // the gallery block below it.
     const group = screen.getByRole('group', { name: 'Formatting for Words' });
     await user.click(within(group).getByRole('button', { name: 'Link' }));
     const refusal = screen.getByText(/will not work as a link/);
     expect(refusal).toHaveAttribute('role', 'alert');
 
-    // The imprecision, stated as a fact rather than as a comment.
+    // The imprecision, stated as a fact rather than as a comment. This post
+    // was already open, so nothing needs mounting -- but `goToFirstProblem`
+    // defers to `focusFirstProblem` through a `requestAnimationFrame`
+    // unconditionally (Step 4), so the assertion still has to wait a tick
+    // rather than read the click's result synchronously.
     await user.click(screen.getByRole('button', { name: 'Take me to the first one' }));
-    expect(document.activeElement).toBe(refusal);
+    await waitFor(() => expect(document.activeElement).toBe(refusal));
 
-    // The bound. Her next keystroke in that box ends the refusal, and the count
-    // and the destination agree again.
+    // The bound. Her next keystroke in that box ends the refusal, and the
+    // count and the destination agree again.
     await user.type(screen.getByLabelText('Words'), '!');
     expect(screen.queryByText(/will not work as a link/)).toBeNull();
     await user.click(screen.getByRole('button', { name: 'Take me to the first one' }));
-    expect(focusedProblemText()).toContain(message);
+    await waitFor(() => expect(focusedProblemText()).toContain(message));
   });
 });

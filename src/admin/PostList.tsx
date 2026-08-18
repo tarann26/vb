@@ -6,17 +6,26 @@
 // through BlockList -- the same split GalleryList.tsx and StoryForm.tsx
 // already make for an array-valued field.
 //
+// Task 7: PostList moves to ItemList + EditorSheet, the same list+editor
+// shape every other panel in this dashboard has taken. Open state keys on
+// `post.id` -- a real id, so there is no re-pointing dance the way Task 6's
+// page slug needed.
+//
 // Every button class string is imported from RecordList rather than retyped.
 // A retyped Tailwind string is a brand-new class to the content scanner and
 // ships extra CSS for a rule that already exists, which is why those three
 // bindings are exported at all (RecordList.tsx's own comment says so, and
 // HoursField/SectionList/StoryForm already read them).
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import RecordForm from './RecordForm';
 import BlockList from './blocks/BlockList';
-import { isBlockProblem } from './blocks/block-problems';
+import { blockProblemOf, isBlockProblem } from './blocks/block-problems';
+import { createStableNames, type StableNames } from './blocks/stable-names';
+import { moveTo } from './blocks/reorder';
 import { arrayIndexOf } from './problems';
-import { ADD_BUTTON_CLASSNAME, MOVE_BUTTON_CLASSNAME, REMOVE_BUTTON_CLASSNAME } from './RecordList';
+import { MOVE_BUTTON_CLASSNAME } from './RecordList';
+import EditorSheet from './manage/EditorSheet';
+import ItemList, { type ItemRow } from './manage/ItemList';
 import Thumbnail from './manage/Thumbnail';
 import { POST_FIELDS, type PostMeta } from './fields';
 import type { ImagePreviews } from './previews';
@@ -30,7 +39,10 @@ export interface PostListProps {
   // The id ORDER, never a reordered array: this is a controlled list and the
   // caller owns `items`, the same contract RecordList documents.
   onReorder: (ids: string[]) => void;
-  onAdd: () => void;
+  // Returns the id of the post it added -- RecordList's own onAdd contract
+  // (Task 3), so Add and Edit stay one surface: the list opens the editor on
+  // the record it just created rather than leaving her to find it.
+  onAdd: () => string;
   onRemove: (index: number) => void;
   // The FULL posts.json problem list, unfiltered. This component is the one
   // place that knows how many post forms are mounted and how many blocks each
@@ -81,7 +93,24 @@ function problemCountSentence(count: number): string {
     : `${count} things here still need fixing. Publishing will be refused until they are.`;
 }
 
+// Where a post's own problems live, whichever HALF of the file names them --
+// a meta field (`[i].title`) or something inside its blocks (`[i].blocks...`).
+// Both halves are needed for `needsAttention`, for `goToFirstProblem`'s own
+// walk, and for the `shown`/`banner` partition below -- a post whose only
+// problem is inside a block is not "clean" just because arrayIndexOf alone
+// says so.
+function ownerOf(field: string): number | undefined {
+  const meta = arrayIndexOf(field);
+  if (meta !== undefined) return meta;
+  return blockProblemOf(field)?.post;
+}
+
 // The first thing on this panel that is complaining, in document order.
+// Extracted verbatim from what used to be the WHOLE of `goToFirstProblem`
+// (Task 7 Step 4) -- with the editor closed there are no field-level errors
+// anywhere in the DOM for this selector to find, so `goToFirstProblem` below
+// opens the offending post's editor FIRST and calls this only once React has
+// had a frame to render its fields.
 //
 // Two shapes, because there are two ways a problem appears on this screen: a
 // CONTROL whose own error region it points at (Field, PhotoField and
@@ -123,70 +152,54 @@ export default function PostList({
   onStaged,
   previews,
 }: PostListProps) {
-  // The partition, in three parts, and every problem in the file lands in
-  // exactly one of them (PostList.test.tsx asserts that count directly, in
-  // both directions, so a message can end up neither twice nor nowhere).
-  //
-  // 1. `metaProblems` minus the block half, narrowed to ONE post's own index
-  //    below, is what each RecordForm sees. Narrowing by index is a
-  //    deliberate departure from RecordForm's "not pre-filtered" contract and
-  //    it is what stops a file-level problem (`field: ''`) appearing once per
-  //    mounted form -- RecordForm's own banner keeps every problem whose
-  //    index is not another rendered index, which for a bare `''` means all
-  //    of them. RecordForm still banners a same-index problem naming a key
-  //    this form does not render, which is the shape a stale draft's unknown
-  //    key produces and the reason that filter is by index rather than by
-  //    matched field.
-  // 2. The block half goes to BlockList, whole: it filters by post itself.
-  // 3. Whatever no mounted form and no mounted BlockList could have claimed
-  //    -- a file-level rule, or a post index this list is not rendering --
-  //    goes in this component's own banner. That is the RecordList
-  //    unclaimedProblems guarantee, and only this component can keep it,
-  //    because only this component knows how many posts are mounted.
-  //
-  // READ THIS BEFORE HARMONISING THE TWO: the rule below is NOT
-  // RecordList.tsx's unclaimedProblems, and the difference is deliberate.
-  // RecordList EXCLUDES a non-indexed problem (`field: ''`) while at least one
-  // form is mounted, on the grounds that every mounted RecordForm banners it
-  // already -- which is true there, and is why a `press.json` sort message
-  // renders once per mounted form (measured: three posts here would show one
-  // file-level message three times). This component INCLUDES it, because step
-  // 1 narrows each RecordForm's own problems to its own index, so no form
-  // banners a non-indexed problem any more and excluding it here would drop it
-  // entirely. The two rules are each correct for their own component and
-  // cannot be swapped: narrowing without this banner loses the message,
-  // this banner without the narrowing shows it once per post. Hoisting the
-  // narrowing into RecordList would fix both at once and is a real behaviour
-  // change for twelve other panels, so it belongs in its own task.
-  const metaProblems = problems.filter((p) => !isBlockProblem(p.field));
-  const unclaimed = problems.filter((p) => {
-    const owner = arrayIndexOf(p.field);
-    return owner === undefined || owner >= items.length;
-  });
+  const [openId, setOpenId] = useState<string | null>(null);
+  const openIndex = openId === null ? -1 : items.findIndex((item) => item.id === openId);
+  const open = openIndex === -1 ? undefined : items[openIndex];
 
-  function swap(index: number, otherIndex: number): void {
-    const ids = items.map((item) => item.id);
-    const moved = ids[index];
-    ids[index] = ids[otherIndex];
-    ids[otherIndex] = moved;
-    onReorder(ids);
+  // One StableNames instance per post id, held here rather than inside
+  // BlockList itself, and kept for as long as PostList itself is mounted --
+  // which, unlike the post's own EditorSheet, is the whole time the Posts
+  // panel is open. BlockList's own WeakMap lives in a `useRef`, torn down
+  // the instant the component unmounts; moving the block editor inside
+  // EditorSheet (this task) means it now does that on every Done, so a name
+  // handed out before she closed the editor has to still mean the same
+  // block when she reopens it, or a staged photo's key stops matching the
+  // block it was staged on -- stable-names.ts's own comment on
+  // `createStableNames` names this exactly. Keyed on `post.id` rather than
+  // a WeakMap on the post object: a post's own object reference changes on
+  // every keystroke (never mutated in place), but its id does not.
+  const namesRef = useRef(new Map<string, StableNames>());
+  function namesFor(id: string): StableNames {
+    let existing = namesRef.current.get(id);
+    if (existing === undefined) {
+      existing = createStableNames('b');
+      namesRef.current.set(id, existing);
+    }
+    return existing;
   }
 
-  // Carried forward from Task 4's review as M6, and this is where it is paid.
-  //
-  // Every message on this panel now lands on the field that caused it, which is
-  // the right place and also a long way down: seven fields per post, plus a
-  // block list under each, so a problem on the third post is some twenty
-  // controls below the fold with nothing at the top of the panel to say it is
-  // there. "Open the panel to see" showed her post one.
-  //
-  // A count plus a button, rather than moving focus on its own: validation is
-  // debounced, so a panel that focused the first problem whenever the list
-  // changed would yank the caret out of the box she is typing in, half a second
-  // after she starts. She decides when to be taken there.
+  // The partition (D4): `shown` is everything the open editor's own
+  // RecordForm or BlockList will place; `banner` is everything else, which
+  // with no editor open is EVERY post's own problems -- meta and block
+  // alike.
+  const shown = open === undefined ? [] : problems.filter((p) => ownerOf(p.field) === openIndex);
+  const banner = problems.filter((p) => !shown.includes(p));
+
+  const rows: ItemRow[] = items.map((post, index) => ({
+    id: post.id,
+    name: post.title || 'Untitled post',
+    thumbnail: <Thumbnail path={post.image ?? null} previewKey={`posts.json:${post.id}:image`} previews={previews} />,
+    needsAttention:
+      problems.some((p) => arrayIndexOf(p.field) === index) ||
+      problems.some((p) => blockProblemOf(p.field)?.post === index),
+  }));
+
   const listRef = useRef<HTMLDivElement>(null);
 
-  function goToFirstProblem(): void {
+  // The first thing on screen that is complaining, in document order --
+  // exposed for `goToFirstProblem` to call once the offending post's editor
+  // has actually rendered.
+  function focusFirstProblem(): void {
     const target = listRef.current?.querySelector<HTMLElement>(FIRST_PROBLEM_SELECTOR);
     if (target === null || target === undefined) return;
     // A <div> or <p> is not focusable, and `.focus()` on one is a silent
@@ -207,6 +220,44 @@ export default function PostList({
     // that have no other reason to know about it.
     if (!target.hasAttribute('tabindex')) target.setAttribute('tabindex', '-1');
     target.focus();
+  }
+
+  // Carried forward from Task 4's review as M6, and this is where it is paid.
+  //
+  // Every message on this panel now lands on the field that caused it, which is
+  // the right place and also a long way down: seven fields per post, plus a
+  // block list under each, so a problem on the third post is some twenty
+  // controls below the fold with nothing at the top of the panel to say it is
+  // there. "Open the panel to see" showed her post one.
+  //
+  // Task 7 Step 4: with fields now mounted only while their own post's editor
+  // is open, the field this used to find is not in the DOM at all until she
+  // has been taken to the right post. So this opens that post's editor first
+  // -- if it is not already the one open -- and defers the actual DOM walk
+  // (`focusFirstProblem`, above) to the frame after React has rendered it.
+  function goToFirstProblem(): void {
+    const firstBad = items.findIndex(
+      (_, index) =>
+        problems.some((p) => arrayIndexOf(p.field) === index) ||
+        problems.some((p) => blockProblemOf(p.field)?.post === index),
+    );
+    // No post OWNS the first problem -- it is file-level (`field: ''`,
+    // `validatePost`'s own "sorted newest first" shape) and lands in this
+    // component's own banner above, which is mounted unconditionally
+    // whether or not any editor is open. Nothing needs opening, so the walk
+    // runs immediately rather than waiting on a render that was never
+    // scheduled -- a literal `return` here (no per-post problem, so give up)
+    // would silently drop the one shape validateContent produces with no
+    // index on it at all, which this panel used to reach through the same
+    // DOM walk below when every post's fields were always mounted.
+    if (firstBad === -1) {
+      focusFirstProblem();
+      return;
+    }
+    if (openId !== items[firstBad].id) setOpenId(items[firstBad].id);
+    // After the editor has rendered its fields, not before -- the selector
+    // walk finds nothing in a DOM that has not painted them yet.
+    requestAnimationFrame(() => focusFirstProblem());
   }
 
   return (
@@ -234,102 +285,63 @@ export default function PostList({
         </div>
       )}
 
-      {unclaimed.length > 0 && (
+      {banner.length > 0 && (
         <div
           role="alert"
           aria-label="Problems with the whole list of posts"
           className="mb-4 rounded border border-red-300 bg-red-50 p-3 text-sm text-red-700"
         >
           <ul className="list-disc pl-5">
-            {unclaimed.map((p, i) => (
+            {banner.map((p, i) => (
               <li key={i}>{p.message}</li>
             ))}
           </ul>
         </div>
       )}
 
-      <ul>
-        {items.map((post, index) => {
-          const name = post.title || 'Untitled post';
-          const isFirst = index === 0;
-          const isLast = index === items.length - 1;
-          return (
-            <li key={post.id} className="mb-6 rounded border border-gray-200 p-4">
-              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <Thumbnail
-                    path={post.image ?? null}
-                    previewKey={`posts.json:${post.id}:image`}
-                    previews={previews}
-                  />
-                  {/* Omitted at the ends, not disabled -- RecordList's own
-                      rule, and its reasoning applies unchanged: a control
-                      that reads as live and does nothing is worse than no
-                      control. */}
-                  {!isFirst && (
-                    <button
-                      type="button"
-                      aria-label={`Move ${name} up`}
-                      onClick={() => swap(index, index - 1)}
-                      className={MOVE_BUTTON_CLASSNAME}
-                    >
-                      Up
-                    </button>
-                  )}
-                  {!isLast && (
-                    <button
-                      type="button"
-                      aria-label={`Move ${name} down`}
-                      onClick={() => swap(index, index + 1)}
-                      className={MOVE_BUTTON_CLASSNAME}
-                    >
-                      Down
-                    </button>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  aria-label={`Remove ${name}`}
-                  onClick={() => onRemove(index)}
-                  className={REMOVE_BUTTON_CLASSNAME}
-                >
-                  Remove
-                </button>
-              </div>
-              <div data-testid="post-form">
-                <RecordForm<PostMeta>
-                  fields={POST_FIELDS}
-                  index={index}
-                  value={metaOf(post)}
-                  onChange={(next) => onChange(index, { ...next, blocks: blocksOf(post) })}
-                  problems={metaProblems.filter((p) => arrayIndexOf(p.field) === index)}
-                  onStaged={(fieldKey, staged) => onStaged(`${post.id}:${fieldKey}`, staged)}
-                  previews={previews}
-                  previewKeyPrefix={`posts.json:${post.id}`}
-                  scope="posts"
-                />
-              </div>
-              <BlockList
-                blocks={blocksOf(post)}
-                postIndex={index}
-                onChange={(nextBlocks) => onChange(index, { ...metaOf(post), blocks: nextBlocks })}
-                problems={problems}
-                previews={previews}
-                onStaged={(key, staged) => onStaged(`${post.id}:${key}`, staged)}
-                previewKeyPrefix={`posts.json:${post.id}`}
-              />
-            </li>
-          );
-        })}
-      </ul>
+      <ItemList
+        rows={rows}
+        onOpen={setOpenId}
+        onMove={(from, to) => onReorder(moveTo(items, from, to).map((item) => item.id))}
+        onAdd={() => setOpenId(onAdd())}
+        addLabel="Add a post"
+      />
 
-      {/* `() => onAdd()`, not `onAdd` -- onClick would forward the DOM
-          MouseEvent as the first argument, which does not match this
-          component's own no-argument contract. RecordList documents the
-          same trap. */}
-      <button type="button" onClick={() => onAdd()} className={ADD_BUTTON_CLASSNAME}>
-        Add a post
-      </button>
+      {open !== undefined && (
+        <EditorSheet
+          title={open.title || 'Untitled post'}
+          onClose={() => setOpenId(null)}
+          onDelete={() => {
+            onRemove(openIndex);
+            setOpenId(null);
+          }}
+          deleteLabel={`Delete ${open.title || 'Untitled post'}`}
+        >
+          <div data-testid="post-form">
+            <RecordForm<PostMeta>
+              fields={POST_FIELDS}
+              index={openIndex}
+              value={metaOf(open)}
+              onChange={(next) => onChange(openIndex, { ...next, blocks: blocksOf(open) })}
+              problems={shown.filter((p) => !isBlockProblem(p.field))}
+              onStaged={(fieldKey, staged) => onStaged(`${open.id}:${fieldKey}`, staged)}
+              previews={previews}
+              previewKeyPrefix={`posts.json:${open.id}`}
+              scope="posts"
+            />
+          </div>
+          <BlockList
+            blocks={blocksOf(open)}
+            postIndex={openIndex}
+            onChange={(nextBlocks) => onChange(openIndex, { ...metaOf(open), blocks: nextBlocks })}
+            problems={shown}
+            previews={previews}
+            onStaged={(key, staged) => onStaged(`${open.id}:${key}`, staged)}
+            previewKeyPrefix={`posts.json:${open.id}`}
+            names={namesFor(open.id)}
+          />
+        </EditorSheet>
+      )}
     </div>
   );
 }

@@ -55,21 +55,46 @@ async function openPostsPanel(page: Page): Promise<Locator> {
   return panel;
 }
 
-// The post this spec added: the last one on the panel, found by the marker
-// PostList puts on each post's own form. Scoped rather than global because the
-// three posts from the real file have blocks of their own, each with its own
-// handle and its own Up/Down buttons.
+// The post this spec added: not an `<li>` any more (Task 7 -- the post form
+// and BlockList are no longer inline in the panel's own list; they live
+// inside EditorSheet's dialog, mounted only once a row is opened), so this
+// counts `[data-item-row]` -- one per post, always in the list -- rather
+// than `li:has([data-testid="post-form"])`, which now exists on at most ONE
+// mounted form at a time and so can no longer tell "how many posts exist"
+// from "is one open".
+//
+// This is deliberately the ONE place in this file that opens a row.
+// EditorSheet is `fixed inset-0` (D1 -- not portalled, so the publish-pause
+// fieldset still reaches it, but that also means its backdrop covers the
+// WHOLE panel, "Add a post" included) and only one editor is ever open at
+// once, so `openPostsPanel` itself must NOT open a row: doing that would
+// leave the button this function clicks unreachable behind whichever post's
+// dialog it opened, for every single caller of this helper -- every one of
+// which calls this function immediately afterwards.
 async function addPost(panel: Locator): Promise<Locator> {
-  const before = await panel.locator('li:has([data-testid="post-form"])').count();
+  const before = await panel.locator('[data-item-row]').count();
   await panel.getByRole('button', { name: 'Add a post' }).click();
-  const posts = panel.locator('li:has([data-testid="post-form"])');
-  await expect(posts).toHaveCount(before + 1);
-  return posts.last();
+  const rows = panel.locator('[data-item-row]');
+  await expect(rows).toHaveCount(before + 1);
+  // The LAST row, always: this is the post PostList's own `onAdd` just
+  // opened the list to (RecordList's own Add-opens-the-editor contract), and
+  // it is what every caller of this helper wants blocks added to. Never the
+  // FIRST row -- that would open whichever of the three real committed
+  // posts happens to sort first, not the blank one this call just created.
+  await rows.last().click();
+  const dialog = panel.locator('[role="dialog"]');
+  await dialog.waitFor();
+  return dialog;
 }
 
 // Each block's kind, read off the strip the handle sits in. The ORDER is the
 // subject, so reading the kinds is enough and typing into three textareas would
 // prove less.
+//
+// `post` is the dialog itself (`addPost`'s own return value), so a plain
+// descendant search is already scoped to the one open post's own blocks --
+// there is only ever one dialog on screen at a time (D4: one editor open),
+// so this needs no `[role="dialog"]` prefix of its own on top of that scope.
 async function kindsOf(post: Locator): Promise<string[]> {
   return post
     .locator('[data-drag-handle]')

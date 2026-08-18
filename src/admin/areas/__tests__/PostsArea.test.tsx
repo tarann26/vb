@@ -99,10 +99,15 @@ async function openPostsPanel(): Promise<HTMLElement> {
 
 describe('the Posts panel', () => {
   it('renders every committed post it is given', async () => {
+    const user = userEvent.setup();
     stubFetchWithPosts(FIXTURE_POSTS);
     renderDashboard('/edit/manage/story');
 
     const panel = await openPostsPanel();
+    // Fields mount only while their own post's row is open (Task 7) -- so
+    // the row itself is asserted first, and then its editor is opened
+    // before either scalar field can be queried at all.
+    await user.click(await within(panel).findByRole('button', { name: 'A fixture post' }));
     expect(await within(panel).findByDisplayValue('A fixture post')).toBeInTheDocument();
     expect(within(panel).getByDisplayValue('a-fixture-post')).toBeInTheDocument();
   });
@@ -112,10 +117,12 @@ describe('the Posts panel', () => {
   // ~1200-element shell, which is the cheap-then-assert-once pattern this
   // project's own AdminApp timeout finding mandates.
   it('renders the blocks of a committed post, in her words', async () => {
+    const user = userEvent.setup();
     stubFetchWithPosts(FIXTURE_POSTS);
     renderDashboard('/edit/manage/story');
 
     const panel = await openPostsPanel();
+    await user.click(await within(panel).findByRole('button', { name: 'A fixture post' }));
     expect(await within(panel).findByDisplayValue('A fixture paragraph.')).toBeInTheDocument();
     // The strip over the block, which is the only thing on screen that tells
     // her what kind of block she is looking at.

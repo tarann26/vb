@@ -1873,6 +1873,8 @@ describe('AdminApp: a photo picked for one block, and then that block moved', ()
     renderDashboard('/edit/manage/story');
 
     const section = await openPostsPanel(user);
+    // Fields mount only while their own post's row is open (Task 7).
+    await user.click(within(section).getByRole('button', { name: 'The tielle' }));
 
     // Each block found by the description SHE typed into it, never by
     // position -- position is the thing under test, so a query that used one
@@ -1936,6 +1938,101 @@ describe('AdminApp: a photo picked for one block, and then that block moved', ()
     // occupy -- while posts.json above went on naming it. Asserted as the
     // whole set rather than two `toContain`s, so a THIRD, orphaned copy staged
     // under a name nothing refers to would fail here too.
+    expect(sent.filter((f) => f.path.startsWith('assets-source/')).map((f) => f.path).sort()).toEqual([
+      'assets-source/posts/oven.jpg',
+      'assets-source/posts/tielle.jpg',
+    ]);
+  });
+
+  // Task 7's own risk, named directly in its brief: BlockList now mounts only
+  // while its post's editor is open (D4), and its stable-names WeakMap lives
+  // in a `useRef` -- torn down on every unmount. The case above proves the
+  // reorder-eviction defect stays fixed while the editor stays open; this one
+  // proves it ALSO stays fixed across the editor closing and reopening, which
+  // is the new way the same WeakMap can be discarded. Without PostList's own
+  // per-post-id `StableNames` (kept alive above BlockList, in
+  // `blocks/stable-names.ts`'s `createStableNames`), reopening reassigns
+  // every block a name by its CURRENT position, and a second pick on a block
+  // that happens to land on a reused name overwrites -- deletes -- whatever
+  // the first pick staged under it. Same failure, one level up from a reorder.
+  it('a staged photo survives the editor closing and reopening, and a second pick elsewhere does not delete it', async () => {
+    const publishBodies = stubFetchCapturingPublish(POST_WITH_TWO_PHOTOS);
+    const user = userEvent.setup();
+    renderDashboard('/edit/manage/story');
+
+    const section = await openPostsPanel(user);
+    await user.click(within(section).getByRole('button', { name: 'The tielle' }));
+
+    const blockOf = (description: string): HTMLElement => {
+      const input = [...section.querySelectorAll<HTMLInputElement>('input')].find(
+        (candidate) => candidate.value === description,
+      );
+      expect(input, `no field on this panel holds "${description}"`).toBeDefined();
+      return (input as HTMLInputElement).closest('li') as HTMLElement;
+    };
+
+    async function pickPhotoIn(block: HTMLElement, file: string, contentPath: string): Promise<void> {
+      const before = FakeXHR.instances.length;
+      const picker = block.querySelector('input[type="file"]') as HTMLInputElement;
+      await user.upload(picker, jpegFile(file));
+      await waitFor(() => expect(FakeXHR.instances).toHaveLength(before + 1));
+      FakeXHR.instances[before].respond(200, { path: `assets-source/posts/${file}`, contentPath });
+      await waitFor(() => expect(within(block).getByText(/Uploaded/)).toBeInTheDocument());
+    }
+
+    // A photo for the tielle, the first block.
+    await pickPhotoIn(blockOf('The tielle, sliced'), 'tielle.jpg', '/posts/tielle.webp');
+    // Reorder while the editor is still open, same as the case above.
+    await user.click(within(section).getByRole('button', { name: 'Move Photo block 1 down' }));
+
+    // Close the editor entirely, then reopen the SAME post -- this is what
+    // unmounts and remounts BlockList, discarding a plain
+    // `useStableNames`-only WeakMap.
+    await user.click(within(section).getByRole('button', { name: 'Done' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    await user.click(within(section).getByRole('button', { name: 'The tielle' }));
+
+    // What she would see: the tielle's own block, found by its own
+    // (unaffected) alt text, still shows the photo she picked for it --
+    // not a blank box, and not the oven's placeholder. Asserted on the real
+    // <img> src PhotoField renders, which is `value` (this block's own
+    // `src` field) once the field's own transient "Uploaded" status has
+    // reset on remount -- a fact about every photo field's own local state,
+    // not something this task changes. What THIS task has to keep true is
+    // that it is still the RIGHT path, on the RIGHT block.
+    // `getByRole('img')` would miss this -- an empty `alt=""` (PhotoField's
+    // own preview, decorative by design) makes it presentational rather
+    // than an accessible image, so the element is found directly instead.
+    const tielleBlockAfterReopen = blockOf('The tielle, sliced');
+    const tielleImg = tielleBlockAfterReopen.querySelector('img');
+    expect(tielleImg, 'no preview image rendered on the tielle block after reopening').not.toBeNull();
+    expect((tielleImg as HTMLImageElement).src).toContain('/posts/tielle.webp');
+
+    // Now the second pick, on the OTHER block -- the exact shape that used
+    // to delete the first pick's bytes when the key was positional. If
+    // reopening reassigned names by current position, this pick's key would
+    // collide with the tielle's own (renamed) key and silently overwrite it.
+    await pickPhotoIn(blockOf('The bread oven'), 'oven.jpg', '/posts/oven.webp');
+
+    await user.click(screen.getByRole('button', { name: 'Publish' }));
+    await user.click(screen.getByRole('button', { name: 'Yes, publish to the live site' }));
+    await waitFor(() => expect(publishBodies).toHaveLength(1));
+
+    const sent = publishBodies[0].files;
+    const postsFile = sent.find((f) => f.path === 'src/content/posts.json');
+    expect(postsFile).toBeDefined();
+    const publishedBlocks = (JSON.parse(postsFile!.content) as Post[])[0].blocks as unknown as {
+      alt: string;
+      src: string;
+    }[];
+    expect(publishedBlocks.map((block) => [block.alt, block.src])).toEqual([
+      ['The bread oven', '/posts/oven.webp'],
+      ['The tielle, sliced', '/posts/tielle.webp'],
+    ]);
+
+    // The bytes for BOTH photos, in the publish REQUEST itself -- not just
+    // in posts.json's own text. This is what the first pick's bytes being
+    // silently deleted from the collector would fail.
     expect(sent.filter((f) => f.path.startsWith('assets-source/')).map((f) => f.path).sort()).toEqual([
       'assets-source/posts/oven.jpg',
       'assets-source/posts/tielle.jpg',
@@ -2046,6 +2143,8 @@ describe('a draft saved before the block editor existed', () => {
     await user.click(await screen.findByRole('button', { name: /^Restore/ }));
     await postsPanelSettled();
     const panel = await openPostsPanel(user);
+    // Fields mount only while their own post's row is open (Task 7).
+    await user.click(within(panel).getByRole('button', { name: /^Another stale post/ }));
 
     // The block's own field carries the block's own problem, by
     // aria-describedby -- the association she actually depends on, not merely
@@ -2066,6 +2165,8 @@ describe('a draft saved before the block editor existed', () => {
     await user.click(await screen.findByRole('button', { name: /^Restore/ }));
     await postsPanelSettled();
     const panel = await openPostsPanel(user);
+    // Fields mount only while their own post's row is open (Task 7).
+    await user.click(within(panel).getByRole('button', { name: /^Another stale post/ }));
 
     // The problem is on screen BEFORE she fixes it, and this is not
     // scene-setting: a wait for a message to go away is satisfied by a message

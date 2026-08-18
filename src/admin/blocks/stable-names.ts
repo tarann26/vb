@@ -46,27 +46,31 @@ function asKey(item: unknown): object | undefined {
   return item !== null && typeof item === 'object' ? (item as object) : undefined;
 }
 
-// `prefix` only makes a staged-file key readable when somebody dumps the
-// collector ('b' for a block, 'g' for a gallery photo). Nothing reads it back:
-// staged.ts stores whatever string it is handed and never parses one.
-export function useStableNames(prefix: string): StableNames {
-  // Lazily, and not `useRef(new WeakMap())`: the argument form constructs a
-  // WeakMap on EVERY render and throws it away on all but the first. Both
-  // assignments below happen during render, which is safe here in a way it
-  // usually is not -- they are memoisation keyed on object identity, so
-  // StrictMode's second pass finds what the first put there and returns the
-  // same answer.
-  const namesRef = useRef<WeakMap<object, string>>();
-  const countRef = useRef(0);
-  const names = namesRef.current ?? (namesRef.current = new WeakMap<object, string>());
+// The non-hook core, extracted for Task 7's own PostList: BlockList's
+// WeakMap lives in a `useRef`, which is torn down the instant the component
+// UNMOUNTS -- and moving the block editor inside EditorSheet means it now
+// does exactly that every time she closes the post's editor and opens it
+// again. Reopening the SAME post then re-ran every block through a FRESH,
+// empty WeakMap, handing out names by current array position
+// (`nameOf`'s own fallback for an item it has never seen) rather than by the
+// identity a photo was staged under -- the reorder-eviction defect this
+// whole module exists to rule out, reappearing one level up, on a remount
+// instead of a reorder. `createStableNames` is the same logic with the
+// storage handed in by the caller instead of owned by the hook, so PostList
+// can keep one instance PER POST ID in a `useRef` of its own (a container
+// that does NOT unmount when that post's editor closes) and pass it down to
+// BlockList, which otherwise behaves exactly as it did before this existed.
+export function createStableNames(prefix: string): StableNames {
+  const names = new WeakMap<object, string>();
+  let count = 0;
 
   const nameOf = (item: unknown, index: number): string => {
     const key = asKey(item);
     if (key === undefined) return `at-${index}`;
     const existing = names.get(key);
     if (existing !== undefined) return existing;
-    countRef.current += 1;
-    const fresh = `${prefix}${countRef.current}`;
+    count += 1;
+    const fresh = `${prefix}${count}`;
     names.set(key, fresh);
     return fresh;
   };
@@ -78,4 +82,19 @@ export function useStableNames(prefix: string): StableNames {
       if (key !== undefined) names.set(key, nameOf(from, index));
     },
   };
+}
+
+// `prefix` only makes a staged-file key readable when somebody dumps the
+// collector ('b' for a block, 'g' for a gallery photo). Nothing reads it back:
+// staged.ts stores whatever string it is handed and never parses one.
+export function useStableNames(prefix: string): StableNames {
+  // Lazily, and not `useRef(createStableNames(prefix))`: the argument form
+  // constructs one on EVERY render and throws it away on all but the first.
+  // The assignment below happens during render, which is safe here in a way
+  // it usually is not -- it is memoisation keyed on object identity, so
+  // StrictMode's second pass finds what the first put there and returns the
+  // same answer.
+  const ref = useRef<StableNames>();
+  if (ref.current === undefined) ref.current = createStableNames(prefix);
+  return ref.current;
 }

@@ -13,7 +13,7 @@ import BlockProblemMessage from './BlockProblemMessage';
 import { blankBlock } from './blank-block';
 import { blockProblemOf, type BlockProblemTarget } from './block-problems';
 import { moveTo, swapAt } from './reorder';
-import { useStableNames } from './stable-names';
+import { useStableNames, type StableNames } from './stable-names';
 import { BLOCK_KIND_LABELS, UNKNOWN_BLOCK_LABEL, UNKNOWN_BLOCK_MESSAGE } from './block-meta';
 import { MOVE_BUTTON_CLASSNAME, REMOVE_BUTTON_CLASSNAME } from '../RecordList';
 import { DRAGGING_STYLE, HANDLE_CLASSNAME, HANDLE_STYLE } from '../manage/drag-row';
@@ -34,6 +34,15 @@ export interface BlockListProps {
   previews: ImagePreviews;
   onStaged: (key: string, staged: StagedPhoto | null) => void;
   previewKeyPrefix: string;
+  // Task 7's own fix, and optional so every other caller (today, only
+  // PostList) is unaffected: a caller that owns storage which survives this
+  // component's own unmount (PostList keeps one `StableNames` per post id in
+  // a ref that outlives the post's EditorSheet closing) hands it in here
+  // instead of letting this component mint a fresh, empty one on every
+  // remount. See stable-names.ts's own comment on `createStableNames` for
+  // why a remount is now a real event this component has to survive, not
+  // just a reorder.
+  names?: StableNames;
 }
 
 interface PlacedProblem {
@@ -95,12 +104,18 @@ export default function BlockList({
   previews,
   onStaged,
   previewKeyPrefix,
+  names,
 }: BlockListProps) {
   // One name per block that survives the block being moved -- stable-names.ts
   // says what that is for and why a block cannot simply carry an id. The
   // gallery photos inside one block use the same hook one level down
   // (BlockFields), because Remove shifts their positions the same way.
-  const { nameOf, rename } = useStableNames('b');
+  //
+  // Always called, never conditionally, so this satisfies the rules of
+  // hooks regardless of whether `names` is supplied -- and its result is
+  // simply ignored when a caller hands in its own longer-lived storage.
+  const ownNames = useStableNames('b');
+  const { nameOf, rename } = names ?? ownNames;
 
   // A draft saved before this feature restores with no `blocks` key at all
   // (registerLoaded's unchecked cast), and the only error boundary between

@@ -117,7 +117,11 @@ function PostsSection({
         const byId = new Map(items.map((item) => [item.id, item]));
         commit(ids.map((id) => byId.get(id) as Post));
       }}
-      onAdd={() => commit([...items, blankPost()])}
+      onAdd={() => {
+        const blank = blankPost();
+        commit([...items, blank]);
+        return blank.id;
+      }}
       onRemove={(index) => commit(items.filter((_, i) => i !== index))}
       problems={problems}
       onStaged={(key, staged) => stage(`posts.json:${key}`, fromStagedPhoto(staged))}
