@@ -293,8 +293,8 @@ function stripKnownSubdomain(host: string): string {
 //
 // `selfHost` is THE INCOMING REQUEST'S OWN HOST, passed in by the handler --
 // not a [vars] entry and not site.json's seo.url. This Worker is routed on
-// vb.aionxxxi.uk today and will be routed on viabiancadelhi.com after the
-// move; reading it from the request means the rule follows the domain with
+// viabiancarestaurant.com now that vb.aionxxxi.uk's zone has been deleted;
+// reading it from the request means the rule follows the domain with
 // nothing to remember to change, and on a preview deploy that preview's own
 // host correctly IS self-referral.
 //

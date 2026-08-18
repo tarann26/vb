@@ -8,10 +8,9 @@ import { readFileSync } from 'node:fs';
 // response, so a hand-placed one would double-count every visit.
 //
 // That was a correct reading of what auto-install is documented to do, and
-// it is not what happens here. Auto-install is on for this site (site_tag
-// 29e1ba52fba74885a5fc44875a48a078, bound to the aionxxxi.uk zone) and the
-// beacon never appeared in the HTML: three cache-busted requests to the live
-// site came back with no beacon in the response, and the
+// it is not what happens here. Auto-install was on for this site's old host
+// and the beacon never appeared in the HTML: three cache-busted requests to
+// the live site came back with no beacon in the response, and the
 // rumPageloadEventsAdaptiveGroups dataset was empty. Cloudflare's HTML
 // injection runs on responses the ZONE serves and is not applied to
 // responses served by Pages -- which, on this site, is all of them. The old
@@ -21,12 +20,20 @@ import { readFileSync } from 'node:fs';
 // deleted test leaves this finding written down nowhere and leaves the tag
 // itself unguarded.
 //
+// The token below is for the Web Analytics site created fresh for
+// viabiancarestaurant.com (JS-snippet installation). It replaces two older
+// tokens that both named the now-deleted vb.aionxxxi.uk zone and disagreed
+// with each other -- this file's beacon wrote to one, wrangler.toml's
+// CF_WEB_ANALYTICS_SITE_TAG read the other -- so naming the same token in
+// both places resets the owner's visible history back to zero, which is the
+// accepted cost of the two finally agreeing.
+//
 // The pin is a COUNT, not a presence check. The failure this file exists to
 // prevent has not gone away, it has only moved: turning auto-install back on
 // in the dashboard, or pasting the snippet a second time, puts two beacons
 // on the page and doubles every number on the Numbers screen. A presence
 // check passes happily in both of those states.
-const BEACON_TOKEN = '7d977bcbda6e4e38884875918d153e7f';
+const BEACON_TOKEN = 'de70f41296fe4d6486dbad51f983220f';
 const BEACON_HOST = 'https://static.cloudflareinsights.com';
 
 // Comments stripped first, and this is load-bearing rather than tidiness:

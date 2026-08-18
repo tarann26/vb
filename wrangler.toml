@@ -77,13 +77,16 @@ CLOUDFLARE_PAGES_PROJECT = "vb"
 # return anything (worker/analytics.ts's PagesEnv/WebAnalyticsEnv split owns
 # this shape).
 #
-# NOT a placeholder, unlike the two above were: this value was read off the
-# live Cloudflare dashboard and is the same tag the beacon snippet in
-# index.html carries. It is bound to the ZONE aionxxxi.uk today, and putting
-# it here as well as in the HTML is what lets the data survive the eventual
-# move to viabiancadelhi.com -- the tag travels with the repo rather than
-# with the zone.
-CF_WEB_ANALYTICS_SITE_TAG = "29e1ba52fba74885a5fc44875a48a078"
+# NOT a placeholder: this value was read off the live Cloudflare dashboard,
+# from the Web Analytics site created fresh for viabiancarestaurant.com, and
+# it is the same tag the beacon snippet in index.html carries. It replaces a
+# tag that named the old vb.aionxxxi.uk zone, now deleted, and that
+# disagreed with the token index.html's beacon actually wrote to -- this
+# line is what GET /api/analytics reads, so the two naming different
+# datasets meant the owner's NUMBERS panel never matched what was being
+# recorded. Naming the same token in both places fixes that; the cost is
+# that the panel starts over at zero and fills in from here.
+CF_WEB_ANALYTICS_SITE_TAG = "de70f41296fe4d6486dbad51f983220f"
 
 # The eventual switch. UNSET (or "github") is the default and means every
 # content file that exists today is read from and written to GitHub, exactly

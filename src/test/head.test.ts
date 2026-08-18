@@ -117,7 +117,7 @@ it('points every icon link at a file that exists, with exact case', () => {
 it('still carries the Cloudflare Web Analytics beacon with this site\'s token', () => {
   const markup = readFileSync('index.html', 'utf8').replace(/<!--[\s\S]*?-->/g, '');
   expect(markup).toMatch(
-    /<script[^>]*src="https:\/\/static\.cloudflareinsights\.com\/beacon\.min\.js"[^>]*data-cf-beacon='\{"token": "7d977bcbda6e4e38884875918d153e7f"\}'/,
+    /<script[^>]*src="https:\/\/static\.cloudflareinsights\.com\/beacon\.min\.js"[^>]*data-cf-beacon='\{"token": "de70f41296fe4d6486dbad51f983220f"\}'/,
   );
 });
 
