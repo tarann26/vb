@@ -20,7 +20,7 @@
 // caret-restoration problem: InlineTextField.tsx's pendingSelection/forValue
 // round trip exists because a controlled textarea is rewritten on every
 // commit. Nothing here is rewritten while she is in it.
-import { createElement, Fragment, useLayoutEffect, useRef, useState, type Attributes, type HTMLAttributes, type KeyboardEvent, type ReactNode } from 'react';
+import { createElement, Fragment, useLayoutEffect, useRef, useState, type Attributes, type HTMLAttributes, type ClipboardEvent, type KeyboardEvent, type ReactNode } from 'react';
 import { blockProblemOf, type BlockProblemTarget } from '../blocks/block-problems';
 import { linkRefusal, TARGET_SHAPES } from '../blocks/link-target';
 import { useStableNames, type StableNames } from '../blocks/stable-names';
@@ -29,6 +29,7 @@ import { writeInline } from './inline-dom';
 import { slotsOf, withSlot, type Slot } from './slots';
 import { backspaceAtStart, enterAt, type Caret, type Edit } from './structure';
 import { autoformat, revertFormat } from './autoformat';
+import { pasteChunks } from './paste';
 import { EMPTY_HISTORY, record, redo, undo, type History, type Snapshot } from './history';
 import { clearMarks, insertLink, LINK_PLACEHOLDER, marksSurviveSave, selectedWords, toggleMark, type Mark } from './marks';
 import WritingToolbar, { type ToolbarKind } from './WritingToolbar';
@@ -235,6 +236,20 @@ function sourceAroundCaret(el: HTMLElement): { before: string; after: string; co
   };
 }
 
+// A copy with new blocks standing directly after `index`. `slice()` first, so
+// every entry this does not name comes out the far side as the IDENTICAL
+// object it went in as -- structure.ts's own `splice` rule, kept here for the
+// same reason it is kept there: an array rebuilt entry by entry would detach
+// every staged photograph in it at once.
+//
+// `-1` puts them at the front, which is the only thing an insert can mean
+// when the array is empty or when she has not stood in a block yet.
+function insertAfter(blocks: Block[], index: number, extra: Block[]): Block[] {
+  const next = blocks.slice();
+  next.splice(index + 1, 0, ...extra);
+  return next;
+}
+
 type HostProps = HTMLAttributes<HTMLElement> & Attributes & Record<string, unknown>;
 
 export default function WritingSurface({ blocks, postIndex, onChange, problems, names }: WritingSurfaceProps) {
@@ -248,6 +263,29 @@ export default function WritingSurface({ blocks, postIndex, onChange, problems, 
   // and the nearest error boundary is per-SECTION, so an unguarded read takes
   // the whole Posts panel down -- the Phase 4 defect verbatim.
   const safe = Array.isArray(blocks) ? blocks : [];
+
+  // The array as most recently handed UP, which is not always `safe`, because
+  // one gesture can produce two of them. A paste commits the words that went
+  // into the host she is standing in and THEN adds the paragraphs after it,
+  // and React has not re-rendered in between -- so the second call has to
+  // build on the first one's result. Built on `safe` instead it would hand up
+  // an array that never saw the commit, and the first pasted paragraph would
+  // vanish the moment the rest of it arrived.
+  //
+  // Assigned during render, which is safe here for the reason
+  // stable-names.ts:97 gives about its own render-time write: the value being
+  // stored is derived from this render's own props, so StrictMode's second
+  // pass stores the same thing the first did.
+  const latest = useRef<Block[]>(safe);
+  latest.current = safe;
+
+  // Every hand-up goes through here, and none of them calls `onChange`
+  // directly -- a call that skipped this would leave `latest` naming an array
+  // one edit out of date for whatever came next in the same gesture.
+  function emit(next: Block[]): void {
+    latest.current = next;
+    onChange(next);
+  }
 
   const rootRef = useRef<HTMLDivElement | null>(null);
   const focusedRef = useRef<string | null>(null);
@@ -431,7 +469,64 @@ export default function WritingSurface({ blocks, postIndex, onChange, problems, 
     // already written and the layout effect leaves the host alone even in the
     // instant between a blur and the re-render.
     written.current.set(el, source);
-    onChange(safe.map((existing, i) => (i === index ? next : existing)));
+    emit(safe.map((existing, i) => (i === index ? next : existing)));
+  }
+
+  // PASTE, and the whole of "paste strips formatting" is the second line of
+  // it: `text/plain` is the only flavour ever asked for, so no foreign font,
+  // no bold run and no `<br>` from the source page is ever in this tree to be
+  // cleaned up afterwards. EditableText.tsx:185-208 makes the same call one
+  // level down and states why cleaning up afterwards is not the same thing.
+  //
+  // The clipboard text goes in as a TEXT NODE, which is what keeps `**` two
+  // literal asterisks: `commitSlot` reads the tree back through readInline and
+  // writes it with serializeInline, and serializeInline escapes them. Pasting
+  // the SOURCE of a markdown document gives her the characters she can see
+  // rather than accidental formatting -- writing the same string in as
+  // markdown would silently turn her quoted asterisks into bold.
+  function handlePaste(row: Row, slot: Slot, event: ClipboardEvent<HTMLElement>): void {
+    const el = event.currentTarget;
+    // Suppressed whatever happens next, including for an empty clipboard: the
+    // browser's own paste is the thing being replaced, and letting it run for
+    // the one case this returns early on would insert rich markup exactly
+    // when nothing else was going to.
+    event.preventDefault();
+    const chunks = pasteChunks(event.clipboardData.getData('text/plain'));
+    if (chunks.length === 0) return;
+    const selection = el.ownerDocument.getSelection();
+    if (selection === null || selection.rangeCount === 0) return;
+    const range = selection.getRangeAt(0);
+    if (!el.contains(range.startContainer)) return;
+    range.deleteContents();
+    const node = el.ownerDocument.createTextNode(chunks[0]);
+    range.insertNode(node);
+    range.setStartAfter(node);
+    range.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(range);
+    // Structural: a paste is a step she will reach for an undo after, and it
+    // must never be folded into the run of typing either side of it.
+    commitSlot(row.index, slot.key, el, true);
+    if (chunks.length === 1) return;
+    const extra: Block[] = chunks.slice(1).map((chunk) => ({ kind: 'paragraph', text: chunk }));
+    // `latest` and not `safe`: commitSlot has ALREADY handed one array up and
+    // React has not re-rendered, so building on `safe` would hand up a second
+    // array that never saw the first paragraph's words.
+    //
+    // Every pasted paragraph is genuinely new, so none of them earns a rename
+    // -- structure.ts's rule for what does is "an old object leaves the array
+    // and exactly one new object stands in its place", and nothing left.
+    focusedRef.current = null;
+    pendingCaret.current = {
+      // The END of the last paragraph she pasted, because that is where she
+      // was left in the document she copied it out of. Without it the caret
+      // stays in the first chunk and everything she types next lands ABOVE
+      // the rest of her own paste.
+      blockIndex: row.index + extra.length,
+      slotKey: 'text',
+      offset: 'end',
+    };
+    emit(insertAfter(latest.current, row.index, extra));
   }
 
   // One structural edit, applied in the order the WeakMap requires: every
@@ -453,7 +548,7 @@ export default function WritingSurface({ blocks, postIndex, onChange, problems, 
     // says belongs to the block beneath it.
     focusedRef.current = null;
     pendingCaret.current = edit.caret;
-    onChange(edit.blocks);
+    emit(edit.blocks);
   }
 
   // One step back, or one step forward. NOTHING IS RENAMED HERE and that is
@@ -471,7 +566,7 @@ export default function WritingSurface({ blocks, postIndex, onChange, problems, 
     // asked to remove.
     focusedRef.current = null;
     pendingCaret.current = step.restored.caret;
-    onChange(step.restored.blocks);
+    emit(step.restored.blocks);
   }
 
   function undoStep(): void {
@@ -712,6 +807,7 @@ export default function WritingSurface({ blocks, postIndex, onChange, problems, 
       'aria-describedby': problemsOf(row, slot.key).length > 0 ? `${id}-error` : undefined,
       onInput: (event) => commitSlot(row.index, slot.key, event.currentTarget as HTMLElement),
       onKeyDown: (event) => onKey(row, slot, event),
+      onPaste: (event) => handlePaste(row, slot, event),
       onFocus: () => {
         focusedRef.current = address;
         active.current = address;

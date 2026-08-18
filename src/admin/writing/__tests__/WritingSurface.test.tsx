@@ -1245,3 +1245,164 @@ describe('the shortcuts', () => {
     expect((spy.mock.calls[0][0] as Block[])[0]).toEqual({ kind: 'paragraph', text: 'a**bc**d' });
   });
 });
+
+// A clipboard, spelled the way RTL spells one: jsdom has no DataTransfer, so
+// `clipboardData` is an object with the one method the surface is allowed to
+// call. That is exactly what makes the first case below a real claim -- a
+// handler reaching for `text/html` would be asking this object for something
+// the test can see it ask for.
+function pastes(host: HTMLElement, text: string): { prevented: boolean; getData: ReturnType<typeof vi.fn> } {
+  const getData = vi.fn((type: string) => (type === 'text/plain' ? text : '<b>rich</b>'));
+  const prevented = fireEvent.paste(host, { clipboardData: { getData } }) === false;
+  return { prevented, getData };
+}
+
+describe('paste', () => {
+  it('never asks the clipboard for its rich flavour', () => {
+    const view = surface({ blocks: [{ kind: 'paragraph', text: '' }] });
+    const host = view.hosts()[0];
+    fireEvent.focus(host);
+    caretAt(host, 0);
+    const { getData } = pastes(host, 'pasted');
+    expect(getData).toHaveBeenCalledWith('text/plain');
+    expect(getData).not.toHaveBeenCalledWith('text/html');
+  });
+
+  // Directly observable, and the plan predicted it would not be: `fireEvent`
+  // returns false when the default was prevented, the same discovery Tasks
+  // 18-19 made for Enter. What the suppression BUYS -- that a real browser
+  // would otherwise have dropped the source page's own markup into the host --
+  // is still browser-only and is deferred to e2e/writing-surface.spec.ts.
+  it('suppresses the browser own paste, including for a clipboard of only spaces', () => {
+    const view = surface({ blocks: [{ kind: 'paragraph', text: '' }] });
+    const host = view.hosts()[0];
+    fireEvent.focus(host);
+    caretAt(host, 0);
+    expect(pastes(host, 'words').prevented).toBe(true);
+    expect(pastes(host, '   ').prevented).toBe(true);
+  });
+
+  // The clipboard text goes in as a TEXT NODE, so the surface never reads it
+  // as markdown: pasting the source of a markdown document gives her the
+  // characters she can see. Writing the same string in through writeInline
+  // instead would turn her quoted asterisks into a bold run she never asked
+  // for, and this is the case that says so.
+  it('pasted asterisks stay characters', () => {
+    const spy = vi.fn();
+    const view = render(<Harness initial={[{ kind: 'paragraph', text: '' }]} spy={spy} />);
+    const host = view.container.querySelector<HTMLElement>('[data-slot]') as HTMLElement;
+    fireEvent.focus(host);
+    caretAt(host, 0);
+    pastes(host, 'a **b** c');
+    expect((spy.mock.calls[0][0] as Block[])[0]).toEqual({ kind: 'paragraph', text: 'a \\*\\*b\\*\\* c' });
+  });
+
+  it('a blank line becomes a second paragraph, standing after the one she was in', () => {
+    const spy = vi.fn();
+    const view = render(
+      <Harness initial={[{ kind: 'paragraph', text: 'x' }, { kind: 'paragraph', text: 'tail' }]} spy={spy} />,
+    );
+    const host = view.container.querySelector<HTMLElement>('[data-slot]') as HTMLElement;
+    fireEvent.focus(host);
+    caretAt(host, 1);
+    pastes(host, 'one\n\ntwo\n\nthree');
+    // The LAST array handed up is the whole paste: the words that went into
+    // the host she was standing in, then the rest of it after her, then the
+    // block that was already below.
+    const last = spy.mock.calls[spy.mock.calls.length - 1][0] as Block[];
+    expect(last).toEqual([
+      { kind: 'paragraph', text: 'xone' },
+      { kind: 'paragraph', text: 'two' },
+      { kind: 'paragraph', text: 'three' },
+      { kind: 'paragraph', text: 'tail' },
+    ]);
+  });
+
+  // Two onChange calls in one gesture, and the second one has to build on the
+  // first. Built on the array this render closed over instead, the words that
+  // went into her own host are handed back up unchanged and the first pasted
+  // paragraph disappears the instant the rest of it arrives.
+  it('does not discard the words it put in her own host when the rest arrives', () => {
+    const spy = vi.fn();
+    const view = render(<Harness initial={[{ kind: 'paragraph', text: '' }]} spy={spy} />);
+    const host = view.container.querySelector<HTMLElement>('[data-slot]') as HTMLElement;
+    fireEvent.focus(host);
+    caretAt(host, 0);
+    pastes(host, 'one\n\ntwo');
+    const last = spy.mock.calls[spy.mock.calls.length - 1][0] as Block[];
+    expect(last[0]).toEqual({ kind: 'paragraph', text: 'one' });
+  });
+
+  it('hands every block it did not touch back by IDENTITY', () => {
+    const spy = vi.fn();
+    const blocks: Block[] = [
+      { kind: 'paragraph', text: 'above' },
+      { kind: 'paragraph', text: '' },
+      { kind: 'image', src: '/x.webp', alt: 'x', caption: 'c' },
+    ];
+    const view = render(<Harness initial={blocks} spy={spy} />);
+    const host = view.container.querySelectorAll<HTMLElement>('[data-slot]')[1];
+    fireEvent.focus(host);
+    caretAt(host, 0);
+    pastes(host, 'one\n\ntwo');
+    const last = spy.mock.calls[spy.mock.calls.length - 1][0] as Block[];
+    expect(last[0]).toBe(blocks[0]);
+    expect(last[3]).toBe(blocks[2]);
+    expect(last[1]).not.toBe(blocks[1]);
+  });
+
+  // Where the caret is left is the difference between one paste and one paste
+  // followed by everything she types next landing in the middle of it.
+  it('leaves her at the end of the LAST paragraph she pasted', () => {
+    const spy = vi.fn();
+    const view = render(<Harness initial={[{ kind: 'paragraph', text: '' }]} spy={spy} />);
+    const host = view.container.querySelector<HTMLElement>('[data-slot]') as HTMLElement;
+    fireEvent.focus(host);
+    caretAt(host, 0);
+    pastes(host, 'one\n\ntwo\n\nthree');
+    expect(caretHost()?.textContent).toBe('three');
+  });
+
+  it('replaces the words she had selected rather than adding to them', () => {
+    const spy = vi.fn();
+    const view = render(<Harness initial={[{ kind: 'paragraph', text: 'abcd' }]} spy={spy} />);
+    const host = view.container.querySelector<HTMLElement>('[data-slot]') as HTMLElement;
+    fireEvent.focus(host);
+    selects(host, 1, 3);
+    pastes(host, 'X');
+    expect((spy.mock.calls[0][0] as Block[])[0]).toEqual({ kind: 'paragraph', text: 'aXd' });
+  });
+
+  // The same containment guard marks.ts carries, and for the same reason: the
+  // document holds ONE selection, and it need not be inside the host the event
+  // was dispatched on. Without this, a paste builds words into a block nobody
+  // asked about and nothing ever commits -- formatting the array has never
+  // heard of, until the next rewrite silently removes it.
+  it('does nothing when the selection is standing in a different block', () => {
+    const spy = vi.fn();
+    const view = render(
+      <Harness initial={[{ kind: 'paragraph', text: 'here' }, { kind: 'paragraph', text: 'there' }]} spy={spy} />,
+    );
+    const [first, second] = [...view.container.querySelectorAll<HTMLElement>('[data-slot]')];
+    fireEvent.focus(second);
+    caretAt(second, 0);
+    pastes(first, 'X');
+    expect(spy).not.toHaveBeenCalled();
+    expect(first.textContent).toBe('here');
+    expect(second.textContent).toBe('there');
+  });
+
+  it('a paste is one step back, never folded into the typing either side of it', () => {
+    const spy = vi.fn();
+    const view = render(<Harness initial={[{ kind: 'paragraph', text: '' }]} spy={spy} />);
+    const host = view.container.querySelector<HTMLElement>('[data-slot]') as HTMLElement;
+    fireEvent.focus(host);
+    types(host, 'typed');
+    caretAt(host, 5);
+    pastes(host, 'one\n\ntwo');
+    const back = view.container.querySelector<HTMLElement>('[data-slot]') as HTMLElement;
+    fireEvent.keyDown(back, { key: 'z', metaKey: true });
+    const last = spy.mock.calls[spy.mock.calls.length - 1][0] as Block[];
+    expect(last).toEqual([{ kind: 'paragraph', text: 'typed' }]);
+  });
+});
