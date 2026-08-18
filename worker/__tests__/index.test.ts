@@ -1057,6 +1057,31 @@ describe('the 6-hour idle window', () => {
   const IDLE = 6 * 60 * 60;
   const ABSOLUTE = 604_800;
 
+  // These cases drive `GET /api/content`, which reads through to GitHub --
+  // and until this stub existed, two of them did so against the REAL
+  // api.github.com on every run, because this describe sits outside the
+  // `describe('GET /api/content')` block that stubs `fetch`. They passed
+  // regardless: `handleGetContent` catches a failed read and answers 502,
+  // and these assertions are about the session cookie the ROUTER attaches,
+  // which is there either way. The cost was that each one took as long as a
+  // live internet round trip, so a slow DNS lookup or a throttled CI egress
+  // turned them into "Test timed out in 5000ms" -- twice failing a
+  // Cloudflare Pages build that had nothing to do with them. Stubbed here so
+  // the read succeeds, which is also the case worth testing: a session must
+  // slide on a request that actually WORKED, not only on one that 502s.
+  beforeEach(() => {
+    vi.stubGlobal(
+      'fetch',
+      makeGitHubStub({
+        contents: { 'src/content/copy.json': { content: '{}', sha: 'copy-sha-idle' } },
+      }).fetch,
+    );
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it('a token idle past six hours no longer verifies', async () => {
     const env = await buildEnv();
     const iat = 1_000_000;
@@ -1075,9 +1100,14 @@ describe('the 6-hour idle window', () => {
       }),
       env,
     );
-    // Whatever the route answers, a live session must come back refreshed --
-    // that IS the sliding window. Without it the cookie would keep its
-    // original expiry and six hours of work would end in a logout.
+    // Pinned so this cannot silently go back to sliding a session on a 502.
+    // Before the stub above, this line would have read 502 on every run --
+    // which is exactly how nobody noticed the route was reading the real
+    // internet.
+    expect(response.status).toBe(200);
+    // A live session must come back refreshed -- that IS the sliding window.
+    // Without it the cookie would keep its original expiry and six hours of
+    // work would end in a logout.
     const refreshed = response.headers.get('Set-Cookie');
     expect(refreshed, 'an authenticated request must reissue the session cookie').toBeTruthy();
     expect(refreshed).toContain('HttpOnly');
@@ -1107,6 +1137,7 @@ describe('the 6-hour idle window', () => {
       }),
       env,
     );
+    expect(response.status).toBe(200);
     const refreshed = response.headers.get('Set-Cookie');
     if (refreshed) {
       const maxAge = Number(refreshed.match(/Max-Age=(\d+)/)?.[1] ?? '0');

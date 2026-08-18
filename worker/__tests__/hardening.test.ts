@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { makeGitHubStub } from './githubStub';
 import worker, {
   AUTHENTICATED_PATHS,
   AUTHENTICATED_UNLIMITED,
@@ -159,14 +160,36 @@ describe('security headers on every response', () => {
 
   // no-store is the point of the header, so prove the previously-explicit
   // one on /api/content did not get lost when it moved into the router.
+  //
+  // The `fetch` stub is load-bearing, and this file has no other: this is the
+  // only case here that authenticates successfully against a route which reads
+  // through to GitHub, and without a stub it issued a LIVE request to
+  // api.github.com on every run. It passed anyway -- `handleGetContent` catches
+  // the failed read and answers 502, and `Cache-Control` is set by the router
+  // either way -- so the only symptom was that this one case took a real
+  // internet round trip, and timed out at Vitest's 5000ms default whenever that
+  // round trip was slow. That intermittent failure ran inside `npm run
+  // test:deploy` and failed two Cloudflare Pages builds. Stubbed so the read
+  // succeeds, and the status pinned below so it stays that way.
   it('still marks the content route no-store now that the header is set centrally', async () => {
-    const response = await worker.fetch(
-      new Request(`${SITE_ORIGIN}/api/content?path=src/content/site.json`, {
-        headers: { Cookie: await cookie() },
-      }),
-      env,
+    vi.stubGlobal(
+      'fetch',
+      makeGitHubStub({
+        contents: { 'src/content/site.json': { content: '{}', sha: 'site-sha-hardening' } },
+      }).fetch,
     );
-    expect(response.headers.get('Cache-Control')).toBe('no-store');
+    try {
+      const response = await worker.fetch(
+        new Request(`${SITE_ORIGIN}/api/content?path=src/content/site.json`, {
+          headers: { Cookie: await cookie() },
+        }),
+        env,
+      );
+      expect(response.status).toBe(200);
+      expect(response.headers.get('Cache-Control')).toBe('no-store');
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   // The one exemption to the blanket no-store, pinned in BOTH directions:

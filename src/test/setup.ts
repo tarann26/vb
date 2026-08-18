@@ -1,5 +1,53 @@
 import '@testing-library/jest-dom/vitest';
 
+// ---------------------------------------------------------------------------
+// No test in this repository may reach the real internet.
+//
+// This is not a style rule. Three cases -- worker/__tests__/hardening.test.ts's
+// "still marks the content route no-store now that the header is set
+// centrally", and worker/__tests__/index.test.ts's "an authenticated request
+// slides the window forward" and "the absolute cap is never extended by
+// activity" -- authenticated successfully against `GET /api/content`, reached
+// `getFileContent` (worker/github.ts) with no `vi.stubGlobal('fetch', ...)` in
+// scope, and issued a LIVE request to api.github.com on every run. Confirmed by
+// tracing every outbound call: exactly three, ~100-140ms each, all answered 401
+// because the fixture token is deliberately fake. The tests passed anyway --
+// they assert on headers the router sets regardless of the 502 that 401 then
+// produces -- so nothing ever pointed at them.
+//
+// `getFileContent` sets no `AbortSignal` and no timeout, so how long those
+// three cases take is bounded by the internet and nothing else. Any DNS stall,
+// handshake delay or throttled CI egress pushes them past Vitest's 5000ms
+// default `testTimeout`, and they fail as "Test timed out in 5000ms" while
+// their 1-40ms neighbours pass -- green again on the next run. That is what
+// failed two consecutive Cloudflare Pages builds (`npm run test:deploy` runs in
+// the build), left the live site two commits behind, and could never be
+// reproduced by re-running. Reproduced deliberately by delaying DNS for
+// api.github.com by 6s: 3 failed, exactly those three, every time.
+//
+// So the guard is the fix, not a lint: a test that touches the network fails
+// IMMEDIATELY and IDENTICALLY on every machine, instead of failing sometimes,
+// somewhere else, weeks later. A test that genuinely needs an HTTP boundary
+// stubs `fetch` -- `vi.stubGlobal('fetch', ...)` replaces this and restores it
+// on `vi.unstubAllGlobals()`, so the guard costs a correctly-written test
+// nothing.
+//
+// Installed here rather than by cutting the network off at the process level so
+// the message says what to do about it, and so it holds under `npm test`,
+// `npm run test:deploy` and a bare `vitest` alike.
+{
+  const unstubbed: typeof fetch = () => {
+    throw new Error(
+      'A test called fetch() without stubbing it. Tests must not reach the ' +
+        'network -- a live request has unbounded latency and turns into an ' +
+        'intermittent 5000ms timeout on CI. Stub it: ' +
+        "vi.stubGlobal('fetch', myStub) (worker/__tests__/githubStub.ts has " +
+        'one for the GitHub API), and vi.unstubAllGlobals() in afterEach.',
+    );
+  };
+  globalThis.fetch = unstubbed;
+}
+
 // jsdom does not implement matchMedia. Components that read motion/contrast
 // preferences (e.g. usePrefersReducedMotion) need a default so tests that
 // don't care about the preference can render without stubbing it themselves.

@@ -248,7 +248,19 @@ describe('the live region is scoped, not wrapped around the strip', () => {
     expect(within(live).getByText('Publishing your changes — usually 2–3 minutes')).toBeInTheDocument();
     expect(within(live).getByText(/have changes you haven't published yet|has changes you haven't published yet/)).toBeInTheDocument();
 
-    const timestamp = within(strip()).getByText('Last published 2 hours ago');
+    // `findByText`, not `getByText`. The line above waits for the PUBLISH
+    // PHASE text, which StatusStrip renders synchronously from its
+    // `publishPhase` prop -- it says nothing about the timestamp, which only
+    // appears once the injected `fetchBuildInfoImpl` promise has resolved and
+    // filled `outcome` (StatusStrip.tsx's own state, null until then). A
+    // synchronous `getByText` here was racing that second render: it happened
+    // to win because this file's stub resolves in a microtask, which nothing
+    // about the real `fetchBuildInfo` -- an actual HTTP call -- guarantees.
+    // It lost roughly 1 run in 4 inside a full `npm run test:deploy`, and 7
+    // runs in 12 with the stub resolving one macrotask later instead of one
+    // microtask later. Awaiting the element that is actually asynchronous is
+    // the whole fix; the assertion below is unchanged.
+    const timestamp = await within(strip()).findByText('Last published 2 hours ago');
     expect(live.contains(timestamp)).toBe(false);
   });
 });
