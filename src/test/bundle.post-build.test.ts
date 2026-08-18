@@ -761,11 +761,41 @@ describe('dist/assets/ keeps admin code out of the entry chunk', () => {
 // becomes an audit of the accumulated total instead of the first raise. A
 // reader who finds more than three raise-entries in this file by the plan's
 // end should look here for why.
+//
+// Admin redesign Task 2, ItemList: 38749 -> 38836 (+87), two rules added,
+// zero removed. Measured the same way as Task 1's entry above: ItemList.tsx
+// and drag-row.ts moved out of src/ with `mv`, `vite build` run to confirm
+// the 38749-byte baseline still held, both files restored with `mv` and
+// rebuilt to 38836, then the two dist CSS files diffed rule-by-rule with
+// `comm` against sorted rule lists. `tsc -b --noEmit` was clean on both
+// sides. Two new rules, each traced to the one class in ItemList.tsx (the
+// only file this task adds that renders anything) that has no other user in
+// src/ today:
+//   .p-2{padding:.5rem}                                19 bytes  (ROW_CLASSNAME's
+//                                                                  own row padding)
+//   .truncate{overflow:hidden;text-overflow:ellipsis;
+//             white-space:nowrap}                       68 bytes  (the row-name span,
+//                                                                  so a long dish
+//                                                                  name clips
+//                                                                  instead of
+//                                                                  wrapping the row)
+//                                                        --------
+//                                                        87 bytes, matching the measured delta exactly
+// Every other class ItemList.tsx and drag-row.ts write -- flex, min-w-0,
+// flex-1, items-center, gap-3, rounded, text-left, the bracketed Montserrat
+// font family, text-sm, text-ink, transition, hover:bg-brand/10,
+// focus-visible:outline, focus-visible:outline-2, focus-visible:outline-accent,
+// mb-3, w-full, border-2, border-dashed, border-brand, py-2, uppercase,
+// tracking-wide, text-accent, mb-1, border, border-gray-200, text-xs,
+// text-red-600, select-none, px-3 -- already had a rule in the sheet before
+// this task and cost nothing marginal. BlockList.tsx's own move of
+// HANDLE_CLASSNAME/HANDLE_STYLE/DRAGGING_STYLE into drag-row.ts changes no
+// rendered class and moves the byte count by zero.
 describe('dist/assets/ keeps the shared stylesheet under a byte ceiling', () => {
-  it.skipIf(!REQUIRED && !existsSync(DIST_ASSETS))('the entry CSS file stays at or under 38749 bytes', () => {
+  it.skipIf(!REQUIRED && !existsSync(DIST_ASSETS))('the entry CSS file stays at or under 38836 bytes', () => {
     const cssFiles = readdirSync(DIST_ASSETS).filter((n) => /^index-.*\.css$/.test(n));
     expect(cssFiles.length).toBeGreaterThan(0);
     const size = statSync(join(DIST_ASSETS, cssFiles[0])).size;
-    expect(size).toBeLessThanOrEqual(38749);
+    expect(size).toBeLessThanOrEqual(38836);
   });
 });
