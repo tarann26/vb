@@ -721,22 +721,22 @@ test.describe('the writing surface', () => {
   // and of `clearMarks` (marks.ts:109,123) -- the words go bold and her
   // selection is gone, so the next press acts on nothing.
   //
-  // A DEFECT THIS TEST FOUND, and the reason the mark below does not start at
-  // the top of the block. CLEAR FORMATTING CANNOT REMOVE A MARK THAT FILLS THE
-  // SELECTION. `clearMarks` (marks.ts:112-124) does `range.deleteContents()`
-  // and then inserts the plain words back at the range's own start. When the
-  // selection begins inside the marked element -- which is every selection
-  // whose first character is marked, including the ordinary select-all-then-
-  // Bold-then-change-my-mind -- the element is only PARTIALLY contained by
-  // that range, so `deleteContents` empties it and leaves it standing, and the
-  // replacement text node goes back INSIDE it. The mark survives its own
-  // removal and nothing on screen says so. Measured directly: after Cmd+A,
-  // Bold, Cmd+A, Clear formatting, the `<strong>` is still there.
+  // A DEFECT THIS TEST FOUND, SINCE FIXED, and the third phase below is what
+  // holds it fixed. CLEAR FORMATTING COULD NOT REMOVE A MARK THAT FILLED THE
+  // SELECTION. `clearMarks` (marks.ts) does `range.deleteContents()` and then
+  // inserts the plain words back at the range's own start. When the selection
+  // begins inside the marked element -- which is every selection whose first
+  // character is marked, including the ordinary select-all-then-Bold-then-
+  // change-my-mind -- the element is only PARTIALLY contained by that range,
+  // so `deleteContents` emptied it and left it standing, and the replacement
+  // text node went back INSIDE it. The mark survived its own removal, survived
+  // a close-and-reopen, and was therefore what published.
   //
-  // Not fixed here -- Task 28 owns a spec file and nothing under src/. It is
-  // in this task's report as a finding, and the test below marks a run in the
-  // MIDDLE of the block so the element is wholly contained and Clear does what
-  // it says.
+  // `clearMarks` now carries the replacement text back OUT of every mark
+  // element it lands in, splitting each one at that point so that whatever
+  // part of the mark she did NOT select keeps it. The first two phases below
+  // mark a run in the MIDDLE of the block, which is the path that always
+  // worked and has to go on working; the third is the one that was broken.
   test('a toggle and a clear both leave her selection on the words she marked', async ({ page }) => {
     const surface = await openWriting(page);
     const host = await writeFirst(page, 'One Two Three');
@@ -762,6 +762,31 @@ test.describe('the writing surface', () => {
     expect((await caret(page)).selected).toBe('One Two Three');
     await expect(host.locator('strong')).toHaveCount(0);
     await expect(host).toHaveText('One Two Three');
+
+    // THE CASE THAT WAS BROKEN, and the ordinary one: bold the whole line,
+    // change her mind, clear the whole line. The selection then STARTS inside
+    // the `<strong>` rather than beside it, which is the shape
+    // `deleteContents` only partially contains.
+    await page.keyboard.press('ControlOrMeta+a');
+    await surface.getByRole('button', { name: 'Bold', exact: true }).click();
+    await expect(host.locator('strong')).toHaveText('One Two Three');
+
+    await toStart(page);
+    for (let i = 0; i < 'One Two Three'.length; i += 1) await page.keyboard.press('Shift+ArrowRight');
+    expect((await caret(page)).selected).toBe('One Two Three');
+    await surface.getByRole('button', { name: 'Clear formatting' }).click();
+
+    await expect(host.locator('strong')).toHaveCount(0);
+    await expect(host).toHaveText('One Two Three');
+    // ...AND THAT IS WHAT PUBLISHES. A remount writes every host from the
+    // saved source, so this reads the draft rather than whatever the button
+    // left in the DOM -- which is the half that made this a defect worth
+    // fixing rather than a cosmetic one. Her selection is not asserted after
+    // the reopen: the surface has been unmounted and there is no caret to
+    // keep.
+    await reopenTheFirstPost(page);
+    await expect(hosts(page).first().locator('strong')).toHaveCount(0);
+    await expect(hosts(page).first()).toHaveText('One Two Three');
   });
 
   // Deferred claim 18 (Tasks 20-21): "`window.prompt` as a real modal.
@@ -1294,13 +1319,14 @@ test.describe('the writing surface', () => {
 //    that class on the WRAPPER instead.
 //
 // ---------------------------------------------------------------------------
-// A DEFECT THIS FILE FOUND AND DID NOT FIX (Task 28 owns a spec file and
-// nothing under src/): CLEAR FORMATTING DOES NOTHING WHEN THE MARK FILLS THE
-// SELECTION. Select a whole paragraph, press Bold, select it again, press
-// Clear formatting -- the `<strong>` is still there, and it is still there
-// after the editor is closed and reopened, so it is what publishes. See the
-// note on "a toggle and a clear both leave her selection on the words she
-// marked" for the mechanism. It is in this task's report as a finding.
+// A DEFECT THIS FILE FOUND, since fixed under `src/` by the task after it:
+// CLEAR FORMATTING DID NOTHING WHEN THE MARK FILLED THE SELECTION. Select a
+// whole paragraph, press Bold, select it again, press Clear formatting -- the
+// `<strong>` was still there, still there after the editor was closed and
+// reopened, and so was what published. Named here rather than only in the test
+// because a reader meeting the test now meets the FIX; the mechanism and the
+// phase that pins it are in the note on "a toggle and a clear both leave her
+// selection on the words she marked".
 
 // ---------------------------------------------------------------------------
 // DELIBERATELY ABSENT, and why -- the deferred claims this file does NOT

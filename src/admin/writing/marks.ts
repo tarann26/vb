@@ -60,6 +60,15 @@ function ancestorMark(node: Node, hostEl: HTMLElement, mark: Mark): Element | nu
   return null;
 }
 
+// The four element names above, asked the other way round. Derived from
+// TAG_OF rather than typed again, so a fifth mark cannot be one the walk in
+// clearMarks silently steps over. `A` is deliberately NOT in here: a link is
+// not a mark, nothing on the toolbar calls it one, and clearing formatting
+// inside one must leave it whole rather than cut it in three.
+const IS_MARK: Record<string, true | undefined> = Object.fromEntries(
+  Object.values(TAG_OF).map((tag): [string, true] => [tag, true]),
+);
+
 function unwrap(el: Element): void {
   const parent = el.parentNode;
   if (parent === null) return;
@@ -105,10 +114,59 @@ export function toggleMark(hostEl: HTMLElement, mark: Mark): void {
   selectContents(hostEl, el);
 }
 
+// Whether an element has anything left in it worth keeping. NOT
+// `textContent === ''` and not `childNodes.length === 0`: `deleteContents`
+// EMPTIES a Text node rather than removing it, so the half a split leaves
+// behind is routinely one text node holding nothing -- while an element
+// holding a `<br>` holds a real line break, which dom-inline.ts reads back as
+// a space and which no cleanup here may throw away.
+function holdsNothing(el: Node): boolean {
+  return [...el.childNodes].every((child) => child.nodeType === 3 && (child as Text).data.length === 0);
+}
+
+// `node` moved OUT of the element it stands in, which is SPLIT around it:
+// everything before it stays in the original, everything after it goes into a
+// copy standing after that, and the node itself comes out plain between the
+// two. A half left holding nothing is dropped rather than left standing --
+// serializeInline already writes an empty run as nothing, but an empty
+// `<strong>` sitting against the caret is somewhere the next keystroke can
+// land, which would put her straight back in the mark she asked to be rid of.
+function liftOut(node: Node): void {
+  const parent = node.parentNode;
+  const grandparent = parent?.parentNode ?? null;
+  if (parent === null || grandparent === null) return;
+  const before = parent.cloneNode(false);
+  let first = parent.firstChild;
+  while (first !== null && first !== node) {
+    before.appendChild(first);
+    first = parent.firstChild;
+  }
+  parent.removeChild(node);
+  if (!holdsNothing(before)) grandparent.insertBefore(before, parent);
+  grandparent.insertBefore(node, parent);
+  if (holdsNothing(parent)) grandparent.removeChild(parent);
+}
+
 // Formatting removed by REPLACING the selection with its own plain words. Not
 // by walking the marks off one at a time: the selection can begin inside one
 // mark and end inside another, and there is no tree operation that removes
 // half of an element. The words are what she asked to keep.
+//
+// THE WORDS ARE THEN CARRIED OUT OF WHATEVER THEY LANDED IN, and without that
+// second half this button did nothing at all for the commonest gesture there
+// is. `deleteContents` only EMPTIES an element the range partially contains,
+// and a range whose first character is marked starts INSIDE that element --
+// so select a paragraph, press Bold, select it again, press Clear formatting,
+// and `deleteContents` left the `<strong>` standing while `insertNode` put the
+// plain words straight back inside it. The mark survived its own removal,
+// survived a close-and-reopen of the editor, and was what published. Found end
+// to end by e2e/writing-surface.spec.ts, which now pins the fix.
+//
+// SPLITTING at the caret rather than unwrapping the element outright, because
+// the element is not always hers to remove: with "AlphaBeta" bold and only
+// "phaBeta" selected, the "Al" that is left has to stay bold. The walk stops
+// at the host, and at anything that is not one of the four marks -- a link is
+// not one, and a Clear press must not cut one in three.
 export function clearMarks(hostEl: HTMLElement): void {
   const range = rangeWithin(hostEl);
   if (range === null || range.collapsed) return;
@@ -116,6 +174,17 @@ export function clearMarks(hostEl: HTMLElement): void {
   range.deleteContents();
   const text = hostEl.ownerDocument.createTextNode(words);
   range.insertNode(text);
+  let parent = text.parentNode;
+  while (parent !== null && parent !== hostEl && IS_MARK[parent.nodeName] === true) {
+    liftOut(text);
+    const next = text.parentNode;
+    // A lift that moved nothing would spin this loop forever, and a hung
+    // browser is a worse failure than a mark that stayed. `liftOut` declines
+    // to move a node whose parent is not itself attached, which is the one way
+    // that can happen.
+    if (next === parent) break;
+    parent = next;
+  }
   // Deliberately NOT normalized afterwards: merging the new node into its
   // neighbours would remove the very node the caret is about to be put in.
   // Two adjacent text nodes cost nothing here -- dom-inline.ts reads both and

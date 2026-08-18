@@ -236,6 +236,92 @@ describe('clearMarks', () => {
     expect(source(el)).toBe('**aa**bbcc*dd*');
   });
 
+  // THE COMMONEST GESTURE THERE IS, and it did nothing at all: select the
+  // paragraph, press Bold, change her mind, select it again, press Clear
+  // formatting. The `<strong>` survived, survived a close-and-reopen of the
+  // editor, and was what published.
+  //
+  // The selection here starts INSIDE the marked element -- which is what a
+  // browser leaves after Bold, and what any selection whose first character is
+  // marked looks like. `deleteContents` only empties an element it partially
+  // contains, so the element stayed standing and `insertNode` put the plain
+  // words back inside it. The test above cannot see this: it selects the
+  // host's CONTENTS, which contains the `<strong>` whole, so the delete takes
+  // the element with it and the words land in the host.
+  //
+  // Mutation: drop the lift-out loop from `clearMarks` and the source below
+  // comes back `**AlphaBeta**`.
+  it('removes a mark that fills the selection, from a selection that starts inside it', () => {
+    const el = document.createElement('p');
+    document.body.appendChild(el);
+    const strong = document.createElement('strong');
+    strong.textContent = 'AlphaBeta';
+    el.appendChild(strong);
+    selects(strong.firstChild as Text, 0, 'AlphaBeta'.length);
+
+    clearMarks(el);
+
+    expect(el.querySelector('strong')).toBeNull();
+    expect(el.textContent).toBe('AlphaBeta');
+    // What would publish, which is the half that made this worth fixing.
+    expect(source(el)).toBe('AlphaBeta');
+  });
+
+  it('keeps the part of a mark she did not select', () => {
+    // Half of one element, cleared from inside it. Unwrapping the element
+    // outright would be the easy fix and the wrong one -- "Al" is still hers
+    // and is still bold.
+    const el = document.createElement('p');
+    document.body.appendChild(el);
+    const strong = document.createElement('strong');
+    strong.textContent = 'AlphaBeta';
+    el.appendChild(strong);
+    selects(strong.firstChild as Text, 2, 'AlphaBeta'.length);
+
+    clearMarks(el);
+
+    expect(el.textContent).toBe('AlphaBeta');
+    expect(source(el)).toBe('**Al**phaBeta');
+  });
+
+  it('carries the words out of every mark they landed in, however deep', () => {
+    const el = document.createElement('p');
+    document.body.appendChild(el);
+    const em = document.createElement('em');
+    const strong = document.createElement('strong');
+    strong.textContent = 'deep';
+    em.appendChild(strong);
+    el.appendChild(em);
+    selects(strong.firstChild as Text, 0, 4);
+
+    clearMarks(el);
+
+    expect(el.querySelector('strong')).toBeNull();
+    expect(el.querySelector('em')).toBeNull();
+    expect(source(el)).toBe('deep');
+  });
+
+  it('leaves a link whole, because a link is not a mark', () => {
+    // The walk stops at anything that is not one of the four mark elements.
+    // A link cut into three by a Clear formatting press would be two links
+    // she never made plus a plain run, and nothing on screen would say so.
+    const el = document.createElement('p');
+    document.body.appendChild(el);
+    const link = document.createElement('a');
+    link.setAttribute('href', '/menu');
+    const strong = document.createElement('strong');
+    strong.textContent = 'menu';
+    link.appendChild(strong);
+    el.appendChild(link);
+    selects(strong.firstChild as Text, 0, 4);
+
+    clearMarks(el);
+
+    expect(el.querySelectorAll('a')).toHaveLength(1);
+    expect(el.querySelector('strong')).toBeNull();
+    expect(source(el)).toBe('[menu](/menu)');
+  });
+
   it('leaves everything alone with nothing selected', () => {
     const el = host('abcd');
     caretAt(el, 2);
