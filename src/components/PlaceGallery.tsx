@@ -5,7 +5,7 @@ const PlaceGallery: React.FC = () => {
   const content = useContent();
   const { galleries, copy } = content;
   return (
-    <section id="gallery" className="py-20 bg-[#F9F9F9]">
+    <section id="gallery" className="py-20 relative bg-wash">
       <div className="max-w-7xl mx-auto px-4">
         <h2 className="font-['Montserrat'] text-4xl md:text-5xl font-bold text-[#222] text-center mb-16">
           {content.renderText('atmosphere.heading', copy.atmosphere.heading)}
@@ -32,7 +32,7 @@ const PlaceGallery: React.FC = () => {
               ))}
             </div>
           </div>
-          <div className="pointer-events-none absolute inset-y-0 right-0 w-16 bg-gradient-to-l from-[#F9F9F9] to-transparent" />
+          <div className="pointer-events-none absolute inset-y-0 right-0 w-16 bg-gradient-to-l from-wash to-transparent" />
         </div>
       </div>
     </section>

@@ -365,8 +365,9 @@ describe('BlockList reads a restored draft defensively', () => {
 
 // What jsdom can honestly say about a drag: that the handle is there, that it
 // is marked draggable, that it sits with the block it moves, and that it is NOT
-// a second control competing with the buttons. Whether a block MOVES is
-// e2e/block-editor.spec.ts's claim -- jsdom has no drag implementation, no
+// a second control competing with the buttons. Whether a block MOVES was
+// e2e/block-editor.spec.ts's claim, deleted with this component's last call
+// site in admin redesign Task 25 -- jsdom has no drag implementation, no
 // DataTransfer worth the name and no layout engine, so a fireEvent.dragStart
 // test here would prove a handler was called and nothing whatsoever about
 // whether anything moved.

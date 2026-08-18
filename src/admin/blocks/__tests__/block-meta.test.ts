@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { BLOCK_KIND_HELP, BLOCK_KIND_LABELS, UNKNOWN_BLOCK_LABEL, UNKNOWN_BLOCK_MESSAGE } from '../block-meta';
+import {
+  BLOCK_KIND_HELP,
+  BLOCK_KIND_LABELS,
+  INSERT_MENU_KINDS,
+  UNKNOWN_BLOCK_LABEL,
+  UNKNOWN_BLOCK_MESSAGE,
+} from '../block-meta';
 import { BLOCK_KINDS } from '../../../content/guards';
 import { validateContent } from '../../../content/validate';
 
@@ -50,5 +56,19 @@ describe('every block kind has words she can read', () => {
       { id: 'a', slug: 'a', type: 'story', title: 'T', date: '2026-03-04', excerpt: 'e', image: '/food/x.webp', blocks: [{ kind: 'wonky' }] },
     ]).find((problem) => problem.field === '[0].blocks[0].kind');
     expect(fromValidator?.message).toContain('add one from the list instead');
+  });
+
+  // The partition, against BLOCK_KINDS rather than against a second copy of
+  // the same four names. The toolbar half is written out as a literal for the
+  // reason the label test above gives: deriving both sides of an equality from
+  // the constant under test asserts nothing.
+  //
+  // This is what makes an eleventh block kind show up SOMEWHERE rather than
+  // silently nowhere -- a kind no toolbar button reaches and no insert menu
+  // offers is one she can never add, and one that opens invisible in a post
+  // that already has it.
+  it('the insert menu holds exactly the kinds the toolbar does not', () => {
+    const TOOLBAR_KINDS = ['paragraph', 'heading', 'bulletList', 'numberList', 'image', 'quote'];
+    expect([...INSERT_MENU_KINDS].sort()).toEqual(BLOCK_KINDS.filter((k) => !TOOLBAR_KINDS.includes(k)).sort());
   });
 });

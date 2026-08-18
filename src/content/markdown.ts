@@ -30,13 +30,32 @@ export type InlineNode =
   | { kind: 'text'; value: string }
   | { kind: 'strong'; children: InlineNode[] }
   | { kind: 'em'; children: InlineNode[] }
+  | { kind: 'strike'; children: InlineNode[] }
+  | { kind: 'underline'; children: InlineNode[] }
   | { kind: 'code'; value: string }
   | { kind: 'link'; href: string; children: InlineNode[] };
 
+// The four delimited runs, named once so tryDelimited's memo lookup can be
+// total over them rather than a two-way guess on the delimiter string.
+//
+// Strike is `~~...~~`, which is what every editor a person has used writes.
+// Underline is `__...__`, and THAT ONE IS A CHOICE THIS PROJECT MAKES,
+// because markdown has no underline at all -- CommonMark spends `__` on a
+// second spelling of strong, which this grammar has never had and does not
+// want. Spending it on underline instead costs nothing here and buys three
+// things: `__` is the only unclaimed doubled ASCII delimiter that draws the
+// mark it carries; it is DOUBLED, so `snake_case`, `NB0_7576.JPG` and a
+// social handle stay literal characters; and doubled-and-symmetric is
+// exactly the shape src/content/inline-source.ts can write back, so a run
+// survives the parse/serialize round trip with no special case of its own.
+type MarkKind = 'strong' | 'em' | 'strike' | 'underline';
+
 // The characters a backslash may escape. Anything else after a backslash is
 // two literal characters, which is what someone typing a Windows path or a
-// measurement expects.
-const ESCAPABLE = '*`[]()\\';
+// measurement expects. `~` and `_` join the list with their delimiters: an
+// author who really does want a doubled tilde on the page needs a way to say
+// so, and the serializer needs the same escape to write one back.
+const ESCAPABLE = '*`[]()\\~_';
 
 // The origin `isSiteRelativePath` measures against. `.invalid` is reserved
 // by RFC 2606 and can never be a real host, so this can never accidentally
@@ -215,6 +234,27 @@ interface Cursor {
   readonly linkMemo: Map<number, Attempt>;
   readonly strongMemo: Map<number, Attempt>;
   readonly emMemo: Map<number, Attempt>;
+  readonly strikeMemo: Map<number, Attempt>;
+  readonly underlineMemo: Map<number, Attempt>;
+}
+
+// One map per mark kind, picked totally rather than by testing the delimiter
+// string. A memo is keyed on index and the character at an index fixes which
+// delimiter is attempted there, so two kinds can never contend for one key --
+// the split is structure, not behaviour, and deliberately has no mutation row
+// in this task's table because no honest assertion can tell it from a single
+// shared map.
+function memoFor(cursor: Cursor, kind: MarkKind): Map<number, Attempt> {
+  switch (kind) {
+    case 'strong':
+      return cursor.strongMemo;
+    case 'em':
+      return cursor.emMemo;
+    case 'strike':
+      return cursor.strikeMemo;
+    case 'underline':
+      return cursor.underlineMemo;
+  }
 }
 
 function remember(memo: Map<number, Attempt>, start: number, node: InlineNode | null, end: number): InlineNode | null {
@@ -243,9 +283,9 @@ function atStop(cursor: Cursor, stopAt: string | null): boolean {
 // emphasis run stops at the next standalone '*' and SUCCEEDS, so
 // '*'.repeat(2000) already parsed in 1ms and '**'.repeat(26) in 0ms. It
 // costs one Map lookup and removes the whole question.
-function tryDelimited(cursor: Cursor, delimiter: string, kind: 'strong' | 'em'): InlineNode | null {
+function tryDelimited(cursor: Cursor, delimiter: string, kind: MarkKind): InlineNode | null {
   const start = cursor.index;
-  const memo = delimiter === '**' ? cursor.strongMemo : cursor.emMemo;
+  const memo = memoFor(cursor, kind);
   const seen = memo.get(start);
   if (seen !== undefined) {
     cursor.index = seen.end;
@@ -329,8 +369,16 @@ function parseNodes(cursor: Cursor, stopAt: string | null): InlineNode[] {
 
     const char = cursor.source[cursor.index];
 
-    if (char === '\\' && ESCAPABLE.includes(cursor.source[cursor.index + 1] ?? '')) {
-      buffer += cursor.source[cursor.index + 1];
+    // `?? ''` used to stand where the undefined check does, and it was wrong
+    // in the one way a fallback of that shape always is: EVERY string
+    // `.includes('')`, so a backslash as the last character of the source
+    // passed this guard, and `buffer += source[index + 1]` then appended the
+    // nine-letter word `undefined` to her paragraph. `the path C:\` published as
+    // `the path C:undefined`. Found by Task 14's round trip, which serialised
+    // the corruption faithfully and could not tell it from prose.
+    const escaped = cursor.source[cursor.index + 1];
+    if (char === '\\' && escaped !== undefined && ESCAPABLE.includes(escaped)) {
+      buffer += escaped;
       cursor.index += 2;
       continue;
     }
@@ -348,6 +396,29 @@ function parseNodes(cursor: Cursor, stopAt: string | null): InlineNode[] {
     if (char === '*') {
       const doubled = cursor.source.startsWith('**', cursor.index);
       const node = tryDelimited(cursor, doubled ? '**' : '*', doubled ? 'strong' : 'em');
+      if (node) {
+        flush();
+        nodes.push(node);
+        continue;
+      }
+    }
+
+    // Doubled-only, and the `startsWith` guard is the whole safety property
+    // rather than an optimisation: a single `~` is an approximate quantity in
+    // prose and a single `_` is a real character in a file name and a handle.
+    // Neither needs an `atStop` exception the way `*`/`**` do, because
+    // neither has a single-character form to be confused with.
+    if (char === '~' && cursor.source.startsWith('~~', cursor.index)) {
+      const node = tryDelimited(cursor, '~~', 'strike');
+      if (node) {
+        flush();
+        nodes.push(node);
+        continue;
+      }
+    }
+
+    if (char === '_' && cursor.source.startsWith('__', cursor.index)) {
+      const node = tryDelimited(cursor, '__', 'underline');
       if (node) {
         flush();
         nodes.push(node);
@@ -382,6 +453,8 @@ export function parseInline(source: string): InlineNode[] {
       linkMemo: new Map(),
       strongMemo: new Map(),
       emMemo: new Map(),
+      strikeMemo: new Map(),
+      underlineMemo: new Map(),
     },
     null,
   );

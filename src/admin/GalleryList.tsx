@@ -17,13 +17,20 @@
 // wrong-category `image`-kind `src` field sitting there unused was a real
 // landmine, see its own comment). This component supplies the real
 // category itself, per list.
-import { useRef } from 'react';
+//
+// Task 5: three lists, three editors, one shared open key (`openKey` below,
+// state lives in `GalleryList` itself and is threaded down) -- two editors
+// open at once would be two dialogs both claiming `aria-modal`, and the
+// second would trap focus inside the first.
+import { useRef, useState } from 'react';
 import Field from './Field';
 import PhotoField from './PhotoField';
+import EditorSheet from './manage/EditorSheet';
+import ItemList, { type ItemRow } from './manage/ItemList';
 import Thumbnail from './manage/Thumbnail';
 import type { ImagePreviews } from './previews';
 import { GALLERY_IMAGE_FIELDS } from './fields';
-import { ADD_BUTTON_CLASSNAME, MOVE_BUTTON_CLASSNAME, REMOVE_BUTTON_CLASSNAME } from './RecordList';
+import { moveTo } from './blocks/reorder';
 import { fromStagedPhoto, type StagedFile } from './staged';
 import { collagePhotos, setCollagePhotoSrc } from '../content/collage';
 import type { Galleries, GalleryImage } from '../content/types';
@@ -66,18 +73,13 @@ function itemOf(prefix: string, field: string): { index: number; sub: string } |
   return match ? { index: Number(match[1]), sub: match[2] } : undefined;
 }
 
-// The bare `prefix` message (validateGalleries's "atmosphere needs at least
-// one image", only possible when the list IS empty) plus any indexed
-// problem naming a row this list isn't currently rendering -- the same
-// "nowhere else for this to go" reasoning RecordList's own unclaimedProblems
-// documents.
-function bannerFor(problems: ValidationProblem[], prefix: string, itemCount: number): ValidationProblem[] {
-  return problems.filter((p) => {
-    if (p.field === prefix) return true;
-    const item = itemOf(prefix, p.field);
-    if (item === undefined) return false;
-    return item.index < 0 || item.index >= itemCount;
-  });
+// Every problem that belongs to THIS list, whatever it names -- the bare
+// `prefix` message (validateGalleries' "atmosphere needs at least one
+// image") or any `prefix[i].sub`, in range or not. The shown/banner split
+// below is what decides where each one actually renders; this is just "does
+// it belong to me at all".
+function relevantTo(problems: ValidationProblem[], prefix: string): ValidationProblem[] {
+  return problems.filter((p) => p.field === prefix || itemOf(prefix, p.field) !== undefined);
 }
 
 // Review finding (Important): keying the staged-file collector on `item.src`
@@ -99,10 +101,10 @@ function bannerFor(problems: ValidationProblem[], prefix: string, itemCount: num
 // schema for a purely client-side bookkeeping need.
 //
 // The one thing this identity must survive that RecordList's `id` gets for
-// free is an EDIT: `patchAt`/`patchSrc` below always build a fresh object
-// (never mutate `items` in place, the same "never reconstruct, never
-// mutate" contract every write path in this codebase keeps), so the row's
-// own object reference changes on every keystroke, not just a stage. Each
+// free is an EDIT: `patchAt` below always builds a fresh object (never
+// mutates `images` in place, the same "never reconstruct, never mutate"
+// contract every write path in this codebase keeps), so the row's own
+// object reference changes on every keystroke, not just a stage. Each
 // caller carries the SAME id forward onto the fresh reference the moment it
 // creates one -- `rowIdFor` mints a new id only the first time a reference
 // is ever seen, never on every lookup.
@@ -123,10 +125,10 @@ function useRowIds<T extends object>() {
   return { rowIdFor, carryForward };
 }
 
-interface GalleryImageListProps {
+interface PhotoRowsProps {
   previews?: ImagePreviews;
   prefix: 'atmosphere' | 'ourStory';
-  // Used for every button/banner label below ("Move {heading} photo 1",
+  // Used for every button/banner label below ("Remove {heading} photo 1",
   // "Problems with {heading}") -- her own vocabulary for this list.
   heading: string;
   // The actual <h3> text, separate from `heading` above: StorySection
@@ -140,32 +142,40 @@ interface GalleryImageListProps {
   // every `role="heading"` query on the page -- confirmed directly
   // (AdminApp.test.tsx's own `sectionByHeading` helper could no longer
   // tell the two apart). `heading` itself stays "About" everywhere
-  // else (buttons, banner) since none of those are heading-role elements
-  // and none of them collide with anything.
+  // else (the banner) since it is not a heading-role element and does not
+  // collide with anything.
   sectionHeading: string;
   addLabel: string;
   category: UploadCategory;
-  items: GalleryImage[];
-  onChange: (next: GalleryImage[]) => void;
+  images: GalleryImage[];
+  onChangeList: (next: GalleryImage[]) => void;
   problems: ValidationProblem[];
   stage: (key: string, file: StagedFile | null) => void;
+  // The one shared key across all three lists -- see GalleryList's own
+  // comment for why there is exactly one, not one per list.
+  openKey: string | null;
+  setOpenKey: (key: string | null) => void;
 }
 
-function GalleryImageList({ prefix, heading, sectionHeading, addLabel, category, items, onChange, problems, stage, previews }: GalleryImageListProps) {
-  const banner = bannerFor(problems, prefix, items.length);
+function PhotoRows({
+  prefix,
+  heading,
+  sectionHeading,
+  addLabel,
+  category,
+  images,
+  onChangeList,
+  problems,
+  stage,
+  previews,
+  openKey,
+  setOpenKey,
+}: PhotoRowsProps) {
   const { rowIdFor, carryForward } = useRowIds<GalleryImage>();
 
-  function swap(index: number, otherIndex: number) {
-    const next = items.slice();
-    const moved = next[index];
-    next[index] = next[otherIndex];
-    next[otherIndex] = moved;
-    onChange(next);
-  }
-
   function patchAt(index: number, patch: Partial<GalleryImage>) {
-    onChange(
-      items.map((item, i) => {
+    onChangeList(
+      images.map((item, i) => {
         if (i !== index) return item;
         const nextItem = { ...item, ...patch };
         // Carries the row's OWN identity forward onto the fresh reference
@@ -176,6 +186,32 @@ function GalleryImageList({ prefix, heading, sectionHeading, addLabel, category,
       }),
     );
   }
+
+  const relevant = relevantTo(problems, prefix);
+
+  // Established once per row, at render time, for EVERY row -- not only
+  // inside an onStaged closure -- so ids are assigned deterministically in
+  // array order (this list's first row is always "row-0"), the same
+  // identity `patchAt` already carries forward across an edit.
+  const rowIds = images.map((item) => rowIdFor(item));
+
+  const openRowId = openKey !== null && openKey.startsWith(`${prefix}:`) ? openKey.slice(prefix.length + 1) : undefined;
+  const openIndex = openRowId === undefined ? -1 : rowIds.indexOf(openRowId);
+  const open = openIndex === -1 ? undefined : images[openIndex];
+
+  // The partition Task 3 established: `shown` is everything the open
+  // editor's own fields will place; `banner` is everything else, which with
+  // no editor open is EVERYTHING that belongs to this list -- including the
+  // bare `prefix` message and any row this list isn't currently rendering.
+  const shown = open === undefined ? [] : relevant.filter((p) => itemOf(prefix, p.field)?.index === openIndex);
+  const banner = relevant.filter((p) => !shown.includes(p));
+
+  const rows: ItemRow[] = images.map((item, index) => ({
+    id: rowIds[index],
+    name: item.alt || 'Photo with no description yet',
+    thumbnail: <Thumbnail path={item.src} previewKey={`galleries.json:${prefix}:${rowIds[index]}:src`} previews={previews} />,
+    needsAttention: relevant.some((p) => itemOf(prefix, p.field)?.index === index),
+  }));
 
   return (
     <div className="mb-8">
@@ -193,103 +229,65 @@ function GalleryImageList({ prefix, heading, sectionHeading, addLabel, category,
           </ul>
         </div>
       )}
-      <ul>
-        {items.map((item, index) => {
-          const isFirst = index === 0;
-          const isLast = index === items.length - 1;
-          const rowProblems = problems.filter((p) => itemOf(prefix, p.field)?.index === index);
-          // Established once per row, at render time, for EVERY row -- not
-          // only inside the onStaged closure below -- so ids are assigned
-          // deterministically in array order (this list's first row is
-          // always "row-0"), the same identity `patchAt` already carries
-          // forward across an edit.
-          const rowId = rowIdFor(item);
-          return (
-            <li key={index} className="mb-6 rounded border border-gray-200 p-4">
-              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <Thumbnail
-                    path={item.src}
-                    previewKey={`galleries.json:${prefix}:${rowId}:src`}
-                    previews={previews}
-                  />
-                  {!isFirst && (
-                    <button
-                      type="button"
-                      aria-label={`Move ${heading} photo ${index + 1} up`}
-                      onClick={() => swap(index, index - 1)}
-                      className={MOVE_BUTTON_CLASSNAME}
-                    >
-                      Up
-                    </button>
-                  )}
-                  {!isLast && (
-                    <button
-                      type="button"
-                      aria-label={`Move ${heading} photo ${index + 1} down`}
-                      onClick={() => swap(index, index + 1)}
-                      className={MOVE_BUTTON_CLASSNAME}
-                    >
-                      Down
-                    </button>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  aria-label={`Remove ${heading} photo ${index + 1}`}
-                  onClick={() => onChange(items.filter((_, i) => i !== index))}
-                  className={REMOVE_BUTTON_CLASSNAME}
-                >
-                  Remove
-                </button>
-              </div>
-              <PhotoField
-                id={`gallery-${prefix}-${index}-src`}
-                label="Photo"
-                category={category}
-                value={item.src}
-                // `?? ''`, never a bare `next`: GalleryImage.src is a
-                // required, non-nullable string (src/content/types.ts) --
-                // PhotoField's onChange is typed for DRINK_FIELDS.image's
-                // OPTIONAL image too, and never actually calls back with
-                // `null` on a real upload, but this keeps the type honest
-                // without an unsafe cast, and a blank value here is already
-                // exactly what validateGalleries' own "needs an image
-                // source" message would catch.
-                onChange={(next) => patchAt(index, { src: next ?? '' })}
-                // Keyed on `rowId` (useRowIds' own object-reference identity,
-                // established above) -- stable across BOTH a reorder (swap
-                // only permutes array POSITION, never touches the object
-                // itself) AND a restage on the SAME row (see useRowIds' own
-                // comment for why `item.src` -- the row's own mutable
-                // content, rewritten by PhotoField's onChange the instant a
-                // stage succeeds -- was never a safe key for either case: a
-                // reorder moved the record away from the key that named it,
-                // and a second pick on the same row computed its own
-                // eviction from the row's POST-first-pick src, which was
-                // never the key the first pick was staged under, orphaning
-                // it rather than evicting it. Confirmed directly (review
-                // finding): 4 picks on one row left 3 staged files, 2 of
-                // them dead weight nothing on screen could remove.
-                onStaged={(staged) => stage(`galleries.json:${prefix}:${rowId}:src`, fromStagedPhoto(staged))}
-                previews={previews}
-                previewKey={`galleries.json:${prefix}:${rowId}:src`}
-                problems={rowProblems.filter((p) => itemOf(prefix, p.field)?.sub === 'src')}
-              />
-              <Field
-                id={`gallery-${prefix}-${index}-alt`}
-                spec={GALLERY_IMAGE_FIELDS.alt}
-                value={item.alt}
-                onChange={(next) => patchAt(index, { alt: next })}
-                problems={rowProblems.filter((p) => itemOf(prefix, p.field)?.sub === 'alt')}
-              />
-            </li>
-          );
-        })}
-      </ul>
-      <button type="button" onClick={() => onChange([...items, { src: '', alt: '' }])} className={ADD_BUTTON_CLASSNAME}>
-        {addLabel}
-      </button>
+      <ItemList
+        rows={rows}
+        onOpen={(id) => setOpenKey(`${prefix}:${id}`)}
+        onMove={(from, to) => onChangeList(moveTo(images, from, to))}
+        onAdd={() => onChangeList([...images, { src: '', alt: '' }])}
+        addLabel={addLabel}
+      />
+      {open !== undefined && (
+        <EditorSheet
+          title={open.alt || 'Photo with no description yet'}
+          onClose={() => setOpenKey(null)}
+          onDelete={() => {
+            onChangeList(images.filter((_, i) => i !== openIndex));
+            setOpenKey(null);
+          }}
+          deleteLabel={`Remove ${heading} photo ${openIndex + 1}`}
+        >
+          <PhotoField
+            id={`gallery-${prefix}-${openIndex}-src`}
+            label="Photo"
+            category={category}
+            value={open.src}
+            // `?? ''`, never a bare `next`: GalleryImage.src is a
+            // required, non-nullable string (src/content/types.ts) --
+            // PhotoField's onChange is typed for DRINK_FIELDS.image's
+            // OPTIONAL image too, and never actually calls back with
+            // `null` on a real upload, but this keeps the type honest
+            // without an unsafe cast, and a blank value here is already
+            // exactly what validateGalleries' own "needs an image
+            // source" message would catch.
+            onChange={(next) => patchAt(openIndex, { src: next ?? '' })}
+            // Keyed on this row's OWN identity (rowIdFor, established
+            // above) -- stable across BOTH a reorder (moveTo only permutes
+            // array POSITION, never touches the object itself) AND a
+            // restage on the SAME row (see useRowIds' own comment for why
+            // `item.src` -- the row's own mutable content, rewritten by
+            // PhotoField's onChange the instant a stage succeeds -- was
+            // never a safe key for either case: a reorder moved the record
+            // away from the key that named it, and a second pick on the
+            // same row computed its own eviction from the row's
+            // POST-first-pick src, which was never the key the first pick
+            // was staged under, orphaning it rather than evicting it.
+            // Confirmed directly (review finding): 4 picks on one row left
+            // 3 staged files, 2 of them dead weight nothing on screen
+            // could remove.
+            onStaged={(staged) => stage(`galleries.json:${prefix}:${rowIds[openIndex]}:src`, fromStagedPhoto(staged))}
+            previews={previews}
+            previewKey={`galleries.json:${prefix}:${rowIds[openIndex]}:src`}
+            problems={shown.filter((p) => itemOf(prefix, p.field)?.sub === 'src')}
+          />
+          <Field
+            id={`gallery-${prefix}-${openIndex}-alt`}
+            spec={GALLERY_IMAGE_FIELDS.alt}
+            value={open.alt}
+            onChange={(next) => patchAt(openIndex, { alt: next })}
+            problems={shown.filter((p) => itemOf(prefix, p.field)?.sub === 'alt')}
+          />
+        </EditorSheet>
+      )}
     </div>
   );
 }
@@ -299,6 +297,8 @@ interface HeroCollageListProps {
   onChange: (next: Galleries['heroCollage']) => void;
   problems: ValidationProblem[];
   stage: (key: string, file: StagedFile | null) => void;
+  openKey: string | null;
+  setOpenKey: (key: string | null) => void;
 }
 
 // The hero collage is a TREE (src/content/collage.ts), not a list, so this
@@ -317,11 +317,34 @@ interface HeroCollageListProps {
 // other candidates -- the array index and `item.src` -- are both rewritten
 // out from under a staged upload (see useRowIds' own comment for both
 // failures). A `CollagePhoto` HAS an id, stable across every edit including a
-// swap, so it can be the staging key directly.
-function HeroCollageList({ tree, onChange, problems, stage }: HeroCollageListProps) {
+// swap, so it can be the staging key and the open key directly.
+function HeroCollageList({ tree, onChange, problems, stage, openKey, setOpenKey }: HeroCollageListProps) {
   const prefix = 'heroCollage';
   const photos = tree === null ? [] : collagePhotos(tree);
-  const banner = bannerFor(problems, prefix, photos.length);
+  const relevant = relevantTo(problems, prefix);
+
+  const openRowId = openKey !== null && openKey.startsWith(`${prefix}:`) ? openKey.slice(prefix.length + 1) : undefined;
+  const openIndex = openRowId === undefined ? -1 : photos.findIndex((photo) => photo.id === openRowId);
+  const open = openIndex === -1 ? undefined : photos[openIndex];
+
+  // This screen has never edited a collage photo's alt text -- only `src`
+  // is ever rendered here (verbatim), so a `src` problem on the open row is
+  // the only shape that can ever be SHOWN. Everything else -- the bare
+  // `heroCollage` message, an alt problem, or a `src` problem on a row that
+  // isn't open -- has nowhere else to go, so it goes to the banner. Same
+  // partition as the two lists above; this list's own "shown" set is just
+  // narrower, because its editor renders fewer fields.
+  const shown =
+    open === undefined
+      ? []
+      : relevant.filter((p) => itemOf(prefix, p.field)?.index === openIndex && itemOf(prefix, p.field)?.sub === 'src');
+  const banner = relevant.filter((p) => !shown.includes(p));
+
+  const rows: ItemRow[] = photos.map((photo, index) => ({
+    id: photo.id,
+    name: photo.alt || 'Photo with no description yet',
+    needsAttention: relevant.some((p) => itemOf(prefix, p.field)?.index === index),
+  }));
 
   return (
     <div className="mb-8">
@@ -343,68 +366,75 @@ function HeroCollageList({ tree, onChange, problems, stage }: HeroCollageListPro
           </ul>
         </div>
       )}
-      <ul>
-        {photos.map((photo, index) => {
-          const rowProblems = problems.filter((p) => itemOf(prefix, p.field)?.index === index);
-          return (
-            <li key={photo.id} className="mb-6 rounded border border-gray-200 p-4">
-              <PhotoField
-                id={`gallery-heroCollage-${photo.id}-src`}
-                label="Photo"
-                category="hero"
-                value={photo.src}
-                onChange={(next) => {
-                  if (tree === null) return;
-                  onChange(setCollagePhotoSrc(tree, photo.id, next ?? ''));
-                }}
-                // Keyed on the photo's own id -- the identity that survives a
-                // reorder, a restage on the same row, and (Task 4) a swap
-                // that moves this photo to a different box entirely.
-                onStaged={(staged) => stage(`galleries.json:heroCollage:${photo.id}:src`, fromStagedPhoto(staged))}
-                problems={rowProblems.filter((p) => itemOf(prefix, p.field)?.sub === 'src')}
-              />
-            </li>
-          );
-        })}
-      </ul>
+      {/* No thumbnail: it is not a list of rows, and its own editor shows
+          the real photograph at real size already. */}
+      <ItemList rows={rows} onOpen={(id) => setOpenKey(`${prefix}:${id}`)} />
+      {open !== undefined && (
+        <EditorSheet title={open.alt || 'Photo with no description yet'} onClose={() => setOpenKey(null)}>
+          <PhotoField
+            id={`gallery-heroCollage-${open.id}-src`}
+            label="Photo"
+            category="hero"
+            value={open.src}
+            onChange={(next) => {
+              if (tree === null) return;
+              onChange(setCollagePhotoSrc(tree, open.id, next ?? ''));
+            }}
+            // Keyed on the photo's own id -- the identity that survives a
+            // reorder, a restage on the same row, and a swap that moves this
+            // photo to a different box entirely.
+            onStaged={(staged) => stage(`galleries.json:heroCollage:${open.id}:src`, fromStagedPhoto(staged))}
+            problems={shown}
+          />
+        </EditorSheet>
+      )}
     </div>
   );
 }
 
 function GalleryList({ value, onChange, problems, stage, previews }: GalleryListProps) {
+  // `${prefix}:${rowId}`, one state for all three lists: two editors open at
+  // once would be two dialogs claiming aria-modal, and the second would trap
+  // focus inside the first.
+  const [openKey, setOpenKey] = useState<string | null>(null);
+
   return (
     <div>
-      <GalleryImageList
+      <PhotoRows
         prefix="atmosphere"
         heading="Atmosphere"
         sectionHeading="Atmosphere"
         addLabel="Add an atmosphere photo"
         category="atmosphere"
-        items={value.atmosphere}
-        onChange={(next) => onChange({ ...value, atmosphere: next })}
+        images={value.atmosphere}
+        onChangeList={(next) => onChange({ ...value, atmosphere: next })}
         problems={problems}
         stage={stage}
         previews={previews}
+        openKey={openKey}
+        setOpenKey={setOpenKey}
       />
-      <GalleryImageList
+      <PhotoRows
         prefix="ourStory"
         heading="About"
         sectionHeading="About photos"
         addLabel="Add an About photo"
         category="our_story"
-        items={value.ourStory}
-        onChange={(next) => onChange({ ...value, ourStory: next })}
+        images={value.ourStory}
+        onChangeList={(next) => onChange({ ...value, ourStory: next })}
         problems={problems}
         stage={stage}
         previews={previews}
+        openKey={openKey}
+        setOpenKey={setOpenKey}
       />
-      {/* The hero collage gets NO thumbnail: it is not a list of rows, and
-          its own editor shows the real photographs at real size already. */}
       <HeroCollageList
         tree={value.heroCollage}
         onChange={(next) => onChange({ ...value, heroCollage: next })}
         problems={problems}
         stage={stage}
+        openKey={openKey}
+        setOpenKey={setOpenKey}
       />
     </div>
   );

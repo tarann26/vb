@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { validateContent } from '../validate';
+import { ABOUT_MAX_CHARS, validateContent } from '../validate';
+import storyJson from '../story.json';
 import { MAX_COLLAGE_PHOTOS, MIN_SPLIT_CHILDREN, normalizeSizes } from '../collage';
 import type { CollageNode } from '../types';
 import type { Dish, Drink, Article, StoryContent, Copy, Section, SiteContent, Galleries, MenuFile, Award, Experience } from '../types';
@@ -1280,6 +1281,23 @@ describe('story.json chef intro', () => {
       ['chef.name', 'chef.portrait', 'chef.portraitAlt', 'chef.role'].sort(),
     );
   });
+
+  it('accepts an About section at the limit exactly', () => {
+    const paragraphs = ['x'.repeat(ABOUT_MAX_CHARS)];
+    expect(validateContent('story.json', { ...VALID_STORY, paragraphs })).toEqual([]);
+  });
+  it('refuses an About section one character over', () => {
+    // TWO paragraphs of half the limit each, so the joining space is the only
+    // thing that crosses the line -- that is what makes the join(' ') vs
+    // join('') mutation below falsifiable.
+    const half = 'x'.repeat(ABOUT_MAX_CHARS / 2);
+    const problems = validateContent('story.json', { ...VALID_STORY, paragraphs: [half, half] });
+    expect(problems.map((p) => p.field)).toContain('paragraphs');
+    expect(problems[0].message).toContain(String(ABOUT_MAX_CHARS));
+  });
+  it('the committed About section is inside the limit', () => {
+    expect(storyJson.paragraphs.join(' ').length).toBeLessThanOrEqual(ABOUT_MAX_CHARS);
+  });
 });
 
 describe('posts.json', () => {
@@ -1385,6 +1403,36 @@ describe('posts.json', () => {
       ['a citation with an unsafe link', { kind: 'citation', publication: 'X', url: 'javascript:alert(1)', date: '2026-01-01' }, '[0].blocks[0].url'],
     ])('refuses %s', (_name, block, field) => {
       expect(withBlocks([block]).map((p) => p.field)).toContain(field);
+    });
+
+    // Admin redesign Task 26. The write boundary's own half of the `levels`
+    // rule -- guards.test.ts's both-ends table already pins that these exact
+    // shapes are refused at BOTH ends, and these three cases pin the message
+    // she is the one who reads. It is a "reload and try again" rather than a
+    // "fix this", because no control on this dashboard edits a nesting depth:
+    // Tab does, and a pair of arrays that came apart is not something she did.
+    it.each([
+      ['fewer depths than items', { kind: 'bulletList', items: ['One', 'Two'], levels: [0] }, /lost track of how its items are nested/],
+      ['more depths than items', { kind: 'numberList', items: ['One'], levels: [0, 1] }, /lost track of how its items are nested/],
+      ['a depth this site cannot show', { kind: 'bulletList', items: ['One', 'Two'], levels: [0, 7] }, /nested deeper than this site can show/],
+    ])('refuses a list with %s', (_name, block, message) => {
+      const problems = withBlocks([block]);
+      expect(problems.map((p) => p.field)).toContain('[0].blocks[0].levels');
+      expect(problems.map((p) => p.message).join(' ')).toMatch(message);
+    });
+
+    // The other direction, and the reason the rows above cannot be satisfied
+    // by a boundary that refuses every list. The middle one is the shape
+    // EVERY list committed before nesting existed has, and the first one is
+    // what makes `levels` a key BLOCK_KEYS has to declare -- without that
+    // declaration the unknownKeys sweep above would refuse a nested list as
+    // carrying a key this site does not use.
+    it.each([
+      ['a nested list', { kind: 'bulletList', items: ['One', 'Two'], levels: [0, 1] }],
+      ['a list with no levels key at all', { kind: 'numberList', items: ['One', 'Two'] }],
+      ['a list nested as deep as it may go', { kind: 'bulletList', items: ['One', 'Two', 'Three'], levels: [0, 1, 2] }],
+    ])('accepts %s', (_name, block) => {
+      expect(withBlocks([block])).toEqual([]);
     });
 
     // A citation with no online copy is a real citation -- press.json's own

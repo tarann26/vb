@@ -19,9 +19,20 @@
 // hero's own toggle is rendered `disabled`, so this screen cannot even
 // SUBMIT a click that would turn it off, rather than merely showing a
 // message after the fact.
+import { useState } from 'react';
 import type { BespokeSection, SectionId } from '../content/types';
 import type { ValidationProblem } from '../content/validate';
 import { MOVE_BUTTON_CLASSNAME } from './RecordList';
+import { DRAGGING_STYLE, HANDLE_CLASSNAME, HANDLE_STYLE } from './manage/drag-row';
+import { moveTo } from './blocks/reorder';
+
+// The one list panel that does NOT use ItemList, and the reason is
+// structural rather than stylistic: every row here carries a live checkbox
+// (`Shown on homepage`), and ItemList's row IS a <button> -- a checkbox
+// inside a button is nested interactive content, which no browser resolves
+// the way either control expects. This panel takes the same drag handle and
+// the same dimming from drag-row.ts, so the two lists still behave
+// identically under a finger; it just does not share the row element.
 
 // Plan 7, Task 1: `BespokeSection[]`, not the full `Section[]` union -- this
 // screen's own D6 header comment (below) is still true today: it only ever
@@ -83,6 +94,8 @@ const SECTION_NAMES: Record<SectionId, { name: string; anchor: string | null }> 
 };
 
 function SectionList({ items, onChange, onReorder, problems }: SectionListProps) {
+  const [dragging, setDragging] = useState<number | null>(null);
+
   function swap(index: number, otherIndex: number): void {
     const ids = items.map((item) => item.id);
     const moved = ids[index];
@@ -132,9 +145,42 @@ function SectionList({ items, onChange, onReorder, problems }: SectionListProps)
           const isHero = section.id === 'hero';
           const toggleId = `section-enabled-${section.id}`;
           return (
-            <li key={section.id} className="mb-6 rounded border border-gray-200 p-4">
+            <li
+              key={section.id}
+              className="mb-6 rounded border border-gray-200 p-4"
+              style={dragging === index ? DRAGGING_STYLE : undefined}
+              onDragOver={(event) => {
+                if (dragging === null) return;
+                // preventDefault is what makes an element a valid drop
+                // target at all. No jsdom test can see it;
+                // e2e/editor-surface.spec.ts is what covers it.
+                event.preventDefault();
+              }}
+              onDrop={(event) => {
+                if (dragging === null) return;
+                event.preventDefault();
+                if (dragging !== index) onReorder(moveTo(items, dragging, index).map((s) => s.id));
+                setDragging(null);
+              }}
+            >
               <div className="mb-3 flex items-center justify-between gap-2">
-                <div>
+                <div className="flex items-center gap-1">
+                  <span
+                    aria-hidden="true"
+                    draggable
+                    onDragStart={(event) => {
+                      setDragging(index);
+                      event.dataTransfer.setData('text/plain', String(index));
+                      event.dataTransfer.effectAllowed = 'move';
+                    }}
+                    onDragEnd={() => setDragging(null)}
+                    className={HANDLE_CLASSNAME}
+                    style={HANDLE_STYLE}
+                    data-drag-handle={index}
+                    title={`Drag to move ${name}`}
+                  >
+                    ⠿
+                  </span>
                   <span className="font-['Montserrat'] text-base text-[#222]">{name}</span>
                   <span className="ml-2 text-xs text-gray-500">{anchor ?? 'not in the navigation menu'}</span>
                 </div>

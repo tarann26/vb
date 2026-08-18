@@ -36,7 +36,7 @@ export default function BlogSection() {
   const shown = sortedPosts(posts).slice(0, HOMEPAGE_POSTS);
 
   return (
-    <section id="blogs" className="py-20 bg-slate-50">
+    <section id="blogs" className="py-20 relative bg-wash">
       <div className="max-w-7xl mx-auto px-4">
         <div className="text-center mb-16">
           <h2 className={`mb-6 font-['Montserrat'] text-4xl md:text-5xl font-bold text-ink`}>

@@ -15,6 +15,9 @@ import ArraySection from '../sections/ArraySection';
 import { registerLoaded } from '../sections/register-loaded';
 import Field from '../Field';
 import PdfField from '../PdfField';
+import EditorSheet from '../manage/EditorSheet';
+import ItemList, { type ItemRow } from '../manage/ItemList';
+import Thumbnail from '../manage/Thumbnail';
 import { fetchContent } from '../content';
 import { DISH_FIELDS, DRINK_FIELDS, MENU_FIELDS } from '../fields';
 import { replaceAt, useValidation } from '../useValidation';
@@ -122,6 +125,7 @@ function MenusSection({
   restoreDraft: DraftMap | null;
 }) {
   const [state, setState] = useState<MenusLoadState>({ status: 'loading' });
+  const [openId, setOpenId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -164,17 +168,28 @@ function MenusSection({
     setState({ status: 'loaded', data: next, sha });
   }
 
-  // The bare, whole-file message (validateMenus' "the site needs at least
-  // one downloadable menu", only reachable if menus.json were hand-edited
-  // down to an empty array -- this screen has no Remove button that could
-  // produce it itself) plus any `[i].key` naming an index this screen isn't
-  // currently rendering -- the identical "nowhere else for this to go"
-  // reasoning RecordList's own unclaimedProblems documents.
-  const banner = problems.filter((p) => {
-    if (items.length === 0) return true;
-    const index = arrayIndexOf(p.field);
-    return index !== undefined && (index < 0 || index >= items.length);
-  });
+  const openIndex = openId === null ? -1 : items.findIndex((item) => item.id === openId);
+  const open = openIndex === -1 ? undefined : items[openIndex];
+
+  const rows: ItemRow[] = items.map((menu, index) => ({
+    id: menu.id,
+    name: menu.label || menu.id,
+    // The one row type in this dashboard with a placeholder and no possible
+    // picture, and it is the spec's own named example: a menu PDF's row must
+    // occupy the same width as a dish's so the two lists read as the same
+    // kind of thing. Rendering a first page needs pdf.js in the admin bundle
+    // for a 48px picture, which is not a trade this makes.
+    thumbnail: <Thumbnail path={null} />,
+    needsAttention: problems.some((p) => arrayIndexOf(p.field) === index),
+  }));
+
+  // The partition Task 3 established: `shown` is everything the open
+  // editor's fields will place; `banner` is everything else, which with no
+  // editor open is EVERYTHING -- including the bare, whole-file message
+  // (validateMenus' "the site needs at least one downloadable menu") and any
+  // `[i].key` naming an index this screen isn't currently rendering.
+  const shown = open === undefined ? [] : problems.filter((p) => arrayIndexOf(p.field) === openIndex);
+  const banner = problems.filter((p) => !shown.includes(p));
 
   return (
     <>
@@ -191,35 +206,40 @@ function MenusSection({
           </ul>
         </div>
       )}
-      <ul>
-        {items.map((menu, index) => (
-          <li key={menu.id} className="mb-6 rounded border border-gray-200 p-4">
-            <Field
-              id={`menu-${index}-id`}
-              spec={MENU_FIELDS.id}
-              value={menu.id}
-              onChange={(next) => commit(replaceAt(items, index, { ...menu, id: next }))}
-              problems={problemsFor(problems, index, 'id')}
-            />
-            <Field
-              id={`menu-${index}-label`}
-              spec={MENU_FIELDS.label}
-              value={menu.label}
-              onChange={(next) => commit(replaceAt(items, index, { ...menu, label: next }))}
-              problems={problemsFor(problems, index, 'label')}
-            />
-            <PdfField
-              id={`menu-${index}-file`}
-              label="PDF file"
-              name={menuNameFor(menu)}
-              value={menu.file}
-              onChange={(next) => commit(replaceAt(items, index, { ...menu, file: next ?? '' }))}
-              onStaged={(staged) => stage(`menus.json:${menu.id}:file`, fromStagedMenuPdf(staged))}
-              problems={problemsFor(problems, index, 'file')}
-            />
-          </li>
-        ))}
-      </ul>
+      <ItemList rows={rows} onOpen={setOpenId} />
+      {open !== undefined && (
+        <EditorSheet title={open.label || open.id} onClose={() => setOpenId(null)}>
+          <Field
+            id={`menu-${openIndex}-id`}
+            spec={MENU_FIELDS.id}
+            value={open.id}
+            onChange={(next) => {
+              commit(replaceAt(items, openIndex, { ...open, id: next }));
+              // MENU_FIELDS.id is editable, so renaming a menu changes the
+              // key this editor is open on. Re-point it in the same tick or
+              // findIndex loses the record mid-edit and the sheet closes.
+              setOpenId(next);
+            }}
+            problems={problemsFor(problems, openIndex, 'id')}
+          />
+          <Field
+            id={`menu-${openIndex}-label`}
+            spec={MENU_FIELDS.label}
+            value={open.label}
+            onChange={(next) => commit(replaceAt(items, openIndex, { ...open, label: next }))}
+            problems={problemsFor(problems, openIndex, 'label')}
+          />
+          <PdfField
+            id={`menu-${openIndex}-file`}
+            label="PDF file"
+            name={menuNameFor(open)}
+            value={open.file}
+            onChange={(next) => commit(replaceAt(items, openIndex, { ...open, file: next ?? '' }))}
+            onStaged={(staged) => stage(`menus.json:${open.id}:file`, fromStagedMenuPdf(staged))}
+            problems={problemsFor(problems, openIndex, 'file')}
+          />
+        </EditorSheet>
+      )}
     </>
   );
 }

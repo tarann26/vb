@@ -29,7 +29,7 @@ Every task's requirements implicitly include this section. The first block is co
 
 Three more, specific to this plan:
 
-- **The CSS ceiling is raised three times, each to a measured number, and never deleted.** Task 12 raises it after the list work, Task 27 after the writing surface, Task 36 after the washes. Each raise is a number read off `wc -c dist/assets/index-*.css` on that branch with the added rules accounted for one by one in the file's ledger; a raise "to be safe" is a defect. Section D must move it by **zero bytes** — it adds no markup and no class, so any movement there is a leaked utility token in a comment and is fixed, not accommodated.
+- **The CSS ceiling is raised as each task's own rules land, each to a measured number, and never deleted.** The schedule below was written expecting three checkpoints (after the list work, after the writing surface, after the washes) but that is not how it played out: `EditorSheet.tsx` breaches the ceiling on its own the moment it exists (Task 1 — Tailwind's scanner reads the file whether or not anything imports it yet), so Task 1 raised it, and Task 2's `ItemList`/`drag-row.ts` raised it again. Both are measured numbers with a per-rule ledger in `bundle.post-build.test.ts`, exactly as this rule requires; a raise "to be safe" is still a defect. Task 12 is **not** the first raise — it is an audit of the accumulated total across every raise Section A actually made, correcting the plan text below wherever a reader would otherwise expect one clean jump. Task 27 (writing surface) and Task 36 (washes) raise it again as their own rules land, on the same one-raise-per-task-that-needs-one basis, not a fixed three-checkpoint schedule. Section D must move it by **zero bytes** — it adds no markup and no class, so any movement there is a leaked utility token in a comment and is fixed, not accommodated.
 - **The hero collage is never touched.** `galleries.json`'s `heroCollage` key, `assets-source/hero/`, `public/hero/` and `/hero/brick.webp` are out of scope for every task in this plan. Task 43 asserts the `heroCollage` subtree is unchanged; Task 47 re-checks the committed photo count of 11 that `src/test/no-missing-react-keys.test.tsx:115` pins.
 - **An unidentifiable photograph is left unnamed rather than guessed.** In Section D, `matchesContentId` may only be set when `confidence === 'certain'`, and `certain` requires a named visual detail in the judgement's `notes`. A wrong photograph on a menu item is worse than no photograph, and nothing downstream can catch it — every other guard checks that a path resolves, not that the food is the right food.
 
@@ -1556,20 +1556,22 @@ It measures the 46–50px thumbnail box "and controls to the right, inside the v
 
 ---
 
-## Task 12: Re-measure the CSS ceiling and close Section A's bookkeeping
+## Task 12: Audit the accumulated CSS ceiling raises and close Section A's bookkeeping
+
+**Re-scoped (fix round 1, after Tasks 1–3 landed):** this is not the first raise. Task 1 raised the ceiling from 38700 to 38793 the moment `EditorSheet.tsx` existed (Tailwind scans the file whether or not it is imported yet), and Task 2 raised it again, 38793 → 38836, for `ItemList.tsx`/`drag-row.ts`. Task 3 (list + editor for five record panels) added no new class and moved the built CSS by zero bytes, confirmed measured. Both real raises are already recorded, rule-by-rule, in `bundle.post-build.test.ts`'s own ledger comment. This task's job is to confirm that ledger against the tree as it stands after every task in Section A, not to perform "the" raise — Steps 1–4 below (originally written assuming a single `HEAD~1` baseline) now mean: build the commit immediately **before Task 1** as the baseline, not `HEAD~1`, and expect the rule-level diff to show BOTH raises' rules together.
 
 **Files:**
 - Modify: `src/test/bundle.post-build.test.ts` (the assertion at `:719` **and** the test name at `:715` — they have drifted apart once before, `:511-514`)
 - Modify: `src/test/hosting.test.ts:382` (a comment, not an assertion)
 - Verify untouched: `src/admin/manage/__tests__/areas.test.tsx`, `src/admin/__tests__/owner-facing-labels.test.tsx`, `src/test/homepage-bytes.test.tsx`
 
-- [ ] **Step 1: Build the parent commit in a worktree, never a stash** (this file's own documented method, `:319-713`):
+- [ ] **Step 1: Build the commit immediately before Task 1 in a worktree, never a stash** (this file's own documented method, `:319-713`) — **not `HEAD~1`**, which by the time this task runs is somewhere inside Section A, not before it:
 ```
-git worktree add ../vb-base $(git rev-parse HEAD~1)
+git worktree add ../vb-base <the commit Task 1 started from>
 cd ../vb-base && npm ci && npm run build
 wc -c dist/assets/index-*.css
 ```
-The comment lineage records 38593 for Phase 5A and the ceiling is 38700; **measure, do not quote** — several commits since that entry touched scanned source.
+The comment lineage records 38593 for Phase 5A and the ceiling was 38700 going into Task 1; **measure, do not quote** — several commits since that entry touched scanned source. Expect this baseline build to measure 38700 or the last pre-Section-A ledger number, not either of Section A's own two raised numbers.
 
 - [ ] **Step 2: Build this branch and measure:** `npm run build && wc -c dist/assets/index-*.css`
 
@@ -1583,7 +1585,7 @@ diff /tmp/base-rules.txt /tmp/head-rules.txt
 ```
 Expect roughly: `overflow-y-auto`, `truncate`, `min-w-0`, `sm:m-auto`, `sm:w-[32rem]`, `sm:max-h-[85vh]`, `sm:rounded`, and the new row/Add/Done bindings. Anything on that list you did not intend is a leaked class — check it against the scans-comments rule (`bundle.post-build.test.ts:340-350`, `ManageShell.tsx:59-64`) before raising the ceiling to accommodate it. Paste the resulting list into the test file's ledger with each rule's byte cost.
 
-- [ ] **Step 4: Set the new ceiling to the measured HEAD number rounded up to the next 100, plus 100** — the same shape of headroom 38700 gives 38593. Write **both** places:
+- [ ] **Step 4: Confirm the ceiling already matches the measured HEAD number — Tasks 1 and 2 each raised it to their own exact measured number already, so this step is an audit, not a fresh raise.** Only if HEAD's build measures something the current `bundle.post-build.test.ts` ceiling does not already cover (a rule this task's own work adds) does this step set a NEW ceiling, using the same shape of headroom 38700 gave 38593 — rounded up to the next 100, plus 100. Write **both** places if and only if a new raise is actually needed:
 ```ts
   // Measured on this branch: <N> bytes, up from <M> before the list-and-editor
   // work. The delta is <N-M> bytes across <k> new rules, listed above. The
@@ -3542,7 +3544,7 @@ Resolve `<parent-sha>` on the branch (`git rev-parse HEAD~1`). Do not reuse the 
 npm run build && wc -c dist/assets/index-*.css
 cd <worktree> && npm ci && npm run build && wc -c dist/assets/index-*.css
 ```
-Task 12 already raised the ceiling once; the "before" number here is Task 12's measured number, not 38593.
+By this point the ceiling already reflects every raise Section A needed (Tasks 1 and 2's own, confirmed by Task 12's audit); the "before" number here is that settled number, not 38593.
 
 - [ ] **Step 3: Diff the two stylesheets rule by rule and write the result into the file's ledger**
 ```

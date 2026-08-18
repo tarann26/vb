@@ -1,5 +1,9 @@
 import type React from 'react';
+import { useState } from 'react';
 import RecordForm from './RecordForm';
+import EditorSheet from './manage/EditorSheet';
+import ItemList, { type ItemRow } from './manage/ItemList';
+import { moveTo } from './blocks/reorder';
 import type { ImagePreviews } from './previews';
 import { arrayIndexOf } from './problems';
 import type { FieldsOf } from './fields';
@@ -11,7 +15,13 @@ export interface RecordListProps<T extends { id: string }> {
   items: T[];
   onChange: (index: number, next: T) => void;
   onReorder: (ids: string[]) => void;
-  onAdd: () => void;
+  // Returns the id of the record it added. Add and Edit are ONE surface --
+  // the spec's own rule, so there is no separate "new item" form to drift
+  // from the edit form -- and this list has no way to spot the new record in
+  // the array it is handed back (`items` arrives on a later render, and an
+  // id-diff would guess wrong on a duplicate). Every caller mints the id in
+  // its own blank* factory already; it just stopped throwing it away.
+  onAdd: () => string;
   onRemove: (index: number) => void;
   // Task 9's wiring, one level up from RecordForm's own `onStaged` (see that
   // file's comment for the field-key half of this). RecordList is the one
@@ -58,43 +68,6 @@ export interface RecordListProps<T extends { id: string }> {
   problems: ValidationProblem[];
 }
 
-// The guarantee only RecordList can keep (see this file's own review
-// history in task-5-brief.md): RecordForm's own banner only ever excludes a
-// problem that names ANOTHER index -- it has no way to know whether that
-// other index is actually rendered by a sibling instance anywhere on the
-// page. A list rendering indices 0-37 with a problem on `[40].name` is
-// invisible to every one of those 38 forms' own banners: each one sees
-// index 40, correctly concludes "not mine", and drops it -- there is no
-// index 40 for the problem to have landed on instead. That is a total,
-// silent loss, which this plan's own rule (RecordForm.tsx's file comment)
-// calls worse than showing a problem in the wrong place.
-//
-// RecordList is the one place that actually knows how many RecordForms are
-// mounted (`items.length`), so it is the one place that can tell "belongs
-// to a sibling I'm not rendering" apart from "belongs to nobody I'm
-// rendering" -- the second case is what this function isolates.
-function unclaimedProblems(problems: ValidationProblem[], itemCount: number): ValidationProblem[] {
-  return problems.filter((p) => {
-    // When NO RecordForm is mounted at all, nothing downstream can surface
-    // ANY problem -- not just an indexed one. This is not a corner case:
-    // validateContent('dishes.json', []) (src/content/validate.ts) emits
-    // exactly `{ field: '', message: 'the menu needs at least one dish' }`
-    // precisely when the array is empty, which is exactly the
-    // state in which `items.length === 0`. Without this branch, the one
-    // message the validator produces for an empty list is the one message
-    // this component drops -- she deletes her last dish, publishes, gets a
-    // 422, and sees an "Add a dish" button with no explanation anywhere.
-    if (itemCount === 0) return true;
-    const index = arrayIndexOf(p.field);
-    // A non-array-item problem (`''`, or a non-array file's own field) is
-    // never this list's concern when at least one RecordForm IS mounted --
-    // every RecordForm this list mounts already surfaces it (via
-    // `!belongsToAnotherIndex`), so counting it here too would only
-    // duplicate it, not rescue it from being dropped.
-    return index !== undefined && (index < 0 || index >= itemCount);
-  });
-}
-
 // No `disabled:` variant: a move button is never rendered disabled -- it is
 // OMITTED entirely at the end it would move past (see the brief's own
 // naming rule below), so there is no `disabled` state for one to ever
@@ -131,27 +104,36 @@ function RecordList<T extends { id: string }>({
   previewKeyPrefix,
   scope,
 }: RecordListProps<T>) {
-  // Swaps the item at `index` with its neighbour at `otherIndex` and hands
-  // the resulting id ORDER back to the caller -- RecordList never reorders
-  // `items` itself. It is a controlled list: the caller owns the array (the
-  // same way RecordForm's caller owns `value`), and re-renders this
-  // component with `items` already in the order it asked for.
-  function swap(index: number, otherIndex: number): void {
-    const ids = items.map((item) => item.id);
-    const moved = ids[index];
-    ids[index] = ids[otherIndex];
-    ids[otherIndex] = moved;
-    onReorder(ids);
-  }
+  const [openId, setOpenId] = useState<string | null>(null);
+  // By ID, never by index. Reordering while an editor is open must not swap
+  // which record she is editing under her hands.
+  const openIndex = openId === null ? -1 : items.findIndex((item) => item.id === openId);
+  const open = openIndex === -1 ? undefined : items[openIndex];
 
-  const banner = unclaimedProblems(problems, items.length);
+  // The partition: `shown` is everything the open editor's RecordForm will
+  // place, on a field or in its own banner; `banner` is everything else,
+  // which with no editor open is EVERYTHING -- including any problem naming
+  // an index that does not exist. By reference, so nothing is counted twice
+  // and nothing is dropped.
+  const shown = open === undefined ? [] : problems.filter((p) => arrayIndexOf(p.field) === openIndex);
+  const banner = problems.filter((p) => !shown.includes(p));
+
+  const rows: ItemRow[] = items.map((item, index) => ({
+    id: item.id,
+    name: itemLabel(item),
+    thumbnail: thumbnail?.(item),
+    needsAttention: problems.some((p) => arrayIndexOf(p.field) === index),
+  }));
 
   return (
     <div>
       {banner.length > 0 && (
         <div
           role="alert"
-          aria-label="Problems with items no longer shown"
+          // No plural: the real nouns are dish, drink, article, award and
+          // "coming-soon item", and `${noun}s` renders "dishs" on the first
+          // of them. This is owner-facing text.
+          aria-label="Problems with this list"
           className="mb-4 rounded border border-red-300 bg-red-50 p-3 text-sm text-red-700"
         >
           <ul className="list-disc pl-5">
@@ -162,75 +144,37 @@ function RecordList<T extends { id: string }>({
         </div>
       )}
 
-      <ul>
-        {items.map((item, index) => {
-          const name = itemLabel(item);
-          const isFirst = index === 0;
-          const isLast = index === items.length - 1;
-          return (
-            <li key={item.id} className="mb-6 rounded border border-gray-200 p-4">
-              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  {thumbnail?.(item)}
-                  {/* Omitted at the ends, not disabled: a list of 38 items
-                      would otherwise carry 76 buttons that read as live
-                      controls but do nothing -- the exact "unassociated
-                      control" failure this task's brief calls out for
-                      identically-named buttons, just moved to disabled ones
-                      instead. */}
-                  {!isFirst && (
-                    <button
-                      type="button"
-                      aria-label={`Move ${name} up`}
-                      onClick={() => swap(index, index - 1)}
-                      className={MOVE_BUTTON_CLASSNAME}
-                    >
-                      Up
-                    </button>
-                  )}
-                  {!isLast && (
-                    <button
-                      type="button"
-                      aria-label={`Move ${name} down`}
-                      onClick={() => swap(index, index + 1)}
-                      className={MOVE_BUTTON_CLASSNAME}
-                    >
-                      Down
-                    </button>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  aria-label={`Remove ${name}`}
-                  onClick={() => onRemove(index)}
-                  className={REMOVE_BUTTON_CLASSNAME}
-                >
-                  Remove
-                </button>
-              </div>
-              <RecordForm<T>
-                fields={fields}
-                index={index}
-                value={item}
-                onChange={(next) => onChange(index, next)}
-                problems={problems}
-                onStaged={onStaged ? (fieldKey, staged) => onStaged(`${item.id}:${fieldKey}`, staged) : undefined}
-                previews={previews}
-                previewKeyPrefix={previewKeyPrefix === undefined ? undefined : `${previewKeyPrefix}:${item.id}`}
-                scope={scope}
-              />
-            </li>
-          );
-        })}
-      </ul>
+      <ItemList
+        rows={rows}
+        onOpen={setOpenId}
+        onMove={(from, to) => onReorder(moveTo(items, from, to).map((item) => item.id))}
+        onAdd={() => setOpenId(onAdd())}
+        addLabel={`Add a ${noun}`}
+      />
 
-      {/* `() => onAdd()`, not `onAdd` directly -- onClick would otherwise
-          forward the DOM MouseEvent as onAdd's first argument, which
-          doesn't match this component's own contract (`onAdd: () => void`,
-          no arguments). */}
-      <button type="button" onClick={() => onAdd()} className={ADD_BUTTON_CLASSNAME}>
-        {`Add a ${noun}`}
-      </button>
+      {open !== undefined && (
+        <EditorSheet
+          title={itemLabel(open)}
+          onClose={() => setOpenId(null)}
+          onDelete={() => {
+            onRemove(openIndex);
+            setOpenId(null);
+          }}
+          deleteLabel={`Delete ${itemLabel(open)}`}
+        >
+          <RecordForm<T>
+            fields={fields}
+            index={openIndex}
+            value={open}
+            onChange={(next) => onChange(openIndex, next)}
+            problems={shown}
+            onStaged={onStaged ? (fieldKey, staged) => onStaged(`${open.id}:${fieldKey}`, staged) : undefined}
+            previews={previews}
+            previewKeyPrefix={previewKeyPrefix === undefined ? undefined : `${previewKeyPrefix}:${open.id}`}
+            scope={scope}
+          />
+        </EditorSheet>
+      )}
     </div>
   );
 }

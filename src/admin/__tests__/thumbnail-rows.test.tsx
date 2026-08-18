@@ -93,16 +93,40 @@ describe('the six row types that get a thumbnail', () => {
 
   // The hero collage is deliberately excluded: it is not a list of rows, and
   // its own editor shows the real photographs at real size already.
+  //
+  // Re-pointed for Task 5: a collage row's own PhotoField now lives inside a
+  // dialog, mounted only while that row's editor is open, rather than inside
+  // an always-rendered `<li>` -- `getAllByLabelText('Photo')` can no longer
+  // find the LAST row without opening one first. `[data-item-row]`, ItemList's
+  // own row marker, is findable with no editor open at all.
   it('the hero collage rows carry none', async () => {
     markEveryAreaSeeded();
     stubFetchWithPhotos();
     renderDashboard('/edit/manage/story');
     const el = await openPanel('Galleries', 'galleries');
 
-    const photoFields = within(el).getAllByLabelText('Photo');
-    const collageRow = photoFields[photoFields.length - 1].closest('li');
-    expect(collageRow).not.toBeNull();
-    expect(thumbnails(collageRow as HTMLElement)).toHaveLength(0);
+    const heading = within(el).getByRole('heading', { name: 'Hero collage' });
+    const wrapper = heading.closest('div');
+    if (!wrapper) throw new Error('Hero collage heading is not inside a <div>');
+    const collageRows = within(wrapper as HTMLElement).getAllByRole('listitem');
+    expect(collageRows.length).toBeGreaterThan(0);
+    collageRows.forEach((row) => {
+      expect(thumbnails(row as HTMLElement)).toHaveLength(0);
+    });
+  });
+
+  // Menu PDFs are the one row type with no possible picture that still
+  // carries a thumbnail -- the neutral placeholder box, never an <img>, so a
+  // menu's row occupies the same width as a dish's and the two lists read as
+  // the same kind of thing.
+  it('Menu PDF rows carry the neutral placeholder, never a picture', async () => {
+    markEveryAreaSeeded();
+    stubFetchWithPhotos();
+    renderDashboard('/edit/manage/menu');
+    const el = await openPanel('Menu PDFs', 'menus');
+    const found = thumbnails(el);
+    expect(found).toHaveLength(MENUS.length);
+    expect(found.every((node) => node.tagName === 'DIV')).toBe(true); // the placeholder box, not an <img>
   });
 });
 
@@ -147,14 +171,14 @@ describe("the template form's own two row types", () => {
 
 // ---------------------------------------------------------------------------
 describe('the panels that get no thumbnail at all', () => {
-  // Menus are PDFs -- rendering a first page needs pdf.js in the admin
-  // bundle for a 48px picture, and a file glyph beside a label that already
-  // says "Food menu" adds nothing. The other four have no image field: a
-  // placeholder box on a row that can never hold a picture is decoration,
-  // and decoration on a row that means nothing is the "bland" complaint in
-  // miniature.
+  // These four have no image field of any kind: a placeholder box on a row
+  // that can never hold a picture is decoration, and decoration on a row
+  // that means nothing is the "bland" complaint in miniature -- which still
+  // holds for every row in one of these lists (unlike Menu PDFs, where the
+  // spec names an aligned row width as the reason to keep the placeholder;
+  // see thumbnail-rows.test.tsx's own Menu PDF case above and Thumbnail.tsx's
+  // header comment).
   it.each([
-    { label: 'Menu PDFs', route: '/edit/manage/menu', heading: 'Menu PDFs', panel: 'menus' },
     { label: 'Pages', route: '/edit/manage/pages', heading: 'Pages', panel: 'pages' },
     { label: 'What shows on the homepage', route: '/edit/manage/pages', heading: 'What shows on the homepage', panel: 'sections' },
     { label: 'Opening hours', route: '/edit/manage/details', heading: 'Opening hours', panel: 'hours' },
@@ -165,5 +189,48 @@ describe('the panels that get no thumbnail at all', () => {
     renderDashboard(route);
     const el = await openPanel(heading, panel);
     expect(thumbnails(el)).toHaveLength(0);
+  });
+});
+
+// Task 10: About gets the enforced length limit; Opening hours is pinned as
+// UNCHANGED -- still a form, not a list. A panel nobody's own task touches is
+// exactly the one a shared component moving underneath it can break without
+// anyone noticing, so this needs a test that would actually go red if that
+// happened.
+describe('Task 10: Opening hours stays a form, not a list', () => {
+  it('Opening hours is still a form, not a list', async () => {
+    markEveryAreaSeeded();
+    stubFetchWithPhotos();
+    renderDashboard('/edit/manage/details');
+    const el = await openPanel('Opening hours', 'hours');
+    expect(el.querySelectorAll('[data-item-row]')).toHaveLength(0);
+    expect(within(el).queryByRole('dialog')).toBeNull();
+    expect(within(el).getAllByRole('textbox').length).toBeGreaterThan(0);
+  });
+});
+
+// Task 10: the live character counter is `role="status"`, deliberately not
+// `role="alert"` -- CollapsibleSection's own MutationObserver (:90) folds a
+// "needs attention" marker onto ANY section whose content contains a
+// `role="alert"` element, and the counter is present on every render of a
+// perfectly fine paragraph, not just an overlong one.
+describe('Task 10: the About counter does not drive the folded "needs attention" marker', () => {
+  it('a well-formed About section, mounted but folded, shows no folded warning', async () => {
+    markEveryAreaSeeded();
+    stubFetchWithPhotos();
+    renderDashboard('/edit/manage/story');
+    const toggle = await screen.findByRole('button', { name: 'About' });
+    const section = toggle.closest('section');
+    if (!section) throw new Error('About toggle is not inside a <section>');
+    const panel = document.getElementById('section-panel-story');
+    if (!panel) throw new Error('no panel for story');
+    await waitFor(() => expect(within(panel).queryByText(/^Loading /)).not.toBeInTheDocument());
+    // Scoped to About's own <section>: the fold marker's TEXT is identical
+    // across every panel that carries one, so a page-wide query would pass
+    // even if About's own marker were showing, so long as some OTHER panel
+    // legitimately needs attention too.
+    expect(
+      within(section as HTMLElement).queryByText('Something in this section needs attention — open it to see.'),
+    ).not.toBeInTheDocument();
   });
 });

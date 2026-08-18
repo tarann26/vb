@@ -294,6 +294,23 @@ export type PostType = 'recipe' | 'story' | 'mention';
 // so much as names a parsing sink.
 export type InlineText = string;
 
+// How deep a list item may sit. `0` is an ordinary item, `2` is the deepest
+// Tab will produce, so three regimes exist in total and the third is already
+// hard to read on a phone.
+//
+// A CONSTANT rather than a judgement made at each keypress, because the reason
+// for the number is a measurement no jsdom test can make: at 390px a list
+// already starts 1.25rem in, and each further step spends the same again out
+// of a column that has about 22 characters left to give. e2e is where that is
+// checked; here it is simply the ceiling both ends agree on.
+//
+// It lives in this file and NOT in src/admin/writing/, which is where a reader
+// would reasonably look for it: guards.ts imports it, guards.ts is in the
+// Worker's own import chain, and worker/__tests__/bundle.test.ts fails the
+// build if anything admin- or React-adjacent reaches that chain. Moving it
+// "next to the code that uses it" would be a build failure, not a tidy-up.
+export const MAX_LIST_DEPTH = 2;
+
 // The ten kinds, paired with their own content shape. `Block` below is
 // DERIVED from this map -- a mapped type distributed over its own keys, not
 // ten hand-written union members -- for exactly the reason
@@ -311,8 +328,23 @@ export type InlineText = string;
 interface BlockContentMap {
   paragraph: { text: InlineText };
   heading: { text: InlineText };
-  bulletList: { items: InlineText[] };
-  numberList: { items: InlineText[] };
+  // `levels` is the nesting depth of each item, one entry per item, and it is
+  // OPTIONAL for the reason the caption and attribution comment below gives at
+  // length: a field a committed file need not carry has to be `?`, or the type
+  // promises something no boundary enforces. THE TWO REGIMES ARE "ABSENT" AND
+  // "ONE ENTRY PER ITEM", with nothing in between -- absent means every item
+  // sits at depth 0, which is what every list committed before this existed
+  // is, so there is no migration because the storage never moves. Every
+  // renderer must handle the absence; blocks.tsx's `nest` does it in one `??`.
+  //
+  // A parallel array rather than a nested item structure, and the cost is
+  // stated rather than hidden: `items` and `levels` can come apart. Both
+  // boundaries refuse a pair whose lengths disagree (guards.ts's assertBlock,
+  // validate.ts's validateBlock) rather than guessing which of the two is
+  // right, and structure.ts rebuilds the two together in one helper so no edit
+  // can change the length of one without the other.
+  bulletList: { items: InlineText[]; levels?: number[] };
+  numberList: { items: InlineText[]; levels?: number[] };
   // `caption` and `attribution` are OPTIONAL, and the review that found them
   // required is the reason they are not. Both were declared as required
   // `InlineText` while nothing at either boundary enforced them: `{ kind:

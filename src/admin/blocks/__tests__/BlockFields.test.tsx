@@ -304,11 +304,18 @@ describe('each kind renders its own fields', () => {
   it('ingredients and steps each have their own heading and their own noun', () => {
     const { unmount } = renderFields(EVERY_BLOCK.ingredients);
     expect(screen.getByLabelText('Heading for the ingredients')).toHaveValue('What you need');
+    // A plain <input>, never InlineTextField's markdown textarea. types.ts
+    // types this heading `string` and not InlineText, and blocks.tsx draws it
+    // with no markdown around it -- so a markdown control here would let her
+    // make a word bold and publish the asterisks as asterisks. `toHaveValue`
+    // alone cannot tell the two controls apart.
+    expect(screen.getByLabelText('Heading for the ingredients').tagName.toLowerCase()).toBe('input');
     expect(screen.getByLabelText('Ingredient 1')).toHaveValue('400g 00 flour');
     expect(screen.getByRole('button', { name: 'Add an ingredient' })).toBeInTheDocument();
     unmount();
     renderFields(EVERY_BLOCK.steps);
     expect(screen.getByLabelText('Heading for the method')).toHaveValue('How to make it');
+    expect(screen.getByLabelText('Heading for the method').tagName.toLowerCase()).toBe('input');
     expect(screen.getByLabelText('Step 1')).toHaveValue('Make a well');
     expect(screen.getByRole('button', { name: 'Add a step' })).toBeInTheDocument();
   });

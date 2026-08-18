@@ -20,7 +20,7 @@ import { ADD_BUTTON_CLASSNAME, MOVE_BUTTON_CLASSNAME, REMOVE_BUTTON_CLASSNAME } 
 import { fromStagedPhoto, type StagedFile } from './staged';
 import type { ImagePreviews } from './previews';
 import type { StoryContent } from '../content/types';
-import type { ValidationProblem } from '../content/validate';
+import { ABOUT_MAX_CHARS, type ValidationProblem } from '../content/validate';
 
 export interface StoryFormProps {
   value: StoryContent;
@@ -215,6 +215,16 @@ function StoryForm({ value, onChange, problems, stage, previews }: StoryFormProp
           );
         })}
       </ul>
+
+      {/* Live, not only on the debounce tick: the validator's own message
+          arrives 400ms after she stops typing and says she is over. This
+          says how much room is left while she is still writing, which is the
+          difference between a limit and a rejection. `role="status"` and not
+          `role="alert"` -- an alert here would drive CollapsibleSection's
+          folded marker on every keystroke of a perfectly fine paragraph. */}
+      <p role="status" className="mb-2 font-['Montserrat'] text-xs text-gray-500">
+        {`${value.paragraphs.join(' ').length} of ${ABOUT_MAX_CHARS} characters`}
+      </p>
 
       <button
         type="button"

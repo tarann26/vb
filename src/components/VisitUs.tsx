@@ -6,7 +6,7 @@ const VisitUs: React.FC = () => {
   const content = useContent();
   const { copy } = content;
   return (
-    <section id= "visit" className="py-20 bg-cream-alt">
+    <section id= "visit" className="py-20 relative bg-wash">
       <div className="max-w-4xl mx-auto px-4">
         <h2 className="font-['Montserrat'] text-4xl md:text-5xl font-bold text-ink text-center mb-16">
           {content.renderText('visit.heading', copy.visit.heading)}

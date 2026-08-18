@@ -199,7 +199,18 @@ function dotsNeeded(filePath: string): number {
 // judgement. Pinned in the case below, not merely added here: this list has
 // already carried an entry (`placement`) that nothing asserted, so the suite
 // stayed green with it present or absent alike.
-const SAFE_CONTENT_SUBMODULES = ['types', 'validate', 'guards', 'context', 'collage', 'markdown'];
+//
+// `inline-source` joins the list for the writing surface, and it inherits
+// `markdown`'s argument almost whole: its ONLY import is an `import type` of
+// InlineNode from `./markdown`, which erases at compile time, so there is no
+// runtime path out of it at all -- let alone one to `src/content/index.ts`.
+// `WritingSurface.tsx` reads `serializeInline` out of it because an editable
+// host is read back as InlineNode values (dom-inline.ts) and something has to
+// turn those into the markdown source a block actually stores; a second copy
+// of that spelling in `src/admin/` would be a second grammar to keep in step
+// with the parser. Pinned twice below -- once as this entry, once as the
+// property of the real file that earns it.
+const SAFE_CONTENT_SUBMODULES = ['types', 'validate', 'guards', 'context', 'collage', 'markdown', 'inline-source'];
 
 function importsContentSnapshot(source: string, filePath: string): boolean {
   const dots = dotsNeeded(filePath);
@@ -225,8 +236,17 @@ function importsContentSnapshot(source: string, filePath: string): boolean {
 // directory at all, so nothing in it can cause either. A production file
 // doing the identical thing is still caught -- proven by the case below that
 // runs `importsContentSnapshot` against a path outside this directory.
+// Written as ANY `__tests__` directory under src/admin, not just the one at
+// the top of it. Plan 10 Task 16 is where that stopped being a distinction
+// without a difference: `src/admin/writing/__tests__/inline-dom.test.ts`
+// proves the four-way loop between markdown source and the DOM, which means
+// importing `serializeInline` from `../../../content/inline-source` -- a
+// submodule that is NOT on the whitelist above and should not be, since no
+// production file imports it yet. Spelled as the top-level directory alone,
+// this scan called that test file a production offender and went red on the
+// first test written in a subdirectory.
 function isTestInfrastructure(filePath: string): boolean {
-  return filePath.startsWith('src/admin/__tests__/');
+  return filePath.startsWith('src/admin/') && filePath.includes('/__tests__/');
 }
 
 function gitLsFiles(dir: string): string[] {
@@ -276,6 +296,30 @@ describe('nothing under src/admin imports the build-time content snapshot', () =
     expect(isTestInfrastructure(path)).toBe(true);
     const scanned = gitLsFiles('src/admin').filter((f) => /\.tsx?$/.test(f) && !isTestInfrastructure(f));
     expect(scanned).not.toContain(path);
+  });
+
+  // The same, for a `__tests__` directory that is NOT the one at the top of
+  // src/admin. Without this the exclusion could be narrowed back to that one
+  // directory and stay green here, going red only in whichever subdirectory
+  // next holds a test -- which is how it was found.
+  it('a __tests__ directory deeper under src/admin is test infrastructure too, and really is excluded', () => {
+    const path = 'src/admin/writing/__tests__/inline-dom.test.ts';
+    // Driven by a snippet rather than by that file's own text, and the
+    // difference is worth writing down. When this case was written the real
+    // file matched on its own, because it imports `serializeInline` from a
+    // submodule the safe list did not carry; the writing surface put that
+    // submodule on the list, so the file stopped matching and this case went
+    // red without anything about the exclusion changing. What the exclusion
+    // has to survive is a test file in a nested directory reading the
+    // committed snapshot itself, which is what is asserted here -- and it
+    // cannot go stale the next time the safe list moves.
+    expect(importsContentSnapshot(`import posts from '../../../content/posts.json';`, path)).toBe(true);
+    expect(isTestInfrastructure(path)).toBe(true);
+    const scanned = gitLsFiles('src/admin').filter((f) => /\.tsx?$/.test(f) && !isTestInfrastructure(f));
+    expect(scanned).not.toContain(path);
+    // And the production module beside it is still scanned, so the widening
+    // exempts the tests and nothing else.
+    expect(scanned).toContain('src/admin/writing/inline-dom.ts');
   });
 
   // The exclusion is for TEST files specifically, not a loophole that
@@ -363,6 +407,28 @@ describe('importsContentSnapshot catches every import form, at the right depth',
     // import statements, so there is no path to the snapshot to have. The
     // dashboard's link button reads `isSafeHref` from it.
     expect(importsContentSnapshot(`import { isSafeHref } from '../content/markdown';`, AT_DEPTH_1)).toBe(false);
+    // `inline-source`, read by WritingSurface.tsx. Written at depth 2 as well
+    // as depth 1 because that is where the real importer sits
+    // (`src/admin/writing/`), and the pattern is built per depth -- an entry
+    // that worked only at depth 1 would still leave the real file red.
+    expect(importsContentSnapshot(`import { serializeInline } from '../content/inline-source';`, AT_DEPTH_1)).toBe(false);
+    expect(
+      importsContentSnapshot(
+        `import { serializeInline } from '../../content/inline-source';`,
+        'src/admin/writing/WritingSurface.tsx',
+      ),
+    ).toBe(false);
+  });
+
+  // The half the pin above cannot state on its own, exactly as for `markdown`
+  // below: `inline-source` is on the safe list because of a property of the
+  // real file. Its one import is an `import type`, which erases entirely, so
+  // it has no runtime path anywhere. Give it a value import and this reddens
+  // and the entry has to be re-argued rather than silently inherited.
+  it('the real content/inline-source module imports nothing that survives compilation', () => {
+    const source = readFileSync('src/content/inline-source.ts', 'utf8');
+    const importLines = source.split('\n').filter((line) => /^\s*(?:import|export\s*\*)\b/.test(line));
+    expect(importLines).toEqual([`import type { InlineNode } from './markdown';`]);
   });
 
   // The half the pin above cannot state on its own: `markdown` is on the safe

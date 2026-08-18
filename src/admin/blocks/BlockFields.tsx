@@ -13,9 +13,9 @@ import Field from '../Field';
 import PhotoField from '../PhotoField';
 import InlineTextField from './InlineTextField';
 import BlockProblemMessage from './BlockProblemMessage';
-import { BLOCK_KIND_LABELS } from './block-meta';
+import { ALT_SPEC, BLOCK_KIND_LABELS } from './block-meta';
 import { swapAt } from './reorder';
-import { useStableNames } from './stable-names';
+import { useStableNames, type StableNames } from './stable-names';
 import { MOVE_BUTTON_CLASSNAME, REMOVE_BUTTON_CLASSNAME, ADD_BUTTON_CLASSNAME } from '../RecordList';
 import type React from 'react';
 import type { FieldSpec } from '../fields';
@@ -44,20 +44,22 @@ export interface BlockFieldsProps {
   previews: ImagePreviews;
   onStaged: (key: string, staged: StagedPhoto | null) => void;
   previewKeyPrefix: string;
+  // The names for the photos inside a gallery block, supplied by a caller that
+  // outlives this component. NOT decoration, exactly as WritingSurface's own
+  // `names` is not: this component is mounted inside EditorSheet, so it
+  // unmounts on every Done, and a WeakMap of its own is destroyed with it. See
+  // stable-names.ts's StableNameGroup for the whole of what that costs her.
+  // Omitted, the fallback below is correct for anything that does not remount.
+  photoNames?: StableNames;
 }
 
 // Ad-hoc specs, declared once at module scope rather than rebuilt per render.
 // `satisfies` rather than a type annotation so the literal keeps its narrow
 // `kind`, which is what lets Field<string>'s generic resolve.
-// The help text INSTRUCTS before it explains, which is the whole difference
-// between a field she fills in and a field she skips: the first version said
-// only what the description is used for, which tells her why the box is there
-// and nothing about what to type in it.
-const ALT_SPEC = {
-  label: 'Photo description',
-  kind: 'text',
-  help: 'Say what is in the photo, in a few words. Anyone who cannot see it hears this instead.',
-} satisfies FieldSpec<string>;
+//
+// ALT_SPEC is no longer among them: the writing column renders a photo block
+// of its own now, and one instruction written twice is two instructions.
+// block-meta.ts holds it, beside every other owner-facing name for a block.
 
 // One per kind, and neither of them is "Heading" -- which is what the heading
 // BLOCK's own field is called. A post with a Heading block and an Ingredients
@@ -130,6 +132,7 @@ export default function BlockFields({
   previews,
   onStaged,
   previewKeyPrefix,
+  photoNames,
 }: BlockFieldsProps) {
   // The same fix BlockList applies to blocks, one level down, for the photos
   // inside a gallery block -- and the trigger here is REMOVE rather than a
@@ -146,8 +149,18 @@ export default function BlockFields({
   // gallery case, which asserts what the collector holds rather than any key.
   //
   // Declared unconditionally, above the switch, because a hook cannot live
-  // inside the one branch that needs it.
-  const photoNames = useStableNames('g');
+  // inside the one branch that needs it -- and always called, never
+  // conditionally, so the rules of hooks hold whether or not the caller
+  // supplied longer-lived storage. Its result is simply ignored when one did.
+  //
+  // THE FALLBACK IS NOT THE SAFE CASE. Review found this component mounted
+  // under EditorSheet, which tears it down on every Done: the WeakMap below
+  // died with it, and reopening re-named the photos by their CURRENT
+  // positions, so a pick after a removal deleted another photo's staged bytes.
+  // Every caller that can remount owes this component a `photoNames` from
+  // somewhere that does not.
+  const ownPhotoNames = useStableNames('g');
+  const names = photoNames ?? ownPhotoNames;
   // A list of markdown-bearing strings, with add/remove/move -- the shape
   // bulletList, numberList, ingredients and steps all share. StoryForm.tsx's
   // paragraph list is the same idea and the same button bindings; this is not
@@ -389,7 +402,7 @@ export default function BlockFields({
     // block, and for the same reason: without it, typing a description would
     // move the photo she has already staged to a name nothing refers to.
     const replaceAt = (i: number, next: GalleryImage): GalleryImage[] => {
-      photoNames.rename(safe[i], next, i);
+      names.rename(safe[i], next, i);
       return safe.map((existing, j) => (j === i ? next : existing));
     };
     return (
@@ -400,7 +413,7 @@ export default function BlockFields({
           // positional on purpose: ids only have to agree with themselves
           // within one render, and a problem key is what the validator emits
           // walking the array, so it is a position by definition.
-          const name = photoNames.nameOf(image, i);
+          const name = names.nameOf(image, i);
           return (
           <div key={name}>
             <PhotoField

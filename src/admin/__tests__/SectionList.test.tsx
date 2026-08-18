@@ -159,6 +159,19 @@ describe('SectionList: reordering', () => {
   });
 });
 
+// The spec's own rule: "No editor — the only things to change are order and
+// on/off, and both belong on the row." A raw assertion, because otherwise
+// "no editor" is a claim nothing in this suite holds -- an onOpen wired onto
+// this panel would still leave every existing test above green.
+describe('SectionList: no editor -- order and on/off live directly on the row', () => {
+  it('clicking a row opens no dialog', async () => {
+    const user = userEvent.setup();
+    renderList();
+    await user.click(screen.getByText('Atmosfera'));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+});
+
 describe('SectionList: sections.json-level problems -- one banner, since assertSections gives no per-id shape', () => {
   it('shows the real validator\'s own message when hero is disabled', () => {
     const bad = ALL_NINE.map((s) => (s.id === 'hero' ? { ...s, enabled: false } : s));

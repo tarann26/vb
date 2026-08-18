@@ -39,6 +39,9 @@ import {
 // Worker, and markdown.ts imports nothing, holds no JSX and touches no DOM,
 // so the chain stays clean (worker/__tests__/bundle.test.ts).
 import { isSafeHref, isSiteRelativePath, rawLinkTargets } from './markdown';
+// The nesting cap, read from the one place it is declared so this end and
+// assertBlock cannot come to two different answers about how deep is too deep.
+import { MAX_LIST_DEPTH } from './types';
 // The hero collage's own data structure. The rules below are the same ones
 // `assertCollageTree` (./guards) fails the BUILD on, written for her instead
 // of for a developer -- see `collageTreeProblems` for the split, and this
@@ -345,6 +348,19 @@ function validatePress(data: unknown): ValidationProblem[] {
 // ---------------------------------------------------------------------------
 // story.json
 
+// The About section's own budget, in characters across every paragraph.
+// The section is a fixed slab on the homepage (OurStory.tsx) and its
+// neighbours are laid out around it; there is no scroll inside it, so a
+// third again as much prose does not make the section taller, it makes the
+// page's rhythm wrong.
+//
+// 2000 rather than a round-sounding number: the committed About is 1366
+// characters (six paragraphs, measured on this branch), and this leaves
+// roughly half again as much. Whitespace counts, because whitespace takes
+// space on the page. The heading and the chef byline do not -- neither
+// grows with the prose.
+export const ABOUT_MAX_CHARS = 2000;
+
 function validateStory(data: unknown): ValidationProblem[] {
   const story = asRecord(data);
   const problems: ValidationProblem[] = [];
@@ -384,6 +400,18 @@ function validateStory(data: unknown): ValidationProblem[] {
       problems.push(problem(`paragraphs[${i}]`, `paragraph ${i + 1} trails off with an ellipsis — finish the thought before publishing`));
     }
   });
+
+  const aboutLength = Array.isArray(story.paragraphs)
+    ? story.paragraphs.filter((p): p is string => typeof p === 'string').join(' ').length
+    : 0;
+  if (aboutLength > ABOUT_MAX_CHARS) {
+    problems.push(
+      problem(
+        'paragraphs',
+        `the About section is ${aboutLength} characters long — trim it to ${ABOUT_MAX_CHARS} or fewer so it still fits its place on the page`,
+      ),
+    );
+  }
   return problems;
 }
 
@@ -1292,6 +1320,31 @@ function validateBlock(raw: unknown, field: string, subject: string): Validation
     case 'bulletList':
     case 'numberList':
       problems.push(...validateInlineList(block.items, `${field}.items`, subject, 'list item'));
+      // The owner-facing half of assertBlock's own `levels` branch
+      // (guards.ts). Absent is the ordinary case and is never a problem: a
+      // list with nothing nested carries no `levels` key at all.
+      //
+      // The message is a "reload and try again" rather than a "fix this",
+      // because there is nothing on screen for her to fix -- no control edits
+      // a nesting depth, Tab does, and the only way the two arrays come apart
+      // is a draft restored from a version of this dashboard that wrote them
+      // differently.
+      if (block.levels !== undefined) {
+        const levels: unknown = block.levels;
+        const items: unknown[] = Array.isArray(block.items) ? block.items : [];
+        if (!Array.isArray(levels) || levels.length !== items.length) {
+          problems.push(problem(`${field}.levels`, `a list in ${subject} lost track of how its items are nested -- reload this page, decline any draft it offers to restore, and make the edit again`));
+        } else if (levels.some((level) => typeof level !== 'number' || !Number.isInteger(level) || level < 0 || level > MAX_LIST_DEPTH)) {
+          // NOT in the brief, and it is here for the reason the caption rule
+          // above states in its own words: without it the two ends disagree in
+          // the dangerous direction. assertBlock refuses a depth of 7 and this
+          // would have accepted one, so a write the Worker took and committed
+          // would fail every build after it -- the poisoned-main shape this
+          // file's header warns about, reachable through a restored draft
+          // because registerLoaded casts one without checking.
+          problems.push(problem(`${field}.levels`, `a list in ${subject} is nested deeper than this site can show -- reload this page, decline any draft it offers to restore, and make the edit again`));
+        }
+      }
       break;
     case 'image':
       if (isBlank(block.src)) {

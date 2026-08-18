@@ -70,6 +70,19 @@ describe('parseInline: the four inline forms', () => {
     expect(parseInline('2 \\* 3 is six')).toEqual([text('2 * 3 is six')]);
   });
 
+  // A backslash with nothing after it is a backslash. This is a REGRESSION
+  // case: the escape guard read `source[index + 1] ?? ''` and every string
+  // `.includes('')`, so a trailing backslash passed it and the next line
+  // appended the word `undefined` to the paragraph. A Windows path at the end
+  // of a sentence published as `the path C:undefined`.
+  it.each([
+    ['a backslash at the very end', 'the path C:\\', [text('the path C:\\')]],
+    ['a backslash before an ordinary letter', 'a \\b c', [text('a \\b c')]],
+    ['a doubled backslash', 'a \\\\ b', [text('a \\ b')]],
+  ])('%s', (_name, source, expected) => {
+    expect(parseInline(source)).toEqual(expected);
+  });
+
   // A link target is allowed to close over its own parentheses. The parser
   // reads the target by matching parens, not by stopping at the first `)`,
   // and this is the case that tells the two apart.
@@ -98,6 +111,63 @@ describe('parseInline: unclosed and malformed runs stay literal', () => {
     ['a closed but empty bold run', 'a **** b', [text('a **** b')]],
   ])('%s', (_name, source, expected) => {
     expect(parseInline(source)).toEqual(expected);
+  });
+});
+
+describe('parseInline: strikethrough and underline', () => {
+  it('parses a doubled tilde run', () => {
+    expect(parseInline('a ~~b~~ c')).toEqual([text('a '), { kind: 'strike', children: [text('b')] }, text(' c')]);
+  });
+
+  it('parses a doubled underscore run', () => {
+    expect(parseInline('a __b__ c')).toEqual([
+      text('a '),
+      { kind: 'underline', children: [text('b')] },
+      text(' c'),
+    ]);
+  });
+
+  it('nests a mark inside the other three', () => {
+    expect(parseInline('**a ~~b __c__~~ d**')).toEqual([
+      {
+        kind: 'strong',
+        children: [
+          text('a '),
+          {
+            kind: 'strike',
+            children: [text('b '), { kind: 'underline', children: [text('c')] }],
+          },
+          text(' d'),
+        ],
+      },
+    ]);
+  });
+
+  // The reason both are doubled-only. A single underscore is a real
+  // character in a file name and in a social handle, and a single tilde is a
+  // real character in prose about approximate quantities.
+  //
+  // The first two cases are the ones that pin the DOUBLED-ONLY guard itself,
+  // and they are here because the obvious pair below cannot do it: an
+  // unpaired `~200g` stays literal even with a single-character delimiter,
+  // since the run still fails for want of a closer. It takes a CLOSED single
+  // run -- `~b~`, `_b_` -- to tell a doubled-only parser from a single one.
+  it.each([
+    ['a closed single-tilde run', 'a ~b~ c', [text('a ~b~ c')]],
+    ['a closed single-underscore run', 'chicken_alla_diavola', [text('chicken_alla_diavola')]],
+    ['a lone underscore', 'via_bianca', [text('via_bianca')]],
+    ['a lone tilde', 'about ~200g', [text('about ~200g')]],
+    ['an unclosed strike run', 'a ~~b', [text('a ~~b')]],
+    ['an unclosed underline run', 'a __b', [text('a __b')]],
+    ['a closed but empty strike run', 'a ~~~~ b', [text('a ~~~~ b')]],
+    ['a closed but empty underline run', 'a ____ b', [text('a ____ b')]],
+  ])('%s stays literal: %s', (_name, source, expected) => {
+    expect(parseInline(source)).toEqual(expected);
+  });
+
+  it('escapes both new delimiters with a backslash', () => {
+    expect(parseInline('a \\~\\~b\\~\\~ c')).toEqual([text('a ~~b~~ c')]);
+    expect(parseInline('a \\_\\_b\\_\\_ c')).toEqual([text('a __b__ c')]);
   });
 });
 

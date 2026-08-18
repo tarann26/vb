@@ -23,8 +23,10 @@ export function swapAt<T>(items: T[], index: number, otherIndex: number): T[] {
 // target. It lives beside swapAt rather than inside BlockList's drag handlers,
 // and the reason is testability rather than tidiness: jsdom has no drag
 // implementation at all, so the handlers themselves can only be proven in a
-// real browser (e2e/block-editor.spec.ts) -- and this is the part of them that
-// can be proven here, exhaustively and cheaply.
+// real browser -- and this is the part of them that can be proven here,
+// exhaustively and cheaply. `moveTo` is what ItemList's own row drag calls
+// too, so this module outlived BlockList's use of it: admin redesign Task 25
+// unmounted that component and deleted e2e/block-editor.spec.ts with it.
 //
 // A MOVE, not a swap. The Up/Down buttons above call swapAt, which exchanges
 // two neighbours -- right for a one-step nudge and wrong for a drag from

@@ -5,8 +5,11 @@
 // six times. Every row type whose content model already has an image path
 // gets one; nothing else does. A placeholder box on a row that can never
 // hold an image is decoration, and decoration on a row that means nothing is
-// the "bland" complaint in miniature -- which is why Menus (PDFs), Pages,
-// Homepage sections, Opening hours and Page copy have none.
+// the "bland" complaint in miniature -- which is why Pages, Homepage
+// sections, Opening hours and Page copy have none. Menu PDFs are the one
+// exception that still renders the placeholder: it is the spec's own named
+// example of a row with no possible picture that must still occupy the same
+// width as a dish's, so the two lists read as the same kind of thing.
 //
 // ---------------------------------------------------------------------------
 // A PHOTO SHE HAS JUST PICKED BEATS THE CONTENT PATH.

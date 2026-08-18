@@ -10,13 +10,13 @@ const Drinks: React.FC = () => {
   const { drinks, menus, copy } = content;
 
   return (
-    <section id="drinks" className="py-20 bg-cream relative overflow-hidden">
+    <section id="drinks" className="py-20 bg-wash-warm relative overflow-hidden">
       {/* Sparkling bubble background */}
       <div className="absolute inset-0 pointer-events-none">
         <div className="absolute top-1/4 left-1/4 w-3 h-3 bg-brand/20 rounded-full animate-ping"></div>
         <div className="absolute top-1/3 right-1/4 w-2 h-2 bg-brand/30 rounded-full animate-ping animation-delay-300"></div>
         <div className="absolute bottom-1/3 left-1/3 w-4 h-4 bg-brand/15 rounded-full animate-ping animation-delay-700"></div>
-        <div className="absolute top-1/2 right-1/6 w-2 h-2 bg-brand/25 rounded-full animate-ping animation-delay-1000"></div>
+        <div className="absolute top-1/2 right-1/4 w-2 h-2 bg-brand/25 rounded-full animate-ping animation-delay-1000"></div>
       </div>
 
       <div className="max-w-7xl mx-auto px-4 relative">
@@ -60,7 +60,7 @@ const Drinks: React.FC = () => {
               ))}
             </div>
           </div>
-          <div className="pointer-events-none absolute inset-y-0 right-0 w-16 bg-gradient-to-l from-cream to-transparent" />
+          <div className="pointer-events-none absolute inset-y-0 right-0 w-16 bg-gradient-to-l from-wash-warm to-transparent" />
         </div>
 
         {/* Download Full Menu Buttons */}

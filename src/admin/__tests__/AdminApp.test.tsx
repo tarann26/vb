@@ -19,7 +19,7 @@ import userEvent from '@testing-library/user-event';
 import { markEveryAreaSeeded, renderDashboard } from './renderDashboard';
 import { LOCKUP_ACCESSIBLE_NAME } from '../manage/brand';
 import { PANELS } from '../manage/areas';
-import { DISH_FIELDS } from '../fields';
+import { DISH_FIELDS, MENU_FIELDS } from '../fields';
 import {
   COPY,
   DISHES,
@@ -37,7 +37,7 @@ import {
   stubFetch,
 } from './dashboardFixtures';
 import { collagePhotos } from '../../content/collage';
-import type { Dish, Page, Post, StoryContent } from '../../content/types';
+import type { Copy, Dish, Page, Post, StoryContent } from '../../content/types';
 import { DRAFT_STORAGE_KEY, DRAFT_STAGED_COUNT_KEY, saveDraft } from '../drafts';
 import { LOCK_TIMEOUT_MS } from '../PublishBar';
 
@@ -72,21 +72,24 @@ describe('AdminApp: fetches each content file once logged in, loading state firs
 
     renderDashboard('/edit/manage/menu');
     expect(await screen.findByText(/loading dishes/i)).toBeInTheDocument();
-    // Not yet rendered -- the gate hasn't been released.
-    expect(screen.queryByDisplayValue('Dish A')).not.toBeInTheDocument();
+    // Not yet rendered -- the gate hasn't been released. A row now shows the
+    // record's name as plain row text (Task 3's list+editor redesign), not
+    // a prefilled input -- the editor holding that input isn't mounted at
+    // all until she opens the row.
+    expect(screen.queryByText('Dish A')).not.toBeInTheDocument();
 
     gate.resolve(contentResponse(DISHES, 'sha-dishes'));
-    expect(await screen.findByDisplayValue('Dish A')).toBeInTheDocument();
-    expect(screen.getByDisplayValue('Dish B')).toBeInTheDocument();
+    expect(await screen.findByText('Dish A')).toBeInTheDocument();
+    expect(screen.getByText('Dish B')).toBeInTheDocument();
   });
 
   it('fetches and renders drinks and press independently of dishes', async () => {
     stubFetch();
     renderDashboard('/edit/manage/menu');
-    expect(await screen.findByDisplayValue('Drink X')).toBeInTheDocument();
-    expect(screen.getByDisplayValue('Drink Y')).toBeInTheDocument();
-    expect(await screen.findByDisplayValue('Article P')).toBeInTheDocument();
-    expect(screen.getByDisplayValue('Article Q')).toBeInTheDocument();
+    expect(await screen.findByText('Drink X')).toBeInTheDocument();
+    expect(screen.getByText('Drink Y')).toBeInTheDocument();
+    expect(await screen.findByText('Article P')).toBeInTheDocument();
+    expect(screen.getByText('Article Q')).toBeInTheDocument();
   });
 
   // Every section starts folded now (CollapsibleSection.tsx), which would
@@ -115,7 +118,7 @@ describe('AdminApp: fetches each content file once logged in, loading state firs
     expect(within(section).queryByText(/needs attention/i)).not.toBeInTheDocument();
 
     // The other two sections are unaffected by one file's failure.
-    expect(await screen.findByDisplayValue('Drink X')).toBeInTheDocument();
+    expect(await screen.findByText('Drink X')).toBeInTheDocument();
   });
 });
 
@@ -325,33 +328,30 @@ function pdfFile(name = 'menu.pdf'): File {
 }
 
 describe('AdminApp: Add, Remove and Reorder, exercised through the real component', () => {
+  // Task 3's redesign: Remove is gone from the row (D8 -- delete lives
+  // inside the editor and asks once), and Add opens the editor on the
+  // record it just added (D3/the brief's own `onAdd` contract) rather than
+  // leaving a third inline form on the page. Rows are counted by
+  // `data-item-row`, ItemList's own row marker, since there is no more
+  // per-row `Remove <name>` button to count instead.
   it('"Add a dish" appends one new, blank row -- not a third copy of an existing one', async () => {
     stubFetch();
     const user = userEvent.setup();
     renderDashboard('/edit/manage/menu');
     const section = await dishesSection();
-    await within(section).findByDisplayValue('Dish A');
+    await within(section).findByText('Dish A');
 
-    // Rows counted by each record's `Remove <name>` button, which is an
-    // `aria-label` and needs no label resolution at all -- the same
-    // conversion the "Experiences" case below documents at length, and for
-    // the same reason: the two `getAllByLabelText` sweeps this replaces were
-    // 193ms and 333ms of this case's ~700ms. Nothing else in the Dishes
-    // panel renders a control whose accessible name starts with "Remove".
-    const rows = () => within(section).getAllByRole('button', { name: /^Remove / });
-    expect(rows()).toHaveLength(2);
+    const rowCount = () => section.querySelectorAll('[data-item-row]').length;
+    expect(rowCount()).toBe(2);
     await user.click(within(section).getByRole('button', { name: 'Add a dish' }));
+    expect(rowCount()).toBe(3);
 
-    const after = rows();
-    expect(after).toHaveLength(3);
-    // The appended row is the BLANK one, not a third copy of an existing
-    // dish: MenuArea's `itemLabel` falls back to "Untitled dish" exactly
-    // when `name` is ''. This is what makes "the last row" mean "the new
-    // row" rather than assuming it from ordering.
-    expect(after[2]).toHaveAccessibleName('Remove Untitled dish');
-    const newRow = after[2].closest('li');
-    expect(newRow).not.toBeNull();
-    expect(within(newRow as HTMLElement).getByLabelText(DISH_FIELDS.name.label)).toHaveValue('');
+    // The appended row is the BLANK one, opened automatically in its own
+    // editor -- Add and Edit are one surface, so there is no separate "new
+    // item" form to drift from the edit form. MenuArea's `itemLabel` falls
+    // back to "Untitled dish" exactly when `name` is ''.
+    expect(await screen.findByRole('dialog', { name: 'Untitled dish' })).toBeInTheDocument();
+    expect(screen.getByLabelText(DISH_FIELDS.name.label)).toHaveValue('');
   });
 
   it('"Remove Dish A" drops only that record, leaving Dish B intact', async () => {
@@ -359,13 +359,15 @@ describe('AdminApp: Add, Remove and Reorder, exercised through the real componen
     const user = userEvent.setup();
     renderDashboard('/edit/manage/menu');
     const section = await dishesSection();
-    await within(section).findByDisplayValue('Dish A');
+    await within(section).findByText('Dish A');
 
-    await user.click(within(section).getByRole('button', { name: 'Remove Dish A' }));
+    await user.click(within(section).getByRole('button', { name: 'Dish A' }));
+    await user.click(await screen.findByRole('button', { name: 'Delete Dish A' }));
+    await user.click(screen.getByRole('button', { name: 'Yes, delete dish a' }));
 
-    expect(within(section).queryByDisplayValue('Dish A')).not.toBeInTheDocument();
-    expect(within(section).getByDisplayValue('Dish B')).toBeInTheDocument();
-    expect(within(section).getAllByLabelText(DISH_FIELDS.name.label)).toHaveLength(1);
+    expect(within(section).queryByText('Dish A')).not.toBeInTheDocument();
+    expect(within(section).getByText('Dish B')).toBeInTheDocument();
+    expect(section.querySelectorAll('[data-item-row]')).toHaveLength(1);
   });
 
   it('"Move Dish A down" swaps the two dishes, each with its own values intact', async () => {
@@ -373,12 +375,14 @@ describe('AdminApp: Add, Remove and Reorder, exercised through the real componen
     const user = userEvent.setup();
     renderDashboard('/edit/manage/menu');
     const section = await dishesSection();
-    await within(section).findByDisplayValue('Dish A');
+    await within(section).findByText('Dish A');
 
     await user.click(within(section).getByRole('button', { name: 'Move Dish A down' }));
 
-    const nameInputs = within(section).getAllByLabelText(DISH_FIELDS.name.label);
-    expect(nameInputs.map((el) => (el as HTMLInputElement).value)).toEqual(['Dish B', 'Dish A']);
+    const names = within(section)
+      .getAllByText(/^Dish [AB]$/)
+      .map((el) => el.textContent);
+    expect(names).toEqual(['Dish B', 'Dish A']);
   });
 });
 
@@ -396,11 +400,34 @@ describe('AdminApp: Add, Remove and Reorder, exercised through the real componen
 // threading an optional `scope` prop (each ArraySection's own `file`, minus
 // ".json") from AdminApp through RecordList into RecordForm's own `idFor`.
 describe("AdminApp: no duplicate DOM ids across sibling sections -- a label click reaches its OWN section's input", () => {
+  // Task 3's redesign mounts a record's fields only while its OWN editor is
+  // open, and each panel's RecordList owns its `openId` independently -- so
+  // Dishes' and Drinks' editors can be open at once, which is exactly what
+  // this describe block needs to still prove the id-namespacing guarantee
+  // it was written for.
   it('every id on the fully-rendered page is unique -- confirmed by counting every id, not just spot-checking one', async () => {
     stubFetch();
+    const user = userEvent.setup();
     renderDashboard('/edit/manage/menu');
+    const dSection = await dishesSection();
+    await within(dSection).findByText('Dish A');
+    await user.click(within(dSection).getByRole('button', { name: 'Dish A' }));
+    const drSection = await sectionByHeading('Drinks');
+    await within(drSection).findByText('Drink X');
+    await user.click(within(drSection).getByRole('button', { name: 'Drink X' }));
     await screen.findByDisplayValue('Dish A');
     await screen.findByDisplayValue('Drink X');
+    // Review finding (fix round 1): Press lives in a different AREA (Story &
+    // Photos), hidden -- not unmounted -- while this route is Menu. Its own
+    // row is still findable by TEXT (`findByText`, unlike `getByRole`, does
+    // not filter on the `hidden` attribute -- this file's own header comment
+    // on `sectionByHeading`), and a raw `fireEvent.click` on the row button
+    // it wraps opens its editor regardless, same as the folded-panel case
+    // above does. Without opening it, a press-vs-dishes id collision (the
+    // exact defect `scope` exists to prevent) would go uncaught here, since
+    // an unopened record renders no ids of its own at all.
+    const pressRowButton = (await screen.findByText('Article P')).closest('button') as HTMLElement;
+    fireEvent.click(pressRowButton);
     await screen.findByDisplayValue('Article P');
 
     const ids = Array.from(document.querySelectorAll('[id]')).map((el) => el.id);
@@ -412,14 +439,17 @@ describe("AdminApp: no duplicate DOM ids across sibling sections -- a label clic
 
   it('Dishes\' and Drinks\' own Photo fields have DIFFERENT ids, namespaced by file', async () => {
     stubFetch();
+    const user = userEvent.setup();
     renderDashboard('/edit/manage/menu');
     const dSection = await dishesSection();
-    await within(dSection).findByDisplayValue('Dish A');
+    await within(dSection).findByText('Dish A');
+    await user.click(within(dSection).getByRole('button', { name: 'Dish A' }));
     const drSection = await sectionByHeading('Drinks');
-    await within(drSection).findByDisplayValue('Drink X');
+    await within(drSection).findByText('Drink X');
+    await user.click(within(drSection).getByRole('button', { name: 'Drink X' }));
 
     const dishPhotoInput = within(dSection).getAllByLabelText(DISH_FIELDS.image.label)[0];
-    const drinkPhotoInput = drSection.querySelector('input[type="file"]') as HTMLInputElement;
+    const drinkPhotoInput = screen.getByRole('dialog', { name: 'Drink X' }).querySelector('input[type="file"]') as HTMLInputElement;
     expect(dishPhotoInput.id).toBe('dishes-field-image-0');
     expect(drinkPhotoInput.id).toBe('drinks-field-image-0');
     expect(dishPhotoInput.id).not.toBe(drinkPhotoInput.id);
@@ -430,15 +460,18 @@ describe("AdminApp: no duplicate DOM ids across sibling sections -- a label clic
     const user = userEvent.setup();
     renderDashboard('/edit/manage/menu');
     const dSection = await dishesSection();
-    await within(dSection).findByDisplayValue('Dish A');
+    await within(dSection).findByText('Dish A');
+    await user.click(within(dSection).getByRole('button', { name: 'Dish A' }));
     const drSection = await sectionByHeading('Drinks');
-    await within(drSection).findByDisplayValue('Drink X');
+    await within(drSection).findByText('Drink X');
+    await user.click(within(drSection).getByRole('button', { name: 'Drink X' }));
 
     const dishPhotoInput = within(dSection).getAllByLabelText(DISH_FIELDS.image.label)[0];
-    const drinkPhotoLabel = within(drSection).getAllByText('Photo')[0];
+    const drinkDialog = screen.getByRole('dialog', { name: 'Drink X' });
+    const drinkPhotoLabel = within(drinkDialog).getAllByText('Photo')[0];
     await user.click(drinkPhotoLabel);
 
-    const drinkPhotoInput = drSection.querySelector('input[type="file"]') as HTMLInputElement;
+    const drinkPhotoInput = drinkDialog.querySelector('input[type="file"]') as HTMLInputElement;
     expect(document.activeElement).toBe(drinkPhotoInput);
     expect(document.activeElement).not.toBe(dishPhotoInput);
   });
@@ -462,9 +495,13 @@ describe('AdminApp: the real "Homepage sections" screen', () => {
     await user.click(within(section).getByRole('button', { name: 'Move Hero down' }));
 
     const HUMAN_NAMES = ['Hero', 'About', 'Atmosfera', 'Menu', 'Drinks', 'Blog', 'Awards', 'Visit Us'];
+    // Task 8 gave every row a drag handle glyph ahead of its name, so
+    // `li.textContent` no longer STARTS WITH the human name -- it starts
+    // with the handle. `within(li).queryByText(name)` finds the name's own
+    // span directly instead of relying on the row's whole concatenated text.
     const namesInOrder = within(section)
       .getAllByRole('listitem')
-      .map((li) => HUMAN_NAMES.find((name) => li.textContent?.startsWith(name)));
+      .map((li) => HUMAN_NAMES.find((name) => within(li).queryByText(name) !== null));
     expect(namesInOrder.slice(0, 2)).toEqual(['About', 'Hero']);
   });
 
@@ -576,12 +613,12 @@ describe('AdminApp: the real "Pages" screen', () => {
 
     // Mutation this guards: `PageList` returning `null` (or `items.map`
     // never running) -- confirmed red, both assertions below.
-    const editButtons = await within(section).findAllByRole('button', { name: 'Edit' });
-    expect(editButtons).toHaveLength(2);
+    const rows = await within(section).findAllByRole('button', { name: /^(Catering|Cheeseboards)$/ });
+    expect(rows).toHaveLength(2);
     expect(within(section).getByText('Catering')).toBeInTheDocument();
     expect(within(section).getByText('Cheeseboards')).toBeInTheDocument();
 
-    await user.click(editButtons[0]);
+    await user.click(within(section).getByRole('button', { name: 'Catering' }));
     expect(within(section).getByLabelText('Page name')).toHaveValue('Catering');
     expect(within(section).getByLabelText('Web address')).toHaveValue('catering');
   });
@@ -634,26 +671,20 @@ describe('AdminApp: the real "Experiences" screen', () => {
     const user = userEvent.setup();
     renderDashboard('/edit/manage/pages');
     const section = await sectionByHeading('Experiences');
-    await within(section).findByDisplayValue('Catering');
+    await within(section).findByText('Catering');
 
-    // One Remove button per record, and only per record -- RecordList names
-    // it `Remove ${itemLabel(item)}`, and nothing else inside this section
-    // renders a control whose accessible name starts with "Remove".
-    const rows = () => within(section).getAllByRole('button', { name: /^Remove / });
-    const before = rows().length;
+    const rowCount = () => section.querySelectorAll('[data-item-row]').length;
+    const before = rowCount();
     await user.click(within(section).getByRole('button', { name: 'Add a coming-soon item' }));
+    expect(rowCount()).toBe(before + 1);
 
-    const after = rows();
-    expect(after).toHaveLength(before + 1);
-    // The appended row is the BLANK one, not a copy of an existing item:
-    // `itemLabel` falls back to "Untitled item" exactly when `title` is ''.
-    // Asserting this is what makes "the last row" mean "the new row" rather
-    // than assuming it from ordering.
-    const newRow = after[after.length - 1].closest('li');
-    expect(after[after.length - 1]).toHaveAccessibleName('Remove Untitled item');
+    // The appended row is the BLANK one, opened automatically in its own
+    // editor -- not a copy of an existing item: `itemLabel` falls back to
+    // "Untitled item" exactly when `title` is ''.
+    expect(await screen.findByRole('dialog', { name: 'Untitled item' })).toBeInTheDocument();
     // ...and it is a real, editable field of hers, reached the way she
-    // reaches it -- by its label -- scoped to that one row.
-    expect(within(newRow as HTMLElement).getByLabelText('Title')).toHaveValue('');
+    // reaches it -- by its label.
+    expect(screen.getByLabelText('Title')).toHaveValue('');
   });
 });
 
@@ -716,35 +747,64 @@ describe('AdminApp: the real "Opening hours" screen', () => {
 // component -- the same "not just built in isolation" bar the Sections/
 // Hours describe blocks above already hold this file to.
 describe('AdminApp: the new prose, gallery, menus and copy screens all render, fetched independently', () => {
-  it('renders Menus, prefilled with both real menu labels', async () => {
+  it('renders Menus, listing both real menu labels, each opening its own editor on real values', async () => {
     stubFetch();
+    const user = userEvent.setup();
     renderDashboard('/edit/manage/menu');
     const section = await sectionByHeading('Menu PDFs');
-    expect(await within(section).findByDisplayValue('Food Menu')).toBeInTheDocument();
-    expect(within(section).getByDisplayValue('Drinks Menu')).toBeInTheDocument();
+    // Task 4: a menu's label is now the row's own name (ItemList), not a
+    // prefilled input -- the editor holding that input isn't mounted at
+    // all until the row is opened.
+    expect(await within(section).findByText('Food Menu')).toBeInTheDocument();
+    expect(within(section).getByText('Drinks Menu')).toBeInTheDocument();
+
+    await user.click(within(section).getByRole('button', { name: 'Food Menu' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Food Menu' });
+    expect(within(dialog).getByLabelText(MENU_FIELDS.label.label)).toHaveValue('Food Menu');
+    expect(within(dialog).getByLabelText(MENU_FIELDS.id.label)).toHaveValue('food');
+    await user.click(screen.getByRole('button', { name: 'Done' }));
+
+    // Fix round 1 (review): the FIRST row happening to show its own value is
+    // not evidence the click routed anywhere -- `items[0]` would pass the
+    // assertion above too. Opening the SECOND row and checking IT shows its
+    // own value, not the first row's, is what distinguishes "the record she
+    // clicked" from "whichever one is first".
+    await user.click(within(section).getByRole('button', { name: 'Drinks Menu' }));
+    const secondDialog = await screen.findByRole('dialog', { name: 'Drinks Menu' });
+    expect(within(secondDialog).getByLabelText(MENU_FIELDS.label.label)).toHaveValue('Drinks Menu');
+    expect(within(secondDialog).getByLabelText(MENU_FIELDS.id.label)).toHaveValue('drinks');
   });
 
-  it('renders Galleries, prefilled with real atmosphere/ourStory alt text and one row per collage photo', async () => {
+  it('renders Galleries, listing real atmosphere/ourStory rows by alt text and one row per collage photo', async () => {
     stubFetch();
+    const user = userEvent.setup();
     renderDashboard('/edit/manage/story');
     const section = await sectionByHeading('Galleries');
-    expect(await within(section).findByDisplayValue(GALLERIES.atmosphere[0].alt)).toBeInTheDocument();
-    expect(within(section).getByDisplayValue(GALLERIES.ourStory[0].alt)).toBeInTheDocument();
+    // Task 5: a row's own fields (PhotoField included) only mount once its
+    // editor is open -- what's provable with none open is that the real
+    // content produced the right ROWS, correctly named.
+    expect(await within(section).findByText(GALLERIES.atmosphere[0].alt)).toBeInTheDocument();
+    expect(within(section).getByText(GALLERIES.ourStory[0].alt)).toBeInTheDocument();
+
     // The collage's grid-placement string is gone, and with it the read-only
     // "Layout position" field this used to count. What is left per photo is
     // the one thing this screen still does for the collage: replace it.
     const photos = collagePhotos(GALLERIES.heroCollage!);
     expect(photos.length).toBeGreaterThan(0);
-    // One PhotoField per collage photo, on top of the atmosphere and
-    // ourStory rows this screen already renders.
-    //
-    // Counted through `photoPickers`, not `getAllByLabelText('Photo')`: that
-    // one query was 981ms of this case's 1066ms, measured -- the Galleries
-    // panel is the biggest in the dashboard, and it is the single most
-    // expensive label sweep left in this file. See photoPickers' own comment
-    // for why the association it checks is the same one.
-    const pickers = photoPickers(section, 'Photo');
-    expect(pickers.length).toBe(GALLERIES.atmosphere.length + GALLERIES.ourStory.length + photos.length);
+    // One row per atmosphere/ourStory image, plus one per collage photo --
+    // counted through `[data-item-row]` (ItemList's own row marker), rather
+    // than a `getAllByLabelText('Photo')` sweep: that query only ever finds
+    // ONE PhotoField at a time now (only the open row's own fields mount),
+    // so it can no longer stand in for the row count at all.
+    expect(section.querySelectorAll('[data-item-row]')).toHaveLength(
+      GALLERIES.atmosphere.length + GALLERIES.ourStory.length + photos.length,
+    );
+
+    // And opening one really does show the real value, not just a row named
+    // right by coincidence.
+    await user.click(within(section).getByRole('button', { name: GALLERIES.atmosphere[0].alt }));
+    const dialog = await screen.findByRole('dialog', { name: GALLERIES.atmosphere[0].alt });
+    expect(within(dialog).getByLabelText('Photo')).toBeInTheDocument();
   });
 
   it('renders About, prefilled with the real heading and first paragraph', async () => {
@@ -755,12 +815,17 @@ describe('AdminApp: the new prose, gallery, menus and copy screens all render, f
     expect(within(section).getByDisplayValue(STORY.paragraphs[0])).toBeInTheDocument();
   });
 
+  // Task 9: Words on the site is now a row per group -- the fields render
+  // only once the group's own row is opened, so this test opens Footer's
+  // row before looking for anything Footer's Fields would show.
   it('renders Page copy, grouped by section, with the real footer hours heading value', async () => {
     stubFetch();
     renderDashboard('/edit/manage/details');
     const section = await sectionByHeading('Words on the site');
-    expect(await within(section).findByDisplayValue(COPY.footer.hoursHeading)).toBeInTheDocument();
-    expect(within(section).getByRole('heading', { name: 'Footer' })).toBeInTheDocument();
+    fireEvent.click(within(section).getByRole('button', { name: 'Footer' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Footer' });
+    expect(within(dialog).getByRole('heading', { name: 'Footer' })).toBeInTheDocument();
+    expect(await within(dialog).findByDisplayValue(COPY.footer.hoursHeading)).toBeInTheDocument();
   });
 
   // The brief's own explicit requirement: footer.followLabel's U+00A0 must
@@ -770,8 +835,94 @@ describe('AdminApp: the new prose, gallery, menus and copy screens all render, f
     stubFetch();
     renderDashboard('/edit/manage/details');
     const section = await sectionByHeading('Words on the site');
-    await within(section).findByDisplayValue(COPY.footer.hoursHeading);
-    expect(within(section).getByText(/Shown with its non-breaking space marked:/)).toHaveTextContent('␣');
+    fireEvent.click(within(section).getByRole('button', { name: 'Footer' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Footer' });
+    await within(dialog).findByDisplayValue(COPY.footer.hoursHeading);
+    expect(within(dialog).getByText(/Shown with its non-breaking space marked:/)).toHaveTextContent('␣');
+  });
+});
+
+// Task 9's own partition: CopySection unmounts every group's Fields except
+// the open one's, so a leaf problem in a group nobody has opened must still
+// reach her -- on the list-level banner AND on that group's own row, never
+// on neither and never on both (D4).
+describe('AdminApp: Words on the site -- a problem in a CLOSED group is still on screen', () => {
+  function stubFetchWithCopy(copy: Copy) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url === '/api/wa') return WA_RESPONSE();
+        if (url.includes('dishes.json')) return contentResponse(DISHES, 'sha-dishes');
+        if (url.includes('drinks.json')) return contentResponse(DRINKS, 'sha-drinks');
+        if (url.includes('press.json')) return contentResponse(PRESS, 'sha-press');
+        if (url.includes('sections.json')) return contentResponse(SECTIONS, 'sha-sections');
+        if (url.includes('site.json')) return contentResponse(SITE, 'sha-site');
+        if (url.includes('galleries.json')) return contentResponse(GALLERIES, 'sha-galleries');
+        if (url.includes('menus.json')) return contentResponse(MENUS, 'sha-menus');
+        if (url.includes('story.json')) return contentResponse(STORY, 'sha-story');
+        if (url.includes('copy.json')) return contentResponse(copy, 'sha-copy');
+        if (url.includes('pages.json')) return contentResponse([], 'sha-pages');
+        if (url.includes('awards.json')) return contentResponse([], 'sha-awards');
+        if (url.includes('experiences.json')) return contentResponse(EXPERIENCES, 'sha-experiences');
+        if (url.includes('posts.json')) return contentResponse([], 'sha-posts');
+        throw new Error(`unexpected fetch to ${url}`);
+      }),
+    );
+  }
+
+  // validateCopy's own retired-drink-phrase rule (src/content/validate.ts)
+  // is the one copy.json check that lands on a REAL COPY_FIELDS key
+  // ('drinks.intro') rather than the whole-file `''` assertCopy reports for
+  // everything else -- copy-fields.ts's own comment on `matched` says why
+  // that distinction matters: only a real-key problem can ever be claimed by
+  // a group, so only this rule can prove the partition.
+  const COPY_WITH_RETIRED_DRINK: Copy = {
+    ...COPY,
+    drinks: { ...COPY.drinks, intro: `${COPY.drinks.intro} basil-lime spritz` },
+  };
+
+  it('with no group open, the message is on the banner and the Drinks copy row is marked', async () => {
+    stubFetchWithCopy(COPY_WITH_RETIRED_DRINK);
+    renderDashboard('/edit/manage/details');
+    const section = await sectionByHeading('Words on the site');
+    expect(await within(section).findByRole('alert', { name: 'Problems with page copy' })).toHaveTextContent(
+      /basil-lime spritz/,
+    );
+    expect(within(section).getByRole('button', { name: 'Drinks copy needs attention' })).toBeInTheDocument();
+  });
+
+  it('with a DIFFERENT group open, the message stays on the banner -- opening Footer does not claim it', async () => {
+    stubFetchWithCopy(COPY_WITH_RETIRED_DRINK);
+    renderDashboard('/edit/manage/details');
+    const section = await sectionByHeading('Words on the site');
+    await within(section).findByRole('alert', { name: 'Problems with page copy' });
+    fireEvent.click(within(section).getByRole('button', { name: 'Footer' }));
+    await screen.findByRole('dialog', { name: 'Footer' });
+    expect(within(section).getByRole('alert', { name: 'Problems with page copy' })).toHaveTextContent(
+      /basil-lime spritz/,
+    );
+  });
+
+  it('opening the group that actually holds the problem moves it off the banner and onto its own field', async () => {
+    stubFetchWithCopy(COPY_WITH_RETIRED_DRINK);
+    renderDashboard('/edit/manage/details');
+    const section = await sectionByHeading('Words on the site');
+    await within(section).findByRole('alert', { name: 'Problems with page copy' });
+    fireEvent.click(within(section).getByRole('button', { name: 'Drinks copy needs attention' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Drinks copy' });
+    expect(within(dialog).getByText(/basil-lime spritz.*is retired/)).toBeInTheDocument();
+    expect(within(section).queryByRole('alert', { name: 'Problems with page copy' })).not.toBeInTheDocument();
+  });
+
+  it("opening Footer shows Footer's own strings, and none of Hero's", async () => {
+    stubFetch();
+    renderDashboard('/edit/manage/details');
+    const section = await sectionByHeading('Words on the site');
+    fireEvent.click(within(section).getByRole('button', { name: 'Footer' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Footer' });
+    expect(within(dialog).getByLabelText('Footer hours heading')).toBeInTheDocument();
+    expect(within(dialog).queryByLabelText('Hero logo name')).toBeNull();
   });
 });
 
@@ -823,15 +974,18 @@ describe('AdminApp: a malformed content file costs one section, not the whole da
       // The rest of the dashboard is unaffected -- proven by reaching real,
       // interactive content in sections that have NOTHING to do with
       // galleries.json.
-      await screen.findByDisplayValue('Dish A');
-      expect(screen.getByDisplayValue('Drink X')).toBeInTheDocument();
-      expect(screen.getByDisplayValue('Article P')).toBeInTheDocument();
-      // Queried by display value rather than through `sectionByHeading`,
-      // deliberately: Menus lives in a different AREA from Galleries, and
-      // role queries do not reach into a hidden one. "Food Menu" is unique
-      // on this page and is the same evidence -- menus.json loaded and
-      // rendered -- without the query needing that area to be on screen.
-      expect(await screen.findByDisplayValue('Food Menu')).toBeInTheDocument();
+      await screen.findByText('Dish A');
+      expect(screen.getByText('Drink X')).toBeInTheDocument();
+      expect(screen.getByText('Article P')).toBeInTheDocument();
+      // Queried by TEXT rather than through `sectionByHeading`, deliberately:
+      // Menus lives in a different AREA from Galleries, and role queries do
+      // not reach into a hidden one. "Food Menu" is unique on this page and
+      // is the same evidence -- menus.json loaded and rendered -- without the
+      // query needing that area to be on screen. Not `findByDisplayValue`:
+      // Task 4 moved a menu's label out to its row's own name (ItemList),
+      // which renders with no editor open, so `findByText` is what still
+      // finds it here.
+      expect(await screen.findByText('Food Menu')).toBeInTheDocument();
 
       // Galleries itself shows a named, recognizable fallback instead of
       // silently vanishing or crashing the page.
@@ -863,12 +1017,16 @@ describe("AdminApp: Task 9's wiring, proven end-to-end -- staged photos across D
     renderDashboard('/edit/manage/menu');
 
     const dSection = await dishesSection();
-    await within(dSection).findByDisplayValue('Dish A');
+    await within(dSection).findByText('Dish A');
     // Nothing staged or edited yet -- checked only once the page has
     // actually finished its initial (async) render, not in the "checking
     // session" gap right after `render`, where nothing meaningful is on
     // screen yet.
     expect(screen.getByText('No changes to publish yet.')).toBeInTheDocument();
+    // A record's own fields (its PhotoField included) only mount once her
+    // editor is open (Task 3's list+editor redesign) -- open Dish A's row
+    // before reaching for its photo input.
+    await user.click(within(dSection).getByRole('button', { name: 'Dish A' }));
     // `photoPickers`, not a whole-panel `getAllByLabelText`: the association
     // proven is identical -- `<label for>` against the control's own id, read
     // from the control's side -- and it costs one indexed selector match per
@@ -884,7 +1042,8 @@ describe("AdminApp: Task 9's wiring, proven end-to-end -- staged photos across D
     await screen.findByText('1 section edited, 1 file staged — ready to publish.');
 
     const drSection = await sectionByHeading('Drinks');
-    await within(drSection).findByDisplayValue('Drink X');
+    await within(drSection).findByText('Drink X');
+    await user.click(within(drSection).getByRole('button', { name: 'Drink X' }));
     // Scoping to the Drinks panel is what makes this the DRINK's own input
     // rather than whichever section happens to render first -- sound because
     // RecordForm's `idFor` takes a per-file `scope` (see the "no duplicate DOM
@@ -932,11 +1091,18 @@ describe('AdminApp: a photo she has just picked wins over the content path in th
     renderDashboard('/edit/manage/menu');
 
     const section = await dishesSection();
-    await within(section).findByDisplayValue('Dish A');
-    const row = within(section).getByDisplayValue('Dish A').closest('li') as HTMLElement;
+    await within(section).findByText('Dish A');
+    const row = within(section).getByRole('button', { name: 'Dish A' }).closest('li') as HTMLElement;
     // Non-vacuous: before the pick it really is showing the committed path.
     expect(row.querySelector('[data-thumbnail]')).toHaveAttribute('src', '/food/a.webp');
 
+    // A record's own fields (its PhotoField included) only mount once her
+    // editor is open (Task 3's list+editor redesign) -- opening it here is
+    // what makes the upload below possible at all. The row's own thumbnail,
+    // asserted below, lives OUTSIDE that editor and is proven to update
+    // anyway -- it reads the shared preview store directly, not anything
+    // local to the open editor.
+    await user.click(within(row).getByRole('button', { name: 'Dish A' }));
     const dishPhotoInput = within(section).getAllByLabelText(DISH_FIELDS.image.label)[0];
     await user.upload(dishPhotoInput, jpegFile('dish.jpg'));
     await waitFor(() => expect(FakeXHR.instances).toHaveLength(1));
@@ -971,9 +1137,11 @@ describe("AdminApp: Task 9's wiring -- replacing a menu PDF under the SAME name 
     const user = userEvent.setup();
     renderDashboard('/edit/manage/menu');
     const section = await sectionByHeading('Menu PDFs');
-    await within(section).findByDisplayValue('Food Menu');
+    await within(section).findByText('Food Menu');
+    await user.click(within(section).getByRole('button', { name: 'Food Menu' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Food Menu' });
 
-    const pdfInput = within(section).getAllByLabelText('PDF file')[0];
+    const pdfInput = within(dialog).getByLabelText('PDF file');
     await user.upload(pdfInput, pdfFile());
     await waitFor(() => expect(FakeXHR.instances).toHaveLength(1));
     expect(FakeXHR.instances[0].sentForm?.get('name')).toBe('food-menu');
@@ -985,9 +1153,11 @@ describe("AdminApp: Task 9's wiring -- replacing a menu PDF under the SAME name 
     const user = userEvent.setup();
     renderDashboard('/edit/manage/menu');
     const section = await sectionByHeading('Menu PDFs');
-    await within(section).findByDisplayValue('Food Menu');
+    await within(section).findByText('Food Menu');
+    await user.click(within(section).getByRole('button', { name: 'Food Menu' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Food Menu' });
 
-    const pdfInput = within(section).getAllByLabelText('PDF file')[0];
+    const pdfInput = within(dialog).getByLabelText('PDF file');
     await user.upload(pdfInput, pdfFile());
     await waitFor(() => expect(FakeXHR.instances).toHaveLength(1));
     FakeXHR.instances[0].respond(200, { path: 'public/menus/food-menu.pdf', file: '/menus/food-menu.pdf' });
@@ -998,7 +1168,72 @@ describe("AdminApp: Task 9's wiring -- replacing a menu PDF under the SAME name 
     // happened can live -- no "section edited" in the summary at all, only
     // the staged file (Task 10's own carried requirement 3).
     await screen.findByText('1 file staged — ready to publish.');
-    expect(within(section).getByDisplayValue('Food Menu')).toBeInTheDocument();
+    expect(within(dialog).getByLabelText(MENU_FIELDS.label.label)).toHaveValue('Food Menu');
+  });
+});
+
+// Task 4's own new coverage: the list/editor split for Menu PDFs, and the
+// three defects the brief's mutation table names explicitly.
+describe('AdminApp: Menu PDFs -- the list/editor split (Task 4)', () => {
+  it('renaming a menu leaves its editor open', async () => {
+    stubFetch();
+    const user = userEvent.setup();
+    renderDashboard('/edit/manage/menu');
+    const section = await sectionByHeading('Menu PDFs');
+    await within(section).findByText('Food Menu');
+    await user.click(within(section).getByRole('button', { name: 'Food Menu' }));
+
+    const idInput = within(screen.getByRole('dialog')).getByLabelText(MENU_FIELDS.id.label);
+    await user.clear(idInput);
+    await user.type(idInput, 'street-food');
+
+    // Still open, on the SAME record -- not closed by the id change that
+    // relocated the record this editor is tracking by id.
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(within(screen.getByRole('dialog')).getByLabelText(MENU_FIELDS.id.label)).toHaveValue('street-food');
+  });
+
+  it('with the editor closed, a problem on the second menu is still on screen', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url === '/api/wa') return WA_RESPONSE();
+        if (url.includes('dishes.json')) return contentResponse(DISHES, 'sha-dishes');
+        if (url.includes('drinks.json')) return contentResponse(DRINKS, 'sha-drinks');
+        if (url.includes('press.json')) return contentResponse(PRESS, 'sha-press');
+        if (url.includes('sections.json')) return contentResponse(SECTIONS, 'sha-sections');
+        if (url.includes('site.json')) return contentResponse(SITE, 'sha-site');
+        if (url.includes('galleries.json')) return contentResponse(GALLERIES, 'sha-galleries');
+        // The second menu's label is blank -- a real validateMenus problem,
+        // with no editor open to place it on a field.
+        if (url.includes('menus.json'))
+          return contentResponse(
+            [
+              { id: 'food', label: 'Food Menu', file: '/menus/food-menu.pdf' },
+              { id: 'drinks', label: '', file: '/menus/drinks-menu.pdf' },
+            ],
+            'sha-menus',
+          );
+        if (url.includes('story.json')) return contentResponse(STORY, 'sha-story');
+        if (url.includes('copy.json')) return contentResponse(COPY, 'sha-copy');
+        if (url.includes('pages.json')) return contentResponse([], 'sha-pages');
+        throw new Error(`unexpected fetch to ${url}`);
+      }),
+    );
+    renderDashboard('/edit/manage/menu');
+    const section = await sectionByHeading('Menu PDFs');
+    // Nothing here opens a row: the blank-label problem on the second menu
+    // must reach the list-level banner with no editor open at all.
+    expect(await within(section).findByRole('alert')).toBeInTheDocument();
+  });
+
+  it('menus.json has no add path -- the list offers no Add button', async () => {
+    stubFetch();
+    renderDashboard('/edit/manage/menu');
+    const section = await sectionByHeading('Menu PDFs');
+    await within(section).findByText('Food Menu');
+    expect(within(section).queryByRole('button', { name: /^Add/ })).toBeNull();
   });
 });
 
@@ -1065,7 +1300,9 @@ describe('AdminApp: Critical review fix -- a restored draft cannot publish a pho
     const { unmount } = renderDashboard('/edit/manage/menu');
 
     const dSection = await dishesSection();
-    const nameInput = await within(dSection).findByDisplayValue('Dish A');
+    await within(dSection).findByText('Dish A');
+    await user.click(within(dSection).getByRole('button', { name: 'Dish A' }));
+    const nameInput = await screen.findByDisplayValue('Dish A');
     await user.clear(nameInput);
     await user.type(nameInput, 'Dish A Edited');
 
@@ -1097,7 +1334,9 @@ describe('AdminApp: Critical review fix -- a restored draft cannot publish a pho
 
     await user.click(screen.getByRole('button', { name: 'Restore' }));
     const restoredSection = await dishesSection();
-    await within(restoredSection).findByDisplayValue('Dish A Edited'); // the unrelated edit survived the scrub
+    await within(restoredSection).findByText('Dish A Edited'); // the unrelated edit survived the scrub
+    await user.click(within(restoredSection).getByRole('button', { name: 'Dish A Edited' }));
+    expect(await screen.findByDisplayValue('Dish A Edited')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Publish' }));
     await user.click(screen.getByRole('button', { name: 'Yes, publish to the live site' }));
@@ -1141,8 +1380,10 @@ describe('AdminApp: Task 10 -- a reload mid-edit offers to restore the draft', (
 
     await user.click(await screen.findByRole('button', { name: 'Restore' }));
 
+    expect(await screen.findByText('Dish A (restored)')).toBeInTheDocument();
+    expect(screen.queryByText('Dish A')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Dish A (restored)' }));
     expect(await screen.findByDisplayValue('Dish A (restored)')).toBeInTheDocument();
-    expect(screen.queryByDisplayValue('Dish A')).not.toBeInTheDocument();
     // The registry's OWN baseline still tracks the server's real sha/value
     // (registerLoaded's own contract) -- proven indirectly: the restored
     // record reads as an unsaved change ready to publish, not as already
@@ -1158,8 +1399,8 @@ describe('AdminApp: Task 10 -- a reload mid-edit offers to restore the draft', (
 
     await user.click(await screen.findByRole('button', { name: 'Discard' }));
 
-    expect(await screen.findByDisplayValue('Dish A')).toBeInTheDocument();
-    expect(screen.queryByDisplayValue('Dish A (restored)')).not.toBeInTheDocument();
+    expect(await screen.findByText('Dish A')).toBeInTheDocument();
+    expect(screen.queryByText('Dish A (restored)')).not.toBeInTheDocument();
     expect(window.localStorage.getItem(DRAFT_STORAGE_KEY)).toBeNull();
     expect(screen.getByText('No changes to publish yet.')).toBeInTheDocument();
   });
@@ -1167,7 +1408,7 @@ describe('AdminApp: Task 10 -- a reload mid-edit offers to restore the draft', (
   it('no draft in localStorage -- the dashboard renders normally, banner absent', async () => {
     stubFetch();
     renderDashboard('/edit/manage/menu');
-    await screen.findByDisplayValue('Dish A');
+    await screen.findByText('Dish A');
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 });
@@ -1219,6 +1460,9 @@ describe('AdminApp: Task 10 review fix -- a 401 mid-edit does not destroy the dr
     const user = userEvent.setup();
     renderDashboard('/edit/manage/menu');
 
+    const dSection = await dishesSection();
+    await within(dSection).findByText('Dish A');
+    await user.click(within(dSection).getByRole('button', { name: 'Dish A' }));
     const dishNameInput = await screen.findByDisplayValue('Dish A');
     await user.clear(dishNameInput);
     await user.type(dishNameInput, 'Dish A Edited');
@@ -1242,9 +1486,12 @@ describe('AdminApp: Task 10 review fix -- a 401 mid-edit does not destroy the dr
     // and NOT silently deleted out from under her.
     expect(await screen.findByRole('alert')).toHaveTextContent(/you have unsaved changes/i);
     expect(window.localStorage.getItem(DRAFT_STORAGE_KEY)).not.toBeNull();
-    expect(screen.queryByDisplayValue('Dish A Edited')).not.toBeInTheDocument(); // still gated -- never auto-applied
+    expect(screen.queryByText('Dish A Edited')).not.toBeInTheDocument(); // still gated -- never auto-applied
 
     await user.click(screen.getByRole('button', { name: 'Restore' }));
+    const restoredSection = await dishesSection();
+    await within(restoredSection).findByText('Dish A Edited');
+    await user.click(within(restoredSection).getByRole('button', { name: 'Dish A Edited' }));
     expect(await screen.findByDisplayValue('Dish A Edited')).toBeInTheDocument();
   });
 
@@ -1262,7 +1509,8 @@ describe('AdminApp: Task 10 review fix -- a 401 mid-edit does not destroy the dr
     renderDashboard('/edit/manage/menu');
 
     const dSection = await dishesSection();
-    await within(dSection).findByDisplayValue('Dish A');
+    await within(dSection).findByText('Dish A');
+    await user.click(within(dSection).getByRole('button', { name: 'Dish A' }));
     const dishPhotoInput = photoPickers(dSection, DISH_FIELDS.image.label)[0];
     await user.upload(dishPhotoInput, jpegFile('dish.jpg'));
     await waitFor(() => expect(FakeXHR.instances).toHaveLength(1));
@@ -1345,14 +1593,22 @@ describe('AdminApp: editing is paused while a publish request is in flight', () 
   }
 
   // Dirties dishes.json through the real UI and takes the publish as far as
-  // the POST, returning the Dish A name input to assert against.
+  // the POST, returning the Dish A name input to assert against. Opens Dish
+  // A's own row first -- its fields only mount once its editor is open
+  // (Task 3's list+editor redesign).
+  async function openDishAInput(): Promise<HTMLInputElement> {
+    const row = await screen.findByRole('button', { name: 'Dish A' });
+    fireEvent.click(row);
+    return (await screen.findByDisplayValue('Dish A')) as HTMLInputElement;
+  }
+
   async function publishAndGetDishInput(user: ReturnType<typeof userEvent.setup>) {
     renderDashboard('/edit/manage/menu');
-    const input = await screen.findByDisplayValue('Dish A');
+    const input = await openDishAInput();
     await user.type(input, '!');
     await user.click(screen.getByRole('button', { name: 'Publish' }));
     await user.click(screen.getByRole('button', { name: 'Yes, publish to the live site' }));
-    return input as HTMLInputElement;
+    return input;
   }
 
   it('a real section input is disabled, and refuses typing, while the POST is open', async () => {
@@ -1381,7 +1637,7 @@ describe('AdminApp: editing is paused while a publish request is in flight', () 
     const user = userEvent.setup();
     stubFetchWithPublish(() => new Promise<Response>(() => {}));
     renderDashboard('/edit/manage/menu');
-    const input = (await screen.findByDisplayValue('Dish A')) as HTMLInputElement;
+    const input = await openDishAInput();
     const fieldset = input.closest('fieldset')!;
 
     // Non-vacuous: neither signal is on before the publish starts.
@@ -1424,6 +1680,16 @@ describe('AdminApp: editing is paused while a publish request is in flight', () 
     markEveryAreaSeeded();
     stubFetchWithPublish(() => new Promise<Response>(() => {}));
     renderDashboard('/edit/manage/menu');
+    // The row (and its own editor, once opened) stay in the DOM even while
+    // the panel is folded -- CollapsibleSection only toggles `hidden` on the
+    // content div, it never unmounts anything (see this file's own header
+    // comment on `sectionByHeading`). `getByText`, unlike `getByRole`, does
+    // not filter on that attribute, so the row can still be found and
+    // clicked before the fold is ever opened -- exactly how the
+    // pre-redesign version of this test obtained its (also then-hidden)
+    // Name input.
+    const rowButton = (await screen.findByText('Dish A')).closest('button') as HTMLElement;
+    fireEvent.click(rowButton);
     const input = (await screen.findByDisplayValue('Dish A')) as HTMLInputElement;
     const toggle = screen.getByRole('button', { name: 'Dishes' });
 
@@ -1665,24 +1931,30 @@ describe('AdminApp: Phase 4 review fix -- a stale /edit draft missing `chef` is 
   });
 });
 
-// Ruled in by Task 8's review and proven here rather than in BlockList.test.tsx,
-// because the claim is about what LEAVES THE BROWSER: a photo she picked, a
-// block she then moved, and one publish request that has to carry both halves
-// in agreement. Only the whole chain can say that -- PhotoField's upload,
-// BlockList's keys, the collector every panel shares (staged.ts), and
-// buildPublishRequest assembling the body.
+// Ruled in by Task 8's review and proven here rather than in a component test,
+// because the claim is about what LEAVES THE BROWSER: a photo she picked, an
+// insert that moved the block holding it, and one publish request that has to
+// carry every half in agreement. Only the whole chain can say that -- the
+// upload, the writing surface's keys, the collector every panel shares
+// (staged.ts), and buildPublishRequest assembling the body.
 //
-// What used to happen, reproduced step for step below: the staged photo was
-// filed under the block's POSITION, so moving the block left the bytes behind
-// at the old position; the next photo picked there superseded them (the
-// collector drops whatever sits at a key the instant a new pick starts, which
-// is right and is the whole point of that contract); and the publish went out
-// naming a photo no file was ever sent for. Live, that is a broken image in
-// her post. On the next build it is an asset-existence failure that refuses
-// every publish after it until somebody edits the JSON by hand. Reported to
-// her as a success, both times.
-describe('AdminApp: a photo picked for one block, and then that block moved', () => {
-  const POST_WITH_TWO_PHOTOS = [
+// What used to happen: the staged photo and its preview were filed under the
+// block's POSITION, so anything that moved the block left both behind at the
+// old position, where the next pick superseded them -- and the publish went
+// out naming a photo no file was ever sent for. Live, that is a broken image
+// in her post; on the next build it is an asset-existence failure that refuses
+// every publish after it. Reported to her as a success, both times.
+//
+// ADMIN REDESIGN TASK 25 CHANGED THE GESTURE, NOT THE CLAIM. The moving used
+// to be a reorder: Up, Down, or the drag handle on a block row. The writing
+// surface has none of those -- no task in Section B gives it one -- so the
+// move that shifts a block here is an INSERT ABOVE IT, which is the only one
+// left. She picks the oven's photo standing in the second paragraph, then the
+// tielle's standing in the first, and the second insert pushes the oven's
+// block down one. Everything a positional key got wrong about a reorder it
+// gets wrong about that too.
+describe('AdminApp: a photo picked for one block, and then that block pushed down', () => {
+  const POST_WITH_TWO_PARAGRAPHS = [
     {
       id: 'post-1',
       slug: 'the-tielle',
@@ -1692,8 +1964,8 @@ describe('AdminApp: a photo picked for one block, and then that block moved', ()
       excerpt: 'A pie from Sète, by way of a bread oven.',
       image: '/press/hotelier.webp',
       blocks: [
-        { kind: 'image', src: '', alt: 'The tielle, sliced', caption: '' },
-        { kind: 'image', src: '', alt: 'The bread oven', caption: '' },
+        { kind: 'paragraph', text: 'The tielle, sliced' },
+        { kind: 'paragraph', text: 'The bread oven' },
       ],
     },
   ];
@@ -1706,51 +1978,79 @@ describe('AdminApp: a photo picked for one block, and then that block moved', ()
     vi.unstubAllGlobals();
   });
 
+  // The paragraph she is standing in, found by HER OWN WORDS and never by
+  // position -- position is the thing under test, so a query that used one
+  // would be assuming the answer.
+  function paragraphSaying(section: HTMLElement, words: string): HTMLElement {
+    const found = [...section.querySelectorAll<HTMLElement>('[data-slot]')].find(
+      (el) => el.textContent === words,
+    );
+    expect(found, `no slot on this panel holds "${words}"`).toBeDefined();
+    return found as HTMLElement;
+  }
+
+  // One photograph, picked while standing in one paragraph. The surface's
+  // single picker acts on the block she was LAST writing in, so the focus is
+  // part of the gesture rather than test scaffolding.
+  async function pickPhotoAfter(
+    section: HTMLElement,
+    user: ReturnType<typeof userEvent.setup>,
+    host: HTMLElement,
+    file: string,
+    contentPath: string,
+  ): Promise<void> {
+    const before = FakeXHR.instances.length;
+    const figuresBefore = section.querySelectorAll('figure').length;
+    fireEvent.focus(host);
+    // The SURFACE's own picker, by the id WritingToolbar's label points at --
+    // never the first file input on the panel, which is the post's own card
+    // photo and belongs to a different field entirely.
+    const picker = section.querySelector('input[id$="-writing-image"]') as HTMLInputElement;
+    expect(picker, 'the writing surface has no photo picker on this panel').not.toBeNull();
+    await user.upload(picker, jpegFile(file));
+    await waitFor(() => expect(FakeXHR.instances).toHaveLength(before + 1));
+    await act(async () => {
+      FakeXHR.instances[before].respond(200, { path: `assets-source/posts/${file}`, contentPath });
+    });
+    // The block itself arriving is the confirmation here: nothing is handed up
+    // until the bytes are staged and the preview filed, so a figure on screen
+    // means both have already happened.
+    await waitFor(() => expect(section.querySelectorAll('figure')).toHaveLength(figuresBefore + 1));
+  }
+
+  // Every photograph on screen, in document order, as the src its own figure
+  // is actually showing. A just-picked photo shows the LOCAL preview -- the
+  // object URL, filed under a key composed from the block's own name -- because
+  // `contentPath` names a derivative no build has produced yet. That is the
+  // half a positional preview key breaks: after the second insert pushes the
+  // oven's block down, a positional key looks up a position the URL was never
+  // stored at, and she gets a broken image where her photograph was.
+  function shownPhotos(section: HTMLElement): string[] {
+    return [...section.querySelectorAll('figure img')].map((img) => (img as HTMLImageElement).src);
+  }
 
   it('publishes the photo on the block she put it on, with the bytes for BOTH photos in the same request', async () => {
-    const publishBodies = stubFetchCapturingPublish(POST_WITH_TWO_PHOTOS);
+    const publishBodies = stubFetchCapturingPublish(POST_WITH_TWO_PARAGRAPHS);
     const user = userEvent.setup();
     renderDashboard('/edit/manage/story');
 
     const section = await openPostsPanel(user);
+    // Fields mount only while their own post's row is open (Task 7).
+    await user.click(within(section).getByRole('button', { name: 'The tielle' }));
 
-    // Each block found by the description SHE typed into it, never by
-    // position -- position is the thing under test, so a query that used one
-    // would be assuming the answer. `closest('li')` lands on the BLOCK's own
-    // item, which is nested inside the post's.
-    //
-    // A plain value scan rather than `getByDisplayValue`, and it is called
-    // four times: what it gives up is the nice failure message, what it saves
-    // is four Testing Library sweeps in a case that already spends its budget
-    // on two uploads and a publish.
-    const blockOf = (description: string): HTMLElement => {
-      const input = [...section.querySelectorAll<HTMLInputElement>('input')].find(
-        (candidate) => candidate.value === description,
-      );
-      expect(input, `no field on this panel holds "${description}"`).toBeDefined();
-      return (input as HTMLInputElement).closest('li') as HTMLElement;
-    };
+    // The oven first, standing in the SECOND paragraph...
+    await pickPhotoAfter(section, user, paragraphSaying(section, 'The bread oven'), 'oven.jpg', '/posts/oven.webp');
+    // ...then the tielle, standing in the FIRST, which pushes the oven's block
+    // down one place.
+    await pickPhotoAfter(section, user, paragraphSaying(section, 'The tielle, sliced'), 'tielle.jpg', '/posts/tielle.webp');
 
-    async function pickPhotoIn(block: HTMLElement, file: string, contentPath: string): Promise<void> {
-      const before = FakeXHR.instances.length;
-      const picker = block.querySelector('input[type="file"]') as HTMLInputElement;
-      await user.upload(picker, jpegFile(file));
-      await waitFor(() => expect(FakeXHR.instances).toHaveLength(before + 1));
-      FakeXHR.instances[before].respond(200, { path: `assets-source/posts/${file}`, contentPath });
-      // Scoped to this block, so a confirmation left over on a DIFFERENT
-      // block cannot answer for this one -- which is exactly the confusion
-      // this whole case is about.
-      await waitFor(() => expect(within(block).getByText(/Uploaded/)).toBeInTheDocument());
-    }
-
-    // A photo for the tielle, which is the first block.
-    await pickPhotoIn(blockOf('The tielle, sliced'), 'tielle.jpg', '/posts/tielle.webp');
-    // She moves it under the oven -- one gesture with the drag handle in a
-    // real browser, one click here, the same reorder either way (the buttons
-    // are not the lesser path; they are the only path on her phone).
-    await user.click(within(section).getByRole('button', { name: 'Move Photo block 1 down' }));
-    // ...and then a photo for the oven, which is now the first block.
-    await pickPhotoIn(blockOf('The bread oven'), 'oven.jpg', '/posts/oven.webp');
+    // Two photographs on screen, each its own, neither of them the broken
+    // image a key that moved with the position would leave behind.
+    const shown = shownPhotos(section);
+    expect(shown).toHaveLength(2);
+    expect(shown[0], `the first figure shows ${shown[0]}`).toMatch(/^blob:/);
+    expect(shown[1], `the second figure shows ${shown[1]}`).toMatch(/^blob:/);
+    expect(shown[0]).not.toBe(shown[1]);
 
     await user.click(screen.getByRole('button', { name: 'Publish' }));
     await user.click(screen.getByRole('button', { name: 'Yes, publish to the live site' }));
@@ -1760,22 +2060,91 @@ describe('AdminApp: a photo picked for one block, and then that block moved', ()
     const postsFile = sent.find((f) => f.path === 'src/content/posts.json');
     expect(postsFile).toBeDefined();
     const publishedBlocks = (JSON.parse(postsFile!.content) as Post[])[0].blocks as unknown as {
-      alt: string;
-      src: string;
+      kind: string;
+      text?: string;
+      src?: string;
     }[];
-    // Her order, and her pairing: the oven first because she moved it there,
-    // each block naming the photo she picked FOR IT.
-    expect(publishedBlocks.map((block) => [block.alt, block.src])).toEqual([
-      ['The bread oven', '/posts/oven.webp'],
-      ['The tielle, sliced', '/posts/tielle.webp'],
-    ]);
+    // Her order, and her pairing: each photograph directly under the words it
+    // belongs to, in the order she wrote them.
+    expect(publishedBlocks.map((block) => block.kind)).toEqual(['paragraph', 'image', 'paragraph', 'image']);
+    expect(publishedBlocks[1].src).toBe('/posts/tielle.webp');
+    expect(publishedBlocks[3].src).toBe('/posts/oven.webp');
 
     // And the bytes for both, in this same request. This is the assertion the
-    // defect failed: `assets-source/posts/tielle.jpg` was absent, because the
-    // oven's pick had superseded the tielle's photo at the position it used to
-    // occupy -- while posts.json above went on naming it. Asserted as the
-    // whole set rather than two `toContain`s, so a THIRD, orphaned copy staged
-    // under a name nothing refers to would fail here too.
+    // defect failed. Asserted as the whole set rather than two `toContain`s, so
+    // a THIRD, orphaned copy staged under a name nothing refers to would fail
+    // here too.
+    expect(sent.filter((f) => f.path.startsWith('assets-source/')).map((f) => f.path).sort()).toEqual([
+      'assets-source/posts/oven.jpg',
+      'assets-source/posts/tielle.jpg',
+    ]);
+  });
+
+  // Task 7's own risk, named directly in its brief and unchanged by Task 25's
+  // swap: the block editor mounts only while its post's editor is open (D4),
+  // and its stable-names WeakMap lives in a `useRef` -- torn down on every
+  // unmount. The case above proves identity survives an insert while the
+  // editor stays open; this one proves it ALSO survives the editor closing and
+  // reopening. Without PostList's own per-post-id `StableNames` (kept alive
+  // above the surface, in `blocks/stable-names.ts`'s `createStableNames`),
+  // reopening reassigns every block a name by its CURRENT position -- and the
+  // photograph she picked is then looked up under a key nothing ever stored,
+  // so she reopens her own post and finds a broken image where it was.
+  it('a staged photo survives the editor closing and reopening, and a second pick elsewhere does not delete it', async () => {
+    const publishBodies = stubFetchCapturingPublish(POST_WITH_TWO_PARAGRAPHS);
+    const user = userEvent.setup();
+    renderDashboard('/edit/manage/story');
+
+    const section = await openPostsPanel(user);
+    await user.click(within(section).getByRole('button', { name: 'The tielle' }));
+
+    // A photograph for the tielle, in the FIRST paragraph, so the block it
+    // makes lands in the MIDDLE of the array. That detail is the whole
+    // falsifiability of this case: a name minted at pick time is handed out
+    // after both paragraphs already have theirs, so the array's order and the
+    // name order disagree -- and a fresh WeakMap on reopen, which hands names
+    // out by current position, gives this block a different one. Picked on the
+    // LAST paragraph instead, the two orders agree and a fresh map is
+    // indistinguishable from a kept one.
+    await pickPhotoAfter(section, user, paragraphSaying(section, 'The tielle, sliced'), 'tielle.jpg', '/posts/tielle.webp');
+    const beforeClosing = shownPhotos(section);
+    expect(beforeClosing[0]).toMatch(/^blob:/);
+
+    // Close the editor entirely, then reopen the SAME post -- this is what
+    // unmounts and remounts the surface, discarding a plain
+    // `useStableNames`-only WeakMap.
+    await user.click(within(section).getByRole('button', { name: 'Done' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    await user.click(within(section).getByRole('button', { name: 'The tielle' }));
+
+    // The same photograph, under the same key, on the same block. A fresh
+    // WeakMap hands this block a name by its current position instead, and the
+    // preview store has nothing at that key -- so the figure falls back to
+    // `src`, a derivative no build has produced, and she sees a broken image.
+    await waitFor(() => expect(shownPhotos(section)).toEqual(beforeClosing));
+
+    // Now the second pick, on the OTHER paragraph -- the exact shape that used
+    // to delete the first pick's bytes when the key was positional.
+    await pickPhotoAfter(section, user, paragraphSaying(section, 'The bread oven'), 'oven.jpg', '/posts/oven.webp');
+
+    await user.click(screen.getByRole('button', { name: 'Publish' }));
+    await user.click(screen.getByRole('button', { name: 'Yes, publish to the live site' }));
+    await waitFor(() => expect(publishBodies).toHaveLength(1));
+
+    const sent = publishBodies[0].files;
+    const postsFile = sent.find((f) => f.path === 'src/content/posts.json');
+    expect(postsFile).toBeDefined();
+    const publishedBlocks = (JSON.parse(postsFile!.content) as Post[])[0].blocks as unknown as {
+      kind: string;
+      src?: string;
+    }[];
+    expect(publishedBlocks.map((block) => block.kind)).toEqual(['paragraph', 'image', 'paragraph', 'image']);
+    expect(publishedBlocks[1].src).toBe('/posts/tielle.webp');
+    expect(publishedBlocks[3].src).toBe('/posts/oven.webp');
+
+    // The bytes for BOTH photos, in the publish REQUEST itself -- not just in
+    // posts.json's own text. This is what the first pick's bytes being
+    // silently deleted from the collector would fail.
     expect(sent.filter((f) => f.path.startsWith('assets-source/')).map((f) => f.path).sort()).toEqual([
       'assets-source/posts/oven.jpg',
       'assets-source/posts/tielle.jpg',
@@ -1886,13 +2255,22 @@ describe('a draft saved before the block editor existed', () => {
     await user.click(await screen.findByRole('button', { name: /^Restore/ }));
     await postsPanelSettled();
     const panel = await openPostsPanel(user);
+    // Fields mount only while their own post's row is open (Task 7).
+    await user.click(within(panel).getByRole('button', { name: /^Another stale post/ }));
 
     // The block's own field carries the block's own problem, by
     // aria-describedby -- the association she actually depends on, not merely
-    // the message being somewhere on the page. Scoped to the one field block
-    // it can be answered by (fieldBlock's own comment), because a
-    // whole-panel label sweep here is what has twice nearly refused a deploy.
-    const box = await waitFor(() => within(fieldBlock(panel, 'Words')).getByLabelText('Words'));
+    // the message being somewhere on the page. Found by the writing surface's
+    // own `data-slot` marker rather than by a label: admin redesign Task 25
+    // swapped BlockList for the column, so a paragraph's words live in an
+    // editable host with no label of its own. Still one indexed selector match
+    // rather than a whole-panel label sweep, which is what has twice nearly
+    // refused a deploy from this file.
+    const box = await waitFor(() => {
+      const host = panel.querySelector<HTMLElement>('[data-slot-key="text"]');
+      expect(host, 'no paragraph slot on this panel').not.toBeNull();
+      return host as HTMLElement;
+    });
     await waitFor(() => expect(box.getAttribute('aria-describedby')).not.toBeNull());
     const describedBy = box.getAttribute('aria-describedby') as string;
     expect(document.getElementById(describedBy.split(' ').pop() as string)).toHaveTextContent(/needs some words/);
@@ -1906,6 +2284,8 @@ describe('a draft saved before the block editor existed', () => {
     await user.click(await screen.findByRole('button', { name: /^Restore/ }));
     await postsPanelSettled();
     const panel = await openPostsPanel(user);
+    // Fields mount only while their own post's row is open (Task 7).
+    await user.click(within(panel).getByRole('button', { name: /^Another stale post/ }));
 
     // The problem is on screen BEFORE she fixes it, and this is not
     // scene-setting: a wait for a message to go away is satisfied by a message
@@ -1914,7 +2294,15 @@ describe('a draft saved before the block editor existed', () => {
     // not supposed.
     await waitFor(() => expect(within(panel).getByText(/needs some words/)).toBeInTheDocument());
 
-    await user.type(within(fieldBlock(panel, 'Words')).getByLabelText('Words'), 'A real paragraph.');
+    // Spelled the way a browser spells an edit to an editable host -- the
+    // words change, then `input` fires. `user.type` drives a value, and an
+    // editable host has none.
+    const host = panel.querySelector<HTMLElement>('[data-slot-key="text"]') as HTMLElement;
+    expect(host, 'no paragraph slot on this panel').not.toBeNull();
+    await act(async () => {
+      host.textContent = 'A real paragraph.';
+      fireEvent.input(host);
+    });
 
     // The publish path is what "she could not get stuck" actually means: not
     // that the screen rendered, but that the work can leave the browser. The

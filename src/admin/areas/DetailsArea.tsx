@@ -19,6 +19,8 @@ import { registerLoaded } from '../sections/register-loaded';
 import { COPY_GROUPS, leafValue, withLeaf, withVisibleNbsp } from '../sections/copy-fields';
 import Field from '../Field';
 import HoursField from '../HoursField';
+import EditorSheet from '../manage/EditorSheet';
+import ItemList, { type ItemRow } from '../manage/ItemList';
 import { fetchContent } from '../content';
 import { COPY_FIELDS } from '../fields';
 import { useValidation } from '../useValidation';
@@ -137,6 +139,7 @@ type CopyLoadState =
 
 function CopySection({ registry, restoreDraft }: { registry: ContentRegistry; restoreDraft: DraftMap | null }) {
   const [state, setState] = useState<CopyLoadState>({ status: 'loading' });
+  const [openSection, setOpenSection] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -172,29 +175,40 @@ function CopySection({ registry, restoreDraft }: { registry: ContentRegistry; re
     );
   }
 
+  const openGroup = COPY_GROUPS.find((g) => g.section === openSection);
+
   const sha = (state as { status: 'loaded'; sha: string }).sha;
   function commit(next: Copy) {
     registry.updateData('copy.json', next);
     setState({ status: 'loaded', data: next, sha });
   }
 
-  // Every leaf problem actually rendered below, tracked by reference so the
-  // banner is simply "whatever's left over" -- the identical guarantee
-  // RecordForm.tsx's own `matched` Set documents (a problem must never be
-  // counted in both places, or in neither). Catches assertCopy's own
-  // whole-file `''` failures and drinks.intro's retired-phrase check, which
-  // COPY_FIELDS has no per-leaf entry for `''` to ever match.
-  const matched = new Set<ValidationProblem>();
+  // Every group's own leaf problems, for the row markers below -- not the
+  // partition itself. Only ONE group's Fields are ever mounted (the open
+  // one), so `openGroupMatched` below -- built from that group alone -- is
+  // what actually decides shown vs. banner; this is just `needsAttention`
+  // per row.
   function leafProblems(key: string): ValidationProblem[] {
-    const found = problemsFor(problems, undefined, key);
-    found.forEach((p) => matched.add(p));
-    return found;
+    return problemsFor(problems, undefined, key);
   }
-  const rows = COPY_GROUPS.map((group) => ({
+  const rows0 = COPY_GROUPS.map((group) => ({
     ...group,
     fields: group.keys.map((key) => ({ key, problems: leafProblems(key) })),
   }));
-  const banner = problems.filter((p) => !matched.has(p));
+  const rows: ItemRow[] = rows0.map((group) => ({
+    id: group.section,
+    name: group.heading,
+    needsAttention: group.fields.some((f) => f.problems.length > 0),
+  }));
+
+  // Only the group whose sheet is open can claim a leaf problem, because
+  // only its Fields are mounted. Every other leaf problem falls to the
+  // banner below -- the same rule this dashboard's other twelve panels
+  // follow, restated for a panel whose rows are groups rather than records.
+  const openGroupMatched = new Set(
+    openGroup === undefined ? [] : openGroup.keys.flatMap((key) => leafProblems(key)),
+  );
+  const banner = problems.filter((p) => !openGroupMatched.has(p));
 
   return (
     <>
@@ -211,27 +225,29 @@ function CopySection({ registry, restoreDraft }: { registry: ContentRegistry; re
           </ul>
         </div>
       )}
-      {rows.map(({ section, heading, fields }) => (
-        <div key={section} className="mb-6">
-          <h3 className="mb-3 font-['Montserrat'] text-base text-[#222]">{heading}</h3>
-          {fields.map(({ key, problems: fieldProblems }) => (
-            <div key={key}>
-              <Field
-                id={`copy-${key}`}
-                spec={COPY_FIELDS[key]}
-                value={leafValue(state.data, key)}
-                onChange={(next) => commit(withLeaf(state.data, key, next))}
-                problems={fieldProblems}
-              />
-              {key === 'footer.followLabel' && (
-                <p className="-mt-3 mb-4 text-xs text-gray-500">
-                  {`Shown with its non-breaking space marked: ${withVisibleNbsp(leafValue(state.data, key))}`}
-                </p>
-              )}
-            </div>
-          ))}
-        </div>
-      ))}
+      <ItemList rows={rows} onOpen={setOpenSection} />
+      {openGroup !== undefined && (
+        <EditorSheet title={openGroup.heading} onClose={() => setOpenSection(null)}>
+          {rows0
+            .find((g) => g.section === openGroup.section)!
+            .fields.map(({ key, problems: fieldProblems }) => (
+              <div key={key}>
+                <Field
+                  id={`copy-${key}`}
+                  spec={COPY_FIELDS[key]}
+                  value={leafValue(state.data, key)}
+                  onChange={(next) => commit(withLeaf(state.data, key, next))}
+                  problems={fieldProblems}
+                />
+                {key === 'footer.followLabel' && (
+                  <p className="-mt-3 mb-4 text-xs text-gray-500">
+                    {`Shown with its non-breaking space marked: ${withVisibleNbsp(leafValue(state.data, key))}`}
+                  </p>
+                )}
+              </div>
+            ))}
+        </EditorSheet>
+      )}
     </>
   );
 }

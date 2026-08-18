@@ -711,11 +711,278 @@ describe('dist/assets/ keeps admin code out of the entry chunk', () => {
 // unconditional step instead of only reaching it through the browser-suite
 // branch, which is skipped entirely for a docs- or content-shaped push. A
 // skipped assertion and an unfalsifiable one cost exactly the same.
+//
+// Admin redesign Task 1, EditorSheet: 38593 -> 38749 (+156), five rules
+// added, zero removed. Measured by a rule-level diff -- EditorSheet.tsx (and
+// its test) moved out of src/ with `mv` (never a stash, never a `git
+// checkout`, since this project's git-safety rule forbids that on tracked
+// history), `vite build` run to get the 38593-byte baseline back, the file
+// restored with `mv` and rebuilt to 38749, then the two dist CSS files
+// diffed. `tsc -b --noEmit` was clean on both sides. The five new rules,
+// each traced to the one class in EditorSheet.tsx that has no other user in
+// src/ today:
+//   .overflow-y-auto{overflow-y:auto}          33 bytes  (the panel's own scroll)
+//   .sm\:m-auto{margin:auto}                   24 bytes  (interior addition to
+//                                                          the @media(min-width:
+//                                                          640px) block every
+//                                                          other sm: rule
+//                                                          already shares)
+//   .sm\:max-h-\[85vh\]{max-height:85vh}       36 bytes  (the desktop dialog cap)
+//   .sm\:w-\[32rem\]{width:32rem}              29 bytes  (the desktop dialog width)
+//   .sm\:rounded{border-radius:.25rem}         34 bytes  (the desktop dialog corner)
+//                                              --------
+//                                              156 bytes, matching the measured delta exactly
+// Every other class EditorSheet.tsx writes -- fixed, inset-0, flex, w-full,
+// bg-white, p-4, mb-4, items-center, justify-between, gap-2, the bracketed
+// Montserrat font family, text-base, uppercase, tracking-wide, text-accent,
+// rounded, bg-brand, px-4, py-2, text-sm, text-ink, transition,
+// hover:bg-brand-dark, mt-6, border-t, border-gray-200, pt-4, and every class
+// inside RecordList's imported REMOVE_BUTTON_CLASSNAME -- already had a rule
+// in the sheet before this file existed and cost nothing marginal.
+//
+// The ceiling below is 38749 itself, not 38749 plus a cushion: the plan's own
+// rule is that a raise lands on a measured number, and a margin added "to be
+// safe" is the same defect wearing a different shape. That is also why the
+// assertion below reads `toBeLessThanOrEqual` rather than `toBeLessThan` --
+// matching the ceiling to the exact measured value and then keeping the
+// stricter operator would fail this task's own build, which is the same
+// name/assertion mismatch this file already caught itself making once
+// (the 34600-vs-38700 incident above). The test's name was changed with it,
+// for the same reason.
+//
+// Schedule change, ruled after this task: the plan text above this line
+// still says the first raise is Task 12's. It isn't -- Task 1 breaches the
+// ceiling on its own, correctly and unavoidably (EditorSheet has to exist
+// before anything wires it in, and Tailwind's scanner reads the file whether
+// or not anything imports it yet), and Task 11's e2e spec cannot run at all
+// against a build that `npm run build` refuses to finish. Every rule-adding
+// task now raises this ceiling to its own measured number as it goes, rather
+// than saving it up for the three checkpoints the plan named; Task 12
+// becomes an audit of the accumulated total instead of the first raise. A
+// reader who finds more than three raise-entries in this file by the plan's
+// end should look here for why.
+//
+// Admin redesign Task 2, ItemList: 38749 -> 38836 (+87), two rules added,
+// zero removed. Measured the same way as Task 1's entry above: ItemList.tsx
+// and drag-row.ts moved out of src/ with `mv`, `vite build` run to confirm
+// the 38749-byte baseline still held, both files restored with `mv` and
+// rebuilt to 38836, then the two dist CSS files diffed rule-by-rule with
+// `comm` against sorted rule lists. `tsc -b --noEmit` was clean on both
+// sides. Two new rules, each traced to the one class in ItemList.tsx (the
+// only file this task adds that renders anything) that has no other user in
+// src/ today:
+//   .p-2{padding:.5rem}                                19 bytes  (ROW_CLASSNAME's
+//                                                                  own row padding)
+//   .truncate{overflow:hidden;text-overflow:ellipsis;
+//             white-space:nowrap}                       68 bytes  (the row-name span,
+//                                                                  so a long dish
+//                                                                  name clips
+//                                                                  instead of
+//                                                                  wrapping the row)
+//                                                        --------
+//                                                        87 bytes, matching the measured delta exactly
+// Every other class ItemList.tsx and drag-row.ts write -- flex, min-w-0,
+// flex-1, items-center, gap-3, rounded, text-left, the bracketed Montserrat
+// font family, text-sm, text-ink, transition, hover:bg-brand/10,
+// focus-visible:outline, focus-visible:outline-2, focus-visible:outline-accent,
+// mb-3, w-full, border-2, border-dashed, border-brand, py-2, uppercase,
+// tracking-wide, text-accent, mb-1, border, border-gray-200, text-xs,
+// text-red-600, select-none, px-3 -- already had a rule in the sheet before
+// this task and cost nothing marginal. BlockList.tsx's own move of
+// HANDLE_CLASSNAME/HANDLE_STYLE/DRAGGING_STYLE into drag-row.ts changes no
+// rendered class and moves the byte count by zero.
+// Admin redesign Task 25b, Move up / Move down / Remove on every block of the
+// writing surface: 38836 -> 38836 (+0), zero rules added, zero removed. The
+// brief for that task expected a raise and it did not happen, so the
+// measurement is recorded here rather than the expectation. Measured with a
+// full `npm run build` on 4768ea6 before and after: the two stylesheets are
+// BYTE-IDENTICAL (`cmp` reports no difference, both 540 rules, and Vite's own
+// content hash in the filename is unchanged), which is a stronger result than
+// a rule-level diff and is what the diff was run to check.
+//
+// The reason there is nothing to account for: the two button bindings are
+// RecordList's own exported constants, imported rather than retyped, and the
+// four utilities on the row that holds them are the same four
+// WritingToolbar.tsx's own row already carries. Every one of them had a rule
+// in this sheet before this task and cost nothing marginal. The new
+// `data-block-controls` attribute is an attribute and not a class, the same
+// cheap-query-surface reasoning `data-slot` and `data-panel` follow, and the
+// wrapper element the rows gained carries no class at all.
+//
+// The ceiling is therefore NOT moved. A raise to a number nothing measured is
+// the "margin added to be safe" this file's Task 1 entry above already refuses
+// by name, and it would hide the next real leak by exactly its own size.
+//
+// Admin redesign Task 26, Tab and Shift+Tab nesting a list item: 38836 ->
+// 38836 (+0), zero rules added and zero removed. Measured the way this lineage
+// requires -- a worktree checkout of the true parent commit (a543e9f, `git
+// worktree add`, never a stash), `npm ci` and `npm run build` in place, then
+// both stylesheets compared. They are BYTE-IDENTICAL (`cmp` reports no
+// difference) and Vite's own content hash is the same on both sides, which is
+// the stronger result the rule-level diff was run to check: 543 selector
+// groups each, ADDED [] and REMOVED [].
+//
+// Read that 543 as this entry's own count and not as a continuation of the
+// "536" and "540" above it. The earlier entries counted with a `grep -o
+// '^[^{]*{'` pipeline, and THAT PIPELINE IS WRONG on the file it is pointed
+// at: the built stylesheet is a single line, so `^` matches once and the grep
+// reports one rule for the whole sheet. This entry's numbers come from
+// extracting every `selector{declarations}` pair instead, at-rule interiors
+// included, which is why the count is a few higher. Anyone re-running the
+// method from the brief should fix the extractor before believing a diff of
+// two one-line files.
+//
+// Where the nesting COULD have cost rules and does not:
+//   * the published sub-list reuses `list-disc`, `list-decimal`, `pl-5`,
+//     `space-y-2` and `mt-2`, all of which already had a user in this sheet;
+//   * the indent she sees while writing is an inline `margin-inline-start`
+//     rather than two utilities -- no shipped rule is 1.25rem or 2.5rem of
+//     margin (`ml-2` and `ml-8` are the only two in the sheet), so a class
+//     version would have bought both. The same escape hatch the drag handle's
+//     cursor and the dragged row's dimming already take.
+//
+// The comment-leak scan this file exists to run was widened rather than
+// repeated by eye, and it found nothing: every one of the 379 class selectors
+// in the shipped sheet is named on at least one NON-comment line under src/.
+// That covers `.lowercase`, `.collapse`, `.invisible`, the slant utility, the
+// grid-columns utility and the "shrink" incident in one pass, and it covers
+// every comment in the repository rather than only the ones written since
+// Task 13.
+//
+// THE CEILING IS RAISED ANYWAY, to 39000 -- measured size rounded up to the
+// next 100, plus 100 -- and that reverses the "no cushion" rule Task 1's entry
+// above states. Read this as the correction it is, not as an oversight.
+//
+// Task 1's rule was written against a real defect (a ceiling nobody measured
+// hides the next leak by its own size) and it produced a different one: the
+// last three tasks each landed on a ceiling exactly equal to the measured
+// size, so the branch has been carrying ZERO headroom. That exact condition
+// has broken this build before -- a task breached the ceiling, the raise was
+// scheduled eleven tasks later, and the branch was red the whole way. A
+// hundred-odd bytes of headroom is what makes a task that adds one honest rule
+// a passing build with a raise to write, instead of a failing build with a
+// schedule to renegotiate.
+//
+// What is given up is stated rather than glossed: a leak smaller than the
+// headroom now passes this assertion silently. The rule-level diff above is
+// what catches those, and it is the check that has caught every leak in this
+// file's history -- not the byte count. The byte count is the tripwire for
+// the large accidental import; the diff is the instrument.
+//
+// The operator goes back to `toBeLessThan` with the raise, and the number in
+// the test's NAME is changed in the same edit as the number in the assertion.
+// Those two have drifted apart in this file once already (the 34600-vs-38700
+// incident above), and nothing tests a test's name -- the counter-measure is
+// that they move together and that a reviewer greps this file for the old
+// number before merging.
+// Admin redesign Task 30, the filter / sort / search controls on /blog: 38836
+// -> 38836 (+0), zero rules added and zero removed. Measured with a full
+// `npm run build` on 2311319 before and after the change: the two stylesheets
+// are BYTE-IDENTICAL (`cmp` reports no difference) and Vite's own content hash
+// in the filename is unchanged, which is the stronger result the rule-level
+// diff is run to check.
+//
+// The brief for the task expected to spend the headroom the entry above left,
+// and it did not, so the measurement is recorded here rather than the
+// expectation. Why a whole row of new UI costs nothing marginal:
+//   * the three control rows' buttons share ONE binding with the numbered
+//     pagination buttons -- BlogIndex.tsx's CONTROL_CLASSNAME / CONTROL_ON /
+//     CONTROL_OFF are the exact strings those buttons already built inline, so
+//     the split moved a string and not a rule;
+//   * the two group rows reuse Drinks.tsx:67's row utilities verbatim and the
+//     bottom margin from Hero.tsx:145;
+//   * the search field's own utilities -- the full-width one, the 42rem
+//     max-width one, the padding pair, the radius, the grey border, the white
+//     surface, the Open Sans family and the small size -- each already had a
+//     user in this sheet. Checked individually against the built file, not
+//     assumed: every one of them has a selector in it.
+//
+// THE CEILING IS THEREFORE NOT MOVED. It stays at 39000 with the same
+// hundred-odd bytes of headroom the entry above argued for; a raise to a
+// number nothing measured is what this file's Task 1 entry refuses by name.
+//
+// Admin redesign Task 34, the section washes: 38836 -> 38917 (+81), four rules
+// added and three removed, 512 -> 513 top-level blocks. Measured by building
+// 8ca7260 in a detached worktree and diffing the two shipped stylesheets rule
+// by rule, not by reading the summary line:
+//
+//    +88  `.bg-wash`, the cool token #E6EDF5
+//    +93  `.bg-wash-warm`, the warm token #F5EEE4
+//   +210  `.from-wash`
+//   +215  `.from-wash-warm`
+//    -96  the bracketed `#F9F9F9` background utility
+//   -218  its gradient-stop partner
+//   -211  the cream gradient stop
+//
+// Sum: 88 + 93 + 210 + 215 - 96 - 218 - 211 = +81, matching the whole-file
+// delta exactly. Each of the three removed rules lost its last user in this
+// same commit, which is why they are gone rather than merely unused.
+//
+// The four gradient-stop rules are the carousel fades, and they are here
+// because the eight sections changed colour underneath them. Each fade is a
+// 64px `bg-gradient-to-l` over the right edge of a horizontal-scroll strip,
+// and its opaque end has to BE the section background or a bright vertical
+// edge appears where the strip stops. Measured at 390px before fixing it:
+// PlaceGallery's fade ended (250,249,249) against a (230,237,245) section,
+// Drinks (255,253,249) against (245,238,228), Experiences (254,252,247)
+// against the same -- three step edges 280 to 344 pixels tall. FoodGallery's
+// `from-white` over `bg-white` measured (254,254,253) against (255,255,255)
+// in the same run, which is what a matched fade looks like and is the control
+// that says the other three were wrong rather than merely different.
+//
+// Three rules that a reader would expect to have gone did NOT, and each still
+// has a real user: `bg-cream` (blocks.tsx's ingredients and steps, NavBar's
+// dropdown, WritingSurface, SignatureMocktails), `bg-cream-alt` (NotFound,
+// ErrorBoundary) and `bg-slate-50` (BlogTeaser, NewsPress). `relative`, which
+// seven sections gained, was already in the sheet many times over and costs
+// nothing here -- the whole HTML cost of this task lands in
+// src/test/homepage-bytes.test.tsx's ledger instead.
+//
+// THE CEILING IS NOT MOVED. 38917 against 39000 leaves 83 bytes. That is
+// thinner than the entry above wanted and it is stated rather than glossed:
+// the next task adding a rule of any real size breaches this and has to raise
+// it with its own rule-level accounting, in its own commit.
+// Admin redesign Task 35 follow-ups, the /blog placeholder and touch targets:
+// 38917 -> 39037 (+120), two rules added, none removed, 513 -> 515 top-level
+// blocks. Measured by rebuilding across the change and diffing rule by rule:
+//
+//   +55  `input::placeholder,textarea::placeholder{color:#6b7280}`, written by
+//        hand in src/index.css
+//   +65  autoprefixer's `-moz-placeholder` twin of it, which is not optional
+//
+// Sum: +120, matching the whole-file delta exactly.
+//
+// THE CEILING IS RAISED, to 39200 -- 39037 rounded up to the next 100, plus
+// 100, which is the method the Task 13 entry above set. This is a breach
+// caused here and closed here rather than deferred; the last deferral cost
+// this branch eleven tasks of red build.
+//
+// What was bought, and what the alternative cost:
+//   * Tailwind preflight painted every placeholder on the site gray-400,
+//     2.54:1 on a white field. That is under AA and under even the 3:1
+//     non-text bar, on the one control a reader has to read before using it.
+//     #6B7280 is 4.83:1. e2e/blog-controls.spec.ts measures it in Chromium.
+//   * The per-field utility version of the same fix was BUILT AND MEASURED
+//     FIRST, not reasoned about: it costs 247 bytes, because Tailwind emits
+//     a `-moz-` twin of the utility as well, and it fixes exactly one field.
+//     The base-layer rule is 127 bytes cheaper and fixes every input in the
+//     app, admin included. That is why this is not a utility.
+//   * The 38px controls went to 46 in the same commit and cost NOTHING here:
+//     `py-2` -> `py-3` on BlogIndex's one shared control binding, and `py-3`
+//     already had a rule in this sheet (NavBar uses it). Verified in the
+//     rule-level diff above, where it does not appear.
+//   * Drinks.tsx's misplaced decorative dot was fixed in the same commit and
+//     also costs nothing: the utility it moved to already had a rule, because
+//     a sibling dot in the same block already used it.
+//
+// The raise leaves 163 bytes of headroom, which is the ~150 this file's Task
+// 13 entry argued a branch should carry so that one honest new rule is a
+// passing build with a raise to write rather than a red build.
 describe('dist/assets/ keeps the shared stylesheet under a byte ceiling', () => {
-  it.skipIf(!REQUIRED && !existsSync(DIST_ASSETS))('the entry CSS file stays under 38700 bytes', () => {
+  it.skipIf(!REQUIRED && !existsSync(DIST_ASSETS))('the entry CSS file stays under 39200 bytes', () => {
     const cssFiles = readdirSync(DIST_ASSETS).filter((n) => /^index-.*\.css$/.test(n));
     expect(cssFiles.length).toBeGreaterThan(0);
     const size = statSync(join(DIST_ASSETS, cssFiles[0])).size;
-    expect(size).toBeLessThan(38700);
+    expect(size).toBeLessThan(39200);
   });
 });

@@ -48,6 +48,62 @@ function Items({ items }: { items: string[] }): ReactNode {
   ));
 }
 
+interface ListNode { text: string; children: ListNode[] }
+
+// The flat pair the storage keeps -- words in one array, depths in another --
+// read back as the tree HTML needs, because a sub-list is a list INSIDE the
+// item above it and not a sibling of it. A `<ul>` whose parent is another
+// `<ul>` is invalid markup that browsers and screen readers each repair their
+// own way.
+//
+// `levels` absent means every item sits at depth 0, which is every list
+// committed before nesting existed, so this returns them unchanged.
+//
+// THE CLAMP TO `stack.length` IS LOAD-BEARING, not defensive tidiness. A
+// `levels` of `[0, 2]` passes both boundaries -- each entry is a whole number
+// inside the cap and the two arrays are the same length -- and without the
+// clamp `stack[depth - 1]` is `undefined` on the second item and the whole
+// post page throws instead of rendering. One step of nesting is the honest
+// reading of a jump nobody could have produced by pressing Tab.
+function nest(items: string[], levels: number[] | undefined): ListNode[] {
+  const roots: ListNode[] = [];
+  const stack: ListNode[] = [];
+  items.forEach((text, i) => {
+    const depth = Math.min(levels?.[i] ?? 0, stack.length);
+    const node: ListNode = { text, children: [] };
+    stack.length = depth;
+    if (depth === 0) roots.push(node);
+    else stack[depth - 1].children.push(node);
+    stack.push(node);
+  });
+  return roots;
+}
+
+// A sub-list wears the same element and the same marker as the list it sits
+// in, and its own step of padding. Every one of these four utilities already
+// has a rule in the shipped sheet -- `pl-5` and `space-y-2` from LIST above,
+// `mt-2` from the figure caption below -- so nesting costs no new rule. It
+// deliberately does not repeat BLOCK_SPACING: that is the gap BETWEEN blocks,
+// and a sub-list is inside one.
+const NESTED_LIST = 'mt-2 pl-5 space-y-2';
+
+// One <li> per node, with the whole sub-tree INSIDE the item it belongs to.
+// A <ul> that is a direct child of another <ul> is invalid markup, and
+// browsers and screen readers each repair it their own way.
+function ListTree({ nodes, tag, markerClass }: { nodes: ListNode[]; tag: 'ul' | 'ol'; markerClass: string }): ReactNode {
+  const Tag = tag;
+  return nodes.map((node, i) => (
+    <li key={i}>
+      <Inline text={node.text} />
+      {node.children.length > 0 && (
+        <Tag className={`${markerClass} ${NESTED_LIST}`}>
+          <ListTree nodes={node.children} tag={tag} markerClass={markerClass} />
+        </Tag>
+      )}
+    </li>
+  ));
+}
+
 function Figure({ src, alt, caption }: { src: string; alt: string; caption: string }) {
   return (
     <figure className={BLOCK_SPACING}>
@@ -71,9 +127,17 @@ export function BlockView({ block }: { block: Block }) {
     case 'heading':
       return <Heading text={block.text} />;
     case 'bulletList':
-      return <ul className={`list-disc ${LIST}`}>{Items({ items: block.items })}</ul>;
+      return (
+        <ul className={`list-disc ${LIST}`}>
+          <ListTree nodes={nest(block.items, block.levels)} tag="ul" markerClass="list-disc" />
+        </ul>
+      );
     case 'numberList':
-      return <ol className={`list-decimal ${LIST}`}>{Items({ items: block.items })}</ol>;
+      return (
+        <ol className={`list-decimal ${LIST}`}>
+          <ListTree nodes={nest(block.items, block.levels)} tag="ol" markerClass="list-decimal" />
+        </ol>
+      );
     case 'image':
       return <Figure src={block.src} alt={block.alt} caption={block.caption ?? ''} />;
     case 'gallery':

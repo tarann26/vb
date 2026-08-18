@@ -41,7 +41,7 @@ function Awards({ fetchImpl = fetch }: AwardsProps = {}) {
   }, [fetchImpl]);
 
   return (
-    <section id="awards" className="py-20 bg-white">
+    <section id="awards" className="py-20 relative bg-white">
       <div className="max-w-7xl mx-auto px-4">
         <div className="text-center mb-16">
           <h2 className="font-['Montserrat'] text-4xl md:text-5xl font-bold text-ink mb-6">

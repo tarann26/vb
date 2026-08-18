@@ -83,6 +83,97 @@ describe('each block renders its own shape', () => {
     expect(li?.querySelector('strong')?.textContent).toBe('wide');
   });
 
+  // Admin redesign Task 26. Nesting is stored as a parallel `levels` array
+  // and read back into a tree here, so these four cases are the whole of what
+  // a visitor can be shown.
+  describe('a nested list', () => {
+    // The migration claim, from the renderer's side: every list committed
+    // before nesting existed carries no `levels` at all, and has to come out
+    // as the flat list it always was. `querySelectorAll('ul')` counts the
+    // nested ones too, so the count is what says "flat" here.
+    it('renders exactly as it did when levels is absent', () => {
+      const { container } = renderBlock(EVERY_BLOCK.bulletList);
+      expect(container.querySelectorAll('ul')).toHaveLength(1);
+      expect([...container.querySelectorAll('li')].map((li) => li.textContent))
+        .toEqual(['A wide bowl', 'A bench scraper']);
+    });
+
+    it('puts the nested item INSIDE the item above it, never beside it', () => {
+      const { container } = renderBlock({
+        kind: 'bulletList',
+        items: ['A wide bowl', 'A bench scraper'],
+        levels: [0, 1],
+      });
+      expect(container.querySelectorAll('ul')).toHaveLength(2);
+      // `li > ul > li`, and the direct-child combinators are the point: a
+      // sub-list that is a SIBLING of the item it belongs to is invalid
+      // markup that browsers and screen readers each repair their own way.
+      const nested = container.querySelectorAll('li > ul > li');
+      expect(nested).toHaveLength(1);
+      expect(nested[0].textContent).toBe('A bench scraper');
+      // And the outer list still has one item of its own, not two.
+      expect(container.querySelector('ul')?.children).toHaveLength(1);
+    });
+
+    it('keeps the numbered marker all the way down', () => {
+      const { container } = renderBlock({
+        kind: 'numberList',
+        items: ['Mix', 'Knead'],
+        levels: [0, 1],
+      });
+      const lists = [...container.querySelectorAll('ol')];
+      expect(lists).toHaveLength(2);
+      lists.forEach((ol) => expect(ol.className).toContain('list-decimal'));
+      expect(container.querySelector('ul')).toBeNull();
+    });
+
+    // The clamp. `[0, 2]` passes both boundaries -- each depth is a whole
+    // number inside the cap and the two arrays are the same length -- and
+    // without `Math.min(..., stack.length)` in `nest` the second item reads
+    // `stack[1]`, which is undefined, and the whole post page throws instead
+    // of rendering. One step of nesting is the honest reading of a jump
+    // nobody could have produced by pressing Tab.
+    it('renders one step of nesting for a depth that jumps, rather than throwing', () => {
+      const { container } = renderBlock({
+        kind: 'bulletList',
+        items: ['A wide bowl', 'A bench scraper'],
+        levels: [0, 2],
+      });
+      expect(container.querySelectorAll('ul')).toHaveLength(2);
+      expect(container.querySelectorAll('li > ul > li')[0]?.textContent).toBe('A bench scraper');
+    });
+
+    it('nests three deep in three lists, and the deepest item is inside both', () => {
+      const { container } = renderBlock({
+        kind: 'bulletList',
+        items: ['One', 'Two', 'Three'],
+        levels: [0, 1, 2],
+      });
+      expect(container.querySelectorAll('ul')).toHaveLength(3);
+      expect(container.querySelectorAll('li > ul > li > ul > li')[0]?.textContent).toBe('Three');
+    });
+
+    it('steps back out again, so a later item at depth 0 is not left inside the sub-list', () => {
+      const { container } = renderBlock({
+        kind: 'bulletList',
+        items: ['One', 'Two', 'Three'],
+        levels: [0, 1, 0],
+      });
+      const outer = container.querySelector('ul');
+      expect(outer?.children).toHaveLength(2);
+      expect([...(outer?.children ?? [])].map((li) => li.firstChild?.textContent)).toEqual(['One', 'Three']);
+    });
+
+    it('parses a nested item’s markdown, the same as any other item', () => {
+      const { container } = renderBlock({
+        kind: 'bulletList',
+        items: ['A bowl', 'A **wide** one'],
+        levels: [0, 1],
+      });
+      expect(container.querySelector('li > ul > li strong')?.textContent).toBe('wide');
+    });
+  });
+
   it('numberList is an <ol> with a decimal marker -- preflight strips both, so the class is load-bearing', () => {
     const { container } = renderBlock(EVERY_BLOCK.numberList);
     const ol = container.querySelector('ol');

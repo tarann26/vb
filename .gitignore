@@ -60,3 +60,4 @@ New Menu/
 
 # Artifacts written by the Playwright MCP server during interactive debugging.
 .playwright-mcp
+.drive-photos/

@@ -46,27 +46,31 @@ function asKey(item: unknown): object | undefined {
   return item !== null && typeof item === 'object' ? (item as object) : undefined;
 }
 
-// `prefix` only makes a staged-file key readable when somebody dumps the
-// collector ('b' for a block, 'g' for a gallery photo). Nothing reads it back:
-// staged.ts stores whatever string it is handed and never parses one.
-export function useStableNames(prefix: string): StableNames {
-  // Lazily, and not `useRef(new WeakMap())`: the argument form constructs a
-  // WeakMap on EVERY render and throws it away on all but the first. Both
-  // assignments below happen during render, which is safe here in a way it
-  // usually is not -- they are memoisation keyed on object identity, so
-  // StrictMode's second pass finds what the first put there and returns the
-  // same answer.
-  const namesRef = useRef<WeakMap<object, string>>();
-  const countRef = useRef(0);
-  const names = namesRef.current ?? (namesRef.current = new WeakMap<object, string>());
+// The non-hook core, extracted for Task 7's own PostList: BlockList's
+// WeakMap lives in a `useRef`, which is torn down the instant the component
+// UNMOUNTS -- and moving the block editor inside EditorSheet means it now
+// does exactly that every time she closes the post's editor and opens it
+// again. Reopening the SAME post then re-ran every block through a FRESH,
+// empty WeakMap, handing out names by current array position
+// (`nameOf`'s own fallback for an item it has never seen) rather than by the
+// identity a photo was staged under -- the reorder-eviction defect this
+// whole module exists to rule out, reappearing one level up, on a remount
+// instead of a reorder. `createStableNames` is the same logic with the
+// storage handed in by the caller instead of owned by the hook, so PostList
+// can keep one instance PER POST ID in a `useRef` of its own (a container
+// that does NOT unmount when that post's editor closes) and pass it down to
+// BlockList, which otherwise behaves exactly as it did before this existed.
+export function createStableNames(prefix: string): StableNames {
+  const names = new WeakMap<object, string>();
+  let count = 0;
 
   const nameOf = (item: unknown, index: number): string => {
     const key = asKey(item);
     if (key === undefined) return `at-${index}`;
     const existing = names.get(key);
     if (existing !== undefined) return existing;
-    countRef.current += 1;
-    const fresh = `${prefix}${countRef.current}`;
+    count += 1;
+    const fresh = `${prefix}${count}`;
     names.set(key, fresh);
     return fresh;
   };
@@ -78,4 +82,67 @@ export function useStableNames(prefix: string): StableNames {
       if (key !== undefined) names.set(key, nameOf(from, index));
     },
   };
+}
+
+// MANY LISTS, ONE PER KEY, all outliving the same remount.
+//
+// `createStableNames` fixes one list. The gallery photos inside a post need a
+// SET of them -- one per gallery block -- and every one has to outlive the
+// editor sheet exactly as the block names do, because a photo's staged key is
+// `blocks[<block name>].images[<photo name>].src` and the second half of that
+// is minted by a WeakMap of its own. Held below the sheet, that WeakMap is
+// destroyed on every Done and the photos are re-named `g1...gn` by their
+// CURRENT positions on reopen -- so a grid she has removed a photo from hands
+// the next pick a key another photo's bytes are already filed under, and
+// PhotoField's supersede (`onStaged(null)`, fired before every pick) deletes
+// them. That is the same defect `createStableNames` exists to close, one level
+// further down, and it is the third time this project has met it.
+//
+// A Map keyed by a STRING rather than a WeakMap keyed by the block, for the
+// same reason PostList keys its own by `post.id`: the block object is replaced
+// on every keystroke, and its stable name is not. Entries are never dropped --
+// one small object per gallery block she has opened in this session, which is
+// the same bound PostList's own per-post map already accepts.
+export interface StableNameGroup {
+  // The names for one list, minted on first ask and then kept for as long as
+  // this group is.
+  of: (key: string) => StableNames;
+}
+
+export function createStableNameGroup(prefix: string): StableNameGroup {
+  const groups = new Map<string, StableNames>();
+  return {
+    of: (key) => {
+      let existing = groups.get(key);
+      if (existing === undefined) {
+        existing = createStableNames(prefix);
+        groups.set(key, existing);
+      }
+      return existing;
+    },
+  };
+}
+
+// `prefix` only makes a staged-file key readable when somebody dumps the
+// collector ('b' for a block, 'g' for a gallery photo). Nothing reads it back:
+// staged.ts stores whatever string it is handed and never parses one.
+export function useStableNames(prefix: string): StableNames {
+  // Lazily, and not `useRef(createStableNames(prefix))`: the argument form
+  // constructs one on EVERY render and throws it away on all but the first.
+  // The assignment below happens during render, which is safe here in a way
+  // it usually is not -- it is memoisation keyed on object identity, so
+  // StrictMode's second pass finds what the first put there and returns the
+  // same answer.
+  const ref = useRef<StableNames>();
+  if (ref.current === undefined) ref.current = createStableNames(prefix);
+  return ref.current;
+}
+
+// The same lazy hold for a whole group. Only useful in a component that does
+// NOT unmount under the editor sheet -- a group held below it dies with it,
+// which is the entire failure this exists to describe.
+export function useStableNameGroup(prefix: string): StableNameGroup {
+  const ref = useRef<StableNameGroup>();
+  if (ref.current === undefined) ref.current = createStableNameGroup(prefix);
+  return ref.current;
 }

@@ -29,7 +29,7 @@ const Experiences: React.FC = () => {
     !item.comingSoon && item.link !== undefined && openable.has(item.link);
 
   return (
-    <section id="experiences" className="py-20 bg-cream">
+    <section id="experiences" className="py-20 relative bg-wash-warm">
       <div className="max-w-7xl mx-auto px-4">
         <div className="text-center mb-16">
           <h2 className="font-['Montserrat'] text-4xl md:text-5xl font-bold text-ink mb-6">
@@ -108,7 +108,7 @@ const Experiences: React.FC = () => {
               })}
             </div>
           </div>
-          <div className="pointer-events-none absolute inset-y-0 right-0 w-16 bg-gradient-to-l from-cream to-transparent" />
+          <div className="pointer-events-none absolute inset-y-0 right-0 w-16 bg-gradient-to-l from-wash-warm to-transparent" />
         </div>
       </div>
     </section>

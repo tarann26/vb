@@ -99,10 +99,15 @@ async function openPostsPanel(): Promise<HTMLElement> {
 
 describe('the Posts panel', () => {
   it('renders every committed post it is given', async () => {
+    const user = userEvent.setup();
     stubFetchWithPosts(FIXTURE_POSTS);
     renderDashboard('/edit/manage/story');
 
     const panel = await openPostsPanel();
+    // Fields mount only while their own post's row is open (Task 7) -- so
+    // the row itself is asserted first, and then its editor is opened
+    // before either scalar field can be queried at all.
+    await user.click(await within(panel).findByRole('button', { name: 'A fixture post' }));
     expect(await within(panel).findByDisplayValue('A fixture post')).toBeInTheDocument();
     expect(within(panel).getByDisplayValue('a-fixture-post')).toBeInTheDocument();
   });
@@ -112,21 +117,28 @@ describe('the Posts panel', () => {
   // ~1200-element shell, which is the cheap-then-assert-once pattern this
   // project's own AdminApp timeout finding mandates.
   it('renders the blocks of a committed post, in her words', async () => {
+    const user = userEvent.setup();
     stubFetchWithPosts(FIXTURE_POSTS);
     renderDashboard('/edit/manage/story');
 
     const panel = await openPostsPanel();
-    expect(await within(panel).findByDisplayValue('A fixture paragraph.')).toBeInTheDocument();
-    // The strip over the block, which is the only thing on screen that tells
-    // her what kind of block she is looking at.
-    //
-    // Scoped to that block's own <li>, because the picker under the list
-    // offers a Paragraph button by the same name -- an unscoped query finds
-    // both and throws on the ambiguity rather than asserting anything. The
-    // Remove button is what locates the block, and is the assertion below.
-    const remove = within(panel).getByRole('button', { name: 'Remove Paragraph block 1' });
-    expect(remove).toBeInTheDocument();
-    expect(within(remove.closest('li') as HTMLElement).getByText('Paragraph')).toBeInTheDocument();
+    await user.click(await within(panel).findByRole('button', { name: 'A fixture post' }));
+    // Her words in the column she writes in, and not in a box with a kind
+    // label over it: admin redesign Task 25 swapped BlockList for the writing
+    // surface, so there is no strip, no Remove button and no textarea to read
+    // a display value off. `data-slot` is the surface's own marker for an
+    // editable slot and is the query surface every case against it uses.
+    const host = await waitFor(() => {
+      const found = [...panel.querySelectorAll<HTMLElement>('[data-slot]')].find(
+        (el) => el.textContent === 'A fixture paragraph.',
+      );
+      expect(found, 'no slot on the panel holds the committed post’s words').toBeDefined();
+      return found as HTMLElement;
+    });
+    // The published renderer's own element for a paragraph, and editable --
+    // the two halves of "she can read it and she can change it".
+    expect(host.tagName.toLowerCase()).toBe('p');
+    expect(host.getAttribute('contenteditable')).toBe('true');
   });
 
   it('a 404 reads as no posts yet, not as a failure', async () => {
@@ -165,7 +177,12 @@ describe('the Posts panel', () => {
     expect(within(panel).getByText(/needs a title/)).toBeInTheDocument();
     expect(within(panel).getByText(/needs a short summary/)).toBeInTheDocument();
     expect(within(panel).getByText(/needs a photo for its card/)).toBeInTheDocument();
-    expect(within(panel).getByText(/has nothing in it yet/)).toBeInTheDocument();
+    // The post's own emptiness, and it is now the PARAGRAPH's sentence rather
+    // than the whole post's -- validatePost's "has nothing in it yet" is
+    // unreachable from Add, because a post she has just added carries one
+    // empty paragraph (blankPost, and see the case below for why).
+    expect(within(panel).getByText(/needs some words in this paragraph/)).toBeInTheDocument();
+    expect(within(panel).queryByText(/has nothing in it yet/)).toBeNull();
 
     // The one field that is pre-filled, and the reason it is: an empty date
     // input tells her nothing about the format it wants.
@@ -187,5 +204,38 @@ describe('the Posts panel', () => {
     // settle above all still work normally.
     const date = within(panel).getByLabelText(POST_FIELDS.date.label) as HTMLInputElement;
     expect(date.value).toBe('2026-03-05');
+  });
+
+  // THE CORE WORKFLOW OF THE WHOLE PANEL: press Add, and type.
+  //
+  // It did not work. `blankPost` handed back `blocks: []`; the insert menu
+  // offers only the four kinds the toolbar cannot reach, and every control
+  // that makes a paragraph acts on the host she is standing in, which an empty
+  // post does not have. She got a post with nowhere to write in it.
+  //
+  // Falsified by putting `blocks: []` back in blankPost (PostsArea.tsx): there
+  // is then no `[data-slot]` on the panel at all and the query below finds
+  // nothing. Asserted as the ELEMENT rather than as the array, because what
+  // was missing was a place to put a caret and not a value in a record --
+  // e2e/writing-surface.spec.ts carries the half jsdom cannot say, that the
+  // caret really lands in it and her words really arrive.
+  it('a post she has just added has a paragraph she can write in straight away', async () => {
+    const user = userEvent.setup();
+    stubFetchWithPosts([]);
+    renderDashboard('/edit/manage/story');
+
+    const panel = await openPostsPanel();
+    await user.click(await within(panel).findByRole('button', { name: 'Add a post' }));
+
+    const hosts = await waitFor(() => {
+      const found = [...panel.querySelectorAll<HTMLElement>('[data-slot]')];
+      expect(found, 'a post she has just added has no editable slot in it').toHaveLength(1);
+      return found;
+    });
+    // The published renderer's own element for a paragraph, editable, and
+    // empty -- a blank document, not a document with something in it already.
+    expect(hosts[0].tagName.toLowerCase()).toBe('p');
+    expect(hosts[0].getAttribute('contenteditable')).toBe('true');
+    expect(hosts[0].textContent).toBe('');
   });
 });
