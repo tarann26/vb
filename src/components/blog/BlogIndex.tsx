@@ -31,7 +31,7 @@ import { usePosts } from './use-posts';
 // zero new rules. The pressed state paints ink on the brand surface, never
 // white: the brand blue is 1.45:1 against white and the palette sweep exists
 // because this project once shipped exactly that button.
-const CONTROL_CLASSNAME = `px-4 py-2 rounded-lg font-['Montserrat'] text-sm transition-colors duration-300`;
+const CONTROL_CLASSNAME = `px-4 py-3 rounded-lg font-['Montserrat'] text-sm transition-colors duration-300`;
 const CONTROL_ON = 'bg-brand text-ink';
 const CONTROL_OFF = 'bg-white border border-gray-300 hover:bg-gray-50';
 const ORDERS: readonly PostOrder[] = ['newest', 'oldest'];
@@ -154,7 +154,7 @@ export default function BlogIndex() {
               onChange={(event) => changeQuery(event.target.value)}
               aria-label="Search stories"
               placeholder="Search stories"
-              className={`w-full max-w-2xl px-4 py-2 rounded-lg border border-gray-300 bg-white font-['Open_Sans'] text-sm text-ink`}
+              className={`w-full max-w-2xl px-4 py-3 rounded-lg border border-gray-300 bg-white font-['Open_Sans'] text-sm text-ink`}
             />
           </div>
 

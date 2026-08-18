@@ -236,16 +236,18 @@ for (const size of WIDTHS) {
         // 24x24, WCAG 2.2 SC 2.5.8 Target Size (Minimum), Level AA.
         expect(box.width).toBeGreaterThanOrEqual(24);
         expect(box.height).toBeGreaterThanOrEqual(24);
-        // And a floor at what ships today, so this cannot quietly shrink
-        // towards the AA line. MEASURED: every control is exactly 38px tall
-        // (px-4 py-2 around a 20px text-sm line box) and at least 49.6px wide.
+        // 44x44, WCAG 2.5.5 Target Size, Level AAA, which is also Apple's HIG
+        // figure. Task 30 asked for it, Task 32 measured 38 and reported that
+        // it was not met, and it is met now: `py-2` became `py-3` on the one
+        // shared control binding, which is 4px more padding on each edge.
         //
-        // Task 30's deferred claim 3 asked for 44x44. IT IS NOT MET, and this
-        // test does not pretend otherwise: 44x44 is WCAG 2.5.5 Level AAA (and
-        // Apple's HIG), the shipped controls are 38 tall, and closing the last
-        // 6px is a padding change with a CSS cost that belongs to a task with
-        // a brief for it, not to a task whose job is to measure. Reported.
-        expect(box.height).toBeGreaterThanOrEqual(38);
+        // MEASURED: every control, the search field included, is exactly 46px
+        // tall at both widths, and at least 49.6px wide. 46 rather than 44
+        // because the padding scale has no half step between them, and
+        // overshooting a minimum by two pixels is the right side to miss on.
+        // The floor is at what ships so this cannot quietly shrink back.
+        expect(box.height).toBeGreaterThanOrEqual(44);
+        expect(box.height).toBe(46);
       }
     });
 
@@ -401,8 +403,9 @@ for (const size of WIDTHS) {
 // 2 rows wrap, no sideways scroll .... "the four kind pills sit on one row..."
 //                                      and "nothing the controls add pushes..."
 // 3 44x44 hit boxes .................. "every control clears the WCAG 2.2
-//                                      minimum target size" -- 24x24 AA is met,
-//                                      44x44 AAA is NOT. Measured at 38 tall.
+//                                      minimum target size" -- 24x24 AA and
+//                                      44x44 AAA both met. Measured at 46 tall
+//                                      since the `py-3` change; was 38.
 // 4 search width at both widths ...... "the search field fills the column..."
 // 5 placeholder contrast ............. "the search placeholder is opaque..."
 //                                      -- 2.54:1, does NOT meet AA. Pinned.
