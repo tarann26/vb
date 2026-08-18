@@ -1617,3 +1617,255 @@ describe('the insert menu, and the four kinds the toolbar cannot reach', () => {
     });
   });
 });
+
+// MOVING AND REMOVING, the two things this column could not do at all.
+//
+// What is being protected here is not a pair of buttons. Task 25 swapped the
+// Posts panel off BlockList, which carried Up, Down and Remove on every block,
+// and onto this column, which carried none of them -- while Task 24 gave the
+// insert menu four kinds that hold no editable slot between them. From that
+// commit until this one the owner could add a photograph, a photo grid or a
+// citation to a post and never take it out again: Backspace keys off a caret
+// carrying a slot, and an atom has no slot for a caret to be in.
+describe('moving and removing a block', () => {
+  // Scoped to the block's own controls, and it has to be: BlockFields draws a
+  // Remove of its own beside every photo in a grid and every line of a recipe
+  // ("Remove photo 1", "Remove Ingredient 1"), so a query for everything
+  // beginning "Remove " reads three affordances as one. Caught by this test
+  // going red on the first run rather than reasoned about.
+  const labelled = (container: HTMLElement, prefix: string): string[] =>
+    [...container.querySelectorAll('[data-block-controls] button')]
+      .map((button) => button.getAttribute('aria-label') ?? '')
+      .filter((label) => label.startsWith(prefix));
+
+  function press(container: HTMLElement, label: string): void {
+    const button = container.querySelector<HTMLButtonElement>(
+      `[data-block-controls] button[aria-label="${label}"]`,
+    );
+    expect(button, `no control labelled ${label}`).not.toBeNull();
+    fireEvent.click(button as HTMLButtonElement);
+  }
+
+  // Every kind at once, and the last five of them are the whole point: an
+  // image, the four the insert menu adds, and a kind this model never had --
+  // none of which puts an editable host on screen for any other affordance to
+  // act through.
+  const EVERY_KIND: Block[] = [
+    { kind: 'paragraph', text: 'p' },
+    { kind: 'image', src: '/x.webp', alt: 'x' },
+    { kind: 'gallery', images: [{ src: '/a.webp', alt: 'a' }] },
+    { kind: 'ingredients', heading: 'For the sauce', items: ['400g flour'] },
+    { kind: 'steps', heading: 'Method', items: ['Make a well'] },
+    { kind: 'citation', publication: 'Vogue', date: '2026-01-01', url: null },
+    { kind: 'marquee' } as unknown as Block,
+  ];
+
+  it('gives every kind a Remove, including the four the toolbar cannot reach and one it has never heard of', () => {
+    const view = surface({ blocks: EVERY_KIND });
+    expect(labelled(view.container, 'Remove ')).toEqual([
+      'Remove Paragraph block 1',
+      'Remove Photo block 2',
+      'Remove Photo grid block 3',
+      'Remove Ingredients block 4',
+      'Remove Method block 5',
+      'Remove Where it was published block 6',
+      // Drawn with no fields at all by `rowOf`, and the validator's own
+      // sentence about it says "remove it and add one from the list instead"
+      // -- advice she could not follow while nothing on the block could.
+      'Remove Unknown block 7',
+    ]);
+  });
+
+  it('gives every kind both directions, and names the position as well as the kind', () => {
+    const view = surface({ blocks: EVERY_KIND });
+    // Omitted at the ends rather than rendered disabled: no Up on the first,
+    // no Down on the last.
+    expect(labelled(view.container, 'Move ')).toEqual([
+      'Move Paragraph block 1 down',
+      'Move Photo block 2 up',
+      'Move Photo block 2 down',
+      'Move Photo grid block 3 up',
+      'Move Photo grid block 3 down',
+      'Move Ingredients block 4 up',
+      'Move Ingredients block 4 down',
+      'Move Method block 5 up',
+      'Move Method block 5 down',
+      'Move Where it was published block 6 up',
+      'Move Where it was published block 6 down',
+      'Move Unknown block 7 up',
+    ]);
+  });
+
+  it('reaches a null where a block should be, which a restored draft really can hold', () => {
+    // registerLoaded's unchecked cast means the array's entries are whatever
+    // localStorage holds. Such an entry gets no slots, no fields and no host,
+    // so before this it was an entry she could see the effects of (the
+    // validator's own complaint) and never get rid of.
+    const spy = vi.fn();
+    const view = surface({
+      blocks: [{ kind: 'paragraph', text: 'p' }, null as unknown as Block],
+      onChange: spy,
+    });
+    press(view.container, 'Remove Unknown block 2');
+    expect(spy.mock.calls[0][0]).toEqual([{ kind: 'paragraph', text: 'p' }]);
+  });
+
+  it('tells two blocks of the SAME kind apart, so one label never names two controls', () => {
+    const view = surface({
+      blocks: [{ kind: 'paragraph', text: 'one' }, { kind: 'paragraph', text: 'two' }],
+    });
+    expect(view.container.querySelectorAll('[aria-label="Remove Paragraph block 1"]')).toHaveLength(1);
+    expect(view.container.querySelectorAll('[aria-label="Remove Paragraph block 2"]')).toHaveLength(1);
+  });
+
+  it('every control is a real button, which is what makes the keyboard fallback one', () => {
+    // A key press on a `<button>` is the browser's own activation, so what
+    // jsdom can honestly say is that these are buttons with names rather than
+    // clickable elements. That the key actually reaches them, and that the
+    // column can be reordered end to end without a pointer, is deferred to
+    // e2e/writing-surface.spec.ts.
+    const view = surface({ blocks: EVERY_KIND });
+    [...view.container.querySelectorAll<HTMLButtonElement>('[data-block-controls] button')].forEach((button) => {
+      expect(button.tagName.toLowerCase()).toBe('button');
+      expect(button.type).toBe('button');
+      expect(button.getAttribute('aria-label')).not.toBeNull();
+    });
+  });
+
+  it('Remove hands back the array without that block, and every other block by IDENTITY', () => {
+    const spy = vi.fn();
+    const alpha: Block = { kind: 'paragraph', text: 'alpha' };
+    const grid: Block = { kind: 'gallery', images: [{ src: '/a.webp', alt: 'a' }] };
+    const omega: Block = { kind: 'paragraph', text: 'omega' };
+    const view = surface({ blocks: [alpha, grid, omega], onChange: spy });
+
+    press(view.container, 'Remove Photo grid block 2');
+
+    const next = spy.mock.calls[0][0] as Block[];
+    expect(next).toHaveLength(2);
+    // Identity, not equality: a removal that rebuilt the survivors would give
+    // every one of them a new name and detach every staged photograph on the
+    // page at once.
+    expect(next[0]).toBe(alpha);
+    expect(next[1]).toBe(omega);
+  });
+
+  it('removes the citation and the photograph nothing else on this surface can reach', () => {
+    const spy = vi.fn();
+    const view = surface({
+      blocks: [
+        { kind: 'image', src: '/x.webp', alt: 'x' },
+        { kind: 'citation', publication: 'Vogue', date: '2026-01-01', url: null },
+        // A block AFTER it, so "removed the citation" and "dropped the last
+        // entry" are not the same array.
+        { kind: 'paragraph', text: 'after' },
+      ],
+      onChange: spy,
+    });
+    press(view.container, 'Remove Where it was published block 2');
+    expect((spy.mock.calls[0][0] as Block[]).map((block) => block.kind)).toEqual(['image', 'paragraph']);
+
+    cleanup();
+    const second = surface({ blocks: [{ kind: 'image', src: '/x.webp', alt: 'x' }], onChange: spy });
+    press(second.container, 'Remove Photo block 1');
+    expect(spy.mock.calls[1][0]).toEqual([]);
+  });
+
+  it('Move carries the SAME block objects to their new positions', () => {
+    // The one claim this whole affordance stands or falls on. stable-names.ts
+    // keys a staged photograph's name on the block OBJECT, so a reorder that
+    // handed back rebuilt copies would file her photograph under a name
+    // nothing refers to and publish a post naming a file that was never sent.
+    const spy = vi.fn();
+    const names = createStableNames('b');
+    const photo: Block = { kind: 'image', src: '/posts/x.webp', alt: 'x' };
+    const words: Block = { kind: 'paragraph', text: 'words' };
+    const tail: Block = { kind: 'heading', text: 'after' };
+    const view = surface({ blocks: [photo, words, tail], onChange: spy, names });
+    const filedAs = names.nameOf(photo, 0);
+
+    press(view.container, 'Move Photo block 1 down');
+
+    const next = spy.mock.calls[0][0] as Block[];
+    expect(next).toHaveLength(3);
+    expect(next[0]).toBe(words);
+    expect(next[1]).toBe(photo);
+    expect(next[2]).toBe(tail);
+    // And therefore the name the bytes are filed under has not moved either.
+    expect(names.nameOf(next[1], 1)).toBe(filedAs);
+  });
+
+  it('Move up is the same swap read from the other end', () => {
+    const spy = vi.fn();
+    const alpha: Block = { kind: 'paragraph', text: 'alpha' };
+    const beta: Block = { kind: 'paragraph', text: 'beta' };
+    const view = surface({ blocks: [alpha, beta], onChange: spy });
+
+    press(view.container, 'Move Paragraph block 2 up');
+
+    const next = spy.mock.calls[0][0] as Block[];
+    expect(next[0]).toBe(beta);
+    expect(next[1]).toBe(alpha);
+  });
+
+  it('reorders the column on screen, in the order the array says', () => {
+    const spy = vi.fn();
+    const { container } = render(
+      <Harness
+        initial={[{ kind: 'paragraph', text: 'alpha' }, { kind: 'paragraph', text: 'beta' }]}
+        spy={spy}
+      />,
+    );
+    press(container, 'Move Paragraph block 1 down');
+    expect([...container.querySelectorAll('[data-slot]')].map((el) => el.textContent)).toEqual(['beta', 'alpha']);
+  });
+
+  it('gives her focus back to the other direction when the control she pressed reaches an end', () => {
+    // MEASURED rather than assumed, the same way BlockList measured it: a
+    // button that survives the move keeps focus in jsdom by itself, and a
+    // button that does not drops focus to `<body>` -- which is the common case,
+    // since a block that arrives at either end loses that direction's control
+    // entirely. Never Remove, which would leave Enter one press away from
+    // deleting the block she was moving.
+    const spy = vi.fn();
+    const { container } = render(
+      <Harness
+        initial={[{ kind: 'paragraph', text: 'alpha' }, { kind: 'paragraph', text: 'beta' }]}
+        spy={spy}
+      />,
+    );
+    press(container, 'Move Paragraph block 1 down');
+    expect(document.activeElement?.getAttribute('aria-label')).toBe('Move Paragraph block 2 up');
+  });
+
+  it('is one step back: Undo puts the removed block into the array as the same object', () => {
+    const spy = vi.fn();
+    const photo: Block = { kind: 'image', src: '/posts/x.webp', alt: 'x' };
+    const view = render(<Harness initial={[{ kind: 'paragraph', text: 'alpha' }, photo]} spy={spy} />);
+
+    press(view.container, 'Remove Photo block 2');
+    expect(spy.mock.calls[0][0]).toHaveLength(1);
+
+    fireEvent.click(within(view.container).getByRole('button', { name: 'Undo' }));
+
+    const restored = spy.mock.calls[spy.mock.calls.length - 1][0] as Block[];
+    expect(restored).toHaveLength(2);
+    // The same object, which is what keeps the photograph she staged for it
+    // filed under the name it is still filed under.
+    expect(restored[1]).toBe(photo);
+  });
+
+  it('is one step back for a move too', () => {
+    const spy = vi.fn();
+    const alpha: Block = { kind: 'paragraph', text: 'alpha' };
+    const beta: Block = { kind: 'paragraph', text: 'beta' };
+    const view = render(<Harness initial={[alpha, beta]} spy={spy} />);
+
+    press(view.container, 'Move Paragraph block 1 down');
+    fireEvent.click(within(view.container).getByRole('button', { name: 'Undo' }));
+
+    const restored = spy.mock.calls[spy.mock.calls.length - 1][0] as Block[];
+    expect(restored[0]).toBe(alpha);
+    expect(restored[1]).toBe(beta);
+  });
+});

@@ -791,6 +791,27 @@ describe('dist/assets/ keeps admin code out of the entry chunk', () => {
 // this task and cost nothing marginal. BlockList.tsx's own move of
 // HANDLE_CLASSNAME/HANDLE_STYLE/DRAGGING_STYLE into drag-row.ts changes no
 // rendered class and moves the byte count by zero.
+// Admin redesign Task 25b, Move up / Move down / Remove on every block of the
+// writing surface: 38836 -> 38836 (+0), zero rules added, zero removed. The
+// brief for that task expected a raise and it did not happen, so the
+// measurement is recorded here rather than the expectation. Measured with a
+// full `npm run build` on 4768ea6 before and after: the two stylesheets are
+// BYTE-IDENTICAL (`cmp` reports no difference, both 540 rules, and Vite's own
+// content hash in the filename is unchanged), which is a stronger result than
+// a rule-level diff and is what the diff was run to check.
+//
+// The reason there is nothing to account for: the two button bindings are
+// RecordList's own exported constants, imported rather than retyped, and the
+// four utilities on the row that holds them are the same four
+// WritingToolbar.tsx's own row already carries. Every one of them had a rule
+// in this sheet before this task and cost nothing marginal. The new
+// `data-block-controls` attribute is an attribute and not a class, the same
+// cheap-query-surface reasoning `data-slot` and `data-panel` follow, and the
+// wrapper element the rows gained carries no class at all.
+//
+// The ceiling is therefore NOT moved. A raise to a number nothing measured is
+// the "margin added to be safe" this file's Task 1 entry above already refuses
+// by name, and it would hide the next real leak by exactly its own size.
 describe('dist/assets/ keeps the shared stylesheet under a byte ceiling', () => {
   it.skipIf(!REQUIRED && !existsSync(DIST_ASSETS))('the entry CSS file stays at or under 38836 bytes', () => {
     const cssFiles = readdirSync(DIST_ASSETS).filter((n) => /^index-.*\.css$/.test(n));

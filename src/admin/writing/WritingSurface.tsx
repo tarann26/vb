@@ -20,9 +20,10 @@
 // caret-restoration problem: InlineTextField.tsx's pendingSelection/forValue
 // round trip exists because a controlled textarea is rewritten on every
 // commit. Nothing here is rewritten while she is in it.
-import { createElement, Fragment, useLayoutEffect, useRef, useState, type Attributes, type HTMLAttributes, type ClipboardEvent, type KeyboardEvent, type ReactNode } from 'react';
+import { createElement, Fragment, useEffect, useLayoutEffect, useRef, useState, type Attributes, type HTMLAttributes, type ClipboardEvent, type KeyboardEvent, type ReactNode } from 'react';
 import { blockProblemOf, type BlockProblemTarget } from '../blocks/block-problems';
 import { linkRefusal, TARGET_SHAPES } from '../blocks/link-target';
+import { swapAt } from '../blocks/reorder';
 import { useStableNames, type StableNames } from '../blocks/stable-names';
 import { readInline } from './dom-inline';
 import { writeInline } from './inline-dom';
@@ -34,7 +35,8 @@ import Field from '../Field';
 import BlockFields from '../blocks/BlockFields';
 import BlockPicker from '../blocks/BlockPicker';
 import { blankBlock } from '../blocks/blank-block';
-import { ALT_SPEC, INSERT_MENU_KINDS } from '../blocks/block-meta';
+import { ALT_SPEC, BLOCK_KIND_LABELS, INSERT_MENU_KINDS, UNKNOWN_BLOCK_LABEL } from '../blocks/block-meta';
+import { MOVE_BUTTON_CLASSNAME, REMOVE_BUTTON_CLASSNAME } from '../RecordList';
 import { checkPhotoSize, convertHeic, uploadAndEncode } from '../upload-photo';
 import { EMPTY_HISTORY, record, redo, undo, type History, type Snapshot } from './history';
 import { clearMarks, insertLink, LINK_PLACEHOLDER, marksSurviveSave, selectedWords, toggleMark, type Mark } from './marks';
@@ -401,6 +403,25 @@ export default function WritingSurface({
   // browser API that can answer it (upload-photo.ts:91-95).
   const [upload, setUpload] = useState<Upload>({ kind: 'idle' });
 
+  // The Move button she just pressed, kept until the reordered column has
+  // rendered so it can be given its focus back. BlockList.tsx:169-190 carried
+  // the identical pair for the identical reason, and its MEASUREMENT of what
+  // jsdom does still holds here: a button that survives the move keeps focus
+  // by itself (React relocates the row and jsdom does not blur a node for
+  // being moved -- a browser may, which is what `Element.moveBefore()` exists
+  // for, so the refocus below is the browser's fix and a no-op here), while a
+  // button that does NOT survive drops focus to `<body>` every time. The
+  // second case is the common one rather than the corner: a block that reaches
+  // either end loses that direction's button entirely, because the control is
+  // OMITTED there rather than rendered disabled, and two blocks with one press
+  // of Down is already it.
+  //
+  // Why she needs it at all: Up and Down are THE way to reorder for anyone on
+  // a phone or a screen reader, and focus landing on `<body>` turns the second
+  // press into a re-navigation from the top of the document.
+  const refocus = useRef<HTMLButtonElement | null>(null);
+  const refocusRow = useRef<HTMLElement | null>(null);
+
   const rows: Row[] = safe.map((block, index) => ({
     block,
     index,
@@ -554,6 +575,34 @@ export default function WritingSurface({
     // browser fact and not one to depend on.
     focusedRef.current = address;
     active.current = address;
+  });
+
+  // Focus, after a move has rearranged the column. Nothing here reads or
+  // writes the block array -- it only puts her back on the control she pressed,
+  // or on the one control of that block's own group that is still standing.
+  //
+  // An ordinary effect and not a layout one: it runs after the caret effect
+  // above, and the two can never both act in one pass, because a move sets no
+  // pending caret and a caret-moving edit sets no pending refocus.
+  useEffect(() => {
+    const button = refocus.current;
+    if (button === null) return;
+    refocus.current = null;
+    const group = refocusRow.current;
+    refocusRow.current = null;
+    if (button.isConnected) {
+      button.focus();
+      return;
+    }
+    // Her button is gone, so the block has reached an end of the post. The
+    // other direction is the only reorder control the group still has, and it
+    // is deliberately never Remove -- landing there would leave Enter one
+    // press away from deleting the block she was moving.
+    if (group === null || !group.isConnected) return;
+    const other = [...group.querySelectorAll('button')].find((candidate) =>
+      (candidate.getAttribute('aria-label') ?? '').startsWith('Move '),
+    );
+    other?.focus();
   });
 
   function commitSlot(index: number, key: Slot['key'], el: HTMLElement, structural = false): void {
@@ -1154,6 +1203,108 @@ export default function WritingSurface({
     emit(insertAfter(blocks, at, [blankBlock(kind)]));
   }
 
+  // MOVE, AND THE SAME OBJECTS ARRIVE AT THE NEW POSITIONS. `swapAt`
+  // (blocks/reorder.ts) copies the array and exchanges two entries, so every
+  // entry -- the two that moved most of all -- comes out the far side as the
+  // IDENTICAL object it went in as. That is the whole of why no rename is
+  // needed here and the whole of why one would be wrong: stable-names.ts keys
+  // a staged photograph's name on the object itself, so a reorder that rebuilt
+  // its entries would file her photograph under a name nothing refers to and
+  // publish a post naming a file no bytes were ever sent for. The reorder
+  // control is exactly where this project shipped that defect twice already
+  // (BlockList.tsx:225-256).
+  function moveBlock(index: number, otherIndex: number, button: HTMLButtonElement): void {
+    if (otherIndex < 0 || otherIndex >= safe.length) return;
+    refocus.current = button;
+    refocusRow.current = button.closest<HTMLElement>('[data-block-controls]');
+    setNotice(null);
+    // Structural, so a reorder is one step back on its own and is never folded
+    // into the run of typing either side of it.
+    remember(active.current, 'end', true);
+    emit(swapAt(safe, index, otherIndex));
+  }
+
+  // REMOVE, and it is a `filter` for the same reason the move is a swap: every
+  // block she is keeping comes back by identity, so nothing else on the page
+  // changes its name, its staged photograph or its preview.
+  //
+  // The bytes of a photograph in the block she removed are deliberately NOT
+  // dropped from the collector. This is an undoable step -- one press of Undo
+  // puts the same block object back, carrying the same `src` -- and a removal
+  // that cleared the bytes first would restore a block naming an asset that no
+  // longer exists anywhere, which publishes a post pointing at a file no build
+  // can produce and fails the asset-existence check on every build after it.
+  // Leaving them is the cheaper failure by a wide margin: one unreferenced
+  // photograph is committed, against one of the eight staged files a publish
+  // allows (PhotoField.tsx's MAX_STAGED_PHOTOS_PER_PUBLISH, which
+  // publish.ts:228 enforces).
+  function removeBlock(index: number): void {
+    if (safe[index] === undefined) return;
+    setNotice(null);
+    remember(active.current, 'end', true);
+    emit(safe.filter((_, i) => i !== index));
+  }
+
+  // The three controls every block gets, whatever kind it is.
+  //
+  // UNCONDITIONAL, and that is the point of this whole addition rather than a
+  // detail of it. `rowOf` draws nothing at all for a kind this model never had
+  // and nothing for a prose block she has emptied of slots, and the four kinds
+  // the insert menu adds carry no editable host for a caret to reach -- so a
+  // photograph, a photo grid, a citation or a wonky block from an older draft
+  // was, until this renders, a thing she could add and never take out again.
+  // Backspace cannot reach one either: it keys off a caret carrying a slot,
+  // and an atom has no slot for a caret to be in.
+  //
+  // Both class strings are RecordList's own exported bindings, imported rather
+  // than retyped for the reason that file's own comment gives: a retyped
+  // string is a brand-new class to the content scanner and ships a duplicate
+  // rule for a style that already exists.
+  function controlsFor(row: Row): ReactNode {
+    const label = row.kind === undefined ? UNKNOWN_BLOCK_LABEL : BLOCK_KIND_LABELS[row.kind];
+    // Her POSITION as well as her kind, and that is not padding: a recipe has
+    // two Paragraph blocks more often than not, so "Move Paragraph block up"
+    // would name two controls at once -- which reads as a broken query rather
+    // than as the ambiguity it is, and leaves a screen-reader user no way to
+    // tell the two apart. BlockList.tsx:345-353 wrote the same rule down.
+    const position = row.index + 1;
+    return (
+      <div className="mb-1 flex items-center gap-2" data-block-controls={row.name}>
+        {/* Omitted at the ends rather than rendered disabled -- RecordList's
+            own rule, and the reason the refocus effect above has a second
+            branch at all. */}
+        {row.index > 0 && (
+          <button
+            type="button"
+            aria-label={`Move ${label} block ${position} up`}
+            onClick={(event) => moveBlock(row.index, row.index - 1, event.currentTarget)}
+            className={MOVE_BUTTON_CLASSNAME}
+          >
+            Up
+          </button>
+        )}
+        {row.index < rows.length - 1 && (
+          <button
+            type="button"
+            aria-label={`Move ${label} block ${position} down`}
+            onClick={(event) => moveBlock(row.index, row.index + 1, event.currentTarget)}
+            className={MOVE_BUTTON_CLASSNAME}
+          >
+            Down
+          </button>
+        )}
+        <button
+          type="button"
+          aria-label={`Remove ${label} block ${position}`}
+          onClick={() => removeBlock(row.index)}
+          className={REMOVE_BUTTON_CLASSNAME}
+        >
+          Remove
+        </button>
+      </div>
+    );
+  }
+
   function rowOf(row: Row): ReactNode {
     const kind = row.kind;
     if (kind === undefined) return null;
@@ -1255,8 +1406,21 @@ export default function WritingSurface({
         </div>
       )}
 
+      {/* Keyed on the block's STABLE NAME rather than on its position, which
+          it already was and now matters twice over: React relocates the whole
+          of one block -- its controls with it -- when two of them trade
+          places, so the control she pressed is the same element afterwards and
+          keeps her focus. A positional key would rebuild both and drop it.
+
+          The wrapper carries no class, so it costs no rule and the margins of
+          what it holds go on reading as they did. Whether that is true at
+          390px and at 1280px is a layout claim, and is deferred to
+          e2e/writing-surface.spec.ts. */}
       {rows.map((row) => (
-        <Fragment key={row.name}>{rowOf(row)}</Fragment>
+        <div key={row.name}>
+          {controlsFor(row)}
+          {rowOf(row)}
+        </div>
       ))}
 
       {/* THE INSERT MENU, and it is unconditional for the reason BlockList's

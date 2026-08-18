@@ -405,3 +405,118 @@ describe('a photograph inside a photo grid', () => {
     expect(at.blocks()[0]).toBe(paragraph);
   });
 });
+
+// THE PHOTOGRAPH THROUGH A REORDER AND THROUGH A REMOVAL, which are the two
+// gestures this whole naming scheme exists for: a block does not survive a
+// reorder, and a staged photograph inside one does. Every case below reads the
+// name back off the block the array actually holds, never off a string this
+// file wrote.
+describe('the photograph after she moves or removes a block', () => {
+  function control(at: Bench, label: string): HTMLButtonElement {
+    const button = at.container.querySelector<HTMLButtonElement>(
+      `[data-block-controls] button[aria-label="${label}"]`,
+    );
+    expect(button, `no control labelled ${label}`).not.toBeNull();
+    return button as HTMLButtonElement;
+  }
+
+  // Two photographs, on two image blocks, both staged through the real picker
+  // path. `mockResolvedValueOnce` gives the second one its own bytes so the
+  // two collector entries cannot be mistaken for each other.
+  async function twoPhotographs(): Promise<Bench> {
+    const at = bench([{ kind: 'paragraph', text: 'intro' }]);
+    fireEvent.focus(hostAt(at.container, `${at.names.nameOf(at.blocks()[0], 0)}/text`));
+    await picks(at.container, file('one.jpg', 10));
+
+    vi.mocked(uploadAndEncode).mockResolvedValueOnce({
+      path: 'assets-source/posts/def456.jpg',
+      contentPath: '/posts/def456.webp',
+      content: 'BBBB',
+      encoding: 'base64',
+    });
+    fireEvent.focus(hostAt(at.container, `${nameIn(at, 1)}/caption`));
+    await picks(at.container, file('two.jpg', 10));
+
+    expect(at.blocks().map((block) => block.kind)).toEqual(['paragraph', 'image', 'image']);
+    return at;
+  }
+
+  it('is still filed under the name it renders with after she moves it, and still on screen', async () => {
+    const at = bench([{ kind: 'paragraph', text: 'intro' }]);
+    fireEvent.focus(hostAt(at.container, `${at.names.nameOf(at.blocks()[0], 0)}/text`));
+    await picks(at.container, file('one.jpg', 10));
+    const key = stagedKey(at);
+    expect(key).toBe(`blocks[${nameIn(at, 1)}].src`);
+
+    act(() => {
+      fireEvent.click(control(at, 'Move Photo block 2 up'));
+    });
+
+    expect(at.blocks().map((block) => block.kind)).toEqual(['image', 'paragraph']);
+    expect(`blocks[${nameIn(at, 0)}].src`).toBe(key);
+    // The same fact from the other end: the preview is keyed on that name too,
+    // so a reorder that rebuilt the block would show her the derivative no
+    // build has produced yet instead of the photograph she picked.
+    expect(at.container.querySelector('img')?.getAttribute('src')).toMatch(/^blob:/);
+  });
+
+  it('leaves the OTHER photograph’s bytes exactly where they were when one block is removed', async () => {
+    const at = await twoPhotographs();
+    const [firstKey, secondKey] = at.onStaged.mock.calls.map((call) => call[0] as string);
+    expect(firstKey).not.toBe(secondKey);
+    expect(firstKey).toBe(`blocks[${nameIn(at, 1)}].src`);
+    expect(secondKey).toBe(`blocks[${nameIn(at, 2)}].src`);
+
+    act(() => {
+      fireEvent.click(control(at, 'Remove Photo block 2'));
+    });
+
+    expect(at.blocks().map((block) => block.kind)).toEqual(['paragraph', 'image']);
+    // The survivor is the SECOND photograph and it still answers to the key
+    // its bytes were filed under. A removal that rebuilt the survivors would
+    // rename this block and leave those bytes referring to nothing.
+    expect(at.blocks()[1]).toMatchObject({ src: '/posts/def456.webp' });
+    expect(`blocks[${nameIn(at, 1)}].src`).toBe(secondKey);
+    expect(at.container.querySelectorAll('img')).toHaveLength(1);
+    expect(at.container.querySelector('img')?.getAttribute('src')).toMatch(/^blob:/);
+  });
+
+  it('keeps the removed block’s own bytes, because one press of Undo puts that block back', async () => {
+    // Deliberate, and the direction of the trade is the reason. Dropping them
+    // on the way out would make Undo restore a block naming an asset that
+    // exists nowhere -- staged no longer, committed never -- which publishes a
+    // post pointing at a file no build can produce and fails the
+    // asset-existence check on every build after it. The cost of keeping them
+    // is one unreferenced photograph committed and one of the eight staged
+    // files a publish allows.
+    const at = await twoPhotographs();
+    const [firstKey] = at.onStaged.mock.calls.map((call) => call[0] as string);
+    const removed = at.blocks()[1];
+    const staged = at.onStaged.mock.calls.length;
+
+    act(() => {
+      fireEvent.click(control(at, 'Remove Photo block 2'));
+    });
+    // Nothing was said to the collector at all: no clear, and certainly no
+    // clear of the wrong key.
+    expect(at.onStaged.mock.calls).toHaveLength(staged);
+
+    // The toolbar's own control, which carries its name as text rather than as
+    // an aria-label (WritingToolbar.tsx).
+    const undo = [...at.container.querySelectorAll('button')].find((el) => el.textContent === 'Undo');
+    expect(undo).toBeDefined();
+    act(() => {
+      fireEvent.click(undo as HTMLButtonElement);
+    });
+
+    // The length first, and it is not padding: two picks stand behind this
+    // press in the same history, so a removal that recorded NO step at all
+    // would send Undo back past the second photograph instead -- landing on an
+    // array whose second entry is also this block, and passing the identity
+    // check below for the wrong reason. Measured: without it this case stayed
+    // green through exactly that mutation.
+    expect(at.blocks().map((block) => block.kind)).toEqual(['paragraph', 'image', 'image']);
+    expect(at.blocks()[1]).toBe(removed);
+    expect(`blocks[${nameIn(at, 1)}].src`).toBe(firstKey);
+  });
+});
