@@ -2424,140 +2424,52 @@ exports[`the thirteen panels, as they render today > Menu PDFs (menus) 1`] = `
     aria-busy="false"
     style="border: 0px; padding: 0px; margin: 0px; min-inline-size: 0;"
   >
-    <ul>
-      <li
-        class="mb-6 rounded border border-gray-200 p-4"
+    <div>
+      <ul
+        data-item-list="rows"
       >
-        <div
-          class="mb-4"
+        <li
+          class="mb-1 flex items-center gap-1 rounded border border-gray-200"
+          data-item-row="food"
         >
-          <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-            for="menu-0-id"
+          <button
+            class="flex min-w-0 flex-1 items-center gap-3 rounded p-2 text-left font-['Montserrat'] text-sm text-ink transition hover:bg-brand/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+            type="button"
           >
-            ID
-          </label>
-          <input
-            aria-describedby="menu-0-id-help"
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-            id="menu-0-id"
-            type="text"
-            value="food"
-          />
-          <p
-            class="mt-1 text-xs text-gray-500"
-            id="menu-0-id-help"
-          >
-            A short identifier used only to tell downloadable menus apart.
-          </p>
-        </div>
-        <div
-          class="mb-4"
+            <div
+              aria-hidden="true"
+              class="h-12 w-12 shrink-0 rounded border border-brand/40 bg-[#f7f5f0]"
+              data-thumbnail="row"
+            />
+            <span
+              class="min-w-0 flex-1 truncate"
+            >
+              Food Menu
+            </span>
+          </button>
+        </li>
+        <li
+          class="mb-1 flex items-center gap-1 rounded border border-gray-200"
+          data-item-row="drinks"
         >
-          <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-            for="menu-0-label"
+          <button
+            class="flex min-w-0 flex-1 items-center gap-3 rounded p-2 text-left font-['Montserrat'] text-sm text-ink transition hover:bg-brand/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+            type="button"
           >
-            Label
-          </label>
-          <input
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-            id="menu-0-label"
-            type="text"
-            value="Food Menu"
-          />
-        </div>
-        <div
-          class="mb-4"
-        >
-          <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-            for="menu-0-file"
-          >
-            PDF file
-          </label>
-          <p
-            class="mt-1 text-xs text-gray-500"
-            id="menu-0-file-current"
-          >
-            Current file: /menus/food-menu.pdf
-          </p>
-          <input
-            accept="application/pdf"
-            aria-describedby="menu-0-file-current"
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-            id="menu-0-file"
-            type="file"
-          />
-        </div>
-      </li>
-      <li
-        class="mb-6 rounded border border-gray-200 p-4"
-      >
-        <div
-          class="mb-4"
-        >
-          <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-            for="menu-1-id"
-          >
-            ID
-          </label>
-          <input
-            aria-describedby="menu-1-id-help"
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-            id="menu-1-id"
-            type="text"
-            value="drinks"
-          />
-          <p
-            class="mt-1 text-xs text-gray-500"
-            id="menu-1-id-help"
-          >
-            A short identifier used only to tell downloadable menus apart.
-          </p>
-        </div>
-        <div
-          class="mb-4"
-        >
-          <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-            for="menu-1-label"
-          >
-            Label
-          </label>
-          <input
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-            id="menu-1-label"
-            type="text"
-            value="Drinks Menu"
-          />
-        </div>
-        <div
-          class="mb-4"
-        >
-          <label
-            class="mb-1 block font-['Montserrat'] text-sm uppercase tracking-wide text-accent"
-            for="menu-1-file"
-          >
-            PDF file
-          </label>
-          <p
-            class="mt-1 text-xs text-gray-500"
-            id="menu-1-file-current"
-          >
-            Current file: /menus/drinks-menu.pdf
-          </p>
-          <input
-            accept="application/pdf"
-            aria-describedby="menu-1-file-current"
-            class="w-full rounded border border-gray-300 px-3 py-2 text-ink focus:border-accent focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
-            id="menu-1-file"
-            type="file"
-          />
-        </div>
-      </li>
-    </ul>
+            <div
+              aria-hidden="true"
+              class="h-12 w-12 shrink-0 rounded border border-brand/40 bg-[#f7f5f0]"
+              data-thumbnail="row"
+            />
+            <span
+              class="min-w-0 flex-1 truncate"
+            >
+              Drinks Menu
+            </span>
+          </button>
+        </li>
+      </ul>
+    </div>
   </fieldset>
 </div>
 `;

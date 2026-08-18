@@ -104,6 +104,20 @@ describe('the six row types that get a thumbnail', () => {
     expect(collageRow).not.toBeNull();
     expect(thumbnails(collageRow as HTMLElement)).toHaveLength(0);
   });
+
+  // Menu PDFs are the one row type with no possible picture that still
+  // carries a thumbnail -- the neutral placeholder box, never an <img>, so a
+  // menu's row occupies the same width as a dish's and the two lists read as
+  // the same kind of thing.
+  it('Menu PDF rows carry the neutral placeholder, never a picture', async () => {
+    markEveryAreaSeeded();
+    stubFetchWithPhotos();
+    renderDashboard('/edit/manage/menu');
+    const el = await openPanel('Menu PDFs', 'menus');
+    const found = thumbnails(el);
+    expect(found).toHaveLength(MENUS.length);
+    expect(found.every((node) => node.tagName === 'DIV')).toBe(true); // the placeholder box, not an <img>
+  });
 });
 
 describe("the template form's own two row types", () => {
@@ -147,14 +161,14 @@ describe("the template form's own two row types", () => {
 
 // ---------------------------------------------------------------------------
 describe('the panels that get no thumbnail at all', () => {
-  // Menus are PDFs -- rendering a first page needs pdf.js in the admin
-  // bundle for a 48px picture, and a file glyph beside a label that already
-  // says "Food menu" adds nothing. The other four have no image field: a
-  // placeholder box on a row that can never hold a picture is decoration,
-  // and decoration on a row that means nothing is the "bland" complaint in
-  // miniature.
+  // These four have no image field of any kind: a placeholder box on a row
+  // that can never hold a picture is decoration, and decoration on a row
+  // that means nothing is the "bland" complaint in miniature -- which still
+  // holds for every row in one of these lists (unlike Menu PDFs, where the
+  // spec names an aligned row width as the reason to keep the placeholder;
+  // see thumbnail-rows.test.tsx's own Menu PDF case above and Thumbnail.tsx's
+  // header comment).
   it.each([
-    { label: 'Menu PDFs', route: '/edit/manage/menu', heading: 'Menu PDFs', panel: 'menus' },
     { label: 'Pages', route: '/edit/manage/pages', heading: 'Pages', panel: 'pages' },
     { label: 'What shows on the homepage', route: '/edit/manage/pages', heading: 'What shows on the homepage', panel: 'sections' },
     { label: 'Opening hours', route: '/edit/manage/details', heading: 'Opening hours', panel: 'hours' },

@@ -19,7 +19,7 @@ import userEvent from '@testing-library/user-event';
 import { markEveryAreaSeeded, renderDashboard } from './renderDashboard';
 import { LOCKUP_ACCESSIBLE_NAME } from '../manage/brand';
 import { PANELS } from '../manage/areas';
-import { DISH_FIELDS } from '../fields';
+import { DISH_FIELDS, MENU_FIELDS } from '../fields';
 import {
   COPY,
   DISHES,
@@ -743,12 +743,21 @@ describe('AdminApp: the real "Opening hours" screen', () => {
 // component -- the same "not just built in isolation" bar the Sections/
 // Hours describe blocks above already hold this file to.
 describe('AdminApp: the new prose, gallery, menus and copy screens all render, fetched independently', () => {
-  it('renders Menus, prefilled with both real menu labels', async () => {
+  it('renders Menus, listing both real menu labels, each opening its own editor on real values', async () => {
     stubFetch();
+    const user = userEvent.setup();
     renderDashboard('/edit/manage/menu');
     const section = await sectionByHeading('Menu PDFs');
-    expect(await within(section).findByDisplayValue('Food Menu')).toBeInTheDocument();
-    expect(within(section).getByDisplayValue('Drinks Menu')).toBeInTheDocument();
+    // Task 4: a menu's label is now the row's own name (ItemList), not a
+    // prefilled input -- the editor holding that input isn't mounted at
+    // all until the row is opened.
+    expect(await within(section).findByText('Food Menu')).toBeInTheDocument();
+    expect(within(section).getByText('Drinks Menu')).toBeInTheDocument();
+
+    await user.click(within(section).getByRole('button', { name: 'Food Menu' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Food Menu' });
+    expect(within(dialog).getByLabelText(MENU_FIELDS.label.label)).toHaveValue('Food Menu');
+    expect(within(dialog).getByLabelText(MENU_FIELDS.id.label)).toHaveValue('food');
   });
 
   it('renders Galleries, prefilled with real atmosphere/ourStory alt text and one row per collage photo', async () => {
@@ -853,12 +862,15 @@ describe('AdminApp: a malformed content file costs one section, not the whole da
       await screen.findByText('Dish A');
       expect(screen.getByText('Drink X')).toBeInTheDocument();
       expect(screen.getByText('Article P')).toBeInTheDocument();
-      // Queried by display value rather than through `sectionByHeading`,
-      // deliberately: Menus lives in a different AREA from Galleries, and
-      // role queries do not reach into a hidden one. "Food Menu" is unique
-      // on this page and is the same evidence -- menus.json loaded and
-      // rendered -- without the query needing that area to be on screen.
-      expect(await screen.findByDisplayValue('Food Menu')).toBeInTheDocument();
+      // Queried by TEXT rather than through `sectionByHeading`, deliberately:
+      // Menus lives in a different AREA from Galleries, and role queries do
+      // not reach into a hidden one. "Food Menu" is unique on this page and
+      // is the same evidence -- menus.json loaded and rendered -- without the
+      // query needing that area to be on screen. Not `findByDisplayValue`:
+      // Task 4 moved a menu's label out to its row's own name (ItemList),
+      // which renders with no editor open, so `findByText` is what still
+      // finds it here.
+      expect(await screen.findByText('Food Menu')).toBeInTheDocument();
 
       // Galleries itself shows a named, recognizable fallback instead of
       // silently vanishing or crashing the page.
@@ -1010,9 +1022,11 @@ describe("AdminApp: Task 9's wiring -- replacing a menu PDF under the SAME name 
     const user = userEvent.setup();
     renderDashboard('/edit/manage/menu');
     const section = await sectionByHeading('Menu PDFs');
-    await within(section).findByDisplayValue('Food Menu');
+    await within(section).findByText('Food Menu');
+    await user.click(within(section).getByRole('button', { name: 'Food Menu' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Food Menu' });
 
-    const pdfInput = within(section).getAllByLabelText('PDF file')[0];
+    const pdfInput = within(dialog).getByLabelText('PDF file');
     await user.upload(pdfInput, pdfFile());
     await waitFor(() => expect(FakeXHR.instances).toHaveLength(1));
     expect(FakeXHR.instances[0].sentForm?.get('name')).toBe('food-menu');
@@ -1024,9 +1038,11 @@ describe("AdminApp: Task 9's wiring -- replacing a menu PDF under the SAME name 
     const user = userEvent.setup();
     renderDashboard('/edit/manage/menu');
     const section = await sectionByHeading('Menu PDFs');
-    await within(section).findByDisplayValue('Food Menu');
+    await within(section).findByText('Food Menu');
+    await user.click(within(section).getByRole('button', { name: 'Food Menu' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Food Menu' });
 
-    const pdfInput = within(section).getAllByLabelText('PDF file')[0];
+    const pdfInput = within(dialog).getByLabelText('PDF file');
     await user.upload(pdfInput, pdfFile());
     await waitFor(() => expect(FakeXHR.instances).toHaveLength(1));
     FakeXHR.instances[0].respond(200, { path: 'public/menus/food-menu.pdf', file: '/menus/food-menu.pdf' });
@@ -1037,7 +1053,72 @@ describe("AdminApp: Task 9's wiring -- replacing a menu PDF under the SAME name 
     // happened can live -- no "section edited" in the summary at all, only
     // the staged file (Task 10's own carried requirement 3).
     await screen.findByText('1 file staged — ready to publish.');
-    expect(within(section).getByDisplayValue('Food Menu')).toBeInTheDocument();
+    expect(within(dialog).getByLabelText(MENU_FIELDS.label.label)).toHaveValue('Food Menu');
+  });
+});
+
+// Task 4's own new coverage: the list/editor split for Menu PDFs, and the
+// three defects the brief's mutation table names explicitly.
+describe('AdminApp: Menu PDFs -- the list/editor split (Task 4)', () => {
+  it('renaming a menu leaves its editor open', async () => {
+    stubFetch();
+    const user = userEvent.setup();
+    renderDashboard('/edit/manage/menu');
+    const section = await sectionByHeading('Menu PDFs');
+    await within(section).findByText('Food Menu');
+    await user.click(within(section).getByRole('button', { name: 'Food Menu' }));
+
+    const idInput = within(screen.getByRole('dialog')).getByLabelText(MENU_FIELDS.id.label);
+    await user.clear(idInput);
+    await user.type(idInput, 'street-food');
+
+    // Still open, on the SAME record -- not closed by the id change that
+    // relocated the record this editor is tracking by id.
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(within(screen.getByRole('dialog')).getByLabelText(MENU_FIELDS.id.label)).toHaveValue('street-food');
+  });
+
+  it('with the editor closed, a problem on the second menu is still on screen', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url === '/api/wa') return WA_RESPONSE();
+        if (url.includes('dishes.json')) return contentResponse(DISHES, 'sha-dishes');
+        if (url.includes('drinks.json')) return contentResponse(DRINKS, 'sha-drinks');
+        if (url.includes('press.json')) return contentResponse(PRESS, 'sha-press');
+        if (url.includes('sections.json')) return contentResponse(SECTIONS, 'sha-sections');
+        if (url.includes('site.json')) return contentResponse(SITE, 'sha-site');
+        if (url.includes('galleries.json')) return contentResponse(GALLERIES, 'sha-galleries');
+        // The second menu's label is blank -- a real validateMenus problem,
+        // with no editor open to place it on a field.
+        if (url.includes('menus.json'))
+          return contentResponse(
+            [
+              { id: 'food', label: 'Food Menu', file: '/menus/food-menu.pdf' },
+              { id: 'drinks', label: '', file: '/menus/drinks-menu.pdf' },
+            ],
+            'sha-menus',
+          );
+        if (url.includes('story.json')) return contentResponse(STORY, 'sha-story');
+        if (url.includes('copy.json')) return contentResponse(COPY, 'sha-copy');
+        if (url.includes('pages.json')) return contentResponse([], 'sha-pages');
+        throw new Error(`unexpected fetch to ${url}`);
+      }),
+    );
+    renderDashboard('/edit/manage/menu');
+    const section = await sectionByHeading('Menu PDFs');
+    // Nothing here opens a row: the blank-label problem on the second menu
+    // must reach the list-level banner with no editor open at all.
+    expect(await within(section).findByRole('alert')).toBeInTheDocument();
+  });
+
+  it('menus.json has no add path -- the list offers no Add button', async () => {
+    stubFetch();
+    renderDashboard('/edit/manage/menu');
+    const section = await sectionByHeading('Menu PDFs');
+    await within(section).findByText('Food Menu');
+    expect(within(section).queryByRole('button', { name: /^Add/ })).toBeNull();
   });
 });
 
