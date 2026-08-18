@@ -163,8 +163,28 @@ function fakePages(body: string = SHELL, status = 200) {
   return { asked, impl };
 }
 
+// Pages itself unreachable: the subrequest REJECTS rather than answering with
+// a bad status. Still no network -- the rejection is synthesised here.
+function unreachablePages() {
+  return (async () => {
+    throw new TypeError('Network connection lost.');
+  }) as unknown as typeof fetch;
+}
+
 function get(path: string): Request {
   return new Request(`https://vb.aionxxxi.uk${path}`);
+}
+
+function head(path: string): Request {
+  return new Request(`https://vb.aionxxxi.uk${path}`, { method: 'HEAD' });
+}
+
+function headerMap(response: Response): Record<string, string> {
+  const out: Record<string, string> = {};
+  response.headers.forEach((value, name) => {
+    out[name] = value;
+  });
+  return out;
 }
 
 describe('slugFromPath', () => {
@@ -247,14 +267,20 @@ describe('serving a post page', () => {
   // body, rather than turned into a 500 of this Worker's own making.
   //
   // The body is deliberately the SHELL rather than some arbitrary error text,
-  // and that is the whole strength of this case. Pages serves the SPA shell as
-  // the body of its own error pages, so an error response CAN carry every
-  // anchor rewriteShellHead looks for. Asserting only the status passes even
-  // with the `!shell.ok` guard deleted (the rewritten response keeps the
-  // shell's 503) -- measured directly. Asserting the body proves the handler
-  // never rewrote it, which is what stops this Worker from stamping a real
-  // post's title and Article data onto a page that is telling the visitor the
-  // site is down.
+  // and that is the whole strength of this case: it is the WORST body Pages
+  // could hand back on a non-2xx -- the only one that carries every anchor
+  // rewriteShellHead looks for, and therefore the only one the guard's absence
+  // could actually corrupt. It is not a claim about what Pages really returns.
+  // (It does not: public/_redirects is `/* /index.html 200`, there is no
+  // 404.html, and a non-2xx from Pages is a Cloudflare edge error page with
+  // none of these tags.) Choosing the adversarial body makes the test stronger
+  // than reality rather than weaker.
+  //
+  // Asserting only the status passes even with the `!shell.ok` guard deleted
+  // (the rewritten response keeps the shell's 503) -- measured directly, which
+  // is why the body assertion is here. It proves the handler never rewrote the
+  // body, which is what stops this Worker from stamping a real post's title
+  // and Article data onto a page telling the visitor the site is down.
   it('hands a failed shell fetch straight back, unread and unrewritten, rather than inventing a 500', async () => {
     const response = await handlePostPage(
       get('/blog/live-only'),
@@ -280,6 +306,153 @@ describe('serving a post page', () => {
     );
     expect(response.status).toBe(200);
     expect(await response.text()).toBe(broken);
+  });
+
+  // Rewriting the head makes the body longer than the one Pages measured, so
+  // a Content-Length carried over from the shell describes a document that no
+  // longer exists -- and a short Content-Length is a truncated page, which is
+  // the blank-screen-at-200 failure in different clothes. Content-Encoding is
+  // the mirror image: `fetch` hands the body back already decoded, so a
+  // surviving `br` would tell the browser to inflate plain text.
+  it('does not carry the shell\'s stale Content-Length or Content-Encoding onto the rewritten body', async () => {
+    const measured = (async () =>
+      new Response(SHELL, {
+        status: 200,
+        headers: {
+          'Content-Type': 'text/html',
+          'Content-Length': String(SHELL.length),
+          'Content-Encoding': 'br',
+        },
+      })) as unknown as typeof fetch;
+    const response = await handlePostPage(
+      get('/blog/live-only'),
+      { DB: await dbWith(D1_POSTS) },
+      measured,
+    );
+    expect(response.headers.get('Content-Length')).toBeNull();
+    expect(response.headers.get('Content-Encoding')).toBeNull();
+    // The header that must survive is still surviving.
+    expect(response.headers.get('Content-Type')).toBe('text/html');
+    const html = await response.text();
+    expect(html).toContain('"@type":"Article"');
+    expect(html.length).toBeGreaterThan(SHELL.length);
+  });
+});
+
+// Finding F1. RFC 9110 requires HEAD to answer what GET would, minus the body.
+// The Workers runtime does not convert one into the other, so this is entirely
+// on the handler -- and getting it wrong is invisible from a browser and a 404
+// for every uptime monitor and link checker on a page that exists.
+describe('HEAD on a post page', () => {
+  async function bothWays(path: string, pagesBody = SHELL, status = 200) {
+    const db = await dbWith(D1_POSTS);
+    return {
+      got: await handlePostPage(get(path), { DB: db }, fakePages(pagesBody, status).impl),
+      headed: await handlePostPage(head(path), { DB: db }, fakePages(pagesBody, status).impl),
+    };
+  }
+
+  // The invariant, asserted as an invariant rather than as a list of remembered
+  // header names: whatever GET answers, HEAD answers the same, with no body.
+  // This reddens if HEAD stops matching GET for ANY reason -- a header added on
+  // one path, a status that diverges, a body that leaks through.
+  it('matches GET exactly, status and headers, and carries no body', async () => {
+    const { got, headed } = await bothWays('/blog/live-only');
+    expect(headed.status).toBe(got.status);
+    expect(headed.status).toBe(200);
+    expect(headerMap(headed)).toEqual(headerMap(got));
+    expect(headed.body).toBeNull();
+    expect(await headed.text()).toBe('');
+    // And GET really did have something to say, so the equality above is not
+    // two empty things agreeing.
+    expect(await got.text()).toContain('"@type":"Article"');
+  });
+
+  // The head is still rewritten for a HEAD, not skipped: the headers a HEAD
+  // reports must describe the document a GET would send, and a short-circuit
+  // that never fetched the shell would report the wrong ones.
+  it('still asks Pages for the shell rather than short-circuiting', async () => {
+    const pages = fakePages();
+    await handlePostPage(head('/blog/live-only'), { DB: await dbWith(D1_POSTS) }, pages.impl);
+    expect(pages.asked).toEqual([`https://vb.aionxxxi.uk${SHELL_PATH}`]);
+  });
+
+  // D5 and the Pages-error passthrough both have to agree with GET too, since
+  // the body is dropped after the decision rather than before it.
+  it('matches GET on an unresolvable slug and on a Pages error', async () => {
+    const unresolvable = await bothWays('/blog/no-such-post');
+    expect(unresolvable.headed.status).toBe(unresolvable.got.status);
+    expect(unresolvable.headed.status).toBe(200);
+    expect(await unresolvable.headed.text()).toBe('');
+
+    const failing = await bothWays('/blog/live-only', SHELL, 503);
+    expect(failing.headed.status).toBe(failing.got.status);
+    expect(failing.headed.status).toBe(503);
+    expect(await failing.headed.text()).toBe('');
+  });
+});
+
+// Finding F6. A REJECTED subrequest, not a bad status -- Pages unreachable
+// rather than Pages unhappy. Unhandled, this escapes worker.fetch and the
+// visitor gets Cloudflare's 1101 "Worker threw exception" page: a failure this
+// Worker neither chose nor can see, on the path Task 4 puts real traffic on.
+describe('Pages unreachable', () => {
+  it('answers a 503 the Worker chose, never a 404 and never a 200', async () => {
+    const response = await handlePostPage(
+      get('/blog/live-only'),
+      { DB: await dbWith(D1_POSTS) },
+      unreachablePages(),
+    );
+    // 503 and not 404 is the whole point: a 404 on a post URL is the
+    // de-indexing event this phase is arranged around avoiding, and a 200
+    // would tell every crawler the empty page it got was the real one.
+    expect(response.status).toBe(503);
+    expect(response.headers.get('Retry-After')).toBe('60');
+    expect(response.headers.get('Cache-Control')).toBe('no-store');
+    // This response is authored by the Worker, and worker/index.ts exempts
+    // this path from SECURITY_HEADERS -- so it has to carry its own. The
+    // document has no subresource of any kind, which is what makes the empty
+    // policy correct here rather than a stray copy of the HTML one.
+    expect(response.headers.get('Content-Security-Policy')).toBe(
+      "default-src 'none'; frame-ancestors 'none'",
+    );
+    expect(response.headers.get('X-Content-Type-Options')).toBe('nosniff');
+    const html = await response.text();
+    expect(html).toContain('Temporarily unavailable');
+    expect(html).not.toContain('"@type":"Article"');
+  });
+
+  it('answers HEAD the same way, with no body', async () => {
+    const response = await handlePostPage(
+      head('/blog/live-only'),
+      { DB: await dbWith(D1_POSTS) },
+      unreachablePages(),
+    );
+    expect(response.status).toBe(503);
+    expect(await response.text()).toBe('');
+  });
+
+  // The catch is deliberately around the subrequest and NOTHING else, and this
+  // is what pins that. The subrequest resolves -- a real 200 with real headers
+  // -- and the body stream fails afterwards, which is past the catch. The
+  // handler must reject rather than laundering it into a tidy 503, because
+  // everything downstream of the fetch is this repo's own code and a bug there
+  // that always answers 503 is a bug nobody finds for a month.
+  //
+  // Reddens if the try is ever widened to wrap the whole function.
+  it('lets a failure past the subrequest stay loud instead of laundering it into a 503', async () => {
+    const brokenStream = (async () =>
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.error(new Error('connection reset mid-body'));
+          },
+        }),
+        { status: 200, headers: { 'Content-Type': 'text/html' } },
+      )) as unknown as typeof fetch;
+    await expect(
+      handlePostPage(get('/blog/live-only'), { DB: await dbWith(D1_POSTS) }, brokenStream),
+    ).rejects.toThrow();
   });
 });
 
@@ -331,6 +504,24 @@ describe('site HTML keeps the headers Pages gave it', () => {
   it('does not exempt a non-GET on a post path', () => {
     expect(servesSiteHtml(post('/blog/live-only'))).toBe(false);
   });
+
+  // Finding F1. HEAD is IN, because RFC 9110 makes it the same request as GET
+  // minus the body -- it reaches the same handler and gets the same HTML
+  // headers. OPTIONS is OUT, decided rather than defaulted: this Worker sets
+  // no CORS headers anywhere, so answering a preflight would be inventing a
+  // capability nothing asked for, and a 404 is what every other path in this
+  // router already gives OPTIONS.
+  it('exempts HEAD, which is a GET without a body, and not OPTIONS', () => {
+    expect(
+      servesSiteHtml(new Request('https://vb.aionxxxi.uk/blog/live-only', { method: 'HEAD' })),
+    ).toBe(true);
+    expect(
+      servesSiteHtml(new Request('https://vb.aionxxxi.uk/blog/live-only', { method: 'OPTIONS' })),
+    ).toBe(false);
+    expect(
+      servesSiteHtml(new Request('https://vb.aionxxxi.uk/blog', { method: 'HEAD' })),
+    ).toBe(false);
+  });
 });
 
 // Swaps globalThis.fetch for a Pages stub and always puts it back. Nothing
@@ -359,8 +550,11 @@ describe('the Worker entry point, end to end', () => {
           headers: { 'Content-Type': 'text/html', 'Content-Security-Policy': PAGES_CSP },
         }),
     );
+    // Finding F7. This used to sit beside a redundant
+    // `.not.toContain("default-src 'none'")`, which the equality already
+    // implies and which therefore could never redden on its own. The trap it
+    // was documenting is named in the comment above instead.
     expect(response.headers.get('Content-Security-Policy')).toBe(PAGES_CSP);
-    expect(response.headers.get('Content-Security-Policy')).not.toContain("default-src 'none'");
     expect(response.headers.get('Content-Type')).toBe('text/html');
     expect(await response.text()).toContain(
       '<title>A post that exists only in the database</title>',
@@ -373,11 +567,14 @@ describe('the Worker entry point, end to end', () => {
   // in the file that introduces the exemption, so that widening servesSiteHtml
   // reddens a test sitting next to the code that did it.
   //
-  // Measured. Widening servesSiteHtml to `pathname.startsWith('/')` reddens
-  // both cases below, the POST case after them, and all four unit cases above
-  // -- 16 tests across three files. Widening it only by dropping the method
-  // check (a pathname-only exemption, the smaller mistake and the easier one
-  // to make) reddens exactly two: the POST case below and its unit sibling.
+  // Measured against this tree. Widening servesSiteHtml to
+  // `pathname.startsWith('/')` reddens 20 tests across four files --
+  // post-page, hardening, index and analytics. Widening it only by dropping
+  // the method check -- a pathname-only exemption, the smaller mistake and the
+  // far easier one to make -- reddens the POST case below and its unit
+  // sibling. And `startsWith('/blog')`, the "simplification" a careless hand
+  // makes, reddens the /blogroll case below, which is the point of that case
+  // existing at all.
   const FULL_SET: Record<string, string> = {
     'X-Content-Type-Options': 'nosniff',
     'X-Frame-Options': 'DENY',
@@ -411,8 +608,87 @@ describe('the Worker entry point, end to end', () => {
     }
   });
 
-  // The route is gated on GET. Without that guard a POST to a post URL would
-  // be answered with the shell -- and, worse, would take the HTML header
+  // Review finding 2. `startsWith('/blog')` -- the edit a careless hand makes
+  // while "simplifying" the predicate -- was caught by a single unit assertion
+  // and by nothing that drove a request. Under it, /blogroll, /blog and
+  // /blog/a/b all start coming back 200 with the SPA shell instead of this
+  // Worker's 404: path hijacking plus a wasted subrequest per hit. No header
+  // leaks (the router widens with the exemption, which is the design working),
+  // so status is the signal, and this drives it end to end so the net is more
+  // than one assertion deep.
+  it('does not claim a path that merely starts with the word blog', async () => {
+    for (const path of ['/blogroll', '/blog', '/blog/a/b']) {
+      const response = await throughWorker(
+        get(path),
+        await dbWith(D1_POSTS),
+        () => new Response(SHELL, { status: 200, headers: { 'Content-Type': 'text/html' } }),
+      );
+      expect(response.status, path).toBe(404);
+      for (const [header, value] of Object.entries(FULL_SET)) {
+        expect(response.headers.get(header), `${path} ${header}`).toBe(value);
+      }
+    }
+  });
+
+  // Finding F1, through the real entry point. Pages answers HEAD /blog/<slug>
+  // 200 today; the moment Task 4 routes /blog/* here it must keep doing so.
+  it('answers HEAD on a post page exactly as it answers GET, with no body', async () => {
+    const db = await dbWith(D1_POSTS);
+    const pages = () =>
+      new Response(SHELL, {
+        status: 200,
+        headers: { 'Content-Type': 'text/html', 'Content-Security-Policy': PAGES_CSP },
+      });
+    const got = await throughWorker(get('/blog/live-only'), db, pages);
+    const headed = await throughWorker(
+      new Request('https://vb.aionxxxi.uk/blog/live-only', { method: 'HEAD' }),
+      db,
+      pages,
+    );
+    expect(headed.status).toBe(got.status);
+    expect(headed.status).toBe(200);
+    expect(headerMap(headed)).toEqual(headerMap(got));
+    // The exemption reaches HEAD too, or a HEAD would report a policy the
+    // matching GET does not have.
+    expect(headed.headers.get('Content-Security-Policy')).toBe(PAGES_CSP);
+    expect(await headed.text()).toBe('');
+  });
+
+  // OPTIONS is the decided non-answer: no CORS anywhere in this Worker, so the
+  // router's 404 with the full header set is the right response, not an
+  // oversight that HEAD's fix happened to skip.
+  it('leaves OPTIONS on a post URL as the router 404 with the full header set', async () => {
+    const response = await throughWorker(
+      new Request('https://vb.aionxxxi.uk/blog/live-only', { method: 'OPTIONS' }),
+      await dbWith(D1_POSTS),
+      () => new Response(SHELL, { status: 200, headers: { 'Content-Type': 'text/html' } }),
+    );
+    expect(response.status).toBe(404);
+    for (const [header, value] of Object.entries(FULL_SET)) {
+      expect(response.headers.get(header), header).toBe(value);
+    }
+  });
+
+  // Finding F6, through the real entry point: the rejection must not escape
+  // worker.fetch. If it does, Cloudflare serves its own 1101 page and nothing
+  // in this Worker chose it.
+  it('does not let an unreachable Pages throw out of the entry point', async () => {
+    const original = globalThis.fetch;
+    globalThis.fetch = unreachablePages();
+    try {
+      const response = await worker.fetch(
+        get('/blog/live-only'),
+        { DB: await dbWith(D1_POSTS) } as unknown as Parameters<typeof worker.fetch>[1],
+      );
+      expect(response.status).toBe(503);
+      expect(response.headers.get('Retry-After')).toBe('60');
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+
+  // The route is gated on GET/HEAD. Without that guard a POST to a post URL
+  // would be answered with the shell -- and, worse, would take the HTML header
   // exemption with it. Nothing else in this repo asserts the method gate.
   it('does not answer a POST to a post URL, and keeps the full header set on that refusal', async () => {
     const response = await throughWorker(

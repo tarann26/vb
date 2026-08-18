@@ -448,13 +448,31 @@ export const CACHEABLE_PATHS = new Set(['/api/published']);
 // no X-Frame-Options and no no-store. That is the "one notch too wide" shape:
 // invisible, because nothing about the post page itself would look wrong.
 //
+// WHY HEAD IS IN AND OPTIONS IS OUT, decided rather than defaulted.
+// RFC 9110 requires HEAD to answer exactly what GET would minus the body, and
+// the Workers runtime does NOT turn a HEAD into a GET for you -- so a
+// GET-only predicate drops every HEAD onto the router's 404. Today Pages
+// answers those 200; the moment wrangler.toml routes /blog/* here (Task 4)
+// they would become 404s for every uptime monitor, link checker and crawler
+// that probes with HEAD before fetching, on pages that exist. That is a
+// de-indexing shape, and it is invisible from a browser. handlePostPage
+// answers HEAD by doing every step a GET does and dropping only the body, so
+// the two cannot disagree.
+//
+// OPTIONS stays a 404 on purpose. This Worker sets no CORS headers anywhere
+// and wants no cross-origin caller preflighting a post page; a 404 is the
+// same answer every other path in this router gives OPTIONS today, and
+// answering it would be inventing a capability nothing asked for.
+//
 // WHY IT IS THE SAME FUNCTION THE ROUTER BRANCHES ON, below. Two predicates
 // -- one deciding who gets the handler, one deciding who gets the headers --
 // is two things that must agree forever, checked by nobody. One predicate,
 // called from both places, cannot disagree with itself. Widening this widens
 // the route too, which is loud.
 export function servesSiteHtml(request: Request): boolean {
-  return request.method === 'GET' && slugFromPath(new URL(request.url).pathname) !== null;
+  const method = request.method;
+  if (method !== 'GET' && method !== 'HEAD') return false;
+  return slugFromPath(new URL(request.url).pathname) !== null;
 }
 
 function withSecurityHeaders(response: Response, request: Request): Response {
