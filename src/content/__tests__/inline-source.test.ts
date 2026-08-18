@@ -133,6 +133,99 @@ describe('the seven inputs parseInline cannot round-trip byte-for-byte', () => {
   });
 });
 
+// Every tree below is hand-built, because parseInline cannot produce one of
+// them: two marks meeting, either wrapped around exactly the same words or
+// written side by side. The writing surface's own mark tools produce both,
+// which is how these were found -- dom-inline.ts handed the serializer a tree
+// read off the DOM and the round trip stopped closing.
+describe('two marks that meet', () => {
+  it('writes bold-over-italic as the one mark this grammar can spell', () => {
+    // `***x***` is not strong(em(x)) to this parser: it is a loose asterisk,
+    // a bold run and another loose asterisk, so a mark disappears and a
+    // delimiter lands on the page at each end. The mark that cannot be
+    // spelled is dropped instead; the words are untouched.
+    const nodes: InlineNode[] = [{ kind: 'strong', children: [{ kind: 'em', children: [text('x')] }] }];
+    expect(serializeInline(nodes)).toBe('*x*');
+    expect(parseInline('*x*')).toEqual([{ kind: 'em', children: [text('x')] }]);
+    roundTrips('*x*');
+  });
+
+  it('writes a bold run inside a bold run as one bold run', () => {
+    // parseNodes closes the outer run at the inner run's opener, so
+    // `**a **b** c**` would put ` c` outside the bold and two asterisks in
+    // the middle of the sentence.
+    const nodes: InlineNode[] = [
+      { kind: 'strong', children: [text('a '), { kind: 'strong', children: [text('b')] }, text(' c')] },
+    ];
+    expect(serializeInline(nodes)).toBe('a **b** c');
+  });
+
+  it('writes two emphasis runs standing side by side as one', () => {
+    // `*a**b*` is not two runs, it is one strong opener that never closes.
+    // The second run is the one dropped, because the first was already
+    // written by the time the collision is visible.
+    const nodes: InlineNode[] = [
+      { kind: 'em', children: [text('a')] },
+      { kind: 'em', children: [text('b')] },
+    ];
+    expect(serializeInline(nodes)).toBe('*a*b');
+  });
+
+  it('keeps a mark that is safely enclosed in another mark, delimiters and all', () => {
+    // The case that makes the rule structural rather than another scan of
+    // the string: the emphasis inside the strike emits two bare asterisks,
+    // and they are no business of the emphasis run around the whole thing --
+    // parseNodes consumes `~~ ~~` in one step and never sees them.
+    const nodes: InlineNode[] = [
+      { kind: 'em', children: [text('a'), { kind: 'strike', children: [{ kind: 'em', children: [text('b')] }] }] },
+    ];
+    expect(serializeInline(nodes)).toBe('*a~~*b*~~*');
+    expect(normalise(parseInline('*a~~*b*~~*'))).toEqual(normalise(nodes));
+  });
+
+  it('is asymmetric at the ends, because parseInline is', () => {
+    // Measured, not reasoned, and stated in both directions so neither can
+    // be quietly widened: a bold run at the END of an emphasis run reads
+    // back; an emphasis run at the end of a bold run does not, and loses its
+    // marker here instead.
+    const boldLast: InlineNode[] = [
+      { kind: 'em', children: [text('a'), { kind: 'strong', children: [text('b')] }] },
+    ];
+    expect(serializeInline(boldLast)).toBe('*a**b***');
+    expect(normalise(parseInline('*a**b***'))).toEqual(normalise(boldLast));
+
+    const italicLast: InlineNode[] = [
+      { kind: 'strong', children: [text('a'), { kind: 'em', children: [text('b')] }] },
+    ];
+    expect(serializeInline(italicLast)).toBe('a*b*');
+  });
+
+  it('keeps a mark whose neighbour uses a different delimiter', () => {
+    const nodes: InlineNode[] = [
+      { kind: 'strike', children: [text('a')] },
+      { kind: 'strong', children: [text('b')] },
+    ];
+    expect(serializeInline(nodes)).toBe('~~a~~**b**');
+    expect(normalise(parseInline('~~a~~**b**'))).toEqual(normalise(nodes));
+  });
+
+  it('never drops a word, whatever it drops', () => {
+    // The claim that matters more than which mark survives. Four shapes that
+    // each lose a marker, and none of them loses a letter or gains one.
+    const wordsOf = (nodes: InlineNode[]): string =>
+      nodes.map((node) => (node.kind === 'text' || node.kind === 'code' ? node.value : wordsOf(node.children))).join('');
+    const shapes: InlineNode[][] = [
+      [{ kind: 'strong', children: [{ kind: 'em', children: [text('one')] }] }],
+      [{ kind: 'em', children: [{ kind: 'em', children: [text('two')] }] }],
+      [{ kind: 'strike', children: [text('a'), { kind: 'strike', children: [text('three')] }] }],
+      [{ kind: 'em', children: [text('f')] }, { kind: 'em', children: [text('our')] }],
+    ];
+    shapes.forEach((nodes) => {
+      expect(wordsOf(parseInline(serializeInline(nodes)))).toBe(wordsOf(nodes));
+    });
+  });
+});
+
 describe('the assertions the round trip cannot make', () => {
   it('leaves a lone tilde and a lone underscore exactly as she typed them', () => {
     // Over-escaping round-trips fine and would still be wrong: it puts
