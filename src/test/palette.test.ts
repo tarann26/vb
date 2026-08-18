@@ -22,6 +22,8 @@ const ACCENT_DARK = colors['accent-dark'];
 const INK = colors.ink;
 const CREAM = colors.cream;
 const CREAM_ALT = colors['cream-alt'];
+const WASH = colors.wash;
+const WASH_WARM = colors['wash-warm'];
 const WHITE = '#FFFFFF';
 
 // Every hex the old palette used, lowercased for comparison. `6b8b59` is the
@@ -55,6 +57,16 @@ const IGNORED = ['src/test/palette.test.ts', 'scripts/favicons.mjs'];
 // full; extensions cover every place a colour literal has actually turned
 // up so far: `.ts`/`.tsx` for component and script source, `.css` for the
 // global stylesheet.
+// The token's own distance from white, in the same units
+// e2e/section-washes.spec.ts measures the rendered band in. This is the
+// arithmetic claim; the pixel claim lives in e2e/ and neither substitutes
+// for the other -- src/index.css paints a fixed overlay this function cannot
+// see, and only the browser knows whether the section paints above it.
+function meanPointsBelowWhite(hex: string): number {
+  const n = parseInt(hex.replace('#', ''), 16);
+  return 255 - (((n >> 16) & 255) + ((n >> 8) & 255) + (n & 255)) / 3;
+}
+
 function sourceFiles(dir: string): string[] {
   return readdirSync(dir).flatMap((entry) => {
     const full = join(dir, entry);
@@ -136,5 +148,39 @@ describe('the brand palette meets WCAG AA where it carries meaning', () => {
     // This is a non-text UI indicator (WCAG 1.4.11), which needs 3:1 rather
     // than body text's 4.5:1.
     expect(contrastRatio(focusRingColor, WHITE)).toBeGreaterThanOrEqual(3);
+  });
+});
+
+// Computed with this repo's own src/test/contrast.ts, and recorded so the next
+// reader can see how much margin each assertion below is standing on rather
+// than only that it passes:
+//
+//   #E6EDF5  ink 13.48   accent 5.11   white 1.180   mean drop 17.67
+//   #F5EEE4  ink 13.81   accent 5.23   white 1.152   mean drop 18.00
+//
+// Both carry a shallowest channel 10 below white, which is what
+// e2e/section-washes.spec.ts's own floor holds the rendered band to.
+describe('the section washes are washes, and readable', () => {
+  it.each([['wash', WASH], ['wash-warm', WASH_WARM]])(
+    '%s sits 15 to 20 points below white, which is where a band reads as a band', (_n, hex) => {
+      expect(meanPointsBelowWhite(hex)).toBeGreaterThanOrEqual(15);
+      expect(meanPointsBelowWhite(hex)).toBeLessThanOrEqual(20);
+    });
+  it.each([['wash', WASH], ['wash-warm', WASH_WARM]])('%s carries ink at AA', (_n, hex) => {
+    expect(contrastRatio(hex, INK)).toBeGreaterThanOrEqual(4.5);
+  });
+  it.each([['wash', WASH], ['wash-warm', WASH_WARM]])(
+    '%s carries the accent at AA, because that is the only foreground colour this palette allows on a light surface',
+    (_n, hex) => { expect(contrastRatio(hex, ACCENT)).toBeGreaterThanOrEqual(4.5); });
+  it.each([['wash', WASH], ['wash-warm', WASH_WARM]])(
+    '%s is a surface, not a colour: white text on it is still unreadable and always will be',
+    (_n, hex) => { expect(contrastRatio(hex, WHITE)).toBeLessThan(1.5); });
+  it('the two washes are distinguishable from white and from each other', () => {
+    // Equal-to-white would pass the AA assertions above and defeat the whole
+    // task; equal-to-each-other would pass them too and remove the boundary
+    // between the last two bands on the homepage.
+    expect(contrastRatio(WASH, WHITE)).toBeGreaterThan(1.1);
+    expect(contrastRatio(WASH_WARM, WHITE)).toBeGreaterThan(1.1);
+    expect(WASH).not.toBe(WASH_WARM);
   });
 });
