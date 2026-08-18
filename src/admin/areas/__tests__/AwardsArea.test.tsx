@@ -94,7 +94,14 @@ describe('AwardsArea', () => {
     const { registry } = fakeRegistry();
     renderAwards(registry);
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Best New Restaurant' }));
+    // Review finding (fix round 1): the row-per-editor rewrite dropped the
+    // cardinality check -- a third, unexpected award would have gone
+    // unnoticed here. Restored as a row count, since only one editor's
+    // fields are ever mounted at once now.
+    await screen.findByRole('button', { name: 'Best New Restaurant' });
+    expect(document.querySelectorAll('[data-item-row]')).toHaveLength(2);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Best New Restaurant' }));
     const firstTitle = await screen.findByLabelText('Title');
     expect((firstTitle as HTMLInputElement).value).toBe('Best New Restaurant');
     // "editable": not disabled/readonly, unlike SITE_FIELDS' own

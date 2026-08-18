@@ -106,7 +106,14 @@ describe('ExperiencesArea', () => {
     const { registry } = fakeRegistry();
     renderExperiences(registry);
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Catering' }));
+    // Review finding (fix round 1): the row-per-editor rewrite dropped the
+    // cardinality check -- a third, unexpected item would have gone
+    // unnoticed here. Restored as a row count, since only one editor's
+    // fields are ever mounted at once now.
+    await screen.findByRole('button', { name: 'Catering' });
+    expect(document.querySelectorAll('[data-item-row]')).toHaveLength(2);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Catering' }));
     const firstTitle = await screen.findByLabelText('Title');
     expect((firstTitle as HTMLInputElement).value).toBe('Catering');
     expect(firstTitle).not.toBeDisabled();

@@ -250,10 +250,17 @@ describe('RecordList: add and remove', () => {
     expect(onAdd).toHaveBeenCalledWith();
   });
 
-  it('an empty list still renders the add button and no remove/move buttons', () => {
+  // Review finding (fix round 1): the original version of this case also
+  // queried `queryByRole('button', { name: /^Remove/ })` -- structurally
+  // unfalsifiable, since no Remove-named control exists anywhere in
+  // ItemList/RecordList regardless of `items`, and duplicated below by "there
+  // is no Remove on any row", which IS falsifiable (a mutation that restores
+  // the button reddens it). What an empty list actually has to prove -- and
+  // could fail to -- is that it renders zero rows, not a phantom one.
+  it('an empty list still renders the add button and no rows', () => {
     renderList({ items: [] });
     expect(screen.getByRole('button', { name: 'Add a dish' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /^Remove/ })).not.toBeInTheDocument();
+    expect(document.querySelectorAll('[data-item-row]')).toHaveLength(0);
   });
 
   // D8: delete lives inside the editor and asks once -- never on the row.

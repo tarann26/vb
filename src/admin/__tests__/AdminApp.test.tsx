@@ -417,7 +417,18 @@ describe("AdminApp: no duplicate DOM ids across sibling sections -- a label clic
     await user.click(within(drSection).getByRole('button', { name: 'Drink X' }));
     await screen.findByDisplayValue('Dish A');
     await screen.findByDisplayValue('Drink X');
-    await screen.findByText('Article P');
+    // Review finding (fix round 1): Press lives in a different AREA (Story &
+    // Photos), hidden -- not unmounted -- while this route is Menu. Its own
+    // row is still findable by TEXT (`findByText`, unlike `getByRole`, does
+    // not filter on the `hidden` attribute -- this file's own header comment
+    // on `sectionByHeading`), and a raw `fireEvent.click` on the row button
+    // it wraps opens its editor regardless, same as the folded-panel case
+    // above does. Without opening it, a press-vs-dishes id collision (the
+    // exact defect `scope` exists to prevent) would go uncaught here, since
+    // an unopened record renders no ids of its own at all.
+    const pressRowButton = (await screen.findByText('Article P')).closest('button') as HTMLElement;
+    fireEvent.click(pressRowButton);
+    await screen.findByDisplayValue('Article P');
 
     const ids = Array.from(document.querySelectorAll('[id]')).map((el) => el.id);
     const counts = new Map<string, number>();
