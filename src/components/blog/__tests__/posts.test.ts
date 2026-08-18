@@ -198,6 +198,35 @@ describe('the /blog controls', () => {
     expect(slugs(visiblePosts(mixed, 'all', 'lemon', 'oldest'))).toEqual(['s-mid', 'r-new']);
   });
 
+  it('hands back a NEW array on first paint, and leaves the caller\'s alone', () => {
+    // Task 30's own report left this open. With no filter and no query,
+    // filterByType and searchPosts both return their input, so visiblePosts
+    // hands /blog's live ContentContext array straight to orderedPosts -- and
+    // it is only safe today because BOTH orderedPosts branches copy before
+    // sorting. Nothing pinned that, so an "as-is" order or an early return
+    // added to orderedPosts later would have /blog sorting the content store
+    // in place, silently, with every other blog surface reading the result.
+    // Each list is ALREADY in the order it is then asked for, which is the
+    // only case where `not.toBe` can catch anything: on a scrambled list every
+    // implementation has to build a new array to sort into, so the identity
+    // assertion would pass on the bug as well as on the fix.
+    // `as const` on the two order strings only, NOT on the array: a whole-array
+    // `as const` makes each `live` a readonly tuple, which visiblePosts will
+    // not take, and vitest would never have told me -- it does not typecheck.
+    // `npx tsc -b --noEmit` did.
+    const cases = [
+      { order: 'newest' as const, live: [mixed[0], mixed[1], mixed[2]] },
+      { order: 'oldest' as const, live: [mixed[2], mixed[1], mixed[0]] },
+    ];
+    for (const { order, live } of cases) {
+      const before = slugs(live);
+      const out = visiblePosts(live, 'all', '', order);
+      expect(out, `${order} handed back the caller's own array`).not.toBe(live);
+      expect(slugs(out), `${order} did not keep the order it was already in`).toEqual(before);
+      expect(slugs(live), `${order} mutated the array it was given`).toEqual(before);
+    }
+  });
+
   it('says something different about an empty result than about an empty blog', () => {
     expect(NO_MATCHING_POSTS_MESSAGE).not.toBe(EMPTY_POSTS_MESSAGE);
   });
