@@ -35,29 +35,8 @@ import { useEffect, useRef, useState } from 'react';
 import { INPUT_CLASSNAME, LABEL_CLASSNAME } from '../Field';
 import { MOVE_BUTTON_CLASSNAME } from '../RecordList';
 import { isSafeHref, rawLinkTargets } from '../../content/markdown';
+import { linkRefusal, TARGET_SHAPES } from './link-target';
 import type { ValidationProblem } from '../../content/validate';
-
-// The one sentence that tells her what a link target may look like, written
-// once because the prompt asks for it and the refusal repeats it, and those
-// two drifting apart is how a control comes to ask for one thing and complain
-// about another.
-//
-// It names `https://` and not `http://`, while isSafeHref accepts both. That
-// gap is deliberate and it runs in the safe direction: the advice is narrower
-// than the check, so the check can only ever accept something she was not told
-// to try -- never refuse something she was told to try. The alternative is to
-// teach a chef about a second, worse scheme so that a sentence and a regular
-// expression match, and every site she will link to serves the first one.
-const TARGET_SHAPES =
-  'a full web address starting with https://, or the address of a page on this site starting with /';
-
-// Refused targets, in her words. The empty case gets its own opening clause
-// because `"" will not work as a link` is a sentence about nothing: pressing OK
-// on an empty box is a real thing she did and deserves to be described.
-function linkRefusal(target: string): string {
-  const opening = target === '' ? 'Nothing was pasted in, so this' : `"${target}"`;
-  return `${opening} will not work as a link. Use ${TARGET_SHAPES}`;
-}
 
 export interface InlineTextFieldProps {
   id: string;

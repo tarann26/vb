@@ -375,6 +375,10 @@ describe('React never takes the host’s subtree back', () => {
 });
 
 describe('problems', () => {
+  // The banner by its OWN name. `[aria-label]` on its own used to be enough
+  // to find it; the toolbar row carries one too, and a selector that matched
+  // both would have gone green on the wrong element.
+  const BANNER = '[aria-label="Problems with this post\u2019s content"]';
   const say = (field: string, message: string): ValidationProblem => ({ field, message });
 
   it('reaches the slot it names, and only that slot', () => {
@@ -394,7 +398,7 @@ describe('problems', () => {
     const message = document.getElementById(errorId as string);
     expect(message?.getAttribute('role')).toBe('alert');
     expect(message?.textContent).toBe('Say who said it.');
-    expect(view.container.querySelector('[aria-label]')).toBeNull();
+    expect(view.container.querySelector(BANNER)).toBeNull();
   });
 
   it('tells two blocks with the SAME field apart by their index', () => {
@@ -462,7 +466,7 @@ describe('problems', () => {
       blocks: [{ kind: 'image', src: '/x.webp', alt: '', caption: 'c' }],
       problems: [say('[0].blocks[0].alt', 'Say what is in the photo.')],
     });
-    const banner = view.container.querySelector('[aria-label]') as HTMLElement;
+    const banner = view.container.querySelector(BANNER) as HTMLElement;
     expect(banner.textContent).toContain('Say what is in the photo.');
     expect(banner.querySelectorAll('li')).toHaveLength(1);
     expect(view.hosts()[0].getAttribute('aria-describedby')).toBeNull();
@@ -473,7 +477,7 @@ describe('problems', () => {
       blocks: [{ kind: 'paragraph', text: '' }],
       problems: [say('[0].blocks[0].text', 'Write something.')],
     });
-    expect(view.container.querySelector('[aria-label]')).toBeNull();
+    expect(view.container.querySelector(BANNER)).toBeNull();
     expect(view.container.querySelectorAll('[role="alert"]')).toHaveLength(1);
     expect(view.hosts()[0].getAttribute('aria-describedby')).toBe('posts-0-block-0-text-error');
   });
@@ -959,5 +963,285 @@ describe('undo and redo', () => {
     const host = container.querySelector<HTMLElement>('[data-slot]') as HTMLElement;
     expect(fireEvent.keyDown(host, { key: 'a', metaKey: true })).toBe(true);
     expect(fireEvent.keyDown(host, { key: 'v', metaKey: true })).toBe(true);
+  });
+});
+
+describe('the toolbar', () => {
+  function press(container: HTMLElement, label: string): void {
+    const button = [...container.querySelectorAll('button')].find((el) => el.textContent === label);
+    expect(button, `no control reading ${label}`).toBeDefined();
+    fireEvent.click(button as HTMLButtonElement);
+  }
+
+  function ready(initial: Block[], spy: (next: Block[]) => void, names?: StableNames) {
+    const view = render(<Harness initial={initial} spy={spy} names={names} />);
+    const host = view.container.querySelector<HTMLElement>('[data-slot]') as HTMLElement;
+    fireEvent.focus(host);
+    return { ...view, host };
+  }
+
+  it('is a group and not a toolbar, and carries twelve buttons and one label', () => {
+    // `role="toolbar"` promises arrow-key navigation and one tab stop.
+    // Thirteen plain controls with thirteen tab stops do not have it, and
+    // claiming it would describe behaviour to a screen-reader user that this
+    // row does not implement.
+    const view = surface({ blocks: [{ kind: 'paragraph', text: 'a' }] });
+    const row = view.container.querySelector('[aria-label="Formatting"]') as HTMLElement;
+    expect(row.getAttribute('role')).toBe('group');
+    expect(view.container.querySelector('[role="toolbar"]')).toBeNull();
+    expect([...row.querySelectorAll('button')].map((el) => el.textContent)).toEqual([
+      'Bold', 'Italic', 'Underline', 'Strikethrough', 'Link', 'Heading',
+      'Bulleted list', 'Numbered list', 'Quote', 'Undo', 'Redo', 'Clear formatting',
+    ]);
+    const label = row.querySelector('label') as HTMLLabelElement;
+    expect(label.textContent).toBe('Image');
+    // Not a button: a browser opens the picker only under a live user
+    // activation, so the control has to be the label over the input itself.
+    expect(label.getAttribute('for')).toBe('posts-0-writing-image');
+  });
+
+  it('holds the caret in her words when a control is pressed', () => {
+    // Without the suppressed default the browser moves focus to the button
+    // before the click fires, the host blurs, and the selection every one of
+    // these actions works on is already gone.
+    const view = surface({ blocks: [{ kind: 'paragraph', text: 'a' }] });
+    const bold = [...view.container.querySelectorAll('button')].find((el) => el.textContent === 'Bold');
+    expect(fireEvent.mouseDown(bold as HTMLButtonElement)).toBe(false);
+  });
+
+  it('Bold writes the mark into the block the host belongs to', () => {
+    const spy = vi.fn();
+    const view = ready([{ kind: 'paragraph', text: 'abcd' }], spy);
+    selects(view.host, 1, 3);
+
+    press(view.container, 'Bold');
+
+    expect((spy.mock.calls[0][0] as Block[])[0]).toEqual({ kind: 'paragraph', text: 'a**bc**d' });
+  });
+
+  it('refuses Bold and Italic on exactly the same words, and says so instead of losing one', () => {
+    // The one shape this grammar cannot spell. inline-source.ts drops a mark
+    // rather than writing delimiters that come back as literal asterisks, and
+    // committing anyway would be the failure this task exists to prevent: it
+    // goes bold, she clicks away, it is plain again, nothing said why.
+    const spy = vi.fn();
+    const view = ready([{ kind: 'paragraph', text: 'abcd' }], spy);
+    selects(view.host, 1, 3);
+    press(view.container, 'Bold');
+    const host = view.container.querySelector<HTMLElement>('[data-slot]') as HTMLElement;
+    const strong = host.querySelector('strong') as HTMLElement;
+    selects(strong.firstChild as unknown as HTMLElement, 0, 2);
+
+    press(view.container, 'Italic');
+
+    expect(view.container.textContent).toContain('cannot both be kept on exactly the same words');
+    // Nothing was committed, and the host holds what it held: the screen and
+    // the array still agree.
+    expect(spy.mock.calls).toHaveLength(1);
+    expect(host.querySelector('em')).toBeNull();
+    expect(host.querySelector('strong')?.textContent).toBe('bc');
+  });
+
+  it('Heading converts the block, keeps its name, and hands the others back by reference', () => {
+    const names = createStableNames('b');
+    const first: Block = { kind: 'paragraph', text: 'alpha' };
+    const second: Block = { kind: 'paragraph', text: 'beta' };
+    const spy = vi.fn();
+    const view = ready([first, second], spy, names);
+    const was = names.nameOf(first, 0);
+
+    press(view.container, 'Heading');
+
+    const next = spy.mock.calls[0][0] as Block[];
+    expect(next[0]).toEqual({ kind: 'heading', text: 'alpha' });
+    expect(next[1]).toBe(second);
+    expect(names.nameOf(next[0], 0)).toBe(was);
+  });
+
+  it('pressing the kind it already is turns it back into a paragraph', () => {
+    const spy = vi.fn();
+    const view = ready([{ kind: 'heading', text: 'alpha' }], spy);
+    press(view.container, 'Heading');
+    expect((spy.mock.calls[0][0] as Block[])[0]).toEqual({ kind: 'paragraph', text: 'alpha' });
+  });
+
+  it('keeps every item when a list becomes something else', () => {
+    const spy = vi.fn();
+    const view = ready([{ kind: 'bulletList', items: ['one', 'two', 'three'] }], spy);
+    press(view.container, 'Quote');
+    expect((spy.mock.calls[0][0] as Block[])[0]).toEqual({ kind: 'quote', text: 'one two three' });
+  });
+
+  it('never lets a kind button dissolve a photograph', () => {
+    // `wordsIn` can only carry a block's markdown slots across, so converting
+    // an image would keep its caption and destroy the picture.
+    const photo: Block = { kind: 'image', src: '/posts/x.webp', alt: 'x', caption: 'c' };
+    const spy = vi.fn();
+    const view = ready([photo], spy);
+    press(view.container, 'Heading');
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('gives a quotation’s attribution a paragraph of its own rather than dropping it', () => {
+    const spy = vi.fn();
+    const view = ready([{ kind: 'quote', text: 'q', attribution: 'her' }], spy);
+    press(view.container, 'Heading');
+    expect(spy.mock.calls[0][0]).toEqual([
+      { kind: 'heading', text: 'q' },
+      { kind: 'paragraph', text: 'her' },
+    ]);
+  });
+
+  it('Link asks, checks the target twice, and writes the run it checked', () => {
+    const spy = vi.fn();
+    const view = ready([{ kind: 'paragraph', text: 'abcd' }], spy);
+    selects(view.host, 1, 3);
+    const asked = vi.spyOn(window, 'prompt').mockReturnValue('/menu');
+
+    press(view.container, 'Link');
+
+    expect(asked.mock.calls[0][0]).toContain('starting with https://');
+    expect((spy.mock.calls[0][0] as Block[])[0]).toEqual({ kind: 'paragraph', text: 'a[bc](/menu)d' });
+    asked.mockRestore();
+  });
+
+  it('refuses an unusable target in her own words, and writes nothing', () => {
+    const spy = vi.fn();
+    const view = ready([{ kind: 'paragraph', text: 'abcd' }], spy);
+    selects(view.host, 1, 3);
+    const asked = vi.spyOn(window, 'prompt').mockReturnValue('javascript:alert(1)');
+
+    press(view.container, 'Link');
+
+    expect(view.container.textContent).toContain('will not work as a link');
+    expect(spy).not.toHaveBeenCalled();
+    asked.mockRestore();
+  });
+
+  it('refuses a target that would read back as some other target at publish', () => {
+    // isSafeHref accepts this; rawLinkTargets does not read it back as what
+    // she pasted, so validatePosts would refuse the post at publish naming a
+    // target she never typed.
+    const spy = vi.fn();
+    const view = ready([{ kind: 'paragraph', text: 'abcd' }], spy);
+    selects(view.host, 1, 3);
+    const asked = vi.spyOn(window, 'prompt').mockReturnValue('https://ok.example/x](javascript:alert(1)');
+
+    press(view.container, 'Link');
+
+    expect(view.container.textContent).toContain('will not work as a link');
+    expect(spy).not.toHaveBeenCalled();
+    asked.mockRestore();
+  });
+
+  it('Cancel writes nothing and says nothing', () => {
+    const spy = vi.fn();
+    const view = ready([{ kind: 'paragraph', text: 'abcd' }], spy);
+    selects(view.host, 1, 3);
+    const asked = vi.spyOn(window, 'prompt').mockReturnValue(null);
+
+    press(view.container, 'Link');
+
+    expect(spy).not.toHaveBeenCalled();
+    expect(view.container.textContent).not.toContain('will not work as a link');
+    asked.mockRestore();
+  });
+
+  it('Clear formatting takes the marks off the selection', () => {
+    const spy = vi.fn();
+    const view = ready([{ kind: 'paragraph', text: '**abcd**' }], spy);
+    const range = document.createRange();
+    range.selectNodeContents(view.host);
+    const selection = document.getSelection() as Selection;
+    selection.removeAllRanges();
+    selection.addRange(range);
+
+    press(view.container, 'Clear formatting');
+
+    expect((spy.mock.calls[0][0] as Block[])[0]).toEqual({ kind: 'paragraph', text: 'abcd' });
+  });
+
+  it('does nothing at all when she has not been writing in any host yet', () => {
+    const spy = vi.fn();
+    const view = render(<Harness initial={[{ kind: 'paragraph', text: 'abcd' }]} spy={spy} />);
+    press(view.container, 'Bold');
+    press(view.container, 'Heading');
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('Undo and Redo through the buttons are the same steps the keys take', () => {
+    const spy = vi.fn();
+    const before: Block = { kind: 'paragraph', text: 'alpha' };
+    const view = ready([before], spy);
+    types(view.container.querySelector<HTMLElement>('[data-slot]') as HTMLElement, 'alpha and more');
+
+    press(view.container, 'Undo');
+    expect((spy.mock.calls[spy.mock.calls.length - 1][0] as Block[])[0]).toBe(before);
+
+    press(view.container, 'Redo');
+    expect((spy.mock.calls[spy.mock.calls.length - 1][0] as Block[])[0]).toEqual({
+      kind: 'paragraph', text: 'alpha and more',
+    });
+  });
+});
+
+describe('the shortcuts', () => {
+  it('Cmd+B does what the Bold button does, and suppresses the browser’s own', () => {
+    const spy = vi.fn();
+    const view = render(<Harness initial={[{ kind: 'paragraph', text: 'abcd' }]} spy={spy} />);
+    const host = view.container.querySelector<HTMLElement>('[data-slot]') as HTMLElement;
+    fireEvent.focus(host);
+    selects(host, 1, 3);
+
+    expect(fireEvent.keyDown(host, { key: 'b', metaKey: true })).toBe(false);
+    expect((spy.mock.calls[0][0] as Block[])[0]).toEqual({ kind: 'paragraph', text: 'a**bc**d' });
+  });
+
+  it('Cmd+I and Cmd+U write the other two marks a key can reach', () => {
+    const spy = vi.fn();
+    const view = render(<Harness initial={[{ kind: 'paragraph', text: 'abcd' }]} spy={spy} />);
+    const host = view.container.querySelector<HTMLElement>('[data-slot]') as HTMLElement;
+    fireEvent.focus(host);
+    selects(host, 1, 3);
+    fireEvent.keyDown(host, { key: 'i', metaKey: true });
+    expect((spy.mock.calls[0][0] as Block[])[0]).toEqual({ kind: 'paragraph', text: 'a*bc*d' });
+
+    const other = render(<Harness initial={[{ kind: 'paragraph', text: 'abcd' }]} spy={spy} />);
+    const second = other.container.querySelector<HTMLElement>('[data-slot]') as HTMLElement;
+    fireEvent.focus(second);
+    selects(second, 1, 3);
+    fireEvent.keyDown(second, { key: 'u', metaKey: true });
+    expect((spy.mock.calls[1][0] as Block[])[0]).toEqual({ kind: 'paragraph', text: 'a__bc__d' });
+  });
+
+  it('Cmd+K asks for a link and Cmd+\\ clears', () => {
+    const spy = vi.fn();
+    const view = render(<Harness initial={[{ kind: 'paragraph', text: 'abcd' }]} spy={spy} />);
+    const host = view.container.querySelector<HTMLElement>('[data-slot]') as HTMLElement;
+    fireEvent.focus(host);
+    selects(host, 1, 3);
+    const asked = vi.spyOn(window, 'prompt').mockReturnValue('/menu');
+    expect(fireEvent.keyDown(host, { key: 'k', metaKey: true })).toBe(false);
+    expect((spy.mock.calls[0][0] as Block[])[0]).toEqual({ kind: 'paragraph', text: 'a[bc](/menu)d' });
+    asked.mockRestore();
+
+    const next = view.container.querySelector<HTMLElement>('[data-slot]') as HTMLElement;
+    const range = document.createRange();
+    range.selectNodeContents(next);
+    const selection = document.getSelection() as Selection;
+    selection.removeAllRanges();
+    selection.addRange(range);
+    expect(fireEvent.keyDown(next, { key: '\\', metaKey: true })).toBe(false);
+    expect((spy.mock.calls[1][0] as Block[])[0]).toEqual({ kind: 'paragraph', text: 'abcd' });
+  });
+
+  it('is reached by Ctrl as well as Cmd, because she may not be on a Mac', () => {
+    const spy = vi.fn();
+    const view = render(<Harness initial={[{ kind: 'paragraph', text: 'abcd' }]} spy={spy} />);
+    const host = view.container.querySelector<HTMLElement>('[data-slot]') as HTMLElement;
+    fireEvent.focus(host);
+    selects(host, 1, 3);
+    fireEvent.keyDown(host, { key: 'b', ctrlKey: true });
+    expect((spy.mock.calls[0][0] as Block[])[0]).toEqual({ kind: 'paragraph', text: 'a**bc**d' });
   });
 });

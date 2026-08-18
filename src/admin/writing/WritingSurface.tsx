@@ -20,8 +20,9 @@
 // caret-restoration problem: InlineTextField.tsx's pendingSelection/forValue
 // round trip exists because a controlled textarea is rewritten on every
 // commit. Nothing here is rewritten while she is in it.
-import { createElement, Fragment, useLayoutEffect, useRef, type Attributes, type HTMLAttributes, type KeyboardEvent, type ReactNode } from 'react';
+import { createElement, Fragment, useLayoutEffect, useRef, useState, type Attributes, type HTMLAttributes, type KeyboardEvent, type ReactNode } from 'react';
 import { blockProblemOf, type BlockProblemTarget } from '../blocks/block-problems';
+import { linkRefusal, TARGET_SHAPES } from '../blocks/link-target';
 import { useStableNames, type StableNames } from '../blocks/stable-names';
 import { readInline } from './dom-inline';
 import { writeInline } from './inline-dom';
@@ -29,7 +30,10 @@ import { slotsOf, withSlot, type Slot } from './slots';
 import { backspaceAtStart, enterAt, type Caret, type Edit } from './structure';
 import { autoformat, revertFormat } from './autoformat';
 import { EMPTY_HISTORY, record, redo, undo, type History, type Snapshot } from './history';
+import { clearMarks, insertLink, LINK_PLACEHOLDER, marksSurviveSave, selectedWords, toggleMark, type Mark } from './marks';
+import WritingToolbar, { type ToolbarKind } from './WritingToolbar';
 import { serializeInline } from '../../content/inline-source';
+import { isSafeHref, rawLinkTargets } from '../../content/markdown';
 import { isBlockKind } from '../../content/guards';
 import type { Block, BlockKind } from '../../content/types';
 import type { ImagePreviews } from '../previews';
@@ -145,6 +149,50 @@ function kindOf(block: Block): BlockKind | undefined {
   return isBlockKind(raw) ? raw : undefined;
 }
 
+// The kinds a toolbar button may turn a block INTO or OUT OF, and nothing
+// else. A photograph, a gallery, a citation and the two recipe cards are all
+// deliberately absent: `wordsIn` below can only carry a block's markdown-
+// bearing slots across, so converting an image would keep its caption and
+// DESTROY THE PHOTOGRAPH, and converting a recipe card would drop the heading
+// slots.ts:77-81 explains is not a markdown field. A button that silently
+// deletes a picture is a worse failure than a button that does nothing.
+const MARK_REFUSAL =
+  'Bold and Italic cannot both be kept on exactly the same words, so this one was not applied. '
+  + 'Use one or the other, or give one of them a longer or shorter run of words.';
+
+const CONVERTIBLE: Record<string, true | undefined> = {
+  paragraph: true, heading: true, quote: true, bulletList: true, numberList: true,
+};
+
+// Every markdown-bearing slot of a block as ONE string, an attribution aside.
+// A list's items are joined rather than truncated: turning a three-item list
+// into a heading and getting only the first item back is two lines of her
+// writing destroyed with nothing on screen saying so.
+function wordsIn(block: Block): string {
+  return slotsOf(block)
+    .filter((slot) => slot.key !== 'attribution')
+    .map((slot) => slot.source)
+    .filter((source) => source.length > 0)
+    .join(' ');
+}
+
+function asKind(block: Block, kind: ToolbarKind | 'paragraph'): Block {
+  const words = wordsIn(block);
+  switch (kind) {
+    case 'bulletList':
+    case 'numberList':
+      return { kind, items: [words] };
+    case 'heading':
+    case 'quote':
+    case 'paragraph':
+      return { kind, text: words };
+    default: {
+      const _exhaustive: never = kind;
+      return _exhaustive;
+    }
+  }
+}
+
 // DOM ids stay POSITIONAL, and that is not the oversight the React key would
 // be: they only have to agree with themselves within one render, and
 // `posts-0-block-2-text-error` is something a person reads in a test failure
@@ -231,6 +279,11 @@ export default function WritingSurface({ blocks, postIndex, onChange, problems, 
   // be rewritten", which stops being true the instant she leaves, and this one
   // answers "where was she working", which does not.
   const active = useRef<string | null>(null);
+  // The one thing a control here has to be able to SAY: a refused link target,
+  // or a mark this grammar cannot store. State and not a ref, because it is on
+  // screen. Cleared by the next action that succeeds, never left standing over
+  // a problem she has already fixed.
+  const [notice, setNotice] = useState<string | null>(null);
 
   const rows: Row[] = safe.map((block, index) => ({
     block,
@@ -429,6 +482,120 @@ export default function WritingSurface({ blocks, postIndex, onChange, problems, 
     stepTo(redo(history.current, snapshot(active.current, 'end')));
   }
 
+  // The host she was last writing in, if it is still on screen. Every toolbar
+  // action goes through this rather than through the live selection alone: the
+  // selection tells us WHERE in the tree, and this tells us which block of the
+  // array that tree belongs to, which is the half D5 will not let the DOM
+  // answer.
+  function activeHost(): { el: HTMLElement; row: Row; slot: Slot; address: string } | null {
+    const root = rootRef.current;
+    const address = active.current;
+    if (root === null || address === null) return null;
+    const found = slotByAddress.get(address);
+    if (found === undefined) return null;
+    const el = root.querySelector<HTMLElement>(`[data-slot="${address}"]`);
+    return el === null ? null : { el, row: found.row, slot: found.slot, address };
+  }
+
+  // BOLD AND EMPHASIS CANNOT BOTH BE STORED ON EXACTLY THE SAME WORDS, and the
+  // mark is put back rather than left on screen to disappear later. Their
+  // delimiters are made of the same character, so inline-source.ts drops one
+  // of the two rather than writing `***x***`, which comes back as a stray
+  // asterisk at each end. Committing anyway would give her the exact failure
+  // this task exists to prevent: it goes bold, she clicks away, it is plain
+  // again, and nothing said why. Refusing keeps the screen and the array
+  // agreeing and puts the reason in front of her while her hand is still on
+  // the button.
+  function markNow(mark: Mark): void {
+    const at = activeHost();
+    if (at === null) return;
+    toggleMark(at.el, mark);
+    if (!marksSurviveSave(at.el)) {
+      // Straight back off. The second call finds the element the first one
+      // built (the selection is inside it) and unwraps it, so the host holds
+      // exactly what it held before the button was pressed.
+      toggleMark(at.el, mark);
+      setNotice(MARK_REFUSAL);
+      return;
+    }
+    setNotice(null);
+    commitSlot(at.row.index, at.slot.key, at.el, true);
+  }
+
+  function clearNow(): void {
+    const at = activeHost();
+    if (at === null) return;
+    clearMarks(at.el);
+    setNotice(null);
+    commitSlot(at.row.index, at.slot.key, at.el, true);
+  }
+
+  // The exact three gates InlineTextField.tsx:153-207 performs, in the same
+  // order and in the same words -- `isSafeHref`, then the `rawLinkTargets`
+  // read-back, then insert -- with that file's own sentence imported rather
+  // than retyped so the advice and the refusal cannot drift apart.
+  function linkNow(): void {
+    const at = activeHost();
+    if (at === null) return;
+    const answer = window.prompt(`Where should this link go? Paste ${TARGET_SHAPES}`);
+    // null is Cancel. An EMPTY string is not: she pressed OK with nothing in
+    // the box, which is refused below and deserves the same sentence as any
+    // other unusable target.
+    if (answer === null) return;
+    const target = answer.trim();
+    if (!isSafeHref(target)) {
+      setNotice(linkRefusal(target));
+      return;
+    }
+    const words = selectedWords(at.el);
+    if (words === null) return;
+    // Asked of the write boundary's OWN reader rather than of a pattern: a
+    // target carrying `](`, or an unmatched bracket of its own, moves where
+    // rawLinkTargets thinks the target ends, and validatePosts would then
+    // refuse the post at publish naming a target she never typed.
+    const run = `[${words.length === 0 ? LINK_PLACEHOLDER : words}](${target})`;
+    if (rawLinkTargets(run)[0] !== target) {
+      setNotice(linkRefusal(target));
+      return;
+    }
+    setNotice(null);
+    insertLink(at.el, target);
+    commitSlot(at.row.index, at.slot.key, at.el, true);
+  }
+
+  function kindNow(kind: ToolbarKind): void {
+    const at = activeHost();
+    if (at === null) return;
+    const block = safe[at.row.index];
+    if (block === undefined) return;
+    const was = kindOf(block);
+    if (was === undefined || CONVERTIBLE[was] !== true) return;
+    // Pressing the kind it already is turns it back into a paragraph, which is
+    // what every editor carrying these buttons does and the only way back out
+    // of a heading with the mouse.
+    const next = asKind(block, was === kind ? 'paragraph' : kind);
+    // A quotation's attribution has nowhere to go in any other kind, so it
+    // becomes a paragraph of its own rather than disappearing --
+    // structure.ts:146-154 makes the same call for the same reason, and there
+    // is now an undo behind it either way.
+    const attribution = slotsOf(block).find((slot) => slot.key === 'attribution')?.source ?? '';
+    const carried: Block[] = attribution.trim().length === 0 || next.kind === 'quote'
+      ? []
+      : [{ kind: 'paragraph', text: attribution }];
+    const blocks = safe.slice();
+    blocks.splice(at.row.index, 1, next, ...carried);
+    setNotice(null);
+    applyEdit({
+      blocks,
+      caret: {
+        blockIndex: at.row.index,
+        slotKey: LIST_KINDS[next.kind] === true ? 'items[0]' : 'text',
+        offset: 'end',
+      },
+      renames: [{ from: block, to: next, index: at.row.index }],
+    }, at.address, 'end');
+  }
+
   // Enter and Backspace, and nothing else. This is not a general "intercept
   // the special keys" rule: every other key, every modifier combination and
   // every composition event is left entirely alone, the same discipline
@@ -448,7 +615,16 @@ export default function WritingSurface({ blocks, postIndex, onChange, problems, 
     // is deferred to e2e/writing-surface.spec.ts.
     if (event.metaKey || event.ctrlKey) {
       const key = event.key.toLowerCase();
-      if (key === 'z') {
+      // Every one of these runs the same handler the button runs, through
+      // `active`, rather than a second implementation of the same action.
+      // There is no strikethrough shortcut: the spec lists none, and every
+      // plausible letter for it is already spoken for.
+      if (key === 'b') { event.preventDefault(); markNow('strong'); }
+      else if (key === 'i') { event.preventDefault(); markNow('em'); }
+      else if (key === 'u') { event.preventDefault(); markNow('underline'); }
+      else if (key === 'k') { event.preventDefault(); linkNow(); }
+      else if (key === '\\') { event.preventDefault(); clearNow(); }
+      else if (key === 'z') {
         event.preventDefault();
         if (event.shiftKey) redoStep();
         else undoStep();
@@ -586,6 +762,25 @@ export default function WritingSurface({ blocks, postIndex, onChange, problems, 
 
   return (
     <div ref={rootRef}>
+      <WritingToolbar
+        onMark={markNow}
+        onLink={linkNow}
+        onKind={kindNow}
+        onClear={clearNow}
+        onUndo={undoStep}
+        onRedo={redoStep}
+        imageInputId={`posts-${postIndex}-writing-image`}
+      />
+      {notice !== null && (
+        // The same class string as every other error paragraph on this screen
+        // (InlineTextField.tsx:325), character for character, and `role`
+        // rather than a colour so PostList's FIRST_PROBLEM_SELECTOR reaches it
+        // in document order with everything else.
+        <p role="alert" className="mt-1 text-sm text-red-600">
+          {notice}
+        </p>
+      )}
+
       {/* BlockList.tsx:209-221's banner, copied verbatim rather than shared:
           there is nothing importable (BlockProblemMessage is a different
           thing, rendered per block), and the two have to read identically to
