@@ -20,12 +20,13 @@
 // caret-restoration problem: InlineTextField.tsx's pendingSelection/forValue
 // round trip exists because a controlled textarea is rewritten on every
 // commit. Nothing here is rewritten while she is in it.
-import { createElement, Fragment, useLayoutEffect, useRef, type Attributes, type HTMLAttributes, type ReactNode } from 'react';
+import { createElement, Fragment, useLayoutEffect, useRef, type Attributes, type HTMLAttributes, type KeyboardEvent, type ReactNode } from 'react';
 import { blockProblemOf, type BlockProblemTarget } from '../blocks/block-problems';
 import { useStableNames, type StableNames } from '../blocks/stable-names';
 import { readInline } from './dom-inline';
 import { writeInline } from './inline-dom';
 import { slotsOf, withSlot, type Slot } from './slots';
+import { backspaceAtStart, enterAt, type Caret, type Edit } from './structure';
 import { serializeInline } from '../../content/inline-source';
 import { isBlockKind } from '../../content/guards';
 import type { Block, BlockKind } from '../../content/types';
@@ -152,6 +153,38 @@ function idKeyOf(key: Slot['key']): string {
   return key.replace('[', '-').replace(']', '');
 }
 
+// The ONE browser-dependent part of Enter and Backspace, and it is a dozen
+// lines. Everything either side of the caret comes back as the slot's own
+// markdown source, read off the live tree through dom-inline.ts rather than
+// off a markup string -- which is why readInline's parameter is `Node` and not
+// `HTMLElement`: `cloneContents()` hands back a DocumentFragment.
+//
+// `collapsed` is reported rather than assumed. With words selected, `before`
+// is what stands to the left of the SELECTION, so a Backspace meant to delete
+// the selection would otherwise be read as a Backspace at the top of the block
+// and merge it into the one above.
+//
+// jsdom has Range and Selection, so this function is exercised for real in the
+// unit tests. What jsdom cannot show is whether the caret a browser actually
+// keeps agrees with the offsets read here; that is e2e/writing-surface.spec.ts.
+function sourceAroundCaret(el: HTMLElement): { before: string; after: string; collapsed: boolean } | null {
+  const selection = el.ownerDocument.getSelection();
+  if (selection === null || selection.rangeCount === 0) return null;
+  const range = selection.getRangeAt(0);
+  if (!el.contains(range.startContainer)) return null;
+  const head = range.cloneRange();
+  head.selectNodeContents(el);
+  head.setEnd(range.startContainer, range.startOffset);
+  const tail = range.cloneRange();
+  tail.selectNodeContents(el);
+  tail.setStart(range.endContainer, range.endOffset);
+  return {
+    before: serializeInline(readInline(head.cloneContents())),
+    after: serializeInline(readInline(tail.cloneContents())),
+    collapsed: range.collapsed,
+  };
+}
+
 type HostProps = HTMLAttributes<HTMLElement> & Attributes & Record<string, unknown>;
 
 export default function WritingSurface({ blocks, postIndex, onChange, problems, names }: WritingSurfaceProps) {
@@ -175,6 +208,11 @@ export default function WritingSurface({ blocks, postIndex, onChange, problems, 
   // hold and leave it blank), and an entry becomes unreachable the moment its
   // element does, so there is nothing to prune.
   const written = useRef<WeakMap<HTMLElement, string>>(new WeakMap());
+  // Where the caret has to be once the hosts the edit implies exist. A ref and
+  // not state: the render that creates those hosts is the one onChange already
+  // schedules, and a second one would only give the browser a frame in which
+  // to paint the caret in the wrong place.
+  const pendingCaret = useRef<Caret | null>(null);
 
   const rows: Row[] = safe.map((block, index) => ({
     block,
@@ -240,6 +278,38 @@ export default function WritingSurface({ blocks, postIndex, onChange, problems, 
       writeInline(el, source);
       written.current.set(el, source);
     });
+
+    // Only after every host holds its words, because the range below is
+    // collapsed against this host's CONTENTS and a host written afterwards
+    // would leave that range pointing at nodes that no longer exist.
+    const pending = pendingCaret.current;
+    if (pending === null) return;
+    pendingCaret.current = null;
+    const row = rows[pending.blockIndex];
+    if (row === undefined) return;
+    const address = addressOf(row, pending.slotKey);
+    const el = root.querySelector<HTMLElement>(`[data-slot="${address}"]`);
+    if (el === null) return;
+    const selection = el.ownerDocument.getSelection();
+    if (selection === null) return;
+    // FOCUS FIRST, RANGE SECOND, and that order is the whole of it. Focusing
+    // an editable element that did not already have focus puts the caret at
+    // the start of it, so focusing AFTER placing the range throws the range
+    // away and lands her at the top of the block every time -- which for a
+    // merge means every following keystroke goes in front of the paragraph she
+    // just joined instead of at the seam. Measured here, not reasoned about:
+    // jsdom moves the selection on focus too, and it is what caught this.
+    el.focus();
+    const range = el.ownerDocument.createRange();
+    range.selectNodeContents(el);
+    range.collapse(pending.offset === 'start');
+    selection.removeAllRanges();
+    selection.addRange(range);
+    // She is now standing in this host, so the rewrite guard has to know it
+    // before the next render -- a focus event fired by `.focus()` above would
+    // say the same thing, but only if the element was focusable, which is a
+    // browser fact and not one to depend on.
+    focusedRef.current = address;
   });
 
   function commitSlot(index: number, key: Slot['key'], el: HTMLElement): void {
@@ -257,6 +327,53 @@ export default function WritingSurface({ blocks, postIndex, onChange, problems, 
     onChange(safe.map((existing, i) => (i === index ? next : existing)));
   }
 
+  // One structural edit, applied in the order the WeakMap requires: every
+  // rename BEFORE onChange, because the re-render onChange schedules is what
+  // looks the names up again, and a block that changed shape is a NEW object.
+  // Miss one and a staged photograph is left filed under a name nothing refers
+  // to any more -- the same failure commitSlot's own `rename` call rules out
+  // for a keystroke, at the scale of a whole split or merge.
+  function applyEdit(edit: Edit): void {
+    edit.renames.forEach((entry) => rename(entry.from, entry.to, entry.index));
+    // The caret is leaving this host, so "never rewrite the host she is
+    // standing in" has nothing left to protect here. Leaving the address set
+    // would stop the layout effect writing the SHORTER source a split
+    // produces, and the top half would keep on screen every word the array now
+    // says belongs to the block beneath it.
+    focusedRef.current = null;
+    pendingCaret.current = edit.caret;
+    onChange(edit.blocks);
+  }
+
+  // Enter and Backspace, and nothing else. This is not a general "intercept
+  // the special keys" rule: every other key, every modifier combination and
+  // every composition event is left entirely alone, the same discipline
+  // EditableText.tsx:173-179 states.
+  function onKey(row: Row, slot: Slot, event: KeyboardEvent<HTMLElement>): void {
+    const el = event.currentTarget;
+    if (event.key === 'Enter' && !event.shiftKey) {
+      // Suppressed whatever happens next: the browser's own Enter inside a
+      // host would split the tree the array is supposed to own. Shift+Enter is
+      // deliberately untouched and still makes a line break, which
+      // dom-inline.ts reads back as a space.
+      event.preventDefault();
+      const around = sourceAroundCaret(el);
+      if (around === null) return;
+      applyEdit(enterAt(safe, { blockIndex: row.index, slotKey: slot.key, offset: 'start' }, around.before, around.after));
+      return;
+    }
+    if (event.key === 'Backspace') {
+      const around = sourceAroundCaret(el);
+      if (around === null || !around.collapsed || around.before.length > 0) return;
+      const edit = backspaceAtStart(safe, { blockIndex: row.index, slotKey: slot.key, offset: 'start' });
+      // Nothing to do is nothing to do: the default is left in place so a
+      // Backspace this does not understand still behaves as the browser's.
+      if (edit === null) return;
+      event.preventDefault();
+      applyEdit(edit);
+    }
+  }
+
   function host(row: Row, kind: BlockKind, slot: Slot): ReactNode {
     const address = addressOf(row, slot.key);
     const id = `posts-${postIndex}-block-${row.index}-${idKeyOf(slot.key)}`;
@@ -272,6 +389,7 @@ export default function WritingSurface({ blocks, postIndex, onChange, problems, 
       'data-slot-key': slot.key,
       'aria-describedby': problemsOf(row, slot.key).length > 0 ? `${id}-error` : undefined,
       onInput: (event) => commitSlot(row.index, slot.key, event.currentTarget as HTMLElement),
+      onKeyDown: (event) => onKey(row, slot, event),
       onFocus: () => {
         focusedRef.current = address;
       },

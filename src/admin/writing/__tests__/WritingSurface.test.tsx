@@ -67,6 +67,40 @@ function types(host: HTMLElement, words: string): void {
   fireEvent.input(host);
 }
 
+// jsdom has Range and Selection, so a caret really can be put inside a host
+// and really can be read back out of one. What it has no opinion about is
+// whether a browser would have put the caret there, or kept it there -- so
+// every claim below is about the ARRAY the keystroke produced, plus the one
+// DOM fact (which host holds the collapsed range afterwards) that the layout
+// effect is directly responsible for.
+function caretAt(host: HTMLElement, offset: number): void {
+  const range = host.ownerDocument.createRange();
+  const node = host.firstChild ?? host;
+  range.setStart(node, offset);
+  range.collapse(true);
+  const selection = host.ownerDocument.getSelection() as Selection;
+  selection.removeAllRanges();
+  selection.addRange(range);
+}
+
+function selects(host: HTMLElement, from: number, to: number): void {
+  const range = host.ownerDocument.createRange();
+  const node = host.firstChild ?? host;
+  range.setStart(node, from);
+  range.setEnd(node, to);
+  const selection = host.ownerDocument.getSelection() as Selection;
+  selection.removeAllRanges();
+  selection.addRange(range);
+}
+
+function caretHost(): HTMLElement | null {
+  const selection = document.getSelection();
+  if (selection === null || selection.rangeCount === 0) return null;
+  const node = selection.getRangeAt(0).startContainer;
+  const el = node.nodeType === 1 ? (node as HTMLElement) : node.parentElement;
+  return el?.closest<HTMLElement>('[data-slot]') ?? null;
+}
+
 describe('the hosts a block gets', () => {
   it('gives each kind the element its published renderer uses, keyed on the slot and not on the kind', () => {
     const view = surface({
@@ -442,5 +476,201 @@ describe('problems', () => {
     expect(view.container.querySelector('[aria-label]')).toBeNull();
     expect(view.container.querySelectorAll('[role="alert"]')).toHaveLength(1);
     expect(view.hosts()[0].getAttribute('aria-describedby')).toBe('posts-0-block-0-text-error');
+  });
+});
+
+describe('Enter and Backspace', () => {
+  it('splits the paragraph she is in and hands every other block back by IDENTITY', () => {
+    // The array transformation itself is proved exhaustively in
+    // structure.test.ts. What this proves is the WIRING: that the surface
+    // reads the caret off the live host, hands `before`/`after` over as this
+    // slot's own source, and passes the result of that -- not a rebuild of
+    // the tree -- to onChange.
+    const spy = vi.fn();
+    const initial: Block[] = [
+      { kind: 'heading', text: 'Before you start' },
+      { kind: 'paragraph', text: 'one two' },
+      { kind: 'image', src: '/food/x.webp', alt: 'x' },
+    ];
+    const { container } = render(<Harness initial={initial} spy={spy} />);
+    const host = container.querySelectorAll<HTMLElement>('[data-slot]')[1];
+    caretAt(host, 4);
+    fireEvent.keyDown(host, { key: 'Enter' });
+
+    const next = spy.mock.calls[0][0] as Block[];
+    expect(next).toEqual([
+      { kind: 'heading', text: 'Before you start' },
+      { kind: 'paragraph', text: 'one ' },
+      { kind: 'paragraph', text: 'two' },
+      { kind: 'image', src: '/food/x.webp', alt: 'x' },
+    ]);
+    expect(next[0]).toBe(initial[0]);
+    expect(next[3]).toBe(initial[2]);
+  });
+
+  it('carries the block’s name across a split, so a staged photograph stays attached to it', () => {
+    // The whole reason `Edit` carries a rename list. A caption split leaves
+    // the SAME photograph in the array with fewer words under it; without the
+    // rename that photograph is a new object with a new name, and the bytes
+    // she staged are filed under a name nothing refers to any more.
+    const names = createStableNames('b');
+    const image: Block = { kind: 'image', src: '/food/x.webp', alt: 'x', caption: 'on the terrace' };
+    const spy = vi.fn();
+    const { container } = render(<Harness initial={[image]} spy={spy} names={names} />);
+    const was = names.nameOf(image, 0);
+
+    const host = container.querySelector<HTMLElement>('[data-slot]') as HTMLElement;
+    caretAt(host, 6);
+    fireEvent.keyDown(host, { key: 'Enter' });
+
+    const next = spy.mock.calls[0][0] as Block[];
+    expect(next[0]).toEqual({ kind: 'image', src: '/food/x.webp', alt: 'x', caption: 'on the' });
+    expect(next[0]).not.toBe(image);
+    expect(names.nameOf(next[0], 0)).toBe(was);
+    // And the paragraph the split created is not called the same thing.
+    expect(names.nameOf(next[1], 1)).not.toBe(was);
+  });
+
+  it('suppresses the browser’s own Enter, and leaves Shift+Enter entirely alone', () => {
+    const spy = vi.fn();
+    const { container } = render(<Harness initial={[{ kind: 'paragraph', text: 'one two' }]} spy={spy} />);
+    const host = container.querySelector<HTMLElement>('[data-slot]') as HTMLElement;
+    caretAt(host, 4);
+
+    expect(fireEvent.keyDown(host, { key: 'Enter', shiftKey: true })).toBe(true);
+    expect(spy).not.toHaveBeenCalled();
+    expect(fireEvent.keyDown(host, { key: 'Enter' })).toBe(false);
+    expect(spy).toHaveBeenCalledTimes(1);
+    // What the suppressed default BUYS -- that the browser did not split the
+    // host's tree underneath the array -- is not observable in jsdom, which
+    // implements no default action for a key in an editable host at all. That
+    // is e2e/writing-surface.spec.ts.
+  });
+
+  it('writes the shorter half into the host she was standing in', () => {
+    // The focused-host rule says a host she is inside is never rewritten. A
+    // split has to lift that, or the top half keeps every word on screen that
+    // the array now says belongs to the block beneath it -- the screen and the
+    // data disagreeing, silently, which is the worst shape this can take.
+    const spy = vi.fn();
+    const { container } = render(<Harness initial={[{ kind: 'paragraph', text: 'one two' }]} spy={spy} />);
+    const host = container.querySelector<HTMLElement>('[data-slot]') as HTMLElement;
+    fireEvent.focus(host);
+    caretAt(host, 4);
+    fireEvent.keyDown(host, { key: 'Enter' });
+
+    const hosts = container.querySelectorAll<HTMLElement>('[data-slot]');
+    expect([...hosts].map((el) => el.textContent)).toEqual(['one ', 'two']);
+  });
+
+  it('puts the caret into the host the edit names', () => {
+    const spy = vi.fn();
+    const { container } = render(<Harness initial={[{ kind: 'paragraph', text: 'one two' }]} spy={spy} />);
+    const host = container.querySelector<HTMLElement>('[data-slot]') as HTMLElement;
+    caretAt(host, 4);
+    fireEvent.keyDown(host, { key: 'Enter' });
+
+    const hosts = container.querySelectorAll<HTMLElement>('[data-slot]');
+    expect(caretHost()).toBe(hosts[1]);
+    // That a browser then SHOWS the caret there, and keeps it there while she
+    // keeps typing, is deferred to e2e/writing-surface.spec.ts.
+  });
+
+  it('leaves the caret at the END of the block a merge folded two into', () => {
+    // Which END is the whole point, and it is the half a focus() call cannot
+    // stand in for: focusing an editable host puts the caret at the start of
+    // it, and a merge that dropped her at the start would put every keystroke
+    // in front of the paragraph she was joining rather than at the seam.
+    const spy = vi.fn();
+    const { container } = render(
+      <Harness initial={[{ kind: 'paragraph', text: 'one' }, { kind: 'paragraph', text: 'two' }]} spy={spy} />,
+    );
+    const host = container.querySelectorAll<HTMLElement>('[data-slot]')[1];
+    caretAt(host, 0);
+    fireEvent.keyDown(host, { key: 'Backspace' });
+
+    const merged = container.querySelector<HTMLElement>('[data-slot]') as HTMLElement;
+    expect(merged.textContent).toBe('onetwo');
+    const selection = document.getSelection() as Selection;
+    expect(selection.isCollapsed).toBe(true);
+    const range = selection.getRangeAt(0);
+    expect(range.startContainer).toBe(merged);
+    expect(range.startOffset).toBe(merged.childNodes.length);
+    expect(range.startOffset).toBeGreaterThan(0);
+  });
+
+  it('merges a paragraph into the one above it when Backspace comes at the very start', () => {
+    const spy = vi.fn();
+    const initial: Block[] = [
+      { kind: 'paragraph', text: 'one' },
+      { kind: 'paragraph', text: 'two' },
+      { kind: 'heading', text: 'after' },
+    ];
+    const { container } = render(<Harness initial={initial} spy={spy} />);
+    const host = container.querySelectorAll<HTMLElement>('[data-slot]')[1];
+    caretAt(host, 0);
+    expect(fireEvent.keyDown(host, { key: 'Backspace' })).toBe(false);
+
+    const next = spy.mock.calls[0][0] as Block[];
+    expect(next).toEqual([{ kind: 'paragraph', text: 'onetwo' }, { kind: 'heading', text: 'after' }]);
+    expect(next[1]).toBe(initial[2]);
+  });
+
+  it('leaves a Backspace that is not at the start to the browser', () => {
+    const spy = vi.fn();
+    const { container } = render(
+      <Harness initial={[{ kind: 'paragraph', text: 'one' }, { kind: 'paragraph', text: 'two' }]} spy={spy} />,
+    );
+    const host = container.querySelectorAll<HTMLElement>('[data-slot]')[1];
+    caretAt(host, 1);
+    expect(fireEvent.keyDown(host, { key: 'Backspace' })).toBe(true);
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('leaves a Backspace over a selection to the browser, even one starting at the top', () => {
+    // With words selected, everything to the left of the SELECTION is empty,
+    // which reads exactly like a caret at the start of the block. Deleting
+    // what she highlighted is not merging the block into the one above it.
+    const spy = vi.fn();
+    const { container } = render(
+      <Harness initial={[{ kind: 'paragraph', text: 'one' }, { kind: 'paragraph', text: 'two' }]} spy={spy} />,
+    );
+    const host = container.querySelectorAll<HTMLElement>('[data-slot]')[1];
+    selects(host, 0, 2);
+    expect(fireEvent.keyDown(host, { key: 'Backspace' })).toBe(true);
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('leaves a Backspace the array has no answer for to the browser, and the photograph where it was', () => {
+    // Backspace at the top of a caption, with a paragraph directly above it.
+    // Every ingredient for the merge is present except the one that matters,
+    // and the answer is to do nothing at all rather than fold a photograph
+    // into the words above it.
+    const spy = vi.fn();
+    const { container } = render(
+      <Harness
+        initial={[
+          { kind: 'paragraph', text: 'a' },
+          { kind: 'image', src: '/food/x.webp', alt: 'x', caption: 'on the terrace' },
+        ]}
+        spy={spy}
+      />,
+    );
+    const host = container.querySelectorAll<HTMLElement>('[data-slot]')[1];
+    caretAt(host, 0);
+    expect(fireEvent.keyDown(host, { key: 'Backspace' })).toBe(true);
+    expect(spy).not.toHaveBeenCalled();
+    expect(container.querySelector('figure')).not.toBeNull();
+  });
+
+  it('leaves every other key completely alone', () => {
+    const spy = vi.fn();
+    const { container } = render(<Harness initial={[{ kind: 'paragraph', text: 'one two' }]} spy={spy} />);
+    const host = container.querySelector<HTMLElement>('[data-slot]') as HTMLElement;
+    caretAt(host, 4);
+    ['a', 'Tab', 'ArrowUp', 'Delete', 'End'].forEach((key) => {
+      expect(fireEvent.keyDown(host, { key })).toBe(true);
+    });
+    expect(spy).not.toHaveBeenCalled();
   });
 });
