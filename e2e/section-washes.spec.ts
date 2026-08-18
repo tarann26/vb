@@ -127,6 +127,16 @@ test('every wash band lands 15 to 20 points below white on a phone', async ({ pa
     // clamped into the viewport; x = 4 is inside the section and outside its
     // own centred content column at every width.
     //
+    // That the gutter is load-bearing rather than arbitrary is measured, not
+    // asserted. Re-running this whole file with the sample moved to x = 195,
+    // the centre of the viewport: atmosphere (152,119,87), drinks (116,93,72),
+    // experiences (93,60,18) and our story (100,104,114) all land on
+    // photographs, 136 to 198 points down, and food moves from 19.3 to 29.7.
+    // Four bands off by more than a hundred points is what a centre sample
+    // buys. The px-4 content column starts at x = 16 at this width, so 4 is
+    // clear of it -- with the one exception in note 3, which is an absolutely
+    // positioned decoration that the column's padding does not constrain.
+    //
     // Step 2 (coordinate spaces): boundingBox() is viewport-relative and
     // page.screenshot({ clip }) is documented as passing through to CDP,
     // which uses page coordinates -- so these two could have disagreed by the
@@ -159,6 +169,16 @@ test('every wash band lands 15 to 20 points below white on a phone', async ({ pa
       expect.soft(points, `${band.label} mean drop`).toBeGreaterThanOrEqual(15);
       expect.soft(points, `${band.label} mean drop`).toBeLessThanOrEqual(20);
       // A band cannot average 18 while one channel sits at white.
+      //
+      // PROVEN BY HAND, once, 2026-08-18, because no token this project ships
+      // is degenerate enough to make it fire and a floor nobody has ever seen
+      // go red is a floor nobody knows works. Experiences.tsx:32 was
+      // temporarily given `bg-[#FFE6E5] relative` -- (255,230,229), a mean drop
+      // of exactly 17.0, so both range assertions above PASS -- and this line
+      // was the single failure the run reported for that band: "experiences
+      // shallowest channel". Reverted immediately; Task 33 ships no component
+      // change. The same run re-confirmed note 2 in passing, since the
+      // positioned section measured #FFE6E5 to the byte with no brick in it.
       expect.soft(255 - Math.max(r, g, b), `${band.label} shallowest channel`).toBeGreaterThanOrEqual(8);
     } else {
       // The white bands stay white, because a wash only reads as a boundary
