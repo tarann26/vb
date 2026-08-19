@@ -120,7 +120,7 @@ export type ContentFileName = (typeof CONTENT_FILES)[number];
 // split to avoid.
 //
 // Typed as a TOTAL Record over ContentFileName, not a partial one or a
-// lookup with a fallback: an eleventh content file added to CONTENT_FILES
+// lookup with a fallback: a thirteenth content file added to CONTENT_FILES
 // above without a name for it fails `tsc -b` here, which is the whole
 // point. A fallback string would instead let that file reach her screen
 // unnamed, or named by its filename, exactly the thing this map exists to
