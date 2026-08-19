@@ -58,14 +58,14 @@ export function problemsFor(problems: ValidationProblem[], index: number | undef
 // identified by its position instead, because "the 4th one" is something she
 // can count to and "" is not.
 export function bannerLine(problem: ValidationProblem, recordName: string | undefined, index: number): string {
-  const who = recordName !== undefined && recordName.trim() !== '' ? recordName : `the ${ordinal(index + 1)} one`;
+  const who = recordName !== undefined && recordName.trim() !== '' ? recordName : `the ${ordinalWord(index + 1)} one`;
   return `${who}: ${problem.message}`;
 }
 
 // 1st, 2nd, 3rd, 4th... spelled out rather than through Intl.PluralRules,
 // which is a locale-dependent answer to a question that is not about locale --
 // this admin surface is English and the ordinals are four cases.
-function ordinal(n: number): string {
+function ordinalWord(n: number): string {
   const rest = n % 100;
   if (rest >= 11 && rest <= 13) return `${String(n)}th`;
   switch (n % 10) {

@@ -31,7 +31,7 @@ const EVERY_BLOCK: Record<BlockKind, Block> = {
 
 // The `field` shape validatePosts really emits for this block, so a test's
 // problem strings are the validator's strings and not a second convention.
-function renderFields(block: Block, problems: ValidationProblem[] = [], ordinal?: number) {
+function renderFields(block: Block, problems: ValidationProblem[] = [], entryNumber?: number) {
   const onChange = vi.fn();
   const onStaged = vi.fn();
   const view = render(
@@ -43,7 +43,7 @@ function renderFields(block: Block, problems: ValidationProblem[] = [], ordinal?
       previews={NO_IMAGE_PREVIEWS}
       onStaged={onStaged}
       previewKeyPrefix="posts.json:fixture-a:blocks[0]"
-      ordinal={ordinal}
+      entryNumber={entryNumber}
     />,
   );
   return { ...view, onChange, onStaged };
@@ -160,7 +160,7 @@ describe('each kind renders its own fields', () => {
 
   // "Photo 1" on a post with one photo is worse than "Photo", because the
   // number implies a second one -- so the overwhelmingly common single-photo
-  // post has to keep the plain word whether `ordinal` arrives as 1 or is
+  // post has to keep the plain word whether `entryNumber` arrives as 1 or is
   // omitted entirely.
   it('one photo entry is just Photo', () => {
     renderFields(EVERY_BLOCK.image, [], 1);

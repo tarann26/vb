@@ -1202,7 +1202,7 @@ export default function WritingSurface({
   // array rather than stored, because moving or removing one changes the
   // count and a stored number would go stale silently -- the same failure
   // mode stable-names.ts exists to prevent for staged photos, one level up.
-  function ordinalOf(row: Row): number {
+  function entryNumberOf(row: Row): number {
     return safe.slice(0, row.index + 1).filter((entry) => entry.kind === row.block.kind).length;
   }
 
@@ -1219,7 +1219,7 @@ export default function WritingSurface({
     // derivative no build has produced yet -- see handleImagePick.
     const shown = previews.urls[previewKeyFor(row.name)] ?? src;
     const id = `posts-${postIndex}-block-${row.index}-alt`;
-    const ordinal = ordinalOf(row);
+    const entryNumber = entryNumberOf(row);
     return (
       <figure className="mb-6">
         {/* blocks.tsx:50's own <img>, character for character, so the column
@@ -1254,7 +1254,7 @@ export default function WritingSurface({
             width straight away. */}
         <PhotoField
           id={`posts-${postIndex}-block-${row.index}-src`}
-          label={numbered('Photo', ordinal)}
+          label={numbered('Photo', entryNumber)}
           category="posts"
           value={src === '' ? null : src}
           onChange={(contentPath) => setSrc(row, contentPath)}
@@ -1272,7 +1272,7 @@ export default function WritingSurface({
             behaviour of the field this replaces. */}
         <Field<string>
           id={id}
-          spec={{ ...ALT_SPEC, label: numbered(ALT_SPEC.label, ordinal) }}
+          spec={{ ...ALT_SPEC, label: numbered(ALT_SPEC.label, entryNumber) }}
           value={alt}
           onChange={(next) => setAlt(row, next)}
           problems={problemsOf(row, 'alt')}
@@ -1322,7 +1322,7 @@ export default function WritingSurface({
           // after she has moved it, and after the sheet this row is standing
           // in has closed and reopened.
           photoNames={photoNamesFor(row.name)}
-          ordinal={ordinalOf(row)}
+          entryNumber={entryNumberOf(row)}
         />
       </div>
     );

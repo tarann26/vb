@@ -54,7 +54,7 @@ export interface BlockFieldsProps {
   // Which entry this is among the entries of its own kind, 1-based; absent
   // means the only one of its kind, which is the common case and renders the
   // bare label.
-  ordinal?: number;
+  entryNumber?: number;
 }
 
 // Ad-hoc specs, declared once at module scope rather than rebuilt per render.
@@ -142,7 +142,7 @@ export default function BlockFields({
   onStaged,
   previewKeyPrefix,
   photoNames,
-  ordinal,
+  entryNumber,
 }: BlockFieldsProps) {
   // The same fix BlockList applies to blocks, one level down, for the photos
   // inside a gallery block -- and the trigger here is REMOVE rather than a
@@ -278,7 +278,7 @@ export default function BlockFields({
         <>
           <PhotoField
             id={`${idPrefix}-src`}
-            label={numbered('Photo', ordinal)}
+            label={numbered('Photo', entryNumber)}
             category="posts"
             value={block.src ?? null}
             onChange={(contentPath) => onChange({ ...block, src: contentPath ?? '' })}
@@ -289,7 +289,7 @@ export default function BlockFields({
           />
           <Field<string>
             id={`${idPrefix}-alt`}
-            spec={{ ...ALT_SPEC, label: numbered(ALT_SPEC.label, ordinal) }}
+            spec={{ ...ALT_SPEC, label: numbered(ALT_SPEC.label, entryNumber) }}
             value={block.alt ?? ''}
             onChange={(next) => onChange({ ...block, alt: next })}
             problems={problemsFor('alt')}
@@ -381,7 +381,7 @@ export default function BlockFields({
           />
           <Field<string>
             id={`${idPrefix}-date`}
-            spec={{ ...CITATION_DATE_SPEC, label: numbered(CITATION_DATE_SPEC.label, ordinal) }}
+            spec={{ ...CITATION_DATE_SPEC, label: numbered(CITATION_DATE_SPEC.label, entryNumber) }}
             value={block.date ?? ''}
             onChange={(next) => onChange({ ...block, date: next })}
             problems={problemsFor('date')}

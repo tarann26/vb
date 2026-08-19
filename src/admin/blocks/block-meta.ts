@@ -129,6 +129,6 @@ export const ALT_SPEC = {
 // component, and `react-refresh/only-export-components` warns on a value
 // exported from such a file that is not a plain constant -- the same trap
 // this module's own header comment already names for ALT_SPEC.
-export function numbered(base: string, ordinal: number | undefined): string {
-  return ordinal === undefined || ordinal <= 1 ? base : `${base} ${String(ordinal)}`;
+export function numbered(base: string, entryNumber: number | undefined): string {
+  return entryNumber === undefined || entryNumber <= 1 ? base : `${base} ${String(entryNumber)}`;
 }
