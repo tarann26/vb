@@ -10,7 +10,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import NumbersArea from '../NumbersArea';
-import { CARD_HEADINGS, formatCountingStartedOn } from '../../manage/analytics';
+import { CARD_HEADINGS } from '../../manage/analytics';
 import { ZERO_DATA_PAYLOAD } from '../../../shared/analytics-payload';
 import type { AnalyticsPayload } from '../../../shared/analytics-payload';
 import type { ContentEntries, ContentRegistry } from '../../publish';
@@ -52,9 +52,13 @@ describe('the state it ships in', () => {
   it('frames the emptiness ONCE, above the cards, rather than four times inside them', async () => {
     renderNumbers(okFetch(ZERO_DATA_PAYLOAD) as unknown as typeof fetch);
 
-    expect(
-      await screen.findByText(`Visitor counting started on ${formatCountingStartedOn()}.`),
-    ).toBeInTheDocument();
+    // A LITERAL, deliberately. `Visitor counting started on
+    // ${formatCountingStartedOn(CONSTANT)}.` re-derives the expected string
+    // from the value under test, so it stays green whichever of the two
+    // counting-start dates the banner points at -- which is precisely the
+    // defect backlog item 1 records. This is the date the Web Analytics
+    // token was unified and the visit dataset reset to zero.
+    expect(await screen.findByText('Visitor counting started on 18 August 2026.')).toBeInTheDocument();
     // The sentence that turns four blanks into one honest statement.
     expect(screen.getByText(/Nothing is wrong with your website/)).toBeInTheDocument();
   });

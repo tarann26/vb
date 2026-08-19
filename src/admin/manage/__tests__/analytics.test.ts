@@ -1,8 +1,9 @@
 // The four cards' judgements, without a component around them.
 import { describe, expect, it } from 'vitest';
 import {
-  COUNTING_STARTED_ON,
   MIN_PRIOR_WEEK_VISITS,
+  TAP_COUNTING_STARTED_ON,
+  VISIT_COUNTING_STARTED_ON,
   WEEK_CHANGE_THRESHOLD,
   formatCountingStartedOn,
   labelForPath,
@@ -30,18 +31,27 @@ function payload(overrides: Partial<AnalyticsPayload> = {}): AnalyticsPayload {
 }
 
 // ---------------------------------------------------------------------------
-describe('COUNTING_STARTED_ON', () => {
-  // Pinned so it cannot silently drift from the day the beacon actually
-  // shipped -- which is the only day before which the dataset is genuinely
-  // empty rather than merely quiet.
-  it('is the day the beacon landed, as a plain ISO date', () => {
-    expect(COUNTING_STARTED_ON).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-    expect(COUNTING_STARTED_ON).toBe('2026-08-07');
+describe('when counting started', () => {
+  // The bug this replaces was invisible for eleven days because ONE date was
+  // right about taps and wrong about visits and nothing said which it meant.
+  // Both assertions are LITERALS, not `toContain(format(CONSTANT))`: the
+  // second form re-derives the expected string from the value under test and
+  // stays green through every possible wrong answer.
+  it('dates taps from the day the tap counter shipped', () => {
+    expect(noVisitsYetSentence(3)).toContain('since 7 August 2026.');
   });
 
-  // Not toLocaleDateString: that renders "8/7/2026" on some machines, which
-  // in India reads as the 8th of July.
-  it('formats unambiguously, with the month spelled out', () => {
+  it('dates visits from the day the Web Analytics token was unified', () => {
+    expect(formatCountingStartedOn(VISIT_COUNTING_STARTED_ON)).toBe('18 August 2026');
+  });
+
+  it('keeps the two apart', () => {
+    expect(VISIT_COUNTING_STARTED_ON).not.toBe(TAP_COUNTING_STARTED_ON);
+  });
+
+  it('formats without the machine locale getting a vote', () => {
+    // "8/7/2026" reads as the 8th of July in India. Hand-formatted for that
+    // reason; this is the assertion that stops a future toLocaleDateString.
     expect(formatCountingStartedOn('2026-08-07')).toBe('7 August 2026');
     expect(formatCountingStartedOn('2026-12-01')).toBe('1 December 2026');
   });
@@ -159,7 +169,10 @@ describe('Card A at launch: one sentence, not two numbers side by side', () => {
     const sentence = noVisitsYetSentence(41);
     expect(sentence).toContain("We haven't started counting visits yet.");
     expect(sentence).toContain('41 people have tapped Reserve a Table');
-    expect(sentence).toContain(formatCountingStartedOn(COUNTING_STARTED_ON));
+    // A LITERAL, not `formatCountingStartedOn(CONSTANT)`: that form derives
+    // the expected string from the value under test and stays green whatever
+    // the constant says, which is how a wrong date survived eleven days.
+    expect(sentence).toContain('since 7 August 2026.');
   });
 
   it('reads correctly for exactly one tap', () => {

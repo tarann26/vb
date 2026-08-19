@@ -8,19 +8,29 @@
 import type { AnalyticsPayload } from '../../shared/analytics-payload';
 
 // ---------------------------------------------------------------------------
-// When counting started.
+// When counting started. TWO dates, because two different things started on
+// two different days and one card names each of them.
 //
-// The ONE real source for this date. It is the day the Cloudflare Web
-// Analytics beacon was hand-placed in index.html -- before that commit the
-// beacon was not on the page at all (auto-install never reached
-// Pages-served responses), so the dataset is genuinely empty before it, not
-// merely quiet.
+// TAPS have been counted since the day the Reserve a Table counter shipped.
+// That number is a KV total with no expiry and it has been accumulating,
+// honestly, since this date.
+export const TAP_COUNTING_STARTED_ON = '2026-08-07';
+
+// VISITS have been counted only since the Web Analytics token was unified.
+// Until then the beacon on the page and the token the Worker queries were
+// two DIFFERENT Cloudflare sites, both bound to a zone that has since been
+// deleted -- so the panel was reading a dataset the page never wrote to.
+// Repointing both at one new token reset the dataset this panel reads to
+// zero, and that reset was accepted rather than treated as a fault.
 //
-// It is never a hand-typed literal in any card's copy: every sentence that
-// names a date formats THIS constant. A date typed into a string is a date
-// that drifts from the day the beacon actually shipped, silently, the first
-// time anything here is reworded.
-export const COUNTING_STARTED_ON = '2026-08-07';
+// This constant was the whole of backlog item 1. ONE date was doing TWO
+// jobs, so the screen told her there was a week and a half of visit history
+// on a dataset that was hours old, and "not enough data yet" read as her
+// website being broken rather than as the panel being new. Note which
+// direction the bug ran: the old value was RIGHT about taps and WRONG about
+// visits, which is why setting the single constant to the new date would
+// have moved the defect rather than closed it.
+export const VISIT_COUNTING_STARTED_ON = '2026-08-18';
 
 const MONTHS = [
   'January',
@@ -40,7 +50,12 @@ const MONTHS = [
 // "7 August 2026". Written out rather than through `toLocaleDateString`,
 // which would render this differently depending on the machine's locale --
 // including as "8/7/2026", which in India reads as the 8th of July.
-export function formatCountingStartedOn(iso: string = COUNTING_STARTED_ON): string {
+//
+// No default argument, deliberately. A default is what let ONE date serve
+// two meanings for eleven days without anything on screen looking wrong:
+// every call site now has to say which thing it is dating, and tsc refuses a
+// call that does not.
+export function formatCountingStartedOn(iso: string): string {
   const [year, month, day] = iso.split('-').map(Number);
   if (!year || !month || !day || month < 1 || month > 12) return iso;
   return `${day} ${MONTHS[month - 1]} ${year}`;
@@ -195,5 +210,5 @@ export function ratioSentence(payload: AnalyticsPayload): string | null {
 export function noVisitsYetSentence(taps: number): string {
   return `We haven't started counting visits yet. ${count(taps)} ${
     taps === 1 ? 'person has' : 'people have'
-  } tapped Reserve a Table since ${formatCountingStartedOn()}.`;
+  } tapped Reserve a Table since ${formatCountingStartedOn(TAP_COUNTING_STARTED_ON)}.`;
 }

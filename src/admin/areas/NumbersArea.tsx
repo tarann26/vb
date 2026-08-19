@@ -33,6 +33,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   CARD_HEADINGS,
+  VISIT_COUNTING_STARTED_ON,
   formatCountingStartedOn,
   labelForPath,
   noVisitsYetSentence,
@@ -201,7 +202,9 @@ const NumbersArea: React.FC<NumbersAreaProps> = ({ active, registry, fetchImpl }
         <>
           {outcome.kind === 'ok' && outcome.payload.visits === 0 && (
             <div className="mb-4 rounded border border-brand/30 bg-[#f7f5f0] p-4 font-['Montserrat'] text-sm text-ink">
-              <p className="font-semibold">Visitor counting started on {formatCountingStartedOn()}.</p>
+              <p className="font-semibold">
+                Visitor counting started on {formatCountingStartedOn(VISIT_COUNTING_STARTED_ON)}.
+              </p>
               <p className="mt-1 text-gray-600">
                 There isn&rsquo;t enough data yet — this fills in over the next week or two. Nothing is wrong with your
                 website.
