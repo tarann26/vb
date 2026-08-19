@@ -48,6 +48,7 @@ import {
 } from '../manage/analytics';
 import type { PageNaming } from '../manage/analytics';
 import TrendChart from '../manage/TrendChart';
+import HoursChart from '../manage/HoursChart';
 import BarList from '../manage/BarList';
 import StatCard from '../manage/StatCard';
 import { changeBetween } from '../manage/comparison';
@@ -227,6 +228,7 @@ const NumbersArea: React.FC<NumbersAreaProps> = ({ active, registry, fetchImpl }
               together, with the sentence that tells them apart between
               them. */}
           <CampaignCard outcome={outcome} site={site} />
+          <HoursCard outcome={outcome} />
           <CardD outcome={outcome} />
         </>
       )}
@@ -395,6 +397,36 @@ const CampaignCard: React.FC<{ outcome: Outcome; site: string }> = ({ outcome, s
     )}
   </div>
 );
+
+// `hourly === null` means THIS SITE CANNOT ANSWER THAT QUESTION, and the card
+// is then absent. An empty array is a different thing entirely -- a real,
+// drawable answer reading "nobody yet" -- so a length check here would delete
+// the card on the quietest week of the year, which is the week she would most
+// want to look at it.
+//
+// The heading still shows while the answer is on its way, like every other
+// card on this panel: until the body arrives there is no null to react to, and
+// a skeleton with its real heading is what the rest of this screen does.
+const HoursCard: React.FC<{ outcome: Outcome }> = ({ outcome }) => {
+  // Three states, and `undefined` is the third: not answered YET, which is
+  // what every other card on this panel draws as a skeleton under its real
+  // heading. `null` is the answer "never", and only that one removes the card.
+  const cells = outcome.kind === 'ok' ? outcome.payload.hourly : undefined;
+  if (cells === null) return null;
+  return (
+    <div className={CARD} data-card="hours">
+      <h3 className={CARD_TITLE}>{CARD_HEADINGS.hours}</h3>
+      {cells === undefined ? (
+        <Skeleton />
+      ) : (
+        <>
+          <HoursChart cells={cells} />
+          <p className="mt-2 text-xs text-gray-500">Indian time. Darker means busier. Visits are an estimate.</p>
+        </>
+      )}
+    </div>
+  );
+};
 
 const CardD: React.FC<{ outcome: Outcome }> = ({ outcome }) => (
   <div className={CARD} data-card="d">

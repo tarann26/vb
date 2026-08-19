@@ -307,6 +307,31 @@ describe('the campaign card', () => {
 });
 
 // ---------------------------------------------------------------------------
+// The busiest-times card is the ONE card here that can be absent. What it
+// draws is pinned in src/admin/manage/__tests__/HoursChart.test.tsx; these two
+// are about whether the card is on the screen at all, and the difference
+// between the two payload values that decide it.
+describe('the busiest-times card', () => {
+  it('is not rendered at all when the site cannot answer the question', async () => {
+    renderNumbers(okFetch(payload({ ...POPULATED, hourly: null })) as unknown as typeof fetch);
+
+    // Waited for, not asserted on a blank screen: before the body lands the
+    // card is a skeleton with its real heading, so a queryByText fired
+    // immediately would pass no matter what the payload said.
+    await screen.findByText(CARD_HEADINGS.a);
+    expect(screen.queryByText(CARD_HEADINGS.hours)).toBeNull();
+  });
+
+  it('IS rendered, empty, when the week was simply quiet', async () => {
+    renderNumbers(okFetch(payload({ ...POPULATED, hourly: [] })) as unknown as typeof fetch);
+
+    expect(await screen.findByText(CARD_HEADINGS.hours)).toBeInTheDocument();
+    const card = screen.getByText(CARD_HEADINGS.hours).closest('div') as HTMLElement;
+    expect(within(card).getByRole('img', { name: /Indian time/ })).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
 describe('the wait, and the two ways it can fail', () => {
   it("shows every card's REAL heading while it loads, never a spinner with nothing named", async () => {
     let release!: (value: Response) => void;

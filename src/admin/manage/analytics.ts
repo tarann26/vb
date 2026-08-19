@@ -83,6 +83,13 @@ export const CARD_HEADINGS = {
   // one already answers "where did people come from?" about somebody else's
   // website. The two headings have to be tellable apart at a glance.
   campaigns: 'Which of your own links brought people?',
+  // The ONE conditional card on this panel. `payload.hourly` is null whenever
+  // the question cannot be answered -- at year grain the archive holds one row
+  // per month and an hour is not recoverable from it -- and the card is then
+  // absent rather than empty. So this heading is on screen while the answer is
+  // still being fetched, and again once it arrives as anything but null; the
+  // sweeps that walk Object.values() here see it in both.
+  hours: 'When are people looking?',
 } as const;
 
 // The chart says where its line begins rather than beginning at an

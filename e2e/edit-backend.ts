@@ -105,7 +105,17 @@ export const BUILD_INFO_FIXTURE = { sha: 'e2ee2ee', builtAt: '2026-08-07T10:00:0
 // ZERO_DATA is the state the screen SHIPS in, and is therefore the default:
 // an e2e run that only ever exercised populated cards would never see the
 // copy she will actually read for the first fortnight.
-export const ANALYTICS_ZERO = ZERO_DATA_PAYLOAD;
+//
+// `hourly` is an EMPTY ARRAY here, not the shared fixture's `null`, for the
+// same reason worker/__tests__/analytics.test.ts's ZERO_DATA_HERE overrides
+// it: Cloudflare's RUM dataset DOES offer an hour dimension for this site
+// (worker/analytics-schema.ts, hourDimension: 'datetimeHour'), so a real body
+// at the default range carries a week of cells that all happen to be zero.
+// `null` is what the Worker answers for a whole YEAR, where the archive holds
+// one row per month and an hour cannot be recovered from it -- a state the
+// browser suite reaches through its own fixture rather than through the
+// launch default.
+export const ANALYTICS_ZERO: AnalyticsPayload = { ...ZERO_DATA_PAYLOAD, hourly: [] };
 
 export const ANALYTICS_POPULATED: AnalyticsPayload = {
   ...ZERO_DATA_PAYLOAD,
@@ -131,7 +141,15 @@ export const ANALYTICS_POPULATED: AnalyticsPayload = {
   seriesGrain: 'day',
   seriesSource: 'snapshot',
   seriesStartsOn: '2026-07-20',
-  hourly: null,
+  // A Friday evening and a Tuesday lunchtime, so the drawing has a real peak
+  // and a real quiet cell to be measured against in a browser. An all-zero
+  // week would leave every cell at the same opacity and every geometry claim
+  // passing for the wrong reason.
+  hourly: [
+    { day: 2, hour: 13, visits: 40 },
+    { day: 5, hour: 20, visits: 210 },
+    { day: 5, hour: 21, visits: 180 },
+  ],
   campaigns: [
     { source: 'instagram', label: 'Instagram link', arrivals: 84 },
     { source: 'other', label: 'Someone else’s link', arrivals: 12 },
