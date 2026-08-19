@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   handleAnalytics,
   bucketReferer,
+  firstMonthOfYearWindow,
   hourCells,
   isExcludedPath,
   istDateDaysAgo,
@@ -705,11 +706,46 @@ describe('the year range', () => {
   });
 
   it('reaches back twelve months and not thirteen', async () => {
-    d1.monthlyVisits.set('2025-06', { visits: 999, complete: 1, recorded_at: 0 });
-    d1.monthlyVisits.set('2026-06', { visits: 1, complete: 1, recorded_at: 0 });
+    // THE FIXTURE IS THE BOUNDARY ITSELF, and it has to be. The clock is
+    // pinned to 2026-08-19, so the twelve months this view may show are
+    // 2025-09 through 2026-08 inclusive. An out-of-range fixture parked two
+    // months clear of the edge (2025-06, which the first version of this test
+    // used) never touches the comparison that decides the answer: an
+    // off-by-one that reached back THIRTEEN months and summed 2025-08 into a
+    // total labelled 365 days passed it, and did. So the row on each side of
+    // the line is here, one month apart, and the visit counts are far enough
+    // apart that a total is unambiguous about which one it contains.
+    d1.monthlyVisits.set('2025-08', { visits: 999, complete: 1, recorded_at: 0 });
+    d1.monthlyVisits.set('2025-09', { visits: 1, complete: 1, recorded_at: 0 });
+    d1.monthlyVisits.set('2026-08', { visits: 2, complete: 1, recorded_at: 0 });
 
     const body = await payloadOf(await handleAnalytics(await analyticsRequest('?range=year'), env));
-    expect(body.series.map((point) => point.date)).toEqual(['2026-06']);
+
+    expect(body.series.map((point) => point.date)).toEqual(['2025-09', '2026-08']);
+    // The headline sums exactly what the chart draws. A thirteenth bucket
+    // over-counts Card A under a twelve-month heading while the taps number
+    // beside it still covers twelve, which is the mismatch nobody can see.
+    expect(body.visits).toBe(3);
+  });
+
+  it('counts the same number of months the label promises, at every month of the year', () => {
+    // sinceMonth is calendar arithmetic across a year boundary, and the
+    // pinned clock above only ever exercises August. Walked over all twelve
+    // starting months here so a December-to-January wrap cannot be wrong for
+    // one month a year in a way no other test in this file would reach.
+    for (let month = 1; month <= 12; month += 1) {
+      const today = `2026-${String(month).padStart(2, '0')}-19`;
+      const since = firstMonthOfYearWindow(today);
+      const months: string[] = [];
+      for (let year = 2024; year <= 2026; year += 1) {
+        for (let index = 1; index <= 12; index += 1) {
+          months.push(`${String(year)}-${String(index).padStart(2, '0')}`);
+        }
+      }
+      const window = months.filter((entry) => entry >= since && entry <= today.slice(0, 7));
+      expect(window).toHaveLength(12);
+      expect(window[11]).toBe(today.slice(0, 7));
+    }
   });
 
   it('stores its answer under its own key, so the second reader costs no D1 read', async () => {

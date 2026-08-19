@@ -356,6 +356,30 @@ export function sumWaCounts(counts: Record<string, number>, dates: string[]): nu
   return dates.reduce((total, date) => total + (counts[date] ?? 0), 0);
 }
 
+// The EARLIEST month the by-year view may show, given today. Twelve calendar
+// months ending with the current one, so the answer is ELEVEN months back and
+// not twelve.
+//
+// That off-by-one is the whole reason this is a named function with its own
+// tests. `monthlySeries` filters `month >= ?` INCLUSIVELY, so subtracting a
+// full year lands on the same month one year ago and hands back THIRTEEN
+// buckets -- last August through this August -- summed into a headline
+// labelled 365 days, beside a taps number covering 365 days exactly. A month
+// of over-count on one card and not its neighbour is precisely the
+// quietly-wrong number this range was added to prevent, inverted.
+//
+// Integer arithmetic on a month index rather than a Date: constructing a Date
+// and calling setMonth(-4) is correct here but relies on a rollover rule that
+// is easy to misread, and every value in play is already a calendar month
+// string.
+export function firstMonthOfYearWindow(today: string): string {
+  const year = Number(today.slice(0, 4));
+  const monthIndex = Number(today.slice(5, 7)) - 1 - 11;
+  const shiftedYear = year + Math.floor(monthIndex / 12);
+  const shiftedMonth = (((monthIndex % 12) + 12) % 12) + 1;
+  return `${String(shiftedYear)}-${String(shiftedMonth).padStart(2, '0')}`;
+}
+
 // ---------------------------------------------------------------------------
 // The GraphQL document.
 // ---------------------------------------------------------------------------
@@ -658,8 +682,7 @@ async function putInCache(cache: Cache, key: Request, body: string): Promise<voi
 // distinction this whole screen exists to make.
 async function yearPayload(env: AnalyticsEnv): Promise<AnalyticsPayload> {
   const today = todayInKolkata();
-  const sinceMonth = `${String(Number(today.slice(0, 4)) - 1)}${today.slice(4, 7)}`;
-  const series = await monthlySeries(env.DB, sinceMonth).catch(() => []);
+  const series = await monthlySeries(env.DB, firstMonthOfYearWindow(today)).catch(() => []);
   const visits = series.reduce((total, point) => total + point.visits, 0);
 
   let waCounts: Record<string, number> = {};
