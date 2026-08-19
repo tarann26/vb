@@ -170,12 +170,21 @@ describe('the payload guard', () => {
 // renames one the screen still expects, and nothing anywhere is red until
 // someone opens the page.
 //
-// THAT HAS NOW HAPPENED, which is why every case below reports itself
-// SKIPPED rather than passing. The Worker imports this module and its copy
-// is gone, so there is no second declaration left to compare against and the
-// guard has nothing to do. It is kept, rather than deleted, because the
-// skipIf condition IS the assertion now: re-declare the shape inside
-// `worker/` and these cases wake up and hold the two copies together again.
+// THAT HAS NOW HAPPENED: the Worker imports this module and its copy is
+// gone. So the guard's job changed. It used to hold two copies in step; what
+// it watches now is that there is only ever ONE copy, and the first case
+// below runs every time and says so.
+//
+// That case earns its place because `tsc` does not own it. A second
+// declaration inside `worker/` that is merely STRUCTURALLY COMPATIBLE with
+// this module's -- one extra optional field, or the same field name carrying
+// a different meaning -- typechecks perfectly on both sides while putting a
+// different contract on each end of the wire, which is the silent drift this
+// whole comment is about. Only reading the source finds it.
+//
+// The text comparison is kept behind that case, asleep, gated on a Worker
+// declaration actually existing. It is not the guard any more; it is what
+// tells the next reader WHICH shape drifted and how.
 //
 // Compared as normalised TEXT rather than by importing worker/analytics.ts,
 // deliberately: that module is compiled under tsconfig.worker.json against
@@ -192,31 +201,59 @@ describe('the Worker and the dashboard agree on the body', () => {
     'AnalyticsError',
   ];
 
+  const withoutComments = (source: string) =>
+    source.replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
+
   // Comments and whitespace removed, so the two files may explain themselves
-  // differently and only the DECLARATIONS are compared.
+  // differently and only the DECLARATIONS are compared. `export` is optional
+  // here on purpose: a copy kept private to `worker/` drifts every bit as
+  // silently as an exported one.
   function declarations(source: string): Map<string, string> {
-    const stripped = source
-      .replace(/\/\/[^\n]*/g, '')
-      .replace(/\/\*[\s\S]*?\*\//g, '');
+    const stripped = withoutComments(source);
     const found = new Map<string, string>();
     NAMES.forEach((name) => {
-      const iface = stripped.match(new RegExp(`export interface ${name}\\s*\\{([\\s\\S]*?)\\n\\}`));
+      const iface = stripped.match(new RegExp(`(?:export )?interface ${name}\\s*\\{([\\s\\S]*?)\\n\\}`));
       if (iface) found.set(name, iface[1].replace(/\s+/g, ' ').trim());
-      const alias = stripped.match(new RegExp(`export type ${name}\\s*=([^;]*);`));
+      const alias = stripped.match(new RegExp(`(?:export )?type ${name}\\s*=([^;]*);`));
       if (alias) found.set(name, alias[1].replace(/\s+/g, ' ').trim());
     });
     return found;
   }
 
+  // Which of the six a file DECLARES, as against imports. `import type {
+  // AnalyticsPayload }` never matches, and that distinction is the whole
+  // thing this guard turns on: the Worker is required to import all six and
+  // required to declare none of them.
+  function declaredIn(source: string): string[] {
+    const stripped = withoutComments(source);
+    return NAMES.filter((name) =>
+      new RegExp(`(?:^|[\\n;}])\\s*(?:export\\s+)?(?:interface|type)\\s+${name}\\b`).test(stripped),
+    );
+  }
+
   const workerSource = readFileSync('worker/analytics.ts', 'utf8');
   const sharedSource = readFileSync('src/shared/analytics-payload.ts', 'utf8');
 
-  // The guard is inert -- and says so out loud -- once the Worker imports
-  // this module instead of declaring its own copy, which is the end state
-  // this whole thing is waiting for.
-  const workerImportsShared = /from '\.\.\/src\/shared\/analytics-payload'/.test(workerSource);
+  const workerDeclares = declaredIn(workerSource);
+  const workerDeclaresFixture = /(?:^|[\n;}])\s*(?:export\s+)?const ZERO_DATA_PAYLOAD\b/.test(
+    withoutComments(workerSource),
+  );
 
-  it.skipIf(workerImportsShared).each(NAMES)('%s is declared identically in both', (name) => {
+  // ALWAYS RUNS. Every other case in this file's last section is asleep in
+  // the state the branch is actually in; this one is the live wire, and it
+  // is the one a re-declaration inside `worker/` reddens -- including a
+  // re-declaration `tsc` is happy with.
+  it('leaves this module as the only place the contract is declared', () => {
+    expect(workerDeclares, 'worker/analytics.ts declares a second copy of the contract').toEqual([]);
+    expect(workerDeclaresFixture, 'worker/analytics.ts declares a second ZERO_DATA_PAYLOAD').toBe(false);
+    // The other half of "only one place": the six have to be declared HERE,
+    // so that deleting one from this module is red rather than green-by-
+    // absence on both sides.
+    expect([...declaredIn(sharedSource)].sort()).toEqual([...NAMES].sort());
+    expect(workerSource).toMatch(/from '\.\.\/src\/shared\/analytics-payload'/);
+  });
+
+  it.skipIf(workerDeclares.length === 0).each(NAMES)('%s is declared identically in both', (name) => {
     const worker = declarations(workerSource).get(name);
     const shared = declarations(sharedSource).get(name);
     expect(shared, `${name} is missing from src/shared/analytics-payload.ts`).toBeDefined();
@@ -224,10 +261,10 @@ describe('the Worker and the dashboard agree on the body', () => {
     expect(shared).toBe(worker);
   });
 
-  it.skipIf(workerImportsShared)('ZERO_DATA_PAYLOAD is declared identically in both', () => {
+  it.skipIf(!workerDeclaresFixture)('ZERO_DATA_PAYLOAD is declared identically in both', () => {
     const literal = (source: string) =>
       source
-        .match(/export const ZERO_DATA_PAYLOAD: AnalyticsPayload = \{([\s\S]*?)\n\};/)?.[1]
+        .match(/(?:export )?const ZERO_DATA_PAYLOAD: AnalyticsPayload = \{([\s\S]*?)\n\};/)?.[1]
         .replace(/\/\/[^\n]*/g, '')
         .replace(/\s+/g, ' ')
         .trim();
