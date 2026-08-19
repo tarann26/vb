@@ -19,6 +19,16 @@ export interface RumCapabilities {
   verifiedOn: string;
   /** True only if the exact document in worker/analytics.ts returned data with no errors[]. */
   baseDocumentAccepted: boolean;
+  /**
+   * WHICH document that was: sha256 of the ANALYTICS_QUERY text the probe
+   * extracted from worker/analytics.ts, truncated. The flag above is a claim
+   * about a document, and the document is edited far more often than the
+   * probe is run -- it was edited twice, silently, while this file still said
+   * the document had been accepted. worker/__tests__/analytics-schema.test.ts
+   * re-hashes the committed query and reddens when the two part company, so
+   * the next edit has to re-run the probe rather than inherit an old verdict.
+   */
+  documentFingerprint: string;
   /** The dimension that groups rows by calendar day, EXACTLY as Cloudflare spells it, or null. */
   dateDimension: string | null;
   /** The dimension that groups rows by hour, EXACTLY as Cloudflare spells it, or null. */
@@ -30,6 +40,7 @@ export interface RumCapabilities {
 export const RUM_CAPABILITIES: RumCapabilities = {
   verifiedOn: '2026-08-19',
   baseDocumentAccepted: true,
+  documentFingerprint: 'sha256:fdf21b7a7eb3beb5',
   dateDimension: 'date',
   hourDimension: 'datetimeHour',
   dimensions: [

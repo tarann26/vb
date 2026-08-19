@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { RUM_CAPABILITIES } from '../analytics-schema';
 
 const DOC = 'docs/analytics-schema-verification.md';
@@ -42,6 +43,47 @@ describe('the recorded schema verification', () => {
 
   it('carries the evidence list at all', () => {
     expect(RUM_CAPABILITIES.dimensions.length).toBeGreaterThan(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// WHICH document the verdict above is about.
+//
+// `baseDocumentAccepted: true` is a claim about a specific text, and that text
+// lives in a file edited far more often than this probe is run. It was edited
+// twice -- the `previousWindow` node with its variable, and `hourly`'s orderBy
+// -- while this constant went on saying the document had been accepted. Every
+// aliased node lives in ONE document precisely so a rejected field takes every
+// card down at once, so an unverified edit is not one broken card, it is the
+// whole screen.
+//
+// The probe hashes the text it actually sent (scripts/verify-analytics-schema.mjs
+// extracts it from the source rather than retyping it) and records the hash.
+// This re-hashes the committed query and holds the two together. It is the
+// only case in this file that a change to worker/analytics.ts can redden, and
+// the way to make it green again is to run the probe, not to edit the
+// constant.
+// ---------------------------------------------------------------------------
+
+describe('the verdict names the document it was measured on', () => {
+  function fingerprintOfCommittedQuery(): string {
+    const source = readFileSync('worker/analytics.ts', 'utf8');
+    const found = source.match(/const ANALYTICS_QUERY = `([\s\S]*?)`;/);
+    if (!found) throw new Error('worker/analytics.ts has no `const ANALYTICS_QUERY = `...`;`');
+    return `sha256:${createHash('sha256').update(found[1]).digest('hex').slice(0, 16)}`;
+  }
+
+  it('matches the query worker/analytics.ts sends today', () => {
+    expect(
+      fingerprintOfCommittedQuery(),
+      'The analytics document has changed since it was last run against the real API. Re-run\n' +
+        '  node scripts/verify-analytics-schema.mjs\n' +
+        'and record the new verdict in worker/analytics-schema.ts and docs/analytics-schema-verification.md.',
+    ).toBe(RUM_CAPABILITIES.documentFingerprint);
+  });
+
+  it('records a fingerprint at all, in the shape the probe prints', () => {
+    expect(RUM_CAPABILITIES.documentFingerprint).toMatch(/^sha256:[0-9a-f]{16}$/);
   });
 });
 

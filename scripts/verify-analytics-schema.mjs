@@ -19,6 +19,9 @@
 //
 // It only ever READS. Nothing is written anywhere, so a wrong token fails
 // loudly and costs nothing.
+import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+
 const ENDPOINT = 'https://api.cloudflare.com/client/v4/graphql';
 
 const accountTag = process.env.CLOUDFLARE_ACCOUNT_ID;
@@ -98,18 +101,64 @@ async function introspectSums(dimensionTypeName) {
   return { typeName: name, names: fields.map((field) => field.name).sort() };
 }
 
-// The EXACT shape worker/analytics.ts sends today, reduced to one aliased
-// node. If this is rejected, every card is already broken in production and
-// the reason is in errors[].
-const BASE = `query VerifyBase($accountTag: String!, $siteTag: String!, $since: Time!, $until: Time!) {
-  viewer { accounts(filter: { accountTag: $accountTag }) {
-    last28: rumPageloadEventsAdaptiveGroups(
-      filter: { siteTag: $siteTag, datetime_geq: $since, datetime_lt: $until }
-      limit: 1000
-      orderBy: [sum_visits_DESC]
-    ) { sum { visits } dimensions { requestPath refererHost } }
-  } }
-}`;
+// THE COMMITTED DOCUMENT, READ OUT OF THE SOURCE FILE. Not a copy of it.
+//
+// This used to be a hand-written reduction to one aliased node, and the gap
+// that opened is the reason the whole verdict is worth so little when it
+// drifts: two later tasks changed the real document -- one added the
+// `previousWindow` node and its variable, one changed `hourly`'s orderBy --
+// and `baseDocumentAccepted: true` went on describing a document nobody had
+// sent since. Every aliased node lives in ONE document precisely so that a
+// rejected field takes every card down at once, which makes "was the real
+// thing accepted" the only question worth asking here.
+//
+// So the text is extracted rather than retyped: change worker/analytics.ts,
+// re-run this, and what goes upstream is what will go upstream in production.
+function committedDocument() {
+  const source = readFileSync('worker/analytics.ts', 'utf8');
+  const found = source.match(/const ANALYTICS_QUERY = `([\s\S]*?)`;/);
+  if (!found) {
+    console.error('Could not find `const ANALYTICS_QUERY = `...`;` in worker/analytics.ts.');
+    console.error('If the document was renamed or moved, fix this extraction rather than retyping the document.');
+    process.exit(2);
+  }
+  return found[1];
+}
+
+const BASE = committedDocument();
+
+// The variables the document DECLARES, filled by name. A document that gains
+// a variable this script has no value for stops the run loudly, rather than
+// being sent short and coming back as a coercion error that reads like a
+// schema answer -- which is the failure this probe exists to be able to see.
+//
+// The windows are the shapes the panel really asks for, so `previousWindow`
+// is exercised over a window that precedes `last28` rather than an empty one.
+const DAYS_BACK = {
+  sinceWindow: 28,
+  sinceThisWeek: 7,
+  sincePriorWeek: 14,
+  sincePrevious: 56,
+  since: 28,
+};
+
+function variablesFor(query) {
+  const header = query.match(/query\s+\w*\s*\(([\s\S]*?)\)\s*\{/);
+  const declared = header ? [...header[1].matchAll(/\$(\w+)\s*:/g)].map((found) => found[1]) : [];
+  const variables = {};
+  for (const name of declared) {
+    if (name === 'accountTag') variables[name] = accountTag;
+    else if (name === 'siteTag') variables[name] = siteTag;
+    else if (name === 'until') variables[name] = until;
+    else if (name in DAYS_BACK) variables[name] = new Date(midnight - DAYS_BACK[name] * DAY_MS).toISOString();
+    else {
+      console.error(`The document declares $${name} and this script has no value for it.`);
+      console.error('Add one to DAYS_BACK (or to variablesFor) rather than sending the document short.');
+      process.exit(2);
+    }
+  }
+  return variables;
+}
 
 // Does `requestPath` arrive with its query string attached? The whole
 // campaign design turns on the answer. If the dimension carries `?utm_source=`
@@ -165,8 +214,9 @@ const NEGATIVE = `query VerifyNegative($accountTag: String!, $siteTag: String!, 
 const dimensions = await introspectDimensions();
 const sums = await introspectSums(dimensions.typeName);
 
-const base = await post({ query: BASE, variables: { accountTag, siteTag, since, until } });
-console.log('\n=== base document ===');
+const base = await post({ query: BASE, variables: variablesFor(BASE) });
+console.log('\n=== base document (the exact text in worker/analytics.ts) ===');
+console.log(`variables: ${JSON.stringify(Object.keys(variablesFor(BASE)).sort())}`);
 console.log(`HTTP ${base.status}`);
 console.log(base.text.slice(0, 4000));
 
@@ -217,6 +267,14 @@ console.log(
     {
       verifiedOn: new Date().toISOString().slice(0, 10),
       baseDocumentAccepted: accepted,
+      // WHICH document was accepted, as a hash of the text that was actually
+      // sent. `baseDocumentAccepted` alone is a claim about a document, and
+      // the document is edited far more often than this is run -- twice,
+      // silently, before this line existed.
+      // worker/__tests__/analytics-schema.test.ts re-hashes the committed
+      // document and reddens when the two stop matching, so the next edit to
+      // the query says out loud that it has not been verified.
+      documentFingerprint: `sha256:${createHash('sha256').update(BASE).digest('hex').slice(0, 16)}`,
       dateDimension,
       hourDimension,
       dimensions: dimensions.names,

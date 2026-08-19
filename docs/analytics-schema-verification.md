@@ -13,6 +13,7 @@ answer, so the next reader neither repeats the probe nor guesses at it.
 {
   "verifiedOn": "2026-08-19",
   "baseDocumentAccepted": true,
+  "documentFingerprint": "sha256:fdf21b7a7eb3beb5",
   "dateDimension": "date",
   "hourDimension": "datetimeHour",
   "dimensions": [
@@ -45,6 +46,18 @@ The block above is the machine copy. `worker/__tests__/analytics-schema.test.ts`
 parses it out of this file and deep-equals it against `RUM_CAPABILITIES` in
 `worker/analytics-schema.ts`, so this document and that constant cannot be
 edited apart.
+
+**The run of 2026-08-19 (second run) sent the whole committed document, not a
+reduction of it.** The first run's "base document" was a hand-written
+one-node copy, and while it sat here two later tasks changed the real query —
+the `previousWindow` node with its `$sincePrevious` variable, and `hourly`'s
+`orderBy` — so `baseDocumentAccepted: true` described a document nobody had
+sent. `scripts/verify-analytics-schema.mjs` now extracts `ANALYTICS_QUERY`
+out of `worker/analytics.ts` and fills the variables it declares, so what goes
+upstream is what production sends; all five aliased nodes came back with
+`errors: null`. `documentFingerprint` records which text that was, and the
+schema test re-hashes the committed query against it — so the next edit to
+the document reddens until the probe is re-run.
 
 ## What each verdict decides
 
@@ -247,9 +260,10 @@ tracks. The script only ever reads.
 === introspect AccountRumPageloadEventsAdaptiveGroupsSum ===
 {"data":{"__type":{"fields":[{"name":"visits","type":{"kind":"NON_NULL","name":"","ofType":{"kind":"SCALAR","name":"uint64"}}}],"name":"AccountRumPageloadEventsAdaptiveGroupsSum"}},"errors":null}
 
-=== base document ===
+=== base document (the exact text in worker/analytics.ts) ===
+variables: ["accountTag","sincePrevious","sincePriorWeek","sinceThisWeek","sinceWindow","siteTag","until"]
 HTTP 200
-{"data":{"viewer":{"accounts":[{"last28":[]}]}},"errors":null}
+{"data":{"viewer":{"accounts":[{"hourly":[],"last28":[],"previousWindow":[],"priorWeek":[],"thisWeek":[]}]}},"errors":null}
 
 === requestPath, with the bot flag beside it ===
 HTTP 200
@@ -265,7 +279,7 @@ HTTP 200
 
 === negative control: a dimension introspection did NOT list ===
 HTTP 200
-{"data":null,"errors":[{"message":"unknown field \"datetimeDay\"","path":null,"extensions":{"timestamp":"2026-08-19T08:01:17.988805276Z","ray_id":"a2d7a1271a21fb2a-SEA"}}]}
+{"data":null,"errors":[{"message":"unknown field \"datetimeDay\"","path":null,"extensions":{"timestamp":"2026-08-19T20:57:32.848359903Z","ray_id":"a2dc123bc884fb18-BNA"}}]}
 REJECTED as required, so an acceptance above is a real acceptance.
 
 === sum fields ===
@@ -275,6 +289,7 @@ REJECTED as required, so an acceptance above is a real acceptance.
 {
   "verifiedOn": "2026-08-19",
   "baseDocumentAccepted": true,
+  "documentFingerprint": "sha256:fdf21b7a7eb3beb5",
   "dateDimension": "date",
   "hourDimension": "datetimeHour",
   "dimensions": [
