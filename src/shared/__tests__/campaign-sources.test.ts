@@ -3,8 +3,22 @@ import {
   CAMPAIGN_LABELS,
   KNOWN_CAMPAIGN_SOURCES,
   OTHER_SOURCE,
+  campaignTag,
   normalizeSource,
 } from '../campaign-sources';
+
+describe('campaignTag', () => {
+  it('tidies the tag without bucketing it', () => {
+    // The difference that matters: two unrecognised tags stay two values
+    // here, while normalizeSource collapses both to one. The tab's
+    // once-per-arrival mark needs the first behaviour and the stored column
+    // needs the second.
+    expect(campaignTag('partner-a')).not.toBe(campaignTag('partner-b'));
+    expect(normalizeSource('partner-a')).toBe(normalizeSource('partner-b'));
+    expect(campaignTag('  Instagram  ')).toBe('instagram');
+    expect(campaignTag('x'.repeat(5000))).toHaveLength(64);
+  });
+});
 
 describe('normalizeSource', () => {
   it('keeps the names she uses and folds everything else into one', () => {

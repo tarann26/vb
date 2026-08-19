@@ -28,6 +28,19 @@ describe('arrivalToRecord', () => {
     expect(arrivalToRecord('/', '?utm_source=zomato', storage)).toBe('zomato');
   });
 
+  // And the case marking with the BUCKET got wrong, which a bare boolean and
+  // the bucket both fail for the same reason: every unrecognised tag counts
+  // under one row, so two of them in one tab compared equal and the second
+  // arrival vanished. The mark is the tag she actually placed.
+  it('records two different unrecognised tags in one tab as two arrivals', () => {
+    expect(arrivalToRecord('/', '?utm_source=partner-a', storage)).toBe('other');
+    expect(arrivalToRecord('/', '?utm_source=partner-b', storage)).toBe('other');
+    expect(storage.map.get(ARRIVAL_STORAGE_KEY)).toBe('partner-b');
+    // The same unrecognised tag twice is still ONE arrival -- a refresh must
+    // not become a second row just because the tag has no name of its own.
+    expect(arrivalToRecord('/', '?utm_source=partner-b', storage)).toBeNull();
+  });
+
   it('records nothing at all for an untagged visit', () => {
     for (const search of ['', '?', '?ref=x', '?utm_source=', '?utm_source=%20%20', '?utm_medium=cpc']) {
       expect(arrivalToRecord('/', search, storage)).toBeNull();

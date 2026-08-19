@@ -24,10 +24,20 @@
 // today and wrong the moment somebody moves the call, and the failure would
 // be a doubled number rather than an error.
 //
-// The value stored is the SOURCE, not a flag: two different tagged links
-// opened in the same tab are two different arrivals and both should count,
-// and a bare boolean would silently drop the second.
-import { normalizeSource } from './shared/campaign-sources';
+// The value stored is the TAG AS WRITTEN, not a flag and not the bucket it is
+// counted under: two different tagged links opened in the same tab are two
+// different arrivals and both should count, and a bare boolean would silently
+// drop the second.
+//
+// The bucket cannot do that job, which is what it used to be asked to do.
+// normalizeSource collapses everything outside the six named sources to the
+// single string `other`, so marking with the bucket made
+// `?utm_source=partner-a` and then `?utm_source=partner-b` in one tab ONE
+// arrival -- the exact case this comment claims is two. The mark is now the
+// tag itself (case and surrounding space folded, so one link is still one
+// link), while the value SENT is still the bucket, which is what bounds the
+// column to a committed list.
+import { campaignTag, normalizeSource } from './shared/campaign-sources';
 
 export const ARRIVAL_STORAGE_KEY = 'vb:arrival:v1';
 
@@ -53,10 +63,11 @@ export function arrivalToRecord(
   // to reason about at all.
   if (raw === null || raw.trim() === '') return null;
   const source = normalizeSource(raw);
+  const mark = campaignTag(raw);
 
   try {
-    if (storage.getItem(ARRIVAL_STORAGE_KEY) === source) return null;
-    storage.setItem(ARRIVAL_STORAGE_KEY, source);
+    if (storage.getItem(ARRIVAL_STORAGE_KEY) === mark) return null;
+    storage.setItem(ARRIVAL_STORAGE_KEY, mark);
   } catch {
     // Private browsing, or storage that has no room left. The honest choice
     // is to count the arrival and accept that a refresh in this tab may count

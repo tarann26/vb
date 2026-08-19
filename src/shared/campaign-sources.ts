@@ -46,10 +46,23 @@ export const CAMPAIGN_LABELS: Record<string, string> = {
   other: 'Someone else’s link',
 };
 
-// Lowercased, trimmed, and anything unrecognised becomes `other`. Length is
-// capped before the comparison so a megabyte of query string is a cheap
-// string operation and not a cheap denial of service.
+// The tag AS WRITTEN, tidied but not bucketed: lowercased, trimmed, and
+// capped so a megabyte of query string is a cheap string operation and not a
+// cheap denial of service.
+//
+// This is not what gets STORED anywhere -- normalizeSource below is the write
+// boundary and the column's whole domain. It is what tells two of HER links
+// apart in one tab (src/campaign.ts's once-per-arrival mark), which the
+// bucketed value cannot do: every unrecognised tag normalises to the same
+// string, so `?utm_source=partner-a` followed by `?utm_source=partner-b` in
+// one tab counted once. Case and surrounding space are folded here on
+// purpose, so `Instagram` and `instagram` remain ONE link rather than two.
+export function campaignTag(raw: string): string {
+  return raw.trim().slice(0, 64).toLocaleLowerCase('en');
+}
+
+// Anything unrecognised becomes `other`, over the tidied tag above.
 export function normalizeSource(raw: string): string {
-  const trimmed = raw.trim().slice(0, 64).toLocaleLowerCase('en');
+  const trimmed = campaignTag(raw);
   return (KNOWN_CAMPAIGN_SOURCES as readonly string[]).includes(trimmed) ? trimmed : OTHER_SOURCE;
 }
