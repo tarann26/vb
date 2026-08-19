@@ -52,9 +52,40 @@ describe('the limiter', () => {
 
   it('starts again once the window has moved on', async () => {
     const { db } = store();
-    await takeRateSlot(db, 'opaque-bucket', 1, 60);
-    expect(await takeRateSlot(db, 'opaque-bucket', 1, 60)).toBe(false);
-    expect(await takeRateSlot(db, 'opaque-bucket', 1, 120)).toBe(true);
+    // The bucket NAMES the window -- worker/campaign.ts hashes the window
+    // number into the per-address bucket and the cap's bucket is the IST
+    // date -- so a window that has moved on has no row of its own yet.
+    await takeRateSlot(db, 'r:window-1', 1, 60);
+    expect(await takeRateSlot(db, 'r:window-1', 1, 60)).toBe(false);
+    expect(await takeRateSlot(db, 'r:window-2', 1, 120)).toBe(true);
+  });
+
+  it('keeps counting one bucket whose expiry advances by a second on every request', async () => {
+    // The exact bindings Task 8 uses: `nowSeconds + <lifetime>`, one second
+    // larger every second. A limiter that read the expiry to decide whether
+    // the window had rolled reset on nearly every request and refused
+    // NOTHING -- neither the ten a minute nor the 2,000 a day. Adjacent
+    // expiries are what make that visible; the round numbers above do not.
+    const { db } = store();
+    const now = 1_760_000_000;
+    const cap: boolean[] = [];
+    for (let i = 0; i < 8; i += 1) cap.push(await takeRateSlot(db, 'day:2026-08-19', 3, now + i + 172_800));
+    expect(cap).toEqual([true, true, true, false, false, false, false, false]);
+    const perAddress: boolean[] = [];
+    for (let i = 0; i < 8; i += 1) perAddress.push(await takeRateSlot(db, 'r:one-window', 3, now + i + 60));
+    expect(perAddress).toEqual([true, true, true, false, false, false, false, false]);
+  });
+
+  it('pushes a bucket still being written to out of the prune it would otherwise die in', async () => {
+    const { fake, db } = store();
+    await takeRateSlot(db, 'day:2026-08-19', 500, 100);
+    await takeRateSlot(db, 'day:2026-08-19', 500, 200);
+    // The prune deletes `expires < now`. A DO UPDATE that left the stored
+    // expiry alone would let the night's prune delete the cap's own row in
+    // the middle of the day it is counting, and the day's 2,000 would start
+    // again from zero.
+    await pruneAnalytics(db, '2000-01-01', 150);
+    expect(fake.campaignRate.size).toBe(1);
   });
 });
 

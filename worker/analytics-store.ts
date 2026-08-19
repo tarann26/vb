@@ -115,9 +115,28 @@ export async function recordArrival(db: D1Database, source: string, day: string,
 // they were under the limit. `ON CONFLICT ... DO UPDATE` with `RETURNING`
 // makes the increment and the answer one atomic step.
 //
-// The `expires` comparison in the UPDATE arm is what resets a stale bucket:
-// without it, a bucket that filled an hour ago is still full, and the limiter
-// becomes a permanent ban rather than a window.
+// THE BUCKET NAMES THE WINDOW. That is the contract, and every caller already
+// honours it: worker/campaign.ts hashes the window number into the
+// per-address bucket, and the daily cap's bucket is the literal
+// 'day:<IST date>'. A window that has moved on therefore has a DIFFERENT name
+// and no row of its own, so the first request of a new window inserts at 1
+// and the limiter is a window rather than a permanent ban. A caller that
+// passes a bucket which outlives its window gets a permanent ban, and there
+// is no way for this statement to rescue it.
+//
+// SO THERE IS NO EXPIRY COMPARISON IN THE UPDATE ARM, and that is the fix for
+// a real defect rather than an omission. An arm reading
+// `campaign_rate.expires <= excluded.expires - 1` resets whenever the new
+// expiry is larger than the stored one -- and both callers bind
+// `nowSeconds + <lifetime>`, which grows by one every second. The reset then
+// fired on very nearly every request and BOTH the ten-a-minute limit and the
+// 2,000-a-day cap refused nothing at all. The daily cap is the case that
+// cannot survive it: its bucket is stable for a whole IST day while its
+// expiry advances all day long.
+//
+// `expires` is a LIFETIME, not a window boundary: it is what the nightly
+// prune reads, and refreshing it on every hit is what keeps a bucket that is
+// still being written to from being deleted out from under its own count.
 //
 // `bucket` is OPAQUE by construction and the caller is responsible for
 // keeping it so -- see worker/campaign.ts, which hashes the address with the
@@ -133,7 +152,7 @@ export async function takeRateSlot(
     .prepare(
       'INSERT INTO campaign_rate (bucket, hits, expires) VALUES (?, 1, ?) ' +
         'ON CONFLICT(bucket) DO UPDATE SET ' +
-        'hits = CASE WHEN campaign_rate.expires <= excluded.expires - 1 THEN 1 ELSE campaign_rate.hits + 1 END, ' +
+        'hits = campaign_rate.hits + 1, ' +
         'expires = excluded.expires ' +
         'RETURNING hits',
     )

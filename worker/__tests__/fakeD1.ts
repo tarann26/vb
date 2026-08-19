@@ -203,13 +203,26 @@ export class FakeD1 {
     if (sql.startsWith('INSERT INTO campaign_rate')) {
       const [bucket, expires] = args as [string, number];
       const existing = this.campaignRate.get(bucket);
-      // Mirrors the CASE arm exactly: a bucket whose recorded expiry is at or
-      // below the new one minus a second is a window that has moved on, and
-      // starts again at 1. Read off the statement, so a limiter that lost its
-      // reset arm becomes a permanent ban here too.
-      const resets = sql.includes('campaign_rate.expires <= excluded.expires - 1');
-      const hits = existing === undefined || (resets && existing.expires <= expires - 1) ? 1 : existing.hits + 1;
-      this.campaignRate.set(bucket, { hits, expires });
+      // Three clauses read off the statement rather than assumed.
+      //
+      // `increments`: a DO UPDATE that wrote a literal 1 would let every
+      // request through, so the arm that counts has to be visible here.
+      //
+      // `resets`: an expiry-comparing CASE arm is the defect this limiter was
+      // repaired for -- it resets whenever the new expiry is larger than the
+      // stored one, and both callers bind an expiry that grows every second.
+      // Mirrored so that re-adding it reddens a test instead of silently
+      // switching the limiter and the daily cap off.
+      //
+      // `refreshes`: without `expires = excluded.expires` a bucket still
+      // being written to keeps its first expiry and the night's prune deletes
+      // it mid-window, which restarts the day's cap from zero.
+      const increments = sql.includes('campaign_rate.hits + 1');
+      const resets = sql.includes('CASE WHEN campaign_rate.expires <= excluded.expires - 1');
+      const refreshes = sql.includes('expires = excluded.expires');
+      const stale = resets && existing !== undefined && existing.expires <= expires - 1;
+      const hits = existing === undefined || stale || !increments ? 1 : existing.hits + 1;
+      this.campaignRate.set(bucket, { hits, expires: existing !== undefined && !refreshes ? existing.expires : expires });
       return { changes: 0, row: { hits } };
     }
     if (sql.startsWith('DELETE FROM campaign_rate WHERE expires')) {
