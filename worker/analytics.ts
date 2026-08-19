@@ -86,8 +86,13 @@
 //               + 2 D1 queries for the trend series and its first day
 //               + 1 D1 query for whether the by-year archive holds anything
 //
-// The SUBREQUEST count is therefore UNCHANGED at 4, which is the number that
-// mattered. Recompute this block again if anything is added.
+//   ?range=year, cache MISS: 2 subrequests (cache.match, cache.put)
+//                            + 2 D1 queries + 1 KV get
+// No GraphQL call on this path at all, which is why it is also the one range
+// that cannot answer 502 upstream-error.
+//
+// The SUBREQUEST count is therefore UNCHANGED at 4 worst case, which is the
+// number that mattered. Recompute this block again if anything is added.
 //
 // CPU is one HMAC verify (the session gate) plus a `JSON.parse` and a single
 // pass over at most 1000 small rows.
@@ -165,7 +170,7 @@ import type {
 } from '../src/shared/analytics-payload';
 import { readWaCounts } from './wa';
 import { readCampaignRows } from './campaign';
-import { dailySince, firstDailyDay, monthlyCount } from './analytics-store';
+import { dailySince, firstDailyDay, monthlyCount, monthlySeries } from './analytics-store';
 import { RUM_CAPABILITIES } from './analytics-schema';
 import type { PagesEnv } from './status';
 
@@ -562,6 +567,81 @@ function startOfTodayUtc(now: number): number {
   return Math.floor(now / DAY_MS) * DAY_MS;
 }
 
+// The one place this route writes to the edge cache, so both return paths
+// store the SAME thing: a copy carrying `public, max-age=600` rather than the
+// `no-store` copy the browser gets. Two hand-rolled copies of this block is
+// how one of them ends up storing the wrong headers and the cache silently
+// stops working -- see this file's header for why that failure is invisible.
+async function putInCache(cache: Cache, key: Request, body: string): Promise<void> {
+  try {
+    await cache.put(
+      key,
+      new Response(body, {
+        headers: {
+          'Cache-Control': `public, max-age=${CACHE_TTL_SECONDS}`,
+          'Content-Type': 'application/json',
+        },
+      }),
+    );
+  } catch {
+    // A cache write that fails costs the next caller an upstream call. It
+    // must not cost this caller the answer she already has in hand.
+  }
+}
+
+// Everything a year can honestly answer, and nothing it cannot.
+//
+// byPath and byReferer are EMPTY rather than stale: the rollup holds monthly
+// totals, not a breakdown, and inventing one from the last 30 days under a
+// twelve-month heading would be a false number. The panel does NOT render its
+// usual "nothing to rank yet" copy for this -- the range control's task gives
+// those two cards a sentence that says the breakdown is not kept, because the
+// difference between "nothing was kept" and "nobody visited" is the
+// distinction this whole screen exists to make.
+async function yearPayload(env: AnalyticsEnv): Promise<AnalyticsPayload> {
+  const today = todayInKolkata();
+  const sinceMonth = `${String(Number(today.slice(0, 4)) - 1)}${today.slice(4, 7)}`;
+  const series = await monthlySeries(env.DB, sinceMonth).catch(() => []);
+  const visits = series.reduce((total, point) => total + point.visits, 0);
+
+  let waCounts: Record<string, number> = {};
+  try {
+    waCounts = await readWaCounts(env.KV);
+  } catch {
+    waCounts = {};
+  }
+
+  return {
+    windowDays: RANGE_DAYS.year,
+    visits,
+    visitsAreEstimate: true,
+    byPath: [],
+    byReferer: [],
+    thisWeekVisits: 0,
+    priorWeekVisits: 0,
+    bookingTaps: {
+      total: sumWaCounts(waCounts, recentIstDates(today, RANGE_DAYS.year)),
+      days: RANGE_DAYS.year,
+      lowerBound: true,
+    },
+    range: 'year',
+    series: series.map((point) => ({ date: point.day, visits: point.visits, complete: point.complete })),
+    seriesGrain: 'month',
+    seriesSource: RUM_CAPABILITIES.dateDimension === null ? 'snapshot' : 'backfilled',
+    seriesStartsOn: series[0]?.day ?? null,
+    // A year cannot be an hour grid. The rollup holds one row per month, and
+    // an hour is not recoverable from it at any price.
+    hourly: null,
+    campaigns: await readCampaignRows(env.DB, istDateDaysAgo(today, RANGE_DAYS.year - 1)),
+    campaignsAreExact: true,
+    // No comparison at year grain: the period before the last twelve months is
+    // twelve months this archive does not have and cannot invent.
+    visitsPrevious: 0,
+    tapsPrevious: 0,
+    yearAvailable: series.length > 0,
+  };
+}
+
 export async function handleAnalytics(request: Request, env: AnalyticsEnv): Promise<Response> {
   // Same auth gate as every other admin route (worker/status.ts's
   // handleBuildStatus, worker/index.ts's handlePublish), and deliberately
@@ -596,6 +676,17 @@ export async function handleAnalytics(request: Request, env: AnalyticsEnv): Prom
     // `public, max-age=600` for the edge's benefit and that header must not
     // reach the browser, where this is per-session data behind a login.
     return jsonString(200, await cached.text());
+  }
+
+  // A year is OURS, entirely. Cloudflare holds about six months, so asking it
+  // for twelve would return six and label them twelve -- the exact class of
+  // quietly-wrong number this panel exists not to produce. This branch makes
+  // no upstream call at all, which also means it cannot answer 502 when
+  // Cloudflare is having a bad afternoon.
+  if (range === 'year') {
+    const yearBody = JSON.stringify(await yearPayload(env));
+    await putInCache(cache, cacheKey, yearBody);
+    return jsonString(200, yearBody);
   }
 
   const until = startOfTodayUtc(Date.now());
@@ -754,19 +845,6 @@ export async function handleAnalytics(request: Request, env: AnalyticsEnv): Prom
 
   // Built ONCE as a string, then two Responses -- see this file's header.
   const body = JSON.stringify(payload);
-  try {
-    await cache.put(
-      cacheKey,
-      new Response(body, {
-        headers: {
-          'Cache-Control': `public, max-age=${CACHE_TTL_SECONDS}`,
-          'Content-Type': 'application/json',
-        },
-      }),
-    );
-  } catch {
-    // A cache write that fails costs the next caller an upstream call. It
-    // must not cost this caller the answer she already has in hand.
-  }
+  await putInCache(cache, cacheKey, body);
   return jsonString(200, body);
 }

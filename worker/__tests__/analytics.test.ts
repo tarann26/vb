@@ -606,6 +606,104 @@ describe('the trend series on the payload', () => {
 });
 
 // ---------------------------------------------------------------------------
+// The by-year range, which is served from OUR archive alone. Cloudflare holds
+// about six months, so asking it for twelve would return six and label them
+// twelve -- and she would read that as the restaurant having halved.
+// ---------------------------------------------------------------------------
+
+describe('the year range', () => {
+  beforeEach(() => {
+    // Pinned. `sinceMonth` is derived from today's own calendar month, so the
+    // thirteen-month fixture below is only a boundary case if the month it is
+    // a boundary of is a fixed one.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-19T12:00:00Z'));
+  });
+
+  it('makes no upstream call at all', async () => {
+    await handleAnalytics(await analyticsRequest('?range=year'), env);
+    expect(fetchStub).not.toHaveBeenCalled();
+  });
+
+  it('draws from the monthly rollup, in order', async () => {
+    // July inserted BEFORE June on purpose: the fake iterates a Map in
+    // insertion order, so a dropped `ORDER BY month ASC` comes back the wrong
+    // way round rather than accidentally right.
+    d1.monthlyVisits.set('2026-07', { visits: 200, complete: 1, recorded_at: 0 });
+    d1.monthlyVisits.set('2026-06', { visits: 100, complete: 1, recorded_at: 0 });
+
+    const body = await payloadOf(await handleAnalytics(await analyticsRequest('?range=year'), env));
+
+    expect(body.visits).toBe(300);
+    expect(body.series).toEqual([
+      { date: '2026-06', visits: 100, complete: true },
+      { date: '2026-07', visits: 200, complete: true },
+    ]);
+    expect(body.seriesGrain).toBe('month');
+    expect(body.seriesStartsOn).toBe('2026-06');
+  });
+
+  it('carries the partial-month flag through to the panel', async () => {
+    // The first year of this view IS a partial year and cannot be made
+    // otherwise. A column drawn short and unmarked reads as a collapse in
+    // traffic that did not happen.
+    d1.monthlyVisits.set('2026-08', { visits: 40, complete: 0, recorded_at: 0 });
+
+    const body = await payloadOf(await handleAnalytics(await analyticsRequest('?range=year'), env));
+    expect(body.series[0].complete).toBe(false);
+  });
+
+  it('leaves the two breakdown cards empty rather than filling them from a different window', async () => {
+    // The upstream answer is deliberately NOT empty: if this branch ever
+    // reached for a 30-day breakdown to fill a twelve-month heading, these
+    // rows are what would show up under it.
+    respondWith(() => graphqlOk({ last28: [{ path: '/catering', referer: 'instagram.com', visits: 40 }] }));
+
+    const body = await payloadOf(await handleAnalytics(await analyticsRequest('?range=year'), env));
+    expect(body.byPath).toEqual([]);
+    expect(body.byReferer).toEqual([]);
+  });
+
+  it('answers 200 even when the rollup is completely empty', async () => {
+    // The state this ships in. The archive accumulates from the day it was
+    // switched on and cannot recover the past. Empty is not an error.
+    const response = await handleAnalytics(await analyticsRequest('?range=year'), env);
+    expect(response.status).toBe(200);
+    expect((await payloadOf(response)).series).toEqual([]);
+  });
+
+  it('says the by-year view has nothing behind it until it does', async () => {
+    const empty = await payloadOf(await handleAnalytics(await analyticsRequest('?range=year'), env));
+    expect(empty.yearAvailable).toBe(false);
+
+    d1.monthlyVisits.set('2026-07', { visits: 1, complete: 1, recorded_at: 0 });
+    cache = new FakeCache();
+    vi.stubGlobal('caches', { default: cache });
+    const filled = await payloadOf(await handleAnalytics(await analyticsRequest('?range=year'), env));
+    expect(filled.yearAvailable).toBe(true);
+  });
+
+  it('reaches back twelve months and not thirteen', async () => {
+    d1.monthlyVisits.set('2025-06', { visits: 999, complete: 1, recorded_at: 0 });
+    d1.monthlyVisits.set('2026-06', { visits: 1, complete: 1, recorded_at: 0 });
+
+    const body = await payloadOf(await handleAnalytics(await analyticsRequest('?range=year'), env));
+    expect(body.series.map((point) => point.date)).toEqual(['2026-06']);
+  });
+
+  it('stores its answer under its own key, so the second reader costs no D1 read', async () => {
+    // The year path returns early, so it has its own `cache.put` call site. A
+    // branch that returned without storing would re-query D1 on every load
+    // and no other assertion in this file would notice.
+    await handleAnalytics(await analyticsRequest('?range=year'), env);
+    expect(cache.puts.map((entry) => entry.url)).toEqual([
+      `${SITE_ORIGIN}/__cache/analytics/${PAYLOAD_SHAPE_VERSION}/year`,
+    ]);
+    expect(cache.puts[0].cacheControl).toBe('public, max-age=600');
+  });
+});
+
+// ---------------------------------------------------------------------------
 // The campaign card. The wiring, not just the helper -- a correct
 // readCampaignRows called over the wrong window still puts a wrong number on
 // the screen.
