@@ -46,7 +46,17 @@ function renderNumbers(fetchImpl: typeof fetch, entries?: ContentEntries) {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
+
+// The stat cards refuse to compare against a period that predates counting,
+// which makes the DAY the test runs on part of what it asserts -- and today
+// is inside the stretch where the real panel refuses. `toFake: ['Date']`
+// only, so setTimeout stays real and Testing Library's findBy* still work.
+function onDay(day: string): void {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date(`${day}T09:00:00.000Z`));
+}
 
 // ---------------------------------------------------------------------------
 describe('the state it ships in', () => {
@@ -169,6 +179,10 @@ describe('with real numbers', () => {
   const WITH_HISTORY = payload({ ...POPULATED, visitsPrevious: 3300, tapsPrevious: 470 });
 
   it('each stat card compares its own number against its own previous, in its own unit', async () => {
+    // Far enough past both counting-start dates that the whole of each
+    // previous window was being counted -- otherwise the honest answer is
+    // the refusal two cases below, and this wiring cannot be seen at all.
+    onDay('2027-01-15');
     renderNumbers(okFetch(WITH_HISTORY) as unknown as typeof fetch);
 
     const visits = (await screen.findByText('Visits')).closest('div') as HTMLElement;
@@ -180,9 +194,43 @@ describe('with real numbers', () => {
     expect(within(taps).getByText('9% more taps than the period before.')).toBeInTheDocument();
   });
 
+  // The comparison's other floor, and the one the count cannot see. At L+45
+  // on a 30-day range the previous window is fifteen real days and fifteen
+  // days of nothing, so 4,100 against 3,300 would print "24% more visits"
+  // for a restaurant whose traffic did not move -- and the counting-started
+  // banner that would explain it is suppressed the moment visits stop being
+  // zero, so nothing on the screen would say why.
+  it('refuses to compare against a period that predates counting', async () => {
+    onDay('2026-10-02');
+    renderNumbers(okFetch(WITH_HISTORY) as unknown as typeof fetch);
+
+    const visits = (await screen.findByText('Visits')).closest('div') as HTMLElement;
+    expect(within(visits).getByText('Not enough of the period before to compare visits against.')).toBeInTheDocument();
+    expect(within(visits).queryByText(/% more visits/)).not.toBeInTheDocument();
+  });
+
+  // Taps have been counted since 7 August and visits only since the 18th, and
+  // the windows are up to ninety days long, so there is a real stretch where
+  // one card can honestly compare and the other cannot. A single flag for
+  // both cards would have to be wrong on one of them, which is the shape of
+  // the defect that put one counting-start date behind two questions.
+  it('answers per measure, so the taps card can compare on a day the visits card cannot', async () => {
+    // Taps: 2 x 28 days back is 2026-08-15, after 7 August -- whole.
+    // Visits: 2 x 30 days back is 2026-08-11, before 18 August -- not.
+    onDay('2026-10-10');
+    renderNumbers(okFetch(WITH_HISTORY) as unknown as typeof fetch);
+
+    const taps = (await screen.findByText('Reserve a Table')).closest('div') as HTMLElement;
+    expect(within(taps).getByText('9% more taps than the period before.')).toBeInTheDocument();
+
+    const visits = screen.getByText('Visits').closest('div') as HTMLElement;
+    expect(within(visits).getByText('Not enough of the period before to compare visits against.')).toBeInTheDocument();
+  });
+
   // The other half of the same wiring: with nothing behind it, the card says
   // so in the card's own words rather than printing a percentage off zero.
   it('says it cannot compare when the period before is empty', async () => {
+    onDay('2027-01-15');
     renderNumbers(okFetch(POPULATED) as unknown as typeof fetch);
 
     const visits = (await screen.findByText('Visits')).closest('div') as HTMLElement;

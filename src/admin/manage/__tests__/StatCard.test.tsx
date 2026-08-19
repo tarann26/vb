@@ -9,18 +9,18 @@ import { changeBetween } from '../comparison';
 
 describe('StatCard', () => {
   it('shows the number and what it is', () => {
-    render(<StatCard label="Visits" value="about 4,100 visits" change={changeBetween(4100, 3300)} unit="visits" />);
+    render(<StatCard label="Visits" value="about 4,100 visits" change={changeBetween(4100, 3300, true)} unit="visits" />);
     expect(screen.getByText('Visits')).toBeInTheDocument();
     expect(screen.getByText('about 4,100 visits')).toBeInTheDocument();
   });
 
   it('says the direction in words, not only in colour', () => {
-    render(<StatCard label="Visits" value="about 4,100 visits" change={changeBetween(4100, 3300)} unit="visits" />);
+    render(<StatCard label="Visits" value="about 4,100 visits" change={changeBetween(4100, 3300, true)} unit="visits" />);
     expect(screen.getByText('24% more visits than the period before.')).toBeInTheDocument();
   });
 
   it('says why it cannot compare rather than showing nothing', () => {
-    render(<StatCard label="Visits" value="about 9 visits" change={changeBetween(9, 2)} unit="visits" />);
+    render(<StatCard label="Visits" value="about 9 visits" change={changeBetween(9, 2, true)} unit="visits" />);
     expect(screen.getByText('Not enough of the period before to compare visits against.')).toBeInTheDocument();
   });
 });

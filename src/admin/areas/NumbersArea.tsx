@@ -40,6 +40,7 @@ import {
   CAMPAIGN_CAVEAT,
   CAMPAIGN_VS_REFERRER,
   CARD_HEADINGS,
+  TAP_COUNTING_STARTED_ON,
   VISIT_COUNTING_STARTED_ON,
   archiveSentence,
   campaignHowTo,
@@ -58,7 +59,7 @@ import HoursChart from '../manage/HoursChart';
 import BarList from '../manage/BarList';
 import StatCard from '../manage/StatCard';
 import RangeControl from '../manage/RangeControl';
-import { changeBetween } from '../manage/comparison';
+import { changeBetween, previousWindowIsCounted } from '../manage/comparison';
 import { KNOWN_CAMPAIGN_SOURCES } from '../../shared/campaign-sources';
 import { DEFAULT_RANGE, isAnalyticsPayload } from '../../shared/analytics-payload';
 import type { AnalyticsFailureReason, AnalyticsPayload, AnalyticsRange } from '../../shared/analytics-payload';
@@ -369,17 +370,31 @@ const CardA: React.FC<{ outcome: Outcome }> = ({ outcome }) => (
       <p className="text-sm text-ink">{noVisitsYetSentence(outcome.payload.bookingTaps.total)}</p>
     ) : (
       <>
+        {/* Each card is told whether ITS OWN measure was being counted for
+            the whole of the period it is dividing by. The two dates are
+            eleven days apart and the ranges are up to ninety days long, so
+            there is a stretch where the taps comparison is honest and the
+            visits one is not -- one flag for both would have to pick which
+            card to be wrong on. See comparison.ts for the arithmetic. */}
         <div className="flex flex-wrap gap-6">
           <StatCard
             label="Visits"
             value={visitsSentence(outcome.payload.visits)}
-            change={changeBetween(outcome.payload.visits, outcome.payload.visitsPrevious)}
+            change={changeBetween(
+              outcome.payload.visits,
+              outcome.payload.visitsPrevious,
+              previousWindowIsCounted(Date.now(), outcome.payload.windowDays, VISIT_COUNTING_STARTED_ON),
+            )}
             unit="visits"
           />
           <StatCard
             label="Reserve a Table"
             value={tapsSentence(outcome.payload.bookingTaps.total)}
-            change={changeBetween(outcome.payload.bookingTaps.total, outcome.payload.tapsPrevious)}
+            change={changeBetween(
+              outcome.payload.bookingTaps.total,
+              outcome.payload.tapsPrevious,
+              previousWindowIsCounted(Date.now(), outcome.payload.bookingTaps.days, TAP_COUNTING_STARTED_ON),
+            )}
             unit="taps"
           />
         </div>
