@@ -854,16 +854,54 @@ describe('the shaped payload', () => {
     expect(payload.hourly).toEqual([{ day: 5, hour: 17, visits: 4 }]);
   });
 
-  it('asks Cloudflare for the hour dimension the verification recorded', async () => {
-    // The document is one aliased node per card. A missing node is not a
-    // missing card here -- it is a rejected document and every card at once,
-    // which is why the spelling is pinned to what introspection returned.
+  it('asks Cloudflare for the hourly node exactly as the verification recorded it', async () => {
+    // The document is one aliased node per card. A missing or misspelled field
+    // is not a missing card here -- it is a rejected document and every card
+    // at once, which is why this is pinned rather than sampled.
+    //
+    // THE WHOLE NODE, not a substring of it. A bare toContain('datetimeHour')
+    // stood here and could not fail: `orderBy: [datetimeHour_ASC]` on the line
+    // above supplied that substring, so misspelling the DIMENSION to
+    // datetimeFifteenMinutes left this file green while the real API returned
+    // rows with no datetimeHour key at all, hourCells skipped every one of
+    // them, and the busiest-times card drew 168 blank cells reading as "nobody
+    // ever came". Two more mutations were green under it: the limit and
+    // ordering could be swapped for `limit: 10` / `sum_visits_DESC`, and the
+    // window could be moved from $sinceWindow to $sinceThisWeek so the card
+    // silently answered from 7 days on every range including 90d.
+    //
+    // Whitespace-normalised so that reindenting the document is not a failure,
+    // and every token that changes the ANSWER is inside the compared string.
     await handleAnalytics(await authed(), env);
     const [, init] = fetchStub.mock.calls[0] as [string, RequestInit];
     const { query } = JSON.parse(init.body as string) as { query: string };
-    expect(query).toContain('hourly:');
-    expect(query).toContain('datetimeHour');
+    const flattened = query.replace(/\s+/g, ' ');
+
+    expect(flattened).toContain(
+      'hourly: rumPageloadEventsAdaptiveGroups( ' +
+        'filter: { siteTag: $siteTag, datetime_geq: $sinceWindow, datetime_lt: $until } ' +
+        'limit: 1000 ' +
+        'orderBy: [sum_visits_DESC] ' +
+        ') { sum { visits } dimensions { datetimeHour requestPath } }',
+    );
     expect(RUM_CAPABILITIES.hourDimension).toBe('datetimeHour');
+  });
+
+  it('orders the hourly node by size, because ordering by time truncates the wrong end', async () => {
+    // Named separately from the block assertion above so that the ONE token
+    // this decision turns on says why it is what it is when it reddens.
+    //
+    // The node groups by (datetimeHour x requestPath), so its group count is
+    // 24 x days x paths and passes `limit: 1000` inside the 30d range. Ordered
+    // by datetimeHour_ASC the 1000 kept are the OLDEST, so the 90d grid answers
+    // "when were we busiest three months ago" under a ninety-day heading and
+    // gets worse the longer the range she picks. Ordered by size, the rows lost
+    // are the quietest cells instead -- the busy ones, which are the entire
+    // answer, survive at every range.
+    await handleAnalytics(await authed(), env);
+    const [, init] = fetchStub.mock.calls[0] as [string, RequestInit];
+    const { query } = JSON.parse(init.body as string) as { query: string };
+    expect(query).not.toContain('datetimeHour_ASC');
   });
 
   it('normalises a path so one page is one row', async () => {

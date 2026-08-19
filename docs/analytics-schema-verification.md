@@ -199,6 +199,34 @@ public path that production never serves, and look for that path under
 question as the section above — nothing has appeared under the current tag yet
 from any origin — so it cannot be run until ingestion is proven at all.
 
+## One question this probe did not ask, and the next run should
+
+**Does the filter accept a string operator on `requestPath`?** The probe
+established that an equality filter works (`bot: 0` was accepted inside a real
+grouping). It never tried `requestPath_notlike`, `requestPath_neq` or anything
+else in that family, so nothing here supports putting one in the document.
+
+It matters to one node. `hourly` groups by `datetimeHour x requestPath`, which
+makes its group count `24 x days x trafficked-paths` and pushes it past
+`limit: 1000` somewhere around ten to twenty days. Dropping `requestPath` from
+the grouping would divide that count by the number of paths and bring even the
+90-day range close to the ceiling, but `requestPath` is the field
+`isExcludedPath` filters `/edit` on downstream. Drop it from the grouping and
+the exclusion has to move upstream into the filter, which needs the operator
+nobody has run.
+
+Guessing it is the one mistake this file exists to stop. Every aliased node
+lives in one document, a rejected field comes back HTTP 200 with `data: null`,
+and the negative control below shows what that looks like: one wrong name took
+the whole document down, not one card.
+
+So `worker/analytics.ts` leaves `requestPath` in the grouping and orders the
+node by `sum_visits_DESC` instead, which the base document already proved this
+dataset accepts on this node. Truncation then drops the quietest cells rather
+than the most recent hours. Add the filter to `scripts/verify-analytics-schema.mjs`,
+run it, record the answer here, and the coarser grouping becomes a one-line
+change to the document.
+
 ## How to re-run this
 
 ```

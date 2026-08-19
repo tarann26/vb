@@ -72,17 +72,51 @@
 // "about N visits" because the dataset is adaptive and sampled; this sits
 // inside that same caveat rather than adding a new claim.
 //
-// THE `hourly` NODE TRUNCATES DIFFERENTLY, and the difference is worth
-// stating rather than discovering. It is grouped by
-// (datetimeHour x requestPath), so the number of groups grows with the RANGE:
-// 24 x days x pages. At 90 days over a dozen public pages that is far past
-// `limit: 1000`, and because the ordering is `datetimeHour_ASC` the rows lost
-// are the MOST RECENT hours rather than the smallest ones. The busiest-times
-// grid is drawn from a shape rather than from a total, so an under-filled
-// tail dims the recent end of a weekly pattern rather than moving a headline
-// number -- but if that grid ever looks emptier the longer the range gets,
-// this is why, and the fix is a coarser grouping (drop requestPath and filter
-// /edit upstream) rather than a larger limit.
+// THE `hourly` NODE TRUNCATES DIFFERENTLY, and the arithmetic is written out
+// here because the first version of it got the direction wrong.
+//
+// It is grouped by (datetimeHour x requestPath), so the number of groups grows
+// with the RANGE rather than being bounded by the site: 24 x days x
+// trafficked-paths. dist/sitemap.xml carries ten public URLs, so at two to
+// four groups per trafficked hour the 1000 ceiling is reached somewhere around
+// ten to twenty days -- inside the 30d range and far inside 90d.
+//
+// The ordering therefore decides WHICH rows survive, and it used to be
+// `datetimeHour_ASC`, which kept the OLDEST. That is the worst available
+// choice and it degrades as the range grows: the 7d answer is complete, the
+// 90d answer is built from roughly the oldest third of the window, so the
+// longer the range she picks the more the card answers "when were we busiest
+// three months ago" while the heading still says ninety days. Nothing on the
+// screen could explain that, and the chart -- which scales opacity by whatever
+// peak survived -- would draw the truncated shape as confidently as a whole
+// one.
+//
+// It is now `sum_visits_DESC`, the same ordering the other three nodes use and
+// the same one the verified document already proved this dataset accepts on
+// this node. The rows lost are the QUIETEST (hour x path) groups instead of
+// the most recent hours, which is the trade-off `last28` above already makes
+// and the one a shape can absorb: the busy cells are the answer, they survive
+// at every range, and the pattern no longer marches across the calendar as the
+// range widens. `hourCells` aggregates into a map and sorts at the end, so it
+// never depended on the rows arriving in time order.
+//
+// THE RESIDUE, so it is a decision and not a discovery: at 90 days the quiet
+// cells under-report, so the grid reads slightly flatter than the truth. It
+// cannot invert the pattern, because inverting it would mean a quiet cell
+// outranking a busy one.
+//
+// THE CHEAPER GROUPING IS BLOCKED ON A PROBE, not on effort. Dropping
+// requestPath would divide the group count by the number of trafficked paths
+// and bring 90 days close to the ceiling -- but requestPath is what
+// isExcludedPath filters on downstream, so dropping it means moving the /edit
+// exclusion UPSTREAM into the filter, and that needs a string operator
+// (requestPath_notlike or similar) that nothing has run against this API.
+// docs/analytics-schema-verification.md records an accepted EQUALITY filter
+// (`bot: 0`) and nothing about string operators. A rejected field here answers
+// HTTP 200 with `data: null` and takes every card down at once, so the
+// operator has to come back from a real probe run before it goes in the
+// document. Re-run scripts/verify-analytics-schema.mjs with that filter added
+// and this becomes a one-line change.
 //
 // `datetimeHour` is the spelling INTROSPECTION returned
 // (worker/analytics-schema.ts's `hourDimension`), not one somebody
@@ -421,7 +455,7 @@ const ANALYTICS_QUERY = `query ViaBiancaAnalytics(
       hourly: rumPageloadEventsAdaptiveGroups(
         filter: { siteTag: $siteTag, datetime_geq: $sinceWindow, datetime_lt: $until }
         limit: 1000
-        orderBy: [datetimeHour_ASC]
+        orderBy: [sum_visits_DESC]
       ) {
         sum { visits }
         dimensions { datetimeHour requestPath }
