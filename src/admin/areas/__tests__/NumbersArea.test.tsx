@@ -315,10 +315,14 @@ describe('the busiest-times card', () => {
   it('is not rendered at all when the site cannot answer the question', async () => {
     renderNumbers(okFetch(payload({ ...POPULATED, hourly: null })) as unknown as typeof fetch);
 
-    // Waited for, not asserted on a blank screen: before the body lands the
-    // card is a skeleton with its real heading, so a queryByText fired
-    // immediately would pass no matter what the payload said.
-    await screen.findByText(CARD_HEADINGS.a);
+    // Waited on a sentence only the ANSWERED screen prints, never on a
+    // heading -- and that choice was made by watching this test survive a
+    // mutation it was written to catch. Every heading is on screen while the
+    // request is still out, and a card handed a null it cannot read throws
+    // mid-render, which under React leaves an EMPTY document. "The hours
+    // heading is absent" is then true because the whole panel is gone, and a
+    // test that waited on a heading would report that as a pass.
+    expect(await screen.findByText('Busier than the week before — 312 visits, up from 240.')).toBeInTheDocument();
     expect(screen.queryByText(CARD_HEADINGS.hours)).toBeNull();
   });
 
