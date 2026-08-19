@@ -49,14 +49,24 @@ export default defineConfig({
   // which is the most timing-sensitive measurement in the suite.
   //
   // Files still run in parallel; tests inside one file now run in order.
-  // That is the level the flakes were at -- two tests in one file racing the
-  // same page's fonts -- and it costs a few seconds against a suite that
-  // blocks every deploy at random today.
   fullyParallel: false,
   // Four, not `undefined` (which is cores, and is 10-14 on the machines this
-  // runs on). Measured against the local suite: four workers keep the wall
-  // clock inside the pre-push budget while leaving the dev server's compile
-  // queue short enough that no spec waits past its own timeout.
+  // runs on).
+  //
+  // AND THE HONEST ACCOUNT OF WHAT THAT BOUGHT, because the obvious reading
+  // of the paragraph above is wrong and the table in e2e/README.md is the
+  // evidence: capping the workers did NOT stop the flakes. One appeared with
+  // the cap already in place. Reverting the cap, on its own, reproduced
+  // nothing in five runs. The change that carries the result is the raised
+  // `timeout` above -- both observed flakes were a test running out of wall
+  // clock, under both worker settings, and neither recurred once the budget
+  // was 60s.
+  //
+  // The cap stays on a different measurement, stated so nobody has to
+  // re-derive it: capped runs take 3.5-3.8 minutes and uncapped ones take
+  // 4.0-4.4, across ten runs. Feeding one vite dev server four workers is
+  // simply faster than oversubscribing it with fourteen. That is the reason,
+  // and it is not the reason this task began with.
   workers: 4,
   // ONE retry, and this is the part to be suspicious of: a retry can hide a
   // real intermittent defect as easily as it can absorb a scheduling blip.

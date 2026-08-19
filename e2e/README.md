@@ -44,3 +44,39 @@ provide: `npx playwright install chromium`, once per machine.
    typecheck either. ESLint and Playwright's own runtime are the only checks a
    spec file gets, and a type error in here has already survived a whole task
    on this project. Run the spec.
+
+## What the config change was actually measured to do
+
+Recorded here because it is not what the change was expected to do, and the
+next person to tune this file should not repeat the reasoning that was wrong.
+
+Twenty-five full runs on one machine, four settings, `flaky` counted from the
+html report:
+
+| Config | Runs | Flaky |
+|---|---|---|
+| `workers: 4`, `fullyParallel: false`, `timeout: 30_000` | 3 | **1** — `collage-swap.spec.ts:151`, a 30s test timeout, passed on retry |
+| `workers: 4`, `fullyParallel: false`, `timeout: 60_000` | 5 | 0 |
+| uncapped, `fullyParallel: true`, `timeout: 60_000` | 5 | 0 |
+| uncapped, `fullyParallel: true`, `timeout: 30_000` | 6 | **1**, on run 3 |
+| `workers: 4`, `fullyParallel: false`, `timeout: 60_000`, `retries: 0` | 5 | 0 |
+
+**The timeout is the change that carries the result.** A flake appeared under
+both worker settings while the budget was 30s, and under neither once it was
+60s. Reverting the cap alone reproduced nothing in five runs. So the worker
+cap is **not** the thing shown to have fixed the flakes, whatever the comment
+in `playwright.config.ts` argues from history.
+
+**The cap is kept anyway, on a different measurement.** Capped runs took
+3.5–3.8 minutes; uncapped runs took 4.0–4.4. Oversubscribing one vite dev
+server with 10–14 workers is slower than feeding it four, consistently, across
+ten runs. It is kept for the wall clock, not for a flake it was proven to
+prevent, and that is the honest reason to state.
+
+**The retry is not hiding anything here.** Five runs with `retries: 0` and the
+cap in place were green, so no test in this suite currently needs its retry.
+Rule 6 still stands: the day one does, that is a bug to fix.
+
+**Both flakes were the same shape** — a test exhausting its wall-clock budget,
+never an assertion disagreeing with the page. That is worth knowing before
+anyone reads a future red run as a product defect.
