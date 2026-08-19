@@ -40,10 +40,9 @@ separate KV counter records Reserve a Table taps.
 **The query has never been run against the real API.** The file's own opening
 block says so, at length, and is written to depend on the fewest possible
 field names because an unverified dimension fails the whole query and takes
-every card down at once. **This spec does not inherit that gamble at all** --
-nothing on screen ends up depending on that query. It is still verified once
-and the answer recorded, because an unverified query left in the tree is a trap
-for whoever reads it next.
+every card down at once. **Verifying it is therefore task one of this plan,
+not an optional check** -- four existing cards and two new ones rest on it, and
+the answer is recorded in the repository so nobody has to guess again.
 
 **Cloudflare's numbers are estimates.** The dataset is adaptive and sampled
 between 0.0001% and 100% depending on volume, which is why the card reads
@@ -56,56 +55,62 @@ come from Cloudflare at any price on this plan.
 
 ## Where each number comes from
 
-Two sources, chosen per question rather than by preference.
-
 | Question | Source | Why |
 |---|---|---|
-| Every question this panel answers | **D1, first-party** | Exact rather than sampled, never expires, and depends on no unverified field |
-| A sanity check on our own numbers | Cloudflare | The beacon is already on the page and costs nothing. Nothing on screen depends on it |
+| Visits, pages, referrers, the trend, the hours | **Cloudflare** | Its counting is already correct for this site, and re-deriving it is the largest false-data risk in this project |
+| Which of *her* links brought them | **D1, first-party** | One tagged arrival is a simple, well-defined event, and it is the one thing Cloudflare cannot reliably give |
+| Anything older than six months | **D1, snapshots of Cloudflare's own totals** | Taken before Cloudflare discards them |
 
-**The panel draws from rows this site records, not from rows Cloudflare
-estimates.** That decision changed during design and it is worth stating why,
-because the first draft had it the other way round.
+**This reverses an earlier draft of this spec, and the reason matters more than
+the decision.** That draft had the site count its own pageviews, on the
+grounds that Cloudflare's numbers are sampled and expire. Both facts are true.
+Neither outweighs what counting ourselves would cost.
 
-Reading from Cloudflare looked cheaper: the integration exists, the query is
-written, no new write path. But three facts undo that. Their numbers are
-**sampled** — the card says "about 4,100 visits" because it has to. Their data
-**expires** at roughly six months, which cannot satisfy a by-year view. And the
-query has **never been run against the real API**, so the trend chart and the
-busiest-times grid would both rest on a field nobody has confirmed exists.
+**Cloudflare's beacon already gets three hard things right.** It sends a
+measurement on *every route change* in a single-page app -- which this site is,
+so a visitor moving between four pages is counted as four page views and one
+visit, with no work from us. It distinguishes a visit from a page view. And it
+has an established definition of what to ignore.
 
-Recording a pageview ourselves costs one request and one small row. Workers
-Free allows 100,000 requests a day and this site sees a few hundred; D1 Free
-allows 500 MB and a row is about 50 bytes, so a thousand visits a day fills
-roughly 18 MB a year. In exchange every number is exact, every range is
-available, and nothing on screen can be taken down by a schema surprise.
+Re-deriving those means writing our own session logic, our own crawler
+filtering, and our own single-page-app route handling. Every one of them
+produces numbers that look plausible when wrong. **A wrong number she trusts is
+worse than an approximate number labelled approximate**, and this panel exists
+to be believed rather than audited.
 
-**What is recorded:** the path, the referrer host, the `utm_source` if present,
-and a timestamp. **What is not:** anything identifying the visitor. No cookie,
-no fingerprint, no visitor id. A row says a page was viewed, not who viewed it,
-which is the same privacy posture that made Cloudflare's beacon the right
-choice originally.
+So sampling stays, and the word "about" stays with it.
 
-**Two honest weaknesses.** Some ad blockers will block the write, though a
-same-origin request to the site's own domain is far less likely to be blocked
-than a known third-party tracker; the effect is undercounting, never wrong
-counting. And crawlers inflate counts unless filtered, so obvious bot traffic
-is excluded on the way in and the rule is stated in the file rather than
-implied.
+## What a number on this panel means
 
-**Campaign rows and pageview rows are the same table**, distinguished by
-whether `utm_source` is set. One write path, one schema, one place to get
-right.
+Precision here is not pedantry: two of the cards would be false if these were
+confused.
 
-**The write path is not new ground.** The Worker already records Reserve a
-Table taps this way, the site's Content Security Policy already permits
-`connect-src 'self'`, and D1 is already bound.
+**A page view** is one page appearing on someone's screen. Moving from the
+homepage to the menu is two page views.
 
-**Rows go to D1, never KV.** KV Free allows 1,000 writes a day and
-this project's rate limiters, login counters and tap counter already commit
-roughly 800 of them. D1 Free allows 500 MB per database with rows bounded only
-by storage; a campaign row is about 50 bytes, so a thousand visits a day for a
-year is roughly 20 MB.
+**A visit** is one arrival. That same person browsing five pages is one visit.
+The existing query already asks for `sum { visits }`, so the card that says
+"about 4,100 visits" is counting arrivals, not pages -- and every card must use
+the word that matches what it counts.
+
+**A tagged visit** is one arrival through a link carrying `utm_source`. It is
+counted **once per arrival, never once per page**, because a visitor who
+arrives through Instagram and then reads four pages came from Instagram once.
+This is the single most likely place for this panel to report a number that is
+four or five times too high, and the design guards it two ways:
+
+- The tag exists in the URL only on arrival. Subsequent route changes within
+  the app do not carry it, so ordinary browsing cannot re-count it.
+- A refresh *does* re-send the same URL, so the browser is asked to remember,
+  for that tab only, that this arrival was already recorded. `sessionStorage`,
+  cleared when the tab closes. Not a cookie, not an identifier, and it cannot
+  follow anyone between visits.
+
+**What the campaign card cannot tell her**, stated on the card rather than
+assumed: how many of those people it counted more than once across separate
+devices, and anyone who arrived through a tagged link with JavaScript blocked.
+Both undercount or overcount at the margin; neither is silently presented as
+precision.
 
 ## The visuals
 
@@ -118,11 +123,18 @@ geometry attributes rather than utility classes, so it barely touches the CSS
 budget at all.
 
 **Visits over time.** An area chart, one point per day. The hero graphic.
-Drawn from our own timestamps, so it depends on nothing unverified.
+
+It needs a date grouping the current query does not ask for. **If task one
+finds no such dimension, this is still built** -- a scheduled job records
+Cloudflare's daily total once a day into D1, and the chart draws from that
+instead. The cost of the fallback is that the line starts the day it is
+switched on rather than reaching backwards, and the chart says so rather than
+beginning at an unexplained zero.
 
 **Top pages, and where they came from.** The existing two cards become
-horizontal bar lists, each row's width its share of the total, now counted
-exactly rather than estimated. `normalizePath` still merges `/catering`,
+horizontal bar lists, each row's width its share of the total. Same data, same
+query, no new risk -- the change is entirely in the drawing.
+`normalizePath` still merges `/catering`,
 `/catering/` and `/catering?utm_source=ig` into one row — that merging is what
 stops a tagged link fracturing the pages list into near-identical rows.
 
@@ -130,22 +142,34 @@ stops a tagged link fracturing the pages list into near-identical rows.
 the previous equivalent period, with direction. The panel already fetches a
 prior week for its busier-or-quieter card, so the shape exists.
 
-**Busiest times.** A grid of day against hour -- genuinely useful for a
-restaurant, and the clearest argument for owning the data: an hour-of-day view
-needs an hour on every row, which our own timestamps give unconditionally.
+**Busiest times.** A grid of day against hour, genuinely useful for a
+restaurant deciding when to staff.
+
+This one has no fallback. It needs an hour dimension from Cloudflare, and a
+daily snapshot cannot reconstruct an hour. **If task one finds no hour
+dimension, this card is cut**, and cutting it costs nothing else -- no other
+card depends on it. It is listed last here for that reason.
 
 ## Tagged links
 
 She tags a link the ordinary way — `?utm_source=instagram` — and it works
 anywhere she pastes it. No redirect, no special path, no timing hazard.
 
-**How a visit is recorded.** Every pageview posts one row. When the URL carries
-a `utm_source`, that row carries it too -- a tagged visit is an ordinary visit
-with one extra column, not a separate mechanism.
+**How a visit is recorded.** On arrival, the site reads `utm_source` from its
+own URL. If it is there, and this tab has not already recorded this arrival,
+one row goes to the Worker and into D1. **An untagged visit writes nothing**,
+so ordinary traffic costs nothing at all and the write path stays small enough
+to reason about.
 
 **What she sees.** A card listing each source and its exact count, ordered by
 volume, over the selected range. Exact, because these are our own rows rather
 than a sampled estimate.
+
+**Once per arrival, not once per page.** The row is written on arrival only,
+guarded per tab, for the reason set out under "What a number on this panel
+means": a visitor who arrives through Instagram and reads four pages came from
+Instagram once, and a card claiming otherwise would be wrong by a factor of
+four.
 
 **Sources she has not defined are grouped, not listed.** Facebook appends
 `fbclid`, other sites append their own, and visitors paste links that already
@@ -222,11 +246,26 @@ delaying the page. A counter that costs the restaurant a customer is worse
 than no counter — that principle is already written into `Hero.tsx` and it
 governs here too.
 
-**Every card now depends on a write path that did not exist before.** That is
-the real cost of owning the data, and it is deliberate: the alternative was two
-cards resting on an unverified field. The write path is guarded the way
-`/api/wa` already is, and a failed write loses one row rather than breaking a
+**One card depends on a write path that did not exist before**, and only one.
+Tagged arrivals are written by this site; everything else is drawn from data
+Cloudflare already collects. A failed write loses one row and never blocks a
 page.
+
+**Nothing here can produce a bill by accident**, which is worth stating
+precisely because the free tiers differ in how they fail:
+
+| Resource | Free allowance | This site's use | What happens at the limit |
+|---|---|---|---|
+| Workers requests | 100,000/day | Only `/api/*`; Pages serves the site itself and does not count | Errors, no billing |
+| D1 rows written | 100,000/day | One per **tagged** arrival, plus one scheduled snapshot | Errors, no billing |
+| D1 rows read | 5,000,000/day | A handful per panel load, behind a 10-minute cache | Errors, no billing |
+| D1 storage | 5 GB total | A tagged-arrival row is ~100 bytes; a daily snapshot is one row | Inserts refuse until space is freed |
+| KV writes | 1,000/day | **Already ~800 committed** to rate limiters, login counters and the tap counter | Why nothing here uses KV |
+
+Every one of these **returns an error rather than starting to charge**. Passing
+a free limit breaks a panel; it does not produce an invoice. Reaching any of
+them would take thousands of visits a day, sustained, at which point the
+restaurant has a better problem than this one.
 
 ## Testing
 
@@ -241,10 +280,11 @@ mutating the code and watching it go red.
   and 1280px, bars proportional to their values, the grid legible on a phone,
   and no control overlapping another. jsdom has no layout engine and cannot
   honestly assert any of it.
-- **The write path is proven end to end**, not merely called: one visit
-  produces exactly one row and never two, a tagged visit carries its source
-  and an untagged one carries none, an excluded crawler produces nothing, and
-  a failed write loses a row without ever blocking the page.
+- **The write path is proven end to end**, not merely called. The cases that
+  matter are the over-counting ones: **one tagged arrival followed by four
+  page views inside the app writes exactly one row**, a refresh of the same
+  tagged URL in the same tab writes no second row, an untagged visit writes
+  nothing at all, and a failed write loses a row without blocking the page.
 
   This is the claim to be most suspicious of. Nothing in this project's
   browser suite has ever observed a real write — every publish assertion reads
