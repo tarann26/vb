@@ -72,3 +72,49 @@ describe('the D1 migrations', () => {
     expect(byPublish![1].replace(/\s+/g, ' ').trim()).toBe('publish_id');
   });
 });
+
+describe('0002_analytics.sql', () => {
+  function columnsOf(table: string): string[] {
+    const block = sql().match(new RegExp(`CREATE TABLE IF NOT EXISTS ${table}\\s*\\(([\\s\\S]*?)\\n\\);`, 'i'));
+    expect(block, `no CREATE TABLE for ${table}`).not.toBeNull();
+    return block![1]
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line !== '' && !line.startsWith('--'))
+      .map((line) => line.split(/\s+/)[0]);
+  }
+
+  it('records a tagged arrival with a source and a day and nothing else', () => {
+    expect(columnsOf('campaign_arrivals')).toEqual(['id', 'source', 'day', 'created_at']);
+  });
+
+  it('holds no address, no agent and no identifier anywhere in the new tables', () => {
+    // The privacy claim, as an assertion rather than a comment. The spec's
+    // "It does not record who" is what lets the limiter live in D1 at all,
+    // so the column lists are load-bearing.
+    const columns = [...columnsOf('campaign_arrivals'), ...columnsOf('campaign_rate')].join(' ');
+    for (const forbidden of ['ip', 'address', 'agent', 'visitor', 'session', 'cookie']) {
+      expect(columns).not.toContain(forbidden);
+    }
+  });
+
+  it('indexes arrivals by day and limiter rows by expiry, which is how both are read', () => {
+    expect(sql()).toContain('CREATE INDEX IF NOT EXISTS campaign_arrivals_by_day ON campaign_arrivals (day)');
+    expect(sql()).toContain('CREATE INDEX IF NOT EXISTS campaign_rate_by_expiry ON campaign_rate (expires)');
+  });
+
+  it('keys the snapshot by day and the rollup by month, and marks a partial month', () => {
+    expect(columnsOf('daily_visits')).toEqual(['day', 'visits', 'recorded_at']);
+    expect(columnsOf('monthly_visits')).toEqual(['month', 'visits', 'complete', 'recorded_at']);
+  });
+
+  it('leaves 0001 alone', () => {
+    // 0001 has been applied to the live database and its header records the
+    // command that applied it. Anything appended to it is a statement nobody
+    // can tell has run.
+    const first = readFileSync(join(DIR, '0001_content.sql'), 'utf8');
+    for (const table of ['campaign_arrivals', 'campaign_rate', 'daily_visits', 'monthly_visits']) {
+      expect(first).not.toContain(table);
+    }
+  });
+});
