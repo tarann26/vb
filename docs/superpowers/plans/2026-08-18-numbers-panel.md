@@ -1271,6 +1271,19 @@ describe('changeBetween', () => {
     // test are indistinguishable and the mutation table's fourth row cannot
     // redden. It is in the table from the start for that reason.
     [105, 100, 'up', 5],
+    // Two rows whose percentage does NOT land on a whole number, because
+    // every other row here does, and while that is true Math.round is
+    // interchangeable with Math.floor and with Math.ceil -- the operator that
+    // decides the figure on the card cannot be tested by a table that never
+    // asks it to decide anything. One row cannot pin all three: Math.round of
+    // a value always agrees with either Math.floor or Math.ceil of it, so it
+    // takes one row of each.
+    //   1275 against 1000 is 27.500000000000004 raw:
+    //     Math.round and Math.ceil say 28, Math.floor says 27.
+    [1275, 1000, 'up', 28],
+    //   728 against 1000 is 27.200000000000003 raw:
+    //     Math.round and Math.floor say 27, Math.ceil says 28.
+    [728, 1000, 'down', 27],
     // Previous period below the floor: no claim, whatever current is.
     [500, 19, 'unknown', null],
     [500, 0, 'unknown', null],
@@ -1333,6 +1346,8 @@ describe('changeSentence', () => {
 | change `<` to `<=` in the flat test | `[105, 100, 'up', 5]` | The boundary row is missing from the table. It is written into Step 2 for this row alone; put it back. |
 | swap `'up'` and `'down'` in the sentence map | "names the unit it is comparing" | — |
 | return `previous` in place of `MIN_PREVIOUS_FOR_CHANGE` | "states the two thresholds it depends on" | — |
+| `Math.round(Math.abs(ratio) * 100)` to `Math.floor(…)` | `[1275, 1000, 'up', 28]` | Every row lands on a whole percent. Both fractional rows are written into Step 2 for these two mutations alone; put them back. |
+| `Math.round(Math.abs(ratio) * 100)` to `Math.ceil(…)` | `[728, 1000, 'down', 27]` | As above. `Math.round` agrees with `Math.ceil` on the `1275` row, so that row alone does not cover this mutation. |
 
 **CSS ceiling:** zero bytes. A pure module with no JSX and no class strings.
 

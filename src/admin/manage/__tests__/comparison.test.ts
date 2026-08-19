@@ -13,6 +13,19 @@ describe('changeBetween', () => {
     // test are indistinguishable and the mutation table's fourth row cannot
     // redden. It is in the table from the start for that reason.
     [105, 100, 'up', 5],
+    // Two rows whose percentage does NOT land on a whole number, because
+    // every other row here does, and while that is true Math.round is
+    // interchangeable with Math.floor and with Math.ceil -- the operator that
+    // decides the figure on the card cannot be tested by a table that never
+    // asks it to decide anything. One row cannot pin all three: Math.round of
+    // a value always agrees with either Math.floor or Math.ceil of it, so it
+    // takes one row of each.
+    //   1275 against 1000 is 27.500000000000004 raw:
+    //     Math.round and Math.ceil say 28, Math.floor says 27.
+    [1275, 1000, 'up', 28],
+    //   728 against 1000 is 27.200000000000003 raw:
+    //     Math.round and Math.floor say 27, Math.ceil says 28.
+    [728, 1000, 'down', 27],
     // Previous period below the floor: no claim, whatever current is.
     [500, 19, 'unknown', null],
     [500, 0, 'unknown', null],
