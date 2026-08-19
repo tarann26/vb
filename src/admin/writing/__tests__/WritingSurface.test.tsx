@@ -1105,6 +1105,24 @@ describe('the toolbar', () => {
     expect((spy.mock.calls[0][0] as Block[])[0]).toEqual({ kind: 'quote', text: 'one two three' });
   });
 
+  // Backlog item 11. `asKind` ran every conversion through `wordsIn`, which
+  // joins a list's items into ONE string -- so bulleted-to-numbered came back
+  // as a single item and every indent she had made went with it. Nothing
+  // undoes that: converting back rebuilds one item too.
+  it('keeps nesting when a bulleted list becomes numbered', () => {
+    const spy = vi.fn();
+    const view = ready([{ kind: 'bulletList', items: ['a', 'b', 'c'], levels: [0, 1, 1] }], spy);
+    press(view.container, 'Numbered list');
+    expect((spy.mock.calls[0][0] as Block[])[0]).toEqual({ kind: 'numberList', items: ['a', 'b', 'c'], levels: [0, 1, 1] });
+  });
+
+  it('keeps nesting in the other direction too', () => {
+    const spy = vi.fn();
+    const view = ready([{ kind: 'numberList', items: ['a', 'b'], levels: [0, 1] }], spy);
+    press(view.container, 'Bulleted list');
+    expect((spy.mock.calls[0][0] as Block[])[0]).toEqual({ kind: 'bulletList', items: ['a', 'b'], levels: [0, 1] });
+  });
+
   it('never lets a kind button dissolve a photograph', () => {
     // `wordsIn` can only carry a block's markdown slots across, so converting
     // an image would keep its caption and destroy the picture.

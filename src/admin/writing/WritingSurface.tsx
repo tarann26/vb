@@ -257,7 +257,24 @@ function wordsIn(block: Block): string {
     .join(' ');
 }
 
+// A conversion BETWEEN the two list kinds, which is the one conversion that
+// must not go through `wordsIn`. `wordsIn` joins every item into one string,
+// so bulleted-to-numbered rebuilt a three-item list as a single item -- and
+// `levels`, the parallel array holding each item's nesting depth, went with
+// it. Nothing undoes that: converting back gives one item too, because the
+// items were already gone from the array by then.
+//
+// The kind is changed on the SAME object, spread rather than rebuilt, so
+// `items` and `levels` come out the far side as the identical arrays that
+// went in and cannot come apart from each other.
+function isListKind(kind: string | undefined): kind is 'bulletList' | 'numberList' {
+  return kind === 'bulletList' || kind === 'numberList';
+}
+
 function asKind(block: Block, kind: ToolbarKind | 'paragraph'): Block {
+  if (isListKind(kind) && isListKind(kindOf(block))) {
+    return { ...(block as Extract<Block, { kind: 'bulletList' | 'numberList' }>), kind };
+  }
   const words = wordsIn(block);
   switch (kind) {
     case 'bulletList':

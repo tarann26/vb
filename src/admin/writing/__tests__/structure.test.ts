@@ -259,10 +259,63 @@ describe('backspaceAtStart', () => {
     expect(edit?.blocks).toEqual([{ kind: 'paragraph', text: 'a' }]);
   });
 
-  it('does nothing at the start of a later list item', () => {
+  // Backlog item 12. The spec named Tab and Shift+Tab only, so an indented
+  // item could be un-indented with Shift+Tab and nothing else -- a binding
+  // nobody guesses. Backspace at the start of one now steps it back out, which
+  // is what every editor carrying nested lists does.
+  it('outdents a nested item instead of doing nothing', () => {
+    const blocks: Block[] = [{ kind: 'bulletList', items: ['a', 'b'], levels: [0, 1] }];
+    const edit = backspaceAtStart(blocks, { blockIndex: 0, slotKey: 'items[1]', offset: 'start' });
+    // The WORDS are untouched -- this is a depth change, never a merge.
+    expect(edit?.blocks).toEqual([{ kind: 'bulletList', items: ['a', 'b'] }]);
+    expect(Object.prototype.hasOwnProperty.call((edit as Edit).blocks[0], 'levels')).toBe(false);
+    // And the block that survives in changed form carries its name, or the
+    // photograph filed against it is filed under a name nothing refers to.
+    const { was, now } = namesAcross(blocks, edit as Edit);
+    expect(now[0]).toBe(was[0]);
+  });
+
+  it('outdents one step at a time, never straight to the top', () => {
+    const edit = backspaceAtStart(
+      [{ kind: 'bulletList', items: ['a', 'b', 'c'], levels: [0, 1, 2] }],
+      { blockIndex: 0, slotKey: 'items[2]', offset: 'start' },
+    );
+    expect(edit?.blocks).toEqual([{ kind: 'bulletList', items: ['a', 'b', 'c'], levels: [0, 1, 1] }]);
+  });
+
+  // The half that must NOT change: a later item already at the top level has
+  // nothing to outdent, so the press reaches the browser untouched. Merging
+  // item three into item two is a reasonable thing to want and is not what
+  // this promised.
+  it('does nothing at the start of a later list item that is already flat', () => {
+    expect(
+      backspaceAtStart(
+        [{ kind: 'bulletList', items: ['a', 'b'], levels: [0, 0] }],
+        { blockIndex: 0, slotKey: 'items[1]', offset: 'start' },
+      ),
+    ).toBeNull();
+  });
+
+  // A list committed before nesting existed carries no `levels` key at all,
+  // and every item in it is at the top level -- so Backspace has nothing to
+  // outdent there either. Reading a missing array as anything but flat would
+  // make this press start moving items she never indented.
+  it('treats a list with no levels array as all top level', () => {
     expect(
       backspaceAtStart(
         [{ kind: 'bulletList', items: ['a', 'b'] }],
+        { blockIndex: 0, slotKey: 'items[1]', offset: 'start' },
+      ),
+    ).toBeNull();
+  });
+
+  // A recipe's ingredients are an `items` list spelled the same way and are
+  // NOT a nestable kind -- writing a `levels` onto one produces a block the
+  // write boundary refuses. The refusal is what keeps that unreachable.
+  it('refuses to outdent a kind that may not nest at all', () => {
+    expect(
+      backspaceAtStart(
+        [{ kind: 'ingredients', heading: 'For the sauce', items: ['a', 'b'], levels: [0, 1] } as unknown as Block],
         { blockIndex: 0, slotKey: 'items[1]', offset: 'start' },
       ),
     ).toBeNull();

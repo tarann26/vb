@@ -141,6 +141,58 @@ describe('each kind renders its own fields', () => {
     expect(onChange).toHaveBeenCalledWith({ kind: 'numberList', items: ['Mix', 'Rest'] });
   });
 
+  // Backlog item 13. `items` and `levels` are parallel arrays and every write
+  // boundary refuses a pair whose lengths disagree -- which she meets as "your
+  // edit was rejected", about a shape she never saw. These pin that the two
+  // move together whichever control she presses.
+  it('commits items and levels together', async () => {
+    const user = userEvent.setup();
+    const { onChange } = renderFields({ kind: 'bulletList', items: ['a', 'b'], levels: [0, 1] });
+    await user.click(screen.getByRole('button', { name: 'Add an item' }));
+    expect(onChange).toHaveBeenCalledWith({ kind: 'bulletList', items: ['a', 'b', ''], levels: [0, 1, 0] });
+  });
+
+  it('keeps the two arrays the same length however the list is edited', async () => {
+    const user = userEvent.setup();
+    const { onChange } = renderFields({ kind: 'numberList', items: ['a', 'b', 'c'], levels: [0, 1, 2] });
+    await user.click(screen.getByRole('button', { name: 'Remove Item 2' }));
+    const next = onChange.mock.calls[0][0] as { items: string[]; levels: number[] };
+    expect(next.items).toHaveLength(next.levels.length);
+    expect(next.levels).toEqual([0, 2]);
+  });
+
+  it('carries the levels across a move, so a nested item stays nested', async () => {
+    const user = userEvent.setup();
+    const { onChange } = renderFields({ kind: 'bulletList', items: ['a', 'b'], levels: [0, 1] });
+    await user.click(screen.getByRole('button', { name: 'Move Item 1 down' }));
+    expect(onChange).toHaveBeenCalledWith({ kind: 'bulletList', items: ['b', 'a'], levels: [1, 0] });
+  });
+
+  // `levels` is DELETED rather than written flat once nothing is nested: an
+  // own key holding a value this site's committed lists do not carry is still
+  // SEEN by `unknownKeys`, so the block would be refused by the very boundary
+  // the key was removed to satisfy.
+  it('drops the levels key entirely once every item is flat again', async () => {
+    const user = userEvent.setup();
+    const { onChange } = renderFields({ kind: 'bulletList', items: ['a', 'b'], levels: [0, 1] });
+    await user.click(screen.getByRole('button', { name: 'Remove Item 2' }));
+    const next = onChange.mock.calls[0][0] as object;
+    expect(next).toEqual({ kind: 'bulletList', items: ['a'] });
+    expect(Object.prototype.hasOwnProperty.call(next, 'levels')).toBe(false);
+  });
+
+  // A recipe's ingredients and its method are `items` lists spelled the same
+  // way, and neither declares `levels` -- writing one onto them produces a
+  // block the write boundary refuses. The shared renderer passes a flat array
+  // in and those two call sites drop it again on the way out.
+  it('never writes a levels key onto a recipe list', async () => {
+    const user = userEvent.setup();
+    const { onChange } = renderFields(EVERY_BLOCK.ingredients);
+    await user.click(screen.getByRole('button', { name: 'Add an ingredient' }));
+    const next = onChange.mock.calls[0][0] as object;
+    expect(Object.prototype.hasOwnProperty.call(next, 'levels')).toBe(false);
+  });
+
   // RecordList's own rule, applied to the inner list: a control that reads as
   // live and does nothing is worse than no control.
   it('Up is omitted on the first item and Down on the last', () => {

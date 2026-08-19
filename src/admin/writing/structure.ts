@@ -247,9 +247,22 @@ export function backspaceAtStart(blocks: Block[], at: Caret): Edit | null {
       renames: [{ from: block, to: rest, index: at.blockIndex + 1 }],
     };
   }
-  // Any later item does nothing at all. Merging item three into item two is a
-  // reasonable thing to want and it is not what this task promised.
-  if (match !== null) return null;
+  // BACKSPACE AT THE START OF A NESTED ITEM OUTDENTS IT BY ONE. Backlog item
+  // 12: the spec named Tab and Shift+Tab only, so an indented item could be
+  // un-indented with Shift+Tab and nothing else -- a binding nobody guesses,
+  // in a surface whose other list gestures are all plain typing.
+  //
+  // `indentAt(..., -1)` rather than a second outdent written here, and that is
+  // the whole point of routing it: it is the one place that clamps the depth,
+  // rebuilds `items` and `levels` together through `withItems`, and files the
+  // rename the staged-photograph WeakMap needs. A hand-written copy would be a
+  // second spelling of the invariant this task exists to keep.
+  //
+  // It answers `null` when there is nothing to outdent (a flat item, or a kind
+  // that may not nest at all), which falls through to the refusal below --
+  // still no merge of item three into item two, which remains a reasonable
+  // thing to want and remains out of scope.
+  if (match !== null) return indentAt(blocks, at, -1);
 
   // BACKSPACE MUST NEVER SILENTLY REMOVE A PHOTOGRAPH, and there are two ways
   // in. This guard is the one where the caret is inside the photograph's own
