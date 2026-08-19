@@ -2,7 +2,8 @@
 // only thing routed to this Worker (see wrangler.toml); every path other
 // than /api/health, POST /api/login, POST /api/publish, POST /api/undo,
 // POST /api/upload, GET /api/build-status, GET /api/analytics,
-// GET /api/content, GET /api/published and POST/GET /api/wa replies 404.
+// GET /api/content, GET /api/published, POST /api/campaign and POST/GET
+// /api/wa replies 404.
 //
 // This Worker has no `scheduled` export and wrangler.toml declares no cron
 // triggers: publishing is instantaneous. A commit lands, Cloudflare's own
@@ -39,6 +40,7 @@ import { storeFor, partitionByStore } from './store';
 import { D1ConflictError, D1Store } from './d1';
 import { handlePublished } from './published';
 import { handlePostPage, slugFromPath } from './post-page';
+import { handleCampaignArrival } from './campaign';
 
 // Grows as later tasks need more bindings -- only what this file actually
 // reads belongs here. GITHUB_OWNER/REPO/BRANCH/TOKEN come in via GitHubEnv
@@ -1438,6 +1440,14 @@ async function route(request: Request, env: Env): Promise<Response> {
 
   if (url.pathname === '/api/wa' && request.method === 'GET') {
     return handleReadWaCounts(request, env);
+  }
+
+  // Public and unauthenticated, exactly like POST /api/wa, and therefore in
+  // NEITHER admin list: not in AUTHENTICATED_PATHS (there is no session to
+  // check) and not in RATE_POLICIES (whose limiter writes to KV, whose budget
+  // is closed). It carries its own guards -- see worker/campaign.ts.
+  if (url.pathname === '/api/campaign' && request.method === 'POST') {
+    return handleCampaignArrival(request, env);
   }
 
   // Phase 5C. The one route in this Worker whose response is HTML rather than
