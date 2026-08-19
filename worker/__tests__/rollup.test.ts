@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { asD1, FakeD1 } from './fakeD1';
 import { runDailyRollup, type RollupEnv } from '../rollup';
 import { RUM_CAPABILITIES } from '../analytics-schema';
+import { refusalFor, requiredVariables } from './graphqlDocument';
 import worker, { type Env } from '../index';
 
 // The nightly archive job. Runs under this repo's single jsdom Vitest
@@ -74,11 +75,24 @@ function byDayRows(rows: { day: string; path?: string; visits: number }[]): unkn
 // One stub answering BOTH documents, told apart by the alias each asks for.
 // A stub that answered the same body to both would let the day's snapshot
 // pass on the backfill's fixture and hide which call did what.
+//
+// AND IT REFUSES A REQUEST THE REAL API WOULD REFUSE. Until it did, this
+// stub answered its canned body to anything carrying `byDay:` or not
+// carrying it, whatever variables came with it -- so `totalVisitsFor`
+// omitting `$sincePrevious` from a document that declares it non-null was
+// invisible here while being fatal in production: coercion fails, `data` is
+// null, the night returns early, and the cron reports success. Keying a stub
+// on query TEXT alone is what made a year of empty archives look green, and
+// refusing at the same point Cloudflare refuses is the guard rather than the
+// one-line fix. See worker/__tests__/graphqlDocument.ts.
 function stubGraphql(daily: unknown, byDay: unknown = { data: { viewer: { accounts: [{ byDay: [] }] } } }): void {
   vi.stubGlobal(
     'fetch',
     vi.fn(async (_url: string, init: RequestInit) => {
-      const body = JSON.parse(init.body as string) as { query: string };
+      const raw = init.body as string;
+      const refusal = refusalFor(raw);
+      if (refusal) return refusal;
+      const body = JSON.parse(raw) as { query: string };
       return new Response(JSON.stringify(body.query.includes('byDay:') ? byDay : daily), { status: 200 });
     }),
   );
@@ -130,6 +144,49 @@ describe('the nightly rollup', () => {
     // narrowed to that day.
     expect(snapshot!.variables.sinceWindow).toBe('2026-08-19T00:00:00.000Z');
     expect(snapshot!.variables.until).toBe('2026-08-20T00:00:00.000Z');
+  });
+
+  it('sends EVERY variable the shared document declares, not only the ones it reads', async () => {
+    // The two above pin the window. This one pins the SET, and it is a
+    // different failure: the panel and the archive send one document, so a
+    // node added for the panel adds a variable this sender must supply even
+    // though it throws the node's rows away. Miss one and GraphQL rejects the
+    // request before it runs anything -- `data: null`, an errors[] nobody
+    // renders, `runDailyRollup` returning early, and a cron reporting success
+    // against an archive that never fills. That is what happened to
+    // `$sincePrevious`, and it survived because the assertions here named
+    // two variables while the document declared seven.
+    //
+    // Derived from the document the sender actually carried, so adding a
+    // variable to worker/analytics.ts and forgetting this sender is red here
+    // rather than in production nine months later.
+    const { env } = rollupEnv();
+    stubGraphql(dayWithVisits(140));
+    await runDailyRollup(env, Date.UTC(2026, 7, 20, 3, 17));
+    const snapshot = sentDocuments().find((doc) => !doc.query.includes('byDay:'));
+    expect(snapshot, "the night's own snapshot document was never sent").toBeDefined();
+    const declared = requiredVariables(snapshot!.query);
+    expect(declared.length).toBeGreaterThan(0);
+    expect(Object.keys(snapshot!.variables).sort()).toEqual([...declared].sort());
+    // And the spelling of the set, as literals, so a document that loses a
+    // variable stays red instead of agreeing with itself.
+    expect(declared.sort()).toEqual(
+      ['accountTag', 'sincePrevious', 'sincePriorWeek', 'sinceThisWeek', 'sinceWindow', 'siteTag', 'until'].sort(),
+    );
+  });
+
+  it('is answered with a refusal when a variable is missing, exactly as Cloudflare would', async () => {
+    // The guard on the guard. Every case in this file leans on the stub
+    // refusing an incomplete request; a refusal that never fires would leave
+    // them all passing on a request the real API rejects, which is the state
+    // this file was in.
+    expect(refusalFor(JSON.stringify({ query: 'query Q($a: Time!) { x }', variables: {} }))).not.toBeNull();
+    expect(refusalFor(JSON.stringify({ query: 'query Q($a: Time!) { x }', variables: { a: 'now' } }))).toBeNull();
+    const refused = refusalFor(JSON.stringify({ query: 'query Q($a: Time!) { x }', variables: {} }));
+    const body = (await refused!.json()) as { data: unknown; errors: { message: string }[] };
+    expect(refused!.status).toBe(200); // a REQUEST error, not a transport one
+    expect(body.data).toBeNull();
+    expect(body.errors[0].message).toContain('$a');
   });
 
   it('running twice leaves one row, not two, holding the LATER number', async () => {

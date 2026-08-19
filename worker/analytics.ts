@@ -534,6 +534,16 @@ function totalVisits(rows: RumRow[]): number {
 // card does, which is why requestPath is in the document at all. An archive
 // that counted her own editing visits would sit permanently above the number
 // printed beside it.
+//
+// EVERY VARIABLE THE DOCUMENT DECLARES IS SENT, INCLUDING THE ONES THIS
+// CALLER THROWS AWAY. Sharing one document is what stops the archive and the
+// panel counting differently; the price is that a node added for the panel
+// adds a variable this sender must supply too. GraphQL coerces variables
+// before it runs anything, so ONE missing non-null variable is not a missing
+// node in the answer -- it is `data: null`, `errors[]`, and a nightly job
+// that returns early and reports success forever. That is exactly what
+// happened when `previousWindow`/`$sincePrevious` was added for the stat
+// cards and only handleAnalytics was updated.
 export async function totalVisitsFor(
   env: AnalyticsQueryEnv,
   since: string,
@@ -552,6 +562,12 @@ export async function totalVisitsFor(
           sinceWindow: since,
           sinceThisWeek: since,
           sincePriorWeek: since,
+          // `since` rather than an earlier moment, deliberately: it makes
+          // previousWindow's own filter (`datetime_geq: $sincePrevious,
+          // datetime_lt: $sinceWindow`) an EMPTY window, so the node this
+          // caller discards costs the smallest answer Cloudflare can give
+          // rather than a second day of rows nobody reads.
+          sincePrevious: since,
           until,
         },
       }),

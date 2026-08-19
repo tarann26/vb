@@ -12,6 +12,7 @@ import {
   type AnalyticsEnv,
 } from '../analytics';
 import { asD1, FakeD1 } from './fakeD1';
+import { refusalFor } from './graphqlDocument';
 import { RUM_CAPABILITIES } from '../analytics-schema';
 import { todayInKolkata } from '../../src/shared/date';
 import {
@@ -240,7 +241,14 @@ beforeEach(() => {
   cache = new FakeCache();
   d1 = new FakeD1();
   env = buildEnv();
-  fetchStub = vi.fn(async () => graphqlOk());
+  // Refuses an incomplete request at the same point Cloudflare refuses it --
+  // variable coercion, before any node runs. The exact assertion below
+  // (`body.variables` by toEqual on the whole set) already pins THIS sender;
+  // what this adds is that the sender cannot be broken by a document change
+  // elsewhere and stay green here. The other sender of the same document had
+  // no such assertion and was broken for exactly that reason
+  // (worker/__tests__/graphqlDocument.ts).
+  fetchStub = vi.fn(async (_url: string, init: RequestInit) => refusalFor(init.body as string) ?? graphqlOk());
   vi.stubGlobal('caches', { default: cache });
   vi.stubGlobal('fetch', fetchStub);
 });
