@@ -32,6 +32,30 @@
 //   - Every aliased node lives in ONE document. That is why a rejected field
 //     takes every card down at once, and it is why the probe above exists.
 //
+// AND THE THIRD, WHICH COSTS HER A WRONG NUMBER RATHER THAN A CRASH:
+// `requestHost` is NOT asked for and NOT filtered on, so a developer's
+// `npm run dev` pageload of a PUBLIC page is counted as an ordinary visit.
+// It lands inside Card A's "about N visits" and inside Card B's page list,
+// and the /edit exclusion above does not catch it because the path is `/`.
+//
+// This is accepted residue, and it is recorded here rather than assumed away,
+// because the residue is REAL and was measured. The 90-day grouping in
+// docs/analytics-schema-verification.md returns 8,100 and 3,200 visits under
+// `requestHost: "localhost"` against 0 under `viabiancarestaurant.com`, for
+// the two site tags that predate the 2026-08-18 unification -- i.e. under
+// those tags essentially every row was a dev-server row. The current tag has
+// no rows at all yet, so nothing is wrong on the screen today; the day it
+// starts ingesting, this is what "about" in Card A is partly covering for.
+//
+// The trade-off, so a later task can reverse it deliberately: excluding
+// localhost means adding `requestHost` to the upstream filter, which means
+// pinning the production hostname somewhere and keeping it in step with the
+// domain this Worker is routed on -- the same hostname problem bucketReferer
+// solves by reading the INCOMING request's host, which is not available to a
+// query built for a fixed site tag. If the numbers she reads are ever visibly
+// inflated by development traffic, that is the change to make, and it belongs
+// with the range contract rather than bolted on here.
+//
 // Two facts the probe settled that constrain what this file may ever ask for:
 //   - `sum` offers exactly ONE field on this dataset, `visits`. There is no
 //     pageViews. Every number this route returns is a count of arrivals.
