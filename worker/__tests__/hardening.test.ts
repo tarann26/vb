@@ -413,24 +413,33 @@ describe('cross-origin write protection', () => {
     });
   }
 
-  // /api/wa keeps its own, stricter rule and must not be caught by the
-  // general one -- it is unauthenticated, so it refuses an absent Origin too.
-  it('leaves /api/wa on its own stricter origin rule', async () => {
-    const missing = await worker.fetch(
-      new Request(`${SITE_ORIGIN}/api/wa`, { method: 'POST', headers: { 'CF-Connecting-IP': '4.4.4.4' } }),
-      env,
-    );
-    expect(missing.status).toBe(403);
+  // The routes anyone on the internet may POST to with no session at all.
+  // They are NOT in WRITE_ROUTES above because the rule is different, not
+  // absent: each carries its own stricter Origin check inside its handler and
+  // refuses an ABSENT Origin too, where an authenticated route deliberately
+  // allows one. WRITE_ROUTES is hand-maintained and this list is its
+  // counterpart -- a new public write route added to `route` and to neither
+  // list is a route nothing in this file has an opinion about.
+  const PUBLIC_WRITE_ROUTES = ['/api/wa', '/api/campaign'];
 
-    const good = await worker.fetch(
-      new Request(`${SITE_ORIGIN}/api/wa`, {
-        method: 'POST',
-        headers: { Origin: SITE_ORIGIN, 'CF-Connecting-IP': '4.4.4.4' },
-      }),
-      env,
-    );
-    expect(good.status).toBe(204);
-  });
+  for (const path of PUBLIC_WRITE_ROUTES) {
+    it(`leaves ${path} on its own stricter origin rule`, async () => {
+      const missing = await worker.fetch(
+        new Request(`${SITE_ORIGIN}${path}`, { method: 'POST', headers: { 'CF-Connecting-IP': '4.4.4.4' } }),
+        env,
+      );
+      expect(missing.status).toBe(403);
+
+      const good = await worker.fetch(
+        new Request(`${SITE_ORIGIN}${path}`, {
+          method: 'POST',
+          headers: { Origin: SITE_ORIGIN, 'CF-Connecting-IP': '4.4.4.4' },
+        }),
+        env,
+      );
+      expect(good.status).toBe(204);
+    });
+  }
 });
 
 describe('body size ceiling on the JSON write routes', () => {

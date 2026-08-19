@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { asD1, FakeD1 } from './fakeD1';
 import { CAMPAIGN_DAILY_CAP, CAMPAIGN_RATE_MAX, handleCampaignArrival } from '../campaign';
+import worker, { type Env } from '../index';
 import { todayInKolkata } from '../../src/shared/date';
 
 const ORIGIN = 'https://viabiancarestaurant.com';
@@ -176,5 +177,78 @@ describe('POST /api/campaign', () => {
 
   it('has a daily cap larger than one address can reach alone', () => {
     expect(CAMPAIGN_DAILY_CAP).toBeGreaterThan((CAMPAIGN_RATE_MAX * 60 * 24) / 10);
+  });
+});
+
+// EVERY CASE ABOVE CALLS handleCampaignArrival DIRECTLY, so not one of them
+// can see the two lines in worker/index.ts's `route` that decide this handler
+// is ever reached. That gap was real: changing the dispatch path string to
+// something no visitor sends left all 179 test files green. A Worker that
+// 404s this route is exactly the shape of the defect worker/campaign.ts's own
+// header records having already shipped once -- src/campaign.ts swallows the
+// rejection by design, so the browser reports nothing and the card reads zero
+// until somebody opens the Numbers screen and disbelieves it.
+//
+// So these three drive worker.fetch, the same entry point count.test.ts uses
+// for POST /api/wa, against a FakeD1-backed env.
+describe('POST /api/campaign, through the Worker entry point', () => {
+  // A full Env because `fetch` takes one, not because this route reads any of
+  // it: /api/campaign is in neither AUTHENTICATED_PATHS nor RATE_POLICIES, so
+  // KV is never opened on this path and nothing here needs a real one.
+  function workerEnv(fake: FakeD1): Env {
+    return {
+      KV: {} as unknown as KVNamespace,
+      ADMIN_PASSWORD_HASH: 'campaign-test-only-password-hash-placeholder',
+      TOKEN_SECRET: 'campaign-test-token-secret',
+      GITHUB_OWNER: 'tarann26',
+      GITHUB_REPO: 'vb',
+      GITHUB_BRANCH: 'main',
+      GITHUB_TOKEN: 'campaign-test-github-token-not-real',
+      CLOUDFLARE_ACCOUNT_ID: 'campaign-test-account-id',
+      CLOUDFLARE_PAGES_PROJECT: 'campaign-test-project',
+      CLOUDFLARE_API_TOKEN: 'campaign-test-cf-token-not-real',
+      CF_WEB_ANALYTICS_SITE_TAG: '29e1ba52fba74885a5fc44875a48a078',
+      DB: asD1(fake),
+    };
+  }
+
+  it('routes a same-origin arrival all the way to a row', async () => {
+    const fake = new FakeD1();
+    const response = await worker.fetch(post({ source: 'instagram' }), workerEnv(fake));
+    expect(response.status).toBe(204);
+    expect(fake.campaignArrivals).toHaveLength(1);
+    expect(fake.campaignArrivals[0].source).toBe('instagram');
+  });
+
+  // The blanket check in `route` refuses every cross-origin POST except
+  // /api/wa's, before any route is matched at all -- and worker/campaign.ts
+  // repeats the check for itself. STATED PLAINLY: two independent guards
+  // answer this request, so deleting either one alone leaves this case green.
+  // It is here for the outcome, not for either mechanism.
+  it('refuses a cross-origin POST to /api/campaign', async () => {
+    const fake = new FakeD1();
+    const response = await worker.fetch(
+      post({ source: 'instagram' }, { Origin: 'https://evil.example' }),
+      workerEnv(fake),
+    );
+    expect(response.status).toBe(403);
+    expect(fake.statements).toEqual([]);
+  });
+
+  // This one is the singly-falsifiable half, and it is why an Origin-less
+  // request is worth a case of its own: `route` deliberately ALLOWS a POST
+  // with no Origin header (a proxy that strips the header must not lock the
+  // owner out), so this request reaches the dispatch branch and is refused by
+  // worker/campaign.ts's own stricter rule. Break the dispatch path and it is
+  // a 404; delete the handler's Origin check and it is a 204 with a row.
+  it('keeps its own stricter rule at the entry point: no Origin is still refused', async () => {
+    const fake = new FakeD1();
+    const bare = new Request(`${ORIGIN}/api/campaign`, {
+      method: 'POST',
+      body: JSON.stringify({ source: 'instagram' }),
+    });
+    const response = await worker.fetch(bare, workerEnv(fake));
+    expect(response.status).toBe(403);
+    expect(fake.campaignArrivals).toEqual([]);
   });
 });
