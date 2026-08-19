@@ -7,13 +7,13 @@
 // screen and deciding it does not work.
 import { StrictMode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import NumbersArea from '../NumbersArea';
-import { CAMPAIGN_CAVEAT, CAMPAIGN_VS_REFERRER, CARD_HEADINGS } from '../../manage/analytics';
+import { CAMPAIGN_CAVEAT, CAMPAIGN_VS_REFERRER, CARD_HEADINGS, archiveSentence } from '../../manage/analytics';
 import { KNOWN_CAMPAIGN_SOURCES } from '../../../shared/campaign-sources';
-import { ZERO_DATA_PAYLOAD } from '../../../shared/analytics-payload';
-import type { AnalyticsPayload } from '../../../shared/analytics-payload';
+import { ZERO_DATA_PAYLOAD, isAnalyticsRange } from '../../../shared/analytics-payload';
+import type { AnalyticsPayload, AnalyticsRange } from '../../../shared/analytics-payload';
 import type { ContentEntries, ContentRegistry } from '../../publish';
 
 function payload(overrides: Partial<AnalyticsPayload> = {}): AnalyticsPayload {
@@ -410,6 +410,256 @@ describe('it asks once per session', () => {
     rerender(<NumbersArea active={false} registry={registry} fetchImpl={fetchImpl as unknown as typeof fetch} />);
     rerender(<NumbersArea active registry={registry} fetchImpl={fetchImpl as unknown as typeof fetch} />);
     await waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(1));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The range control. Everything here is about WHICH question the panel asks
+// and WHOSE answer it paints; how the pills look, how big they are and
+// whether one covers another is geometry, and lives in
+// e2e/numbers-visuals.spec.ts.
+describe('the range control', () => {
+  // Which range a call asked for. Falls back to the default for anything
+  // unrecognised, so a bogus parameter reaches the assertions in
+  // "never sends a range the Worker does not know" rather than throwing here
+  // and reporting as some other failure.
+  function rangeOf(input: RequestInfo | URL): AnalyticsRange {
+    const asked = new URL(String(input), 'http://dashboard.test').searchParams.get('range');
+    return isAnalyticsRange(asked) ? asked : '30d';
+  }
+
+  // ECHOES the range it was asked for, because the real Worker does: the body
+  // carries its own `range` so a body served under the wrong cache key is
+  // visible rather than silently relabelled. A stub that answered every
+  // question with the same label would be testing a Worker this project does
+  // not have.
+  function stubAnalytics(bodyFor: (range: AnalyticsRange) => Partial<AnalyticsPayload> = () => ({})) {
+    return vi.fn(
+      async (input: RequestInfo | URL) =>
+        new Response(JSON.stringify(payload({ ...POPULATED, ...bodyFor(rangeOf(input)), range: rangeOf(input) })), {
+          status: 200,
+        }),
+    );
+  }
+
+  // A fetch that never settles: the state the control is in for as long as
+  // the Worker is thinking, which on this route is up to ten seconds.
+  function neverResolvingAnalytics() {
+    return vi.fn(() => new Promise<Response>(() => undefined));
+  }
+
+  // Every request held open until the test says otherwise, and answerable in
+  // any order. This is the only way to put two answers in flight at once and
+  // decide which one lands second.
+  function deferredAnalytics() {
+    const waiting: { range: AnalyticsRange; settle: (body: Partial<AnalyticsPayload>) => void }[] = [];
+    const impl = vi.fn(
+      (input: RequestInfo | URL) =>
+        new Promise<Response>((resolve) => {
+          const asked = rangeOf(input);
+          waiting.push({
+            range: asked,
+            settle: (body) => {
+              // `label` is what the BODY claims, which is not always what was
+              // asked -- that is the whole point of the echo.
+              const label = body.range ?? asked;
+              resolve(new Response(JSON.stringify(payload({ ...POPULATED, ...body, range: label })), { status: 200 }));
+            },
+          });
+        }),
+    );
+    async function answer(range: AnalyticsRange, body: Partial<AnalyticsPayload> = {}): Promise<void> {
+      const index = waiting.findIndex((held) => held.range === range);
+      expect(index, `no request is waiting for ${range}`).toBeGreaterThanOrEqual(0);
+      const [held] = waiting.splice(index, 1);
+      await act(async () => {
+        held.settle(body);
+        await Promise.resolve();
+      });
+    }
+    return { impl, answer };
+  }
+
+  // Waits for the pill to be pressable before pressing it. React ignores a
+  // click on a disabled control entirely, so a bare fireEvent against one
+  // reports as "she pressed it and nothing happened" -- which is exactly the
+  // defect a test here might be trying to catch, arriving as a false pass.
+  async function pressRange(label: string): Promise<void> {
+    const button = await screen.findByRole('button', { name: label });
+    await waitFor(() => {
+      expect(button).toBeEnabled();
+    });
+    fireEvent.click(button);
+  }
+
+  it('starts on 30 days', async () => {
+    const fetchImpl = stubAnalytics();
+    renderNumbers(fetchImpl as unknown as typeof fetch);
+    await waitFor(() => {
+      expect(fetchImpl).toHaveBeenCalledWith('/api/analytics?range=30d');
+    });
+    expect(await screen.findByRole('button', { name: 'Last 30 days' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  // PublishBar is one <form> wrapping this whole screen, and a bare <button>
+  // inside a form defaults to type="submit".
+  it('never submits the form it sits inside', async () => {
+    renderNumbers(stubAnalytics() as unknown as typeof fetch);
+    const group = await screen.findByRole('group', { name: 'How far back' });
+    const buttons = within(group).getAllByRole('button');
+    expect(buttons.length).toBeGreaterThan(0);
+    for (const button of buttons) {
+      expect(button).toHaveAttribute('type', 'button');
+    }
+  });
+
+  it('asks the Worker for the range she picked', async () => {
+    const fetchImpl = stubAnalytics();
+    renderNumbers(fetchImpl as unknown as typeof fetch);
+    await pressRange('Last 90 days');
+    await waitFor(() => {
+      expect(fetchImpl).toHaveBeenCalledWith('/api/analytics?range=90d');
+    });
+  });
+
+  it('asks once per range per session, not once per click', async () => {
+    const fetchImpl = stubAnalytics();
+    renderNumbers(fetchImpl as unknown as typeof fetch);
+    await pressRange('Last 90 days');
+    await waitFor(() => {
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
+    });
+    await pressRange('Last 30 days');
+    await pressRange('Last 90 days');
+    await waitFor(() => {
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  // Not re-asking is only correct if the panel REMEMBERS. Without the stored
+  // answer she gets the 90-day figures under a 30-day pill, which is the
+  // exact mismatch the per-range cache key exists to prevent, arriving
+  // through the front end instead.
+  it('paints the numbers of the range she returned to, not the ones she left', async () => {
+    const fetchImpl = stubAnalytics((range) => ({ visits: range === '90d' ? 900 : 4100 }));
+    renderNumbers(fetchImpl as unknown as typeof fetch);
+    expect(await screen.findByText('about 4,100 visits')).toBeInTheDocument();
+
+    await pressRange('Last 90 days');
+    expect(await screen.findByText('about 900 visits')).toBeInTheDocument();
+
+    await pressRange('Last 30 days');
+    expect(await screen.findByText('about 4,100 visits')).toBeInTheDocument();
+    expect(screen.queryByText('about 900 visits')).toBeNull();
+  });
+
+  it('still asks only once when she never touches the control', async () => {
+    // The ORIGINAL guarantee, re-pinned: a dashboard load costs no Cloudflare
+    // call for a screen she does not open, and coming back to one she has
+    // costs none either.
+    const fetchImpl = stubAnalytics();
+    const registry = fakeRegistry();
+    const { rerender } = render(
+      <NumbersArea active={false} registry={registry} fetchImpl={fetchImpl as unknown as typeof fetch} />,
+    );
+    expect(fetchImpl).not.toHaveBeenCalled();
+    for (const active of [true, false, true]) {
+      rerender(<NumbersArea active={active} registry={registry} fetchImpl={fetchImpl as unknown as typeof fetch} />);
+    }
+    await waitFor(() => {
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // TWO guards close this, and they close different halves of it.
+  //
+  // The first is the disabled control below: while an answer is outstanding
+  // she cannot start a second request, so two answers are never in flight at
+  // once through the front end.
+  //
+  // The second is this one, and it is the half `disabled` cannot reach: the
+  // ten-minute Cache API entry behind this route is keyed per range, and a
+  // body served under the wrong key arrives labelled with the range it was
+  // built for rather than the one that was asked. The panel refuses it
+  // instead of relabelling 7 days as 90 -- which is the whole reason
+  // AnalyticsPayload carries its own `range`.
+  it('discards an answer for a range she is no longer looking at', async () => {
+    const backend = deferredAnalytics();
+    renderNumbers(backend.impl as unknown as typeof fetch);
+    await backend.answer('30d', { visits: 4100 });
+    expect(await screen.findByText('about 4,100 visits')).toBeInTheDocument();
+
+    await pressRange('Last 90 days');
+    // The answer to her 90-day question comes back carrying the 7-day label.
+    await backend.answer('90d', { range: '7d', visits: 7 });
+
+    expect(screen.queryByText('about 7 visits')).toBeNull();
+    expect(screen.queryByText('about 4,100 visits')).toBeNull();
+  });
+
+  it('cannot be pressed while a request is in flight', async () => {
+    renderNumbers(neverResolvingAnalytics() as unknown as typeof fetch);
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Last 90 days' })).toBeDisabled();
+    });
+  });
+
+  // The other half of the same claim, and the reason the race above cannot be
+  // reached from the front end: a pill she cannot press starts nothing.
+  it('starts no second request while the first is still out', async () => {
+    const fetchImpl = neverResolvingAnalytics();
+    renderNumbers(fetchImpl as unknown as typeof fetch);
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Last 90 days' })).toBeDisabled();
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Last 90 days' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Last 7 days' }));
+    await waitFor(() => {
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+    });
+    expect(screen.getByRole('button', { name: 'Last 30 days' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('never sends a range the Worker does not know', async () => {
+    const fetchImpl = stubAnalytics(() => ({ yearAvailable: true }));
+    renderNumbers(fetchImpl as unknown as typeof fetch);
+    await screen.findByRole('button', { name: 'By year' });
+    for (const label of ['Last 7 days', 'Last 90 days', 'By year']) {
+      await pressRange(label);
+    }
+    await waitFor(() => {
+      expect(fetchImpl).toHaveBeenCalledTimes(4);
+    });
+    for (const call of fetchImpl.mock.calls) {
+      expect(String(call[0])).toMatch(/^\/api\/analytics\?range=(7d|30d|90d|year)$/);
+    }
+  });
+
+  it('offers no By year button until the archive holds something', async () => {
+    renderNumbers(stubAnalytics(() => ({ yearAvailable: false })) as unknown as typeof fetch);
+    expect(await screen.findByRole('button', { name: 'Last 90 days' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'By year' })).toBeNull();
+  });
+
+  it('offers it once the archive does', async () => {
+    renderNumbers(stubAnalytics(() => ({ yearAvailable: true })) as unknown as typeof fetch);
+    expect(await screen.findByRole('button', { name: 'By year' })).toBeInTheDocument();
+  });
+
+  it('says the breakdown is not KEPT by year, rather than saying nobody visited', async () => {
+    const fetchImpl = stubAnalytics((range) =>
+      range === 'year' ? { yearAvailable: true, byPath: [], byReferer: [] } : { yearAvailable: true },
+    );
+    renderNumbers(fetchImpl as unknown as typeof fetch);
+    await pressRange('By year');
+
+    const pages = (await screen.findByText(CARD_HEADINGS.b)).closest('div') as HTMLElement;
+    expect(within(pages).getByText(archiveSentence())).toBeInTheDocument();
+    const sources = screen.getByText(CARD_HEADINGS.c).closest('div') as HTMLElement;
+    expect(within(sources).getByText(archiveSentence())).toBeInTheDocument();
+
+    expect(screen.queryByText(/Nothing to rank yet/)).toBeNull();
+    expect(screen.queryByText(/this will show whether people found you/)).toBeNull();
   });
 });
 

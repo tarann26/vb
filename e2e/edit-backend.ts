@@ -170,7 +170,14 @@ export interface EditBackendOptions {
 }
 
 export async function mockEditBackend(page: Page, options: EditBackendOptions = {}): Promise<void> {
-  await page.route('**/api/analytics', async (route) => {
+  // `**/api/analytics**`, with the trailing double star -- the panel's range
+  // control appends `?range=7d|30d|90d|year`, and Playwright matches the whole
+  // URL including its query string. A pattern ending at `analytics` stops
+  // matching the moment a parameter is added, and the failure is silent: the
+  // request goes to the dev server, answers 404, and every card on the screen
+  // reads "the visitor numbers aren't connected yet". The same trap
+  // `**/api/content**` below already carries a paragraph about.
+  await page.route('**/api/analytics**', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -219,8 +226,13 @@ export async function mockEditBackend(page: Page, options: EditBackendOptions = 
 // exactly how CONTENT_FILES above came to be maintained by hand in three
 // places, which this file's own header already records as the reason it
 // exists.
-export async function openDashboard(page: Page, path = '/edit/manage'): Promise<void> {
-  await mockEditBackend(page);
+// `options` reaches mockEditBackend, and that is not a convenience: Playwright
+// matches routes most-recently-registered first, so a caller that mocked its
+// own analytics body and THEN called this would have had it overridden by the
+// launch-state default registered here. The one way to open the dashboard on a
+// chosen payload is to pass it through.
+export async function openDashboard(page: Page, path = '/edit/manage', options: EditBackendOptions = {}): Promise<void> {
+  await mockEditBackend(page, options);
   await page.goto(path);
   await expect(page.getByRole('heading', { name: LOCKUP_ACCESSIBLE_NAME })).toBeVisible();
   // Every area's own fetches have settled -- otherwise anything measured

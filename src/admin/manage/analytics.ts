@@ -274,6 +274,22 @@ export function noVisitsYetSentence(taps: number): string {
 }
 
 // ---------------------------------------------------------------------------
+// Cards B and C at year grain.
+//
+// The yearly archive holds monthly TOTALS and nothing else -- no per-page
+// breakdown and no referrer breakdown, because a rollup row is one number per
+// month per metric and neither list can be reconstructed from it. So at that
+// range both cards have nothing to draw, and their usual
+// "Nothing to rank yet — this fills in once people start visiting" is FALSE
+// there: it says nobody visited, when what happened is that nobody kept the
+// breakdown. Telling those two apart is the distinction this whole panel
+// exists to make, so the year case gets its own sentence and names the way
+// back to the answer she wanted.
+export function archiveSentence(): string {
+  return 'Pages and links are not kept in the yearly archive — choose 90 days or less to see them.';
+}
+
+// ---------------------------------------------------------------------------
 // The campaign card: which of HER links brought people.
 
 // Shown while there is nothing to count, which is the state this card ships

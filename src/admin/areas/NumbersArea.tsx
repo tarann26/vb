@@ -15,9 +15,14 @@
 // element inside a hidden ancestor, and it does not exist in jsdom at all.
 // So the one signal that means "she is looking at this" has to be passed in,
 // and a ref latch makes the request fire on the first render where it is
-// true and never again in that session. A Cloudflare API call on every
-// dashboard load, for a screen she may not open, is not free and is not
-// needed.
+// true and never again for that range in that session. A Cloudflare API call
+// on every dashboard load, for a screen she may not open, is not free and is
+// not needed.
+//
+// The latch is a SET of ranges rather than a boolean, because the screen now
+// has four possible answers instead of one. What it guarantees is unchanged:
+// a range she has never chosen is never requested, so a dashboard load still
+// costs nothing here.
 //
 // ---------------------------------------------------------------------------
 // EVERY CARD'S EMPTY STATE IS THE STATE IT SHIPS IN.
@@ -36,6 +41,7 @@ import {
   CAMPAIGN_VS_REFERRER,
   CARD_HEADINGS,
   VISIT_COUNTING_STARTED_ON,
+  archiveSentence,
   campaignHowTo,
   formatCountingStartedOn,
   labelForPath,
@@ -51,10 +57,11 @@ import TrendChart from '../manage/TrendChart';
 import HoursChart from '../manage/HoursChart';
 import BarList from '../manage/BarList';
 import StatCard from '../manage/StatCard';
+import RangeControl from '../manage/RangeControl';
 import { changeBetween } from '../manage/comparison';
 import { KNOWN_CAMPAIGN_SOURCES } from '../../shared/campaign-sources';
-import { isAnalyticsPayload } from '../../shared/analytics-payload';
-import type { AnalyticsFailureReason, AnalyticsPayload } from '../../shared/analytics-payload';
+import { DEFAULT_RANGE, isAnalyticsPayload } from '../../shared/analytics-payload';
+import type { AnalyticsFailureReason, AnalyticsPayload, AnalyticsRange } from '../../shared/analytics-payload';
 import type { ContentRegistry } from '../publish';
 import type { Page } from '../../content/types';
 
@@ -95,12 +102,16 @@ function errorSentence(reason: AnalyticsFailureReason): string {
 // Worker's own tests can then assert that what it emits passes the same guard
 // this screen applies -- a real end-to-end claim rather than two hopes
 // pointing at each other.
-async function loadAnalytics(fetchImpl?: typeof fetch): Promise<Outcome> {
+async function loadAnalytics(range: AnalyticsRange, fetchImpl?: typeof fetch): Promise<Outcome> {
   // Wrapped rather than passed as a bare reference -- see `fetchImpl`'s own
   // prop comment on why `fetch` detached from its global throws.
   const request = fetchImpl ?? ((input: RequestInfo | URL) => fetch(input));
   try {
-    const response = await request('/api/analytics');
+    // One of four words, never a number of days. The Worker's whole load
+    // control is one Cache API entry per range, so an unbounded parameter
+    // here would be an unbounded number of upstream calls; `AnalyticsRange`
+    // is what makes that impossible to type by accident.
+    const response = await request(`/api/analytics?range=${range}`);
     if (response.ok) {
       const body: unknown = await response.json();
       if (!isAnalyticsPayload(body)) return { kind: 'error', reason: 'upstream-error' };
@@ -127,10 +138,32 @@ const CARD_TITLE = "mb-2 font-['Montserrat'] text-sm uppercase tracking-wide tex
 
 const NumbersArea: React.FC<NumbersAreaProps> = ({ active, registry, fetchImpl }) => {
   const [outcome, setOutcome] = useState<Outcome>({ kind: 'idle' });
-  // Fired once per session, on the first render where `active` is true. A
-  // plain `useEffect` keyed on `active` would re-fire every time she came
-  // back to this screen.
-  const requestedRef = useRef(false);
+  const [range, setRange] = useState<AnalyticsRange>(DEFAULT_RANGE);
+  // Which ranges this session has already asked the Worker for. The single
+  // boolean this replaces was right for a screen with one answer and is wrong
+  // for one with four -- but the ORIGINAL guarantee it existed for is kept
+  // exactly: a dashboard load never costs a Cloudflare call for a screen she
+  // does not open, because a range she has not chosen is still never
+  // requested.
+  const requestedRef = useRef<Set<AnalyticsRange>>(new Set());
+  // The answer each range gave, kept so that returning to a range she has
+  // already seen paints ITS numbers rather than leaving the previous range's
+  // numbers under the newly pressed pill. That specific mismatch -- the pill
+  // says 90 days and the figures are the 30-day ones -- is the failure this
+  // whole per-range design exists to prevent, and not re-asking without also
+  // remembering is how it arrives through the front end instead of through
+  // the cache key.
+  //
+  // Deliberately NOT re-fetched on a return visit: the ten-minute Cache API
+  // entry behind this route means a second request would usually hand back
+  // the same body anyway.
+  const answersRef = useRef<Map<AnalyticsRange, Outcome>>(new Map());
+  // The range she is looking at RIGHT NOW, readable from inside a promise
+  // that was started under a different one. The captured `range` in an effect
+  // closure is the range that request was FOR, which is exactly the wrong
+  // thing to compare a late answer against.
+  const rangeRef = useRef<AnalyticsRange>(range);
+  rangeRef.current = range;
   // Whether this component is still on screen, rather than a `cancelled`
   // flag scoped to one effect run -- and that distinction is load-bearing
   // under React's StrictMode, which mounts, unmounts and remounts every
@@ -155,20 +188,51 @@ const NumbersArea: React.FC<NumbersAreaProps> = ({ active, registry, fetchImpl }
     };
   }, []);
 
+  // Records the answer against the range it was asked for, and paints it only
+  // if she is still looking at that range.
+  //
+  // The answer for a range she has moved on from is DISCARDED. Tapping 7
+  // days and then 90 days quickly otherwise paints the 7-day answer under the
+  // 90-day pill, with no error and no way for her to tell. `disabled` on the
+  // control narrows that window but cannot close it: a request already in
+  // flight when the control switches off is still in flight when it switches
+  // back on, which happens the moment any earlier answer lands.
+  //
+  // The comparison is against the payload's OWN echoed range, not against the
+  // range this call asked for, so it also catches a body served under the
+  // wrong cache key -- the thing `AnalyticsPayload.range` was put in the
+  // contract to expose rather than let pass silently.
+  function receive(asked: AnalyticsRange, next: Outcome) {
+    if (!mountedRef.current) return;
+    answersRef.current.set(asked, next);
+    if (next.kind === 'ok' && next.payload.range !== rangeRef.current) return;
+    setOutcome(next);
+  }
+
   useEffect(() => {
-    if (!active || requestedRef.current) return;
-    requestedRef.current = true;
+    if (!active) return;
+    const answered = answersRef.current.get(range);
+    if (answered !== undefined) {
+      setOutcome(answered);
+      return;
+    }
+    if (requestedRef.current.has(range)) {
+      setOutcome({ kind: 'loading' });
+      return;
+    }
+    requestedRef.current.add(range);
     setOutcome({ kind: 'loading' });
-    void loadAnalytics(fetchImpl).then((next) => {
-      if (mountedRef.current) setOutcome(next);
+    void loadAnalytics(range, fetchImpl).then((next) => {
+      receive(range, next);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active]);
+  }, [active, range]);
 
   function retry() {
     setOutcome({ kind: 'loading' });
-    void loadAnalytics(fetchImpl).then((next) => {
-      if (mountedRef.current) setOutcome(next);
+    const asked = range;
+    void loadAnalytics(asked, fetchImpl).then((next) => {
+      receive(asked, next);
     });
   }
 
@@ -183,6 +247,15 @@ const NumbersArea: React.FC<NumbersAreaProps> = ({ active, registry, fetchImpl }
       <p className="mb-4 font-['Montserrat'] text-xs text-gray-500">
         Your own editing visits aren&rsquo;t counted.
       </p>
+
+      {/* Above the error branch as well as the cards, so a range that fails
+          still leaves her a way back to one that did not. */}
+      <RangeControl
+        value={range}
+        onChange={setRange}
+        disabled={outcome.kind === 'loading'}
+        yearAvailable={outcome.kind === 'ok' && outcome.payload.yearAvailable}
+      />
 
       {outcome.kind === 'error' ? (
         <div className={CARD} role="alert">
@@ -308,6 +381,11 @@ const CardB: React.FC<{ outcome: Outcome; pages: PageNaming[] }> = ({ outcome, p
     <h3 className={CARD_TITLE}>{CARD_HEADINGS.b}</h3>
     {outcome.kind !== 'ok' ? (
       <Skeleton />
+    ) : /* Before the emptiness check, never after it: at year grain the list
+           is empty for a reason that has nothing to do with visitors, and the
+           usual sentence would say nobody came. */
+    outcome.payload.range === 'year' ? (
+      <p className="text-sm text-gray-600">{archiveSentence()}</p>
     ) : outcome.payload.byPath.length === 0 ? (
       <p className="text-sm text-gray-600">Nothing to rank yet — this fills in once people start visiting.</p>
     ) : (
@@ -333,6 +411,10 @@ const CardC: React.FC<{ outcome: Outcome }> = ({ outcome }) => (
     <h3 className={CARD_TITLE}>{CARD_HEADINGS.c}</h3>
     {outcome.kind !== 'ok' ? (
       <Skeleton />
+    ) : outcome.payload.range === 'year' ? (
+      // Same reason as Card B: the rollup keeps monthly totals, and a
+      // referrer cannot be recovered from a total.
+      <p className="text-sm text-gray-600">{archiveSentence()}</p>
     ) : outcome.payload.byReferer.length === 0 ? (
       // "No referrers yet" used the exact word this copy exists to avoid.
       <p className="text-sm text-gray-600">
