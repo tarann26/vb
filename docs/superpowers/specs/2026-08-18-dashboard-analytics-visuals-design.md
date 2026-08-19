@@ -153,10 +153,25 @@ months are served from the D1 rollup and never reach Cloudflare.
 ## What this deliberately does not do
 
 **No third-party analytics service.** PostHog, Sentry and Datadog were each
-considered and rejected for the same three reasons: another script executing on
-a diner's phone, a Content Security Policy exemption, and a third party holding
-the restaurant's customer data. Cloudflare already collects the general
-picture and D1 covers what Cloudflare cannot. Neither gap justifies a vendor.
+considered and rejected. Datadog is infrastructure monitoring and answers no
+question this site has. PostHog's session recordings and funnels are built for
+optimising a signup flow, and buying them costs a script on every diner's
+phone plus browser storage to follow people between visits — a real privacy
+step for a site that is cookieless on the public side. Cloudflare already
+collects the general picture and D1 covers what Cloudflare cannot.
+
+**No error tracking, and no monitoring of any kind.** This was raised, because
+`index.html` carries a hand-written blank-page fallback whose comment records
+three separate incidents of the site serving a white screen, and nothing
+reports that back today. The owner's ruling is explicit and it is the right one
+for this site: the site needs to work for the overwhelming majority of
+visitors, not to be watched. A monitoring surface nobody reads is worse than
+none, because it implies someone is looking.
+
+**Nothing here needs tending.** This is the last planned work on the site. The
+monthly rollup runs on a schedule and requires no attention; if it stops, the
+by-year view stops growing and every other card is unaffected. No dashboards to
+check, no alerts, no accounts to keep alive.
 
 **No per-visitor tracking, no cookies, no identifiers.** The site is currently
 cookieless on the public side and privacy-first analytics is the reason
@@ -200,17 +215,56 @@ mutating the code and watching it go red.
   produces exactly one row, an untagged visit produces none, and a failed
   write never blocks the page.
 
-## One defect carried in, deliberately
+## The backlog, closed out here
 
-The panel tells the owner that visitor counting began on 7 August 2026. That is
-the **tap counter's** start date; visit counting began on 2026-08-18, when the
-beacon token was unified. So she is told there is a week and a half of history
-where there are hours, and "there isn't enough data yet" reads as a fault in
-her website rather than as a new counter.
+This is the last planned piece of work on this site. Everything parked during
+the admin redesign is therefore fixed here or written off on purpose — nothing
+is left "for later", because there is no later.
 
-It is one sentence, it sits in the file this work already opens, and every card
-here inherits the same start-date question. It is fixed as a task in this plan
-rather than left to drift.
+### She can see these
+
+| # | Defect | What she experiences |
+|---|---|---|
+| 1 | The panel says visitor counting began 7 August 2026 | That is the **tap counter's** start date. Visit counting began 2026-08-18 when the beacon token was unified. She is told there is a week and a half of history where there are hours, so "not enough data yet" reads as her website being broken |
+| 2 | `POST_FIELDS.date` and a citation block's date are both labelled "Published on" | Any post with a citation shows two identically-named controls |
+| 3 | Two image blocks in one post produce two "Photo" labels | Same collision, same cause: a label that names the field but not which block |
+| 4 | Validation banner lines do not name their record | "A dish needs a name" without saying which dish |
+| 5 | Deleting a record does not release its staged photo bytes | A deleted dish's upload keeps occupying one of eight publish slots |
+| 6 | A gallery tile shows a stale thumbnail after the editor is reopened | `PhotoField` reads its preview from local state and `value`, never from the shared store. Bytes are safe; the picture is wrong |
+| 7 | The `/blog` search field's focus ring is Chromium's, not the site's | It matches neither `button:focus-visible` nor `a:focus-visible` |
+
+### Visual
+
+| # | Defect | Note |
+|---|---|---|
+| 8 | Drinks and Experiences share a wash token | That section boundary does not exist on the page |
+| 9 | `experiences→press` and `ourStory→visit` are `wash-warm` against `wash` | Contrast 1.02 — a hue-only boundary. Both tokens are held to a floor against **white** only; nothing measures adjacent bands |
+| 10 | `text-gray-500` on a wash is 4.10:1 | Under AA. No current pairing violates it; only a comment guards it |
+
+### The writing surface
+
+| # | Defect | Note |
+|---|---|---|
+| 11 | The toolbar's `asKind` flattens a list to one item | Nesting is lost when a list is converted |
+| 12 | Backspace at the start of a nested item does not outdent | The spec named Tab/Shift+Tab only, so this was never built |
+| 13 | `BlockFields.itemList` can desync `levels` from `items` | Unmounted today with no live path, and a desynced list is refused at the write boundary |
+
+### Underneath
+
+| # | Item | Why it matters now |
+|---|---|---|
+| 14 | `playwright.config.ts` is `fullyParallel` with no worker cap and no retries | The pre-push hook failed three times running on three **different** sets of tests, all of which pass alone. It blocks deploys at random and will keep doing so |
+| 15 | `visiblePosts` has no non-mutation test | On first paint it hands the live content array into `orderedPosts`, safe only because both branches happen to copy |
+| 16 | `BlockList.tsx` sits on disk unreferenced | Retired at Task 25, kept deliberately while the surface was new. The surface is no longer new |
+| 17 | An orphaned `/edit/manage` Press panel, and `press.json` | Superseded and never removed |
+| 18 | `worker/github.ts` sets no `AbortSignal` | A hung request has no ceiling |
+| 19 | Nothing in `e2e/` observes a publish | "What she publishes" is inferred from what a remount writes back, never from a request body — and the staged-photo bug that broke three times lives exactly there |
+| 20 | The browser suite depends on the first committed post being one paragraph and one citation | A new post landing first breaks the block-label assertions |
+| 21 | The analytics GraphQL query has never been run against the real API | Task one of this plan, and the thing the trend chart depends on |
+
+**Written off rather than fixed:** nothing yet. Anything that turns out to cost
+more than it is worth gets recorded here with the reason, so the decision is
+visible rather than silent.
 
 ## Out of scope
 
