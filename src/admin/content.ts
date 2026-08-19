@@ -27,7 +27,6 @@ import type {
   Galleries,
   Dish,
   Drink,
-  Article,
   StoryContent,
   MenuFile,
   Copy,
@@ -52,7 +51,6 @@ export const CONTENT_FILES = [
   'galleries.json',
   'dishes.json',
   'drinks.json',
-  'press.json',
   'story.json',
   'menus.json',
   'copy.json',
@@ -132,7 +130,6 @@ export const CONTENT_FILE_LABELS: Record<ContentFileName, string> = {
   'galleries.json': 'Galleries',
   'dishes.json': 'Dishes',
   'drinks.json': 'Drinks',
-  'press.json': 'Press',
   'story.json': 'About',
   'menus.json': 'Menu PDFs',
   'copy.json': 'Words on the site',
@@ -151,7 +148,6 @@ export interface ContentTypeMap {
   'galleries.json': Galleries;
   'dishes.json': Dish[];
   'drinks.json': Drink[];
-  'press.json': Article[];
   'story.json': StoryContent;
   'menus.json': MenuFile[];
   'copy.json': Copy;

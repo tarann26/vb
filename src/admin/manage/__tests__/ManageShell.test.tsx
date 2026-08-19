@@ -101,7 +101,7 @@ describe.each([
 
     await screen.findByRole('heading', { name: 'Galleries' });
     expect(screen.getByRole('heading', { name: 'About' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Press' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Posts' })).toBeInTheDocument();
     // Menu's, Pages' and Hours & Wording's panels are mounted but hidden, so
     // a role query -- which is what a screen reader and the tab order both
     // see -- does not reach them.

@@ -296,7 +296,7 @@ describe('mostRecentSavedAt', () => {
     const map: DraftMap = {
       'dishes.json': { data: [], savedAt: 1_000 },
       'drinks.json': { data: [], savedAt: 9_000 },
-      'press.json': { data: [], savedAt: 5_000 },
+      'story.json': { data: {}, savedAt: 5_000 },
     };
     expect(mostRecentSavedAt(map)).toBe(9_000);
   });

@@ -263,13 +263,13 @@ describe('PublishBar: the confirmation step before anything is pushed', () => {
 
     // A second file becomes dirty while she is reading the panel.
     act(() => {
-      captured!.registry.register('press.json', [{ id: 'p', title: '' }], 'sha-p');
-      captured!.registry.register('press.json', [{ id: 'p', title: 'Edited' }], 'sha-p');
+      captured!.registry.register('experiences.json', [{ id: 'p', title: '' }], 'sha-p');
+      captured!.registry.register('experiences.json', [{ id: 'p', title: 'Edited' }], 'sha-p');
     });
 
     const dialog = screen.getByRole('dialog', { name: /publish/i });
     expect(dialog).toHaveTextContent('2 sections edited — ready to publish.');
-    expect(dialog).toHaveTextContent('Changing: Dishes, Press.');
+    expect(dialog).toHaveTextContent('Changing: Dishes, Experiences.');
   });
 
   // The flush that runs when the panel OPENS, proven the only way it can be
@@ -293,8 +293,8 @@ describe('PublishBar: the confirmation step before anything is pushed', () => {
   // stale summary, since passive effects run after paint -- a difference
   // jsdom has no paint to show.
   it('a keyboard submit from a still-focused field opens a panel that names that field\'s own section', () => {
-    render(<Harness withTagsField tagsFile="press.json" />);
-    act(() => captured!.registry.register('press.json', [{ id: 'x', tags: ['a', 'b'] }], 'sha-p'));
+    render(<Harness withTagsField tagsFile="experiences.json" />);
+    act(() => captured!.registry.register('experiences.json', [{ id: 'x', tags: ['a', 'b'] }], 'sha-p'));
     dirty(captured!.registry);
 
     const tagsInput = screen.getByLabelText('tags') as HTMLInputElement;
@@ -306,7 +306,7 @@ describe('PublishBar: the confirmation step before anything is pushed', () => {
 
     const dialog = screen.getByRole('dialog', { name: /publish/i });
     expect(dialog).toHaveTextContent('2 sections edited — ready to publish.');
-    expect(dialog).toHaveTextContent('Changing: Dishes, Press.');
+    expect(dialog).toHaveTextContent('Changing: Dishes, Experiences.');
   });
 
   // The single most important correctness property here. An EditableImage

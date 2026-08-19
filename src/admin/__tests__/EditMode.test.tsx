@@ -15,7 +15,7 @@ import EditMode, { buildBundle } from '../EditMode';
 import { AppRoutes } from '../../App';
 import type { ContentEntries, ContentRegistry } from '../publish';
 import { loadDraft, saveDraft } from '../drafts';
-import type { Article, Copy, Dish, Drink, Experience, Galleries, MenuFile, Post, Section, SiteContent, StoryContent } from '../../content/types';
+import type { Copy, Dish, Drink, Experience, Galleries, MenuFile, Post, Section, SiteContent, StoryContent } from '../../content/types';
 // Real, committed files for galleries/story/menus/copy -- the same choice
 // AdminApp.test.tsx already makes (see that file's own comment): each has
 // real structural shape a hand-typed fixture would have to reproduce, and
@@ -72,7 +72,6 @@ const SECTIONS: Section[] = [
 
 const DISHES: Dish[] = [];
 const DRINKS: Drink[] = [];
-const PRESS: Article[] = [];
 
 const WA_RESPONSE = () =>
   new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'content-type': 'application/json' } });
@@ -88,7 +87,7 @@ function unauthorizedResponse(): Response {
   });
 }
 
-// `pressResponse` (and the other per-file overrides below) may be a
+// `menusResponse` (and the other per-file overrides below) may be a
 // Promise, not just a Response, so a caller can gate one file's resolution
 // independently -- every other file resolves immediately, matching how nine
 // independent GET /api/content calls actually behave (not sequenced against
@@ -108,7 +107,7 @@ function acceptPublishConfirm() {
 function stubFetch(overrides: {
   siteResponse?: Promise<Response> | Response;
   dishesResponse?: Promise<Response> | Response;
-  pressResponse?: Promise<Response> | Response;
+  menusResponse?: Promise<Response> | Response;
   copyResponse?: Promise<Response> | Response;
   sectionsResponse?: Promise<Response> | Response;
   // Phase 2, Task 11: lets a test drive awards.json's own genuine 404 (the
@@ -153,11 +152,10 @@ function stubFetch(overrides: {
       }
       if (url.includes('dishes.json')) return overrides.dishesResponse ?? contentResponse(DISHES, 'sha-dishes');
       if (url.includes('drinks.json')) return contentResponse(DRINKS, 'sha-drinks');
-      if (url.includes('press.json')) return overrides.pressResponse ?? contentResponse(PRESS, 'sha-press');
       if (url.includes('sections.json')) return overrides.sectionsResponse ?? contentResponse(SECTIONS, 'sha-sections');
       if (url.includes('site.json')) return overrides.siteResponse ?? contentResponse(SITE, 'sha-site');
       if (url.includes('galleries.json')) return contentResponse(GALLERIES, 'sha-galleries');
-      if (url.includes('menus.json')) return contentResponse(MENUS, 'sha-menus');
+      if (url.includes('menus.json')) return overrides.menusResponse ?? contentResponse(MENUS, 'sha-menus');
       if (url.includes('story.json')) return contentResponse(STORY, 'sha-story');
       if (url.includes('copy.json')) return overrides.copyResponse ?? contentResponse(COPY, 'sha-copy');
       // Plan 7, Task 1: the tenth content file, joining CONTENT_FILES (and
@@ -381,7 +379,6 @@ describe('EditMode: a 401 mid-load does not unmount the page or lose what alread
         if (url.includes('galleries.json')) return contentResponse(GALLERIES, 'sha-galleries');
         if (url.includes('menus.json')) return contentResponse(MENUS, 'sha-menus');
         if (url.includes('story.json')) return contentResponse(STORY, 'sha-story');
-        if (url.includes('press.json')) return contentResponse(PRESS, 'sha-press');
         // BlogSection's own runtime read (usePosts, not this registry) --
         // harmless here and not what this test is about; see this file's
         // shared stubFetch() for the same branch.
@@ -454,7 +451,6 @@ describe('EditMode: a 401 mid-load does not unmount the page or lose what alread
         if (!loggedIn) return unauthorizedResponse();
         if (url.includes('dishes.json')) return contentResponse(DISHES, 'sha-dishes');
         if (url.includes('drinks.json')) return contentResponse(DRINKS, 'sha-drinks');
-        if (url.includes('press.json')) return contentResponse(PRESS, 'sha-press');
         if (url.includes('sections.json')) return contentResponse(SECTIONS, 'sha-sections');
         if (url.includes('site.json')) return contentResponse(SITE, 'sha-site');
         if (url.includes('galleries.json')) return contentResponse(GALLERIES, 'sha-galleries');
@@ -490,7 +486,7 @@ describe('EditMode: a 401 mid-load does not unmount the page or lose what alread
   // content.ts's fetchContent resolves rather than rejects), with no
   // re-login involved at all.
   it('a file that fails for a genuine, non-401 reason stops the loading banner and shows an error, with no re-login needed', async () => {
-    stubFetch({ pressResponse: new Response(null, { status: 500 }) });
+    stubFetch({ menusResponse: new Response(null, { status: 500 }) });
 
     render(
       <MemoryRouter>
@@ -503,7 +499,7 @@ describe('EditMode: a 401 mid-load does not unmount the page or lose what alread
     expect(await screen.findByText(COPY.hero.reservationsLabel)).toBeInTheDocument();
     // The failure is reported, naming the file...
     const alert = await screen.findByRole('alert');
-    expect(alert).toHaveTextContent(/press\.json/);
+    expect(alert).toHaveTextContent(/menus\.json/);
     // ...and the loading banner is gone, not stuck forever.
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
@@ -550,14 +546,16 @@ describe('EditMode: a 401 mid-load does not unmount the page or lose what alread
   // "Could not load awards.json" banner standing over what is, right now, a
   // perfectly fine empty state.
   //
-  // press.json is what forces the retry here (a 401, the same re-login
+  // menus.json is what forces the retry here (a 401, the same re-login
   // mechanism the "a loaded file is never re-fetched..." test above already
   // uses) -- awards.json itself has no 401 branch, so its own two calls are
   // driven by call count alone: the first (real, on initial load) 500s: the
-  // second (after re-login) 404s.
+  // second (after re-login) 404s. It was press.json until backlog item 17
+  // took that file out of CONTENT_FILES; any file EditMode still fetches
+  // does the same job, and nothing here was ever press-specific.
   it('a stale error on awards.json clears once a later attempt reads its true, empty (404) state', async () => {
     let awardsCalls = 0;
-    let pressCalls = 0;
+    let menusCalls = 0;
     vi.stubGlobal(
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
@@ -569,17 +567,16 @@ describe('EditMode: a 401 mid-load does not unmount the page or lose what alread
         if (url.includes('sections.json')) return contentResponse(SECTIONS, 'sha-sections');
         if (url.includes('site.json')) return contentResponse(SITE, 'sha-site');
         if (url.includes('galleries.json')) return contentResponse(GALLERIES, 'sha-galleries');
-        if (url.includes('menus.json')) return contentResponse(MENUS, 'sha-menus');
+        if (url.includes('menus.json')) {
+          menusCalls += 1;
+          return menusCalls === 1 ? unauthorizedResponse() : contentResponse(MENUS, 'sha-menus-2');
+        }
         if (url.includes('story.json')) return contentResponse(STORY, 'sha-story');
         if (url.includes('copy.json')) return contentResponse(COPY, 'sha-copy');
         if (url.includes('pages.json')) return contentResponse([], 'sha-pages');
         if (url.includes('experiences.json')) return contentResponse([], 'sha-experiences');
         // Phase 5B, Task 3, same reason as the shared stub above.
         if (url.includes('posts.json')) return contentResponse([], 'sha-posts');
-        if (url.includes('press.json')) {
-          pressCalls += 1;
-          return pressCalls === 1 ? unauthorizedResponse() : contentResponse(PRESS, 'sha-press-2');
-        }
         if (url.includes('awards.json')) {
           awardsCalls += 1;
           return awardsCalls === 1
@@ -603,7 +600,7 @@ describe('EditMode: a 401 mid-load does not unmount the page or lose what alread
     expect(alert).toHaveTextContent(/awards\.json/);
     expect(awardsCalls).toBe(1);
 
-    // press.json's 401 drives the same re-login cycle the sibling test
+    // menus.json's 401 drives the same re-login cycle the sibling test
     // above already exercises.
     await screen.findByLabelText(/password/i);
     await user.type(screen.getByLabelText(/password/i), 'whatever-the-real-password-is');
@@ -1257,7 +1254,6 @@ describe('EditMode: an edit survives a 401 mid-session -- Task 2\'s per-file fet
         if (url.includes('galleries.json')) return contentResponse(GALLERIES, 'sha-galleries');
         if (url.includes('menus.json')) return contentResponse(MENUS, 'sha-menus');
         if (url.includes('story.json')) return contentResponse(STORY, 'sha-story');
-        if (url.includes('press.json')) return contentResponse(PRESS, 'sha-press');
         // BlogSection's own runtime read (usePosts, not this registry) --
         // harmless here and not what this test is about; see this file's
         // shared stubFetch() for the same branch.

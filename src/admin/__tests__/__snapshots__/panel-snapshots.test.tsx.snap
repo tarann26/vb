@@ -1,6 +1,6 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`the thirteen panels, as they render today > About (story) 1`] = `
+exports[`the twelve panels, as they render today > About (story) 1`] = `
 <div
   id="section-panel-story"
 >
@@ -418,7 +418,7 @@ exports[`the thirteen panels, as they render today > About (story) 1`] = `
 </div>
 `;
 
-exports[`the thirteen panels, as they render today > Awards (awards) 1`] = `
+exports[`the twelve panels, as they render today > Awards (awards) 1`] = `
 <div
   id="section-panel-awards"
 >
@@ -443,7 +443,7 @@ exports[`the thirteen panels, as they render today > Awards (awards) 1`] = `
 </div>
 `;
 
-exports[`the thirteen panels, as they render today > Dishes (dishes) 1`] = `
+exports[`the twelve panels, as they render today > Dishes (dishes) 1`] = `
 <div
   id="section-panel-dishes"
 >
@@ -547,7 +547,7 @@ exports[`the thirteen panels, as they render today > Dishes (dishes) 1`] = `
 </div>
 `;
 
-exports[`the thirteen panels, as they render today > Drinks (drinks) 1`] = `
+exports[`the twelve panels, as they render today > Drinks (drinks) 1`] = `
 <div
   id="section-panel-drinks"
 >
@@ -647,7 +647,7 @@ exports[`the thirteen panels, as they render today > Drinks (drinks) 1`] = `
 </div>
 `;
 
-exports[`the thirteen panels, as they render today > Experiences (experiences) 1`] = `
+exports[`the twelve panels, as they render today > Experiences (experiences) 1`] = `
 <div
   id="section-panel-experiences"
 >
@@ -935,7 +935,7 @@ exports[`the thirteen panels, as they render today > Experiences (experiences) 1
 </div>
 `;
 
-exports[`the thirteen panels, as they render today > Galleries (galleries) 1`] = `
+exports[`the twelve panels, as they render today > Galleries (galleries) 1`] = `
 <div
   id="section-panel-galleries"
 >
@@ -1792,7 +1792,7 @@ exports[`the thirteen panels, as they render today > Galleries (galleries) 1`] =
 </div>
 `;
 
-exports[`the thirteen panels, as they render today > Menu PDFs (menus) 1`] = `
+exports[`the twelve panels, as they render today > Menu PDFs (menus) 1`] = `
 <div
   id="section-panel-menus"
 >
@@ -1850,7 +1850,7 @@ exports[`the thirteen panels, as they render today > Menu PDFs (menus) 1`] = `
 </div>
 `;
 
-exports[`the thirteen panels, as they render today > Opening hours (hours) 1`] = `
+exports[`the twelve panels, as they render today > Opening hours (hours) 1`] = `
 <div
   id="section-panel-hours"
 >
@@ -1961,7 +1961,7 @@ exports[`the thirteen panels, as they render today > Opening hours (hours) 1`] =
 </div>
 `;
 
-exports[`the thirteen panels, as they render today > Pages (pages) 1`] = `
+exports[`the twelve panels, as they render today > Pages (pages) 1`] = `
 <div
   id="section-panel-pages"
 >
@@ -1980,7 +1980,7 @@ exports[`the thirteen panels, as they render today > Pages (pages) 1`] = `
 </div>
 `;
 
-exports[`the thirteen panels, as they render today > Posts (posts) 1`] = `
+exports[`the twelve panels, as they render today > Posts (posts) 1`] = `
 <div
   id="section-panel-posts"
 >
@@ -2005,111 +2005,7 @@ exports[`the thirteen panels, as they render today > Posts (posts) 1`] = `
 </div>
 `;
 
-exports[`the thirteen panels, as they render today > Press (press) 1`] = `
-<div
-  id="section-panel-press"
->
-  <fieldset
-    aria-busy="false"
-    style="border: 0px; padding: 0px; margin: 0px; min-inline-size: 0;"
-  >
-    <div>
-      <div>
-        <button
-          class="mb-3 w-full rounded border-2 border-dashed border-brand py-2 font-['Montserrat'] text-sm uppercase tracking-wide text-accent transition hover:bg-brand/10"
-          type="button"
-        >
-          Add a article
-        </button>
-        <ul
-          data-item-list="rows"
-        >
-          <li
-            class="mb-1 flex items-center gap-1 rounded border border-gray-200"
-            data-item-row="p"
-          >
-            <span
-              aria-hidden="true"
-              class="select-none px-3 py-1 text-gray-500"
-              data-drag-handle="0"
-              draggable="true"
-              style="cursor: move;"
-              title="Drag to move Article P"
-            >
-              ⠿
-            </span>
-            <button
-              class="flex min-w-0 flex-1 items-center gap-3 rounded p-2 text-left font-['Montserrat'] text-sm text-ink transition hover:bg-brand/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
-              type="button"
-            >
-              <img
-                alt=""
-                class="h-12 w-12 shrink-0 rounded border border-brand/40 object-cover"
-                data-thumbnail="row"
-                loading="lazy"
-                src="/press/p.webp"
-              />
-              <span
-                class="min-w-0 flex-1 truncate"
-              >
-                Article P
-              </span>
-            </button>
-            <button
-              aria-label="Move Article P down"
-              class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
-              type="button"
-            >
-              Down
-            </button>
-          </li>
-          <li
-            class="mb-1 flex items-center gap-1 rounded border border-gray-200"
-            data-item-row="q"
-          >
-            <span
-              aria-hidden="true"
-              class="select-none px-3 py-1 text-gray-500"
-              data-drag-handle="1"
-              draggable="true"
-              style="cursor: move;"
-              title="Drag to move Article Q"
-            >
-              ⠿
-            </span>
-            <button
-              class="flex min-w-0 flex-1 items-center gap-3 rounded p-2 text-left font-['Montserrat'] text-sm text-ink transition hover:bg-brand/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
-              type="button"
-            >
-              <img
-                alt=""
-                class="h-12 w-12 shrink-0 rounded border border-brand/40 object-cover"
-                data-thumbnail="row"
-                loading="lazy"
-                src="/press/q.webp"
-              />
-              <span
-                class="min-w-0 flex-1 truncate"
-              >
-                Article Q
-              </span>
-            </button>
-            <button
-              aria-label="Move Article Q up"
-              class="rounded border border-gray-300 px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink"
-              type="button"
-            >
-              Up
-            </button>
-          </li>
-        </ul>
-      </div>
-    </div>
-  </fieldset>
-</div>
-`;
-
-exports[`the thirteen panels, as they render today > What shows on the homepage (sections) 1`] = `
+exports[`the twelve panels, as they render today > What shows on the homepage (sections) 1`] = `
 <div
   id="section-panel-sections"
 >
@@ -2711,7 +2607,7 @@ exports[`the thirteen panels, as they render today > What shows on the homepage 
 </div>
 `;
 
-exports[`the thirteen panels, as they render today > Words on the site (copy) 1`] = `
+exports[`the twelve panels, as they render today > Words on the site (copy) 1`] = `
 <div
   id="section-panel-copy"
 >

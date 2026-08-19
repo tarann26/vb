@@ -27,7 +27,6 @@ import {
   EXPERIENCES,
   GALLERIES,
   MENUS,
-  PRESS,
   SECTIONS,
   SITE,
   STORY,
@@ -83,13 +82,16 @@ describe('AdminApp: fetches each content file once logged in, loading state firs
     expect(screen.getByText('Dish B')).toBeInTheDocument();
   });
 
-  it('fetches and renders drinks and press independently of dishes', async () => {
+  // Was "drinks and press" until backlog item 17 retired the Press panel.
+  // Experiences stands in its place and is the same claim: a second file's
+  // own list arrives on its own fetch, not on dishes.json's.
+  it('fetches and renders drinks and experiences independently of dishes', async () => {
     stubFetch();
     renderDashboard('/edit/manage/menu');
     expect(await screen.findByText('Drink X')).toBeInTheDocument();
     expect(screen.getByText('Drink Y')).toBeInTheDocument();
-    expect(await screen.findByText('Article P')).toBeInTheDocument();
-    expect(screen.getByText('Article Q')).toBeInTheDocument();
+    renderDashboard('/edit/manage/experiences');
+    expect(await screen.findByText(EXPERIENCES[0].title)).toBeInTheDocument();
   });
 
   // Every section starts folded now (CollapsibleSection.tsx), which would
@@ -193,7 +195,6 @@ function stubFetchCapturingPublish(posts: unknown = []) {
       if (url.includes('posts.json')) return contentResponse(posts, 'sha-posts');
       if (url.includes('dishes.json')) return contentResponse(DISHES, 'sha-dishes');
       if (url.includes('drinks.json')) return contentResponse(DRINKS, 'sha-drinks');
-      if (url.includes('press.json')) return contentResponse(PRESS, 'sha-press');
       if (url.includes('sections.json')) return contentResponse(SECTIONS, 'sha-sections');
       if (url.includes('site.json')) return contentResponse(SITE, 'sha-site');
       if (url.includes('galleries.json')) return contentResponse(GALLERIES, 'sha-galleries');
@@ -417,18 +418,19 @@ describe("AdminApp: no duplicate DOM ids across sibling sections -- a label clic
     await user.click(within(drSection).getByRole('button', { name: 'Drink X' }));
     await screen.findByDisplayValue('Dish A');
     await screen.findByDisplayValue('Drink X');
-    // Review finding (fix round 1): Press lives in a different AREA (Story &
-    // Photos), hidden -- not unmounted -- while this route is Menu. Its own
-    // row is still findable by TEXT (`findByText`, unlike `getByRole`, does
-    // not filter on the `hidden` attribute -- this file's own header comment
-    // on `sectionByHeading`), and a raw `fireEvent.click` on the row button
-    // it wraps opens its editor regardless, same as the folded-panel case
-    // above does. Without opening it, a press-vs-dishes id collision (the
-    // exact defect `scope` exists to prevent) would go uncaught here, since
-    // an unopened record renders no ids of its own at all.
-    const pressRowButton = (await screen.findByText('Article P')).closest('button') as HTMLElement;
-    fireEvent.click(pressRowButton);
-    await screen.findByDisplayValue('Article P');
+    // Review finding (fix round 1): a THIRD ArraySection in a different AREA,
+    // hidden -- not unmounted -- while this route is Menu. Its own row is
+    // still findable by TEXT (`findByText`, unlike `getByRole`, does not
+    // filter on the `hidden` attribute -- this file's own header comment on
+    // `sectionByHeading`), and a raw `fireEvent.click` on the row button it
+    // wraps opens its editor regardless, same as the folded-panel case above
+    // does. Without opening it, a cross-file id collision (the exact defect
+    // `scope` exists to prevent) would go uncaught here, since an unopened
+    // record renders no ids of its own at all. It was Press until backlog
+    // item 17 retired that panel; Experiences is the same shape.
+    const thirdRowButton = (await screen.findByText(EXPERIENCES[0].title)).closest('button') as HTMLElement;
+    fireEvent.click(thirdRowButton);
+    await screen.findByDisplayValue(EXPERIENCES[0].title);
 
     const ids = Array.from(document.querySelectorAll('[id]')).map((el) => el.id);
     const counts = new Map<string, number>();
@@ -594,7 +596,6 @@ describe('AdminApp: the real "Pages" screen', () => {
         if (url === '/api/wa') return WA_RESPONSE();
         if (url.includes('dishes.json')) return contentResponse(DISHES, 'sha-dishes');
         if (url.includes('drinks.json')) return contentResponse(DRINKS, 'sha-drinks');
-        if (url.includes('press.json')) return contentResponse(PRESS, 'sha-press');
         if (url.includes('sections.json')) return contentResponse(SECTIONS, 'sha-sections');
         if (url.includes('site.json')) return contentResponse(SITE, 'sha-site');
         if (url.includes('galleries.json')) return contentResponse(GALLERIES, 'sha-galleries');
@@ -855,7 +856,6 @@ describe('AdminApp: Words on the site -- a problem in a CLOSED group is still on
         if (url === '/api/wa') return WA_RESPONSE();
         if (url.includes('dishes.json')) return contentResponse(DISHES, 'sha-dishes');
         if (url.includes('drinks.json')) return contentResponse(DRINKS, 'sha-drinks');
-        if (url.includes('press.json')) return contentResponse(PRESS, 'sha-press');
         if (url.includes('sections.json')) return contentResponse(SECTIONS, 'sha-sections');
         if (url.includes('site.json')) return contentResponse(SITE, 'sha-site');
         if (url.includes('galleries.json')) return contentResponse(GALLERIES, 'sha-galleries');
@@ -936,7 +936,7 @@ describe('AdminApp: Words on the site -- a problem in a CLOSED group is still on
 // SectionErrorBoundary; this proves ONE bad file costs ONE section, not the
 // whole page.
 describe('AdminApp: a malformed content file costs one section, not the whole dashboard', () => {
-  it('a galleries.json missing every list still lets Dishes/Drinks/Press render normally, with only Galleries showing a fallback', async () => {
+  it('a galleries.json missing every list still lets Dishes/Drinks/Menus render normally, with only Galleries showing a fallback', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
@@ -944,7 +944,6 @@ describe('AdminApp: a malformed content file costs one section, not the whole da
         if (url === '/api/wa') return WA_RESPONSE();
         if (url.includes('dishes.json')) return contentResponse(DISHES, 'sha-dishes');
         if (url.includes('drinks.json')) return contentResponse(DRINKS, 'sha-drinks');
-        if (url.includes('press.json')) return contentResponse(PRESS, 'sha-press');
         if (url.includes('sections.json')) return contentResponse(SECTIONS, 'sha-sections');
         if (url.includes('site.json')) return contentResponse(SITE, 'sha-site');
         // Malformed: none of the three lists GalleryList.tsx's own
@@ -976,7 +975,6 @@ describe('AdminApp: a malformed content file costs one section, not the whole da
       // galleries.json.
       await screen.findByText('Dish A');
       expect(screen.getByText('Drink X')).toBeInTheDocument();
-      expect(screen.getByText('Article P')).toBeInTheDocument();
       // Queried by TEXT rather than through `sectionByHeading`, deliberately:
       // Menus lives in a different AREA from Galleries, and role queries do
       // not reach into a hidden one. "Food Menu" is unique on this page and
@@ -1201,7 +1199,6 @@ describe('AdminApp: Menu PDFs -- the list/editor split (Task 4)', () => {
         if (url === '/api/wa') return WA_RESPONSE();
         if (url.includes('dishes.json')) return contentResponse(DISHES, 'sha-dishes');
         if (url.includes('drinks.json')) return contentResponse(DRINKS, 'sha-drinks');
-        if (url.includes('press.json')) return contentResponse(PRESS, 'sha-press');
         if (url.includes('sections.json')) return contentResponse(SECTIONS, 'sha-sections');
         if (url.includes('site.json')) return contentResponse(SITE, 'sha-site');
         if (url.includes('galleries.json')) return contentResponse(GALLERIES, 'sha-galleries');
@@ -1280,7 +1277,6 @@ describe('AdminApp: Critical review fix -- a restored draft cannot publish a pho
         }
         if (url.includes('dishes.json')) return contentResponse(DISHES, 'sha-dishes');
         if (url.includes('drinks.json')) return contentResponse(DRINKS, 'sha-drinks');
-        if (url.includes('press.json')) return contentResponse(PRESS, 'sha-press');
         if (url.includes('sections.json')) return contentResponse(SECTIONS, 'sha-sections');
         if (url.includes('site.json')) return contentResponse(SITE, 'sha-site');
         if (url.includes('galleries.json')) return contentResponse(GALLERIES, 'sha-galleries');
@@ -1441,7 +1437,6 @@ describe('AdminApp: Task 10 review fix -- a 401 mid-edit does not destroy the dr
         }
         if (url.includes('dishes.json')) return contentResponse(DISHES, 'sha-dishes');
         if (url.includes('drinks.json')) return contentResponse(DRINKS, 'sha-drinks');
-        if (url.includes('press.json')) return contentResponse(PRESS, 'sha-press');
         if (url.includes('sections.json')) return contentResponse(SECTIONS, 'sha-sections');
         if (url.includes('site.json')) return contentResponse(SITE, 'sha-site');
         if (url.includes('galleries.json')) return contentResponse(GALLERIES, 'sha-galleries');
@@ -1579,7 +1574,6 @@ describe('AdminApp: editing is paused while a publish request is in flight', () 
         if (url === '/build-info.json') return new Response(JSON.stringify({ sha: 'x', builtAt: 'now' }), { status: 200 });
         if (url.includes('dishes.json')) return contentResponse(DISHES, 'sha-dishes');
         if (url.includes('drinks.json')) return contentResponse(DRINKS, 'sha-drinks');
-        if (url.includes('press.json')) return contentResponse(PRESS, 'sha-press');
         if (url.includes('sections.json')) return contentResponse(SECTIONS, 'sha-sections');
         if (url.includes('site.json')) return contentResponse(SITE, 'sha-site');
         if (url.includes('galleries.json')) return contentResponse(GALLERIES, 'sha-galleries');
@@ -1820,7 +1814,6 @@ describe('AdminApp: Phase 4 review fix -- a stale /edit draft missing `chef` is 
         }
         if (url.includes('dishes.json')) return contentResponse(DISHES, 'sha-dishes');
         if (url.includes('drinks.json')) return contentResponse(DRINKS, 'sha-drinks');
-        if (url.includes('press.json')) return contentResponse(PRESS, 'sha-press');
         if (url.includes('sections.json')) return contentResponse(SECTIONS, 'sha-sections');
         if (url.includes('site.json')) return contentResponse(SITE, 'sha-site');
         if (url.includes('galleries.json')) return contentResponse(GALLERIES, 'sha-galleries');

@@ -30,7 +30,6 @@ export const CONTENT_FILES = [
   'galleries.json',
   'dishes.json',
   'drinks.json',
-  'press.json',
   'story.json',
   'menus.json',
   'copy.json',

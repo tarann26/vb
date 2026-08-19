@@ -1076,6 +1076,16 @@ describe('dist/assets/ keeps admin code out of the entry chunk', () => {
 // THE CEILING IS RAISED, to 39500 -- 39345 rounded up to the next 100 (39400),
 // plus 100, per this tier's own procedure. Zero headroom is what let a past
 // breach on this project stay red for eleven tasks.
+//
+// Tasks 28-30 (the backlog close-out): 39409, unchanged to the byte. Recorded
+// because two of those tasks DELETE files Tailwind was scanning -- BlockList
+// and the dashboard's Press panel -- and the freed headroom people expected is
+// zero. Every utility those two files named is named by something else that is
+// still on disk, and the scanner emits a rule once however many files ask for
+// it, so removing one of several askers frees nothing. THE CEILING IS
+// DELIBERATELY LEFT AT 39500: a ceiling with more headroom than it needs costs
+// nothing, and lowering one is how a build goes red on the next unrelated
+// change.
 describe('dist/assets/ keeps the shared stylesheet under a byte ceiling', () => {
   it.skipIf(!REQUIRED && !existsSync(DIST_ASSETS))('the entry CSS file stays under 39500 bytes', () => {
     const cssFiles = readdirSync(DIST_ASSETS).filter((n) => /^index-.*\.css$/.test(n));
