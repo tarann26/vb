@@ -307,17 +307,66 @@ for (const size of WIDTHS) {
         // the page at 6.03:1.
         expect(after.offset, `${name} focus ring offset`).toBe('2px');
       }
-      // The search field is NOT covered by index.css's rule, which names only
-      // `button:focus-visible` and `a:focus-visible`. It still shows a ring,
-      // but it is Chromium's own: outline-style `auto`, in the UA's blue, not
-      // the site's accent. Asserted as what it is -- a visible ring from a
-      // different source -- and reported, because a UA default is not a
-      // decision this project made and the next browser may draw it
-      // differently.
+      // The search field used to fall through to Chromium's own ring here --
+      // index.css's rule named only `button:focus-visible` and
+      // `a:focus-visible` -- a different colour, a different offset, and not
+      // measured against anything. `input:focus-visible` closed that gap;
+      // "the search field gets the site ring..." and "the ring clears the
+      // 3:1..." below are the two named tests the mutation table points at
+      // for that selector, so this block only re-confirms the same field
+      // reads as ringed, not un-ringed, before either focuses it.
       const search = page.getByRole('searchbox', { name: 'Search stories' });
       expect(await search.evaluate((el) => getComputedStyle(el).outlineStyle)).toBe('none');
       await search.focus();
-      expect(await search.evaluate((el) => getComputedStyle(el).outlineStyle)).toBe('auto');
+      const searchAfter = await search.evaluate((el) => {
+        const s = getComputedStyle(el);
+        return { style: s.outlineStyle, width: s.outlineWidth, color: s.outlineColor, offset: s.outlineOffset };
+      });
+      expect(searchAfter.style, 'search focus ring style').toBe('solid');
+      expect(searchAfter.width, 'search focus ring width').toBe('2px');
+      expect(searchAfter.color, 'search focus ring colour').toBe(FOCUS_RING);
+      expect(searchAfter.offset, 'search focus ring offset').toBe('2px');
+    });
+
+    test('the search field gets the site ring, not the browser default', async ({ page }) => {
+      await page.goto('/blog');
+      const search = page.locator('#blog-search');
+      await search.focus();
+      // Computed style, not a class name -- the dev server's JIT can keep a
+      // class green that a cold build would never emit.
+      await expect(search).toHaveCSS('outline-style', 'solid');
+      await expect(search).toHaveCSS('outline-width', '2px');
+      await expect(search).toHaveCSS('outline-color', FOCUS_RING);
+      await expect(search).toHaveCSS('outline-offset', '2px');
+    });
+
+    test('the ring clears the 3:1 non-text contrast bar against the page', async ({ page }) => {
+      await page.goto('/blog');
+      const search = page.locator('#blog-search');
+      await search.focus();
+      const ring = await search.evaluate((el) => getComputedStyle(el).outlineColor);
+      // NOT `getComputedStyle(document.body).backgroundColor` -- <body> on
+      // this site never carries a background-colour of its own (every wash
+      // and every white is painted on a wrapping <div>), so that read comes
+      // back `rgba(0, 0, 0, 0)` and throws out of the parser below rather
+      // than measuring anything. And NOT the field's own background either:
+      // `outline-offset: 2px` puts the ring OUTSIDE the field's border, over
+      // whatever is painted behind the field, not over the field's own
+      // `bg-white` -- so the walk starts at the PARENT and climbs until it
+      // finds the first ancestor actually painting something, which today is
+      // /blog's own outermost `bg-gray-50` div (BlogIndex.tsx:94).
+      const behind = await search.evaluate((el) => {
+        let node: HTMLElement | null = el.parentElement;
+        while (node) {
+          const bg = getComputedStyle(node).backgroundColor;
+          if (bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') return bg;
+          node = node.parentElement;
+        }
+        return 'rgb(255, 255, 255)'; // the page's own default paint, if nothing else claimed it
+      });
+      // Equality alone is not enough: a future palette move could keep both
+      // values off-white and still land under 3.
+      expect(contrast(ring, behind)).toBeGreaterThanOrEqual(3);
     });
 
     test('the no-match sentence is on screen, unclipped and unoccluded', async ({ page }) => {
@@ -401,9 +450,13 @@ for (const size of WIDTHS) {
 //                                      -- 4.83:1, meets AA, since src/index.css
 //                                      took the base-layer colour off
 //                                      preflight's gray-400; was 2.54:1.
-// 6 a visible focus ring per control . "every control shows a focus ring..."
-//                                      -- accent on the six buttons, the UA's
-//                                      own ring on the search field.
+// 6 a visible focus ring per control . "every control shows a focus ring...",
+//                                      "the search field gets the site
+//                                      ring...", and "the ring clears the
+//                                      3:1..." -- accent on the six buttons
+//                                      AND on the search field, since
+//                                      src/index.css's rule now names inputs,
+//                                      selects and textareas too.
 // 7 no-match sentence unclipped ...... "the no-match sentence is on screen..."
 // 8 rows between intro and cards ..... "the control rows sit between the intro
 //                                      and the first card row"

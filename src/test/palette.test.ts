@@ -133,15 +133,16 @@ describe('the brand palette meets WCAG AA where it carries meaning', () => {
 
   it('keeps the focus ring visible against a white surface', () => {
     // Reads the actual outline colour out of src/index.css's
-    // `button:focus-visible, a:focus-visible` rule, not a copy of its value
-    // re-typed here -- otherwise this assertion can never fail on its
+    // `button:focus-visible, a:focus-visible, input:focus-visible,
+    // select:focus-visible, textarea:focus-visible` rule, not a copy of its
+    // value re-typed here -- otherwise this assertion can never fail on its
     // stated subject: swap that rule back to brand (1.45:1 on white, well
     // under the 3:1 this is checking for) and ACCENT here would still be
     // ACCENT, still >= 4.5 by the assertion two tests up, and this test
     // would stay green while the real page's focus ring failed 1.4.11.
     const css = readFileSync('src/index.css', 'utf8');
     const match = css.match(
-      /button:focus-visible,\s*a:focus-visible\s*\{\s*outline:\s*2px solid (#[0-9A-Fa-f]{6});/
+      /button:focus-visible,\s*a:focus-visible,\s*input:focus-visible,\s*select:focus-visible,\s*textarea:focus-visible\s*\{\s*outline:\s*2px solid (#[0-9A-Fa-f]{6});/
     );
     if (!match) throw new Error('focus-visible outline rule not found in src/index.css');
     const focusRingColor = match[1];

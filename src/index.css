@@ -62,12 +62,22 @@ html {
 
 /* Focus styles for accessibility. This is a non-text UI indicator (WCAG
    1.4.11 Non-text Contrast), which needs 3:1 against what it sits behind --
-   a lower bar than body text's 4.5:1, but #C8D8E8 (the brand surface
-   colour) is only 1.45:1 against white and fails it outright, so the focus
-   ring uses the accent colour (#9D4949, 6.03:1 against white) instead of
-   the brand tokens used everywhere else in this file. */
+   a lower bar than body text's 4.5:1, but #C8D8E8 (the brand surface colour)
+   is only 1.45:1 against white and fails it outright, so the ring uses the
+   accent colour (#9D4949, 6.03:1 against white) instead of the brand tokens
+   used everywhere else in this file.
+
+   Inputs, selects and textareas are listed too, and their absence was a real
+   defect: /blog's search field is the one control a reader must focus before
+   they can use it, and it fell through to Chromium's own ring -- a different
+   colour, a different offset, and not measured against anything. A selector
+   list naming only the two elements somebody happened to think of is how
+   that happens. */
 button:focus-visible,
-a:focus-visible {
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
   outline: 2px solid #9D4949;
   outline-offset: 2px;
 }
