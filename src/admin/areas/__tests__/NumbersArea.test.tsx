@@ -7,10 +7,11 @@
 // screen and deciding it does not work.
 import { StrictMode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import NumbersArea from '../NumbersArea';
-import { CARD_HEADINGS } from '../../manage/analytics';
+import { CAMPAIGN_CAVEAT, CAMPAIGN_VS_REFERRER, CARD_HEADINGS } from '../../manage/analytics';
+import { KNOWN_CAMPAIGN_SOURCES } from '../../../shared/campaign-sources';
 import { ZERO_DATA_PAYLOAD } from '../../../shared/analytics-payload';
 import type { AnalyticsPayload } from '../../../shared/analytics-payload';
 import type { ContentEntries, ContentRegistry } from '../../publish';
@@ -97,34 +98,38 @@ describe('the state it ships in', () => {
 });
 
 // ---------------------------------------------------------------------------
-describe('with real numbers', () => {
-  const POPULATED = payload({
-    visits: 4100,
-    thisWeekVisits: 312,
-    priorWeekVisits: 240,
-    bookingTaps: { total: 512, days: 28, lowerBound: true },
-    byPath: [
-      { path: '/', visits: 2000 },
-      { path: '/catering', visits: 400 },
-      { path: '/never-heard-of-it', visits: 3 },
-    ],
-    byReferer: [
-      { kind: 'instagram', label: 'Instagram', host: null, visits: 1200 },
-      { kind: 'other', label: 'Other links', host: 't.co', visits: 40 },
-    ],
-    // Four points, so the trend card actually draws rather than falling back
-    // to "not enough days yet". A populated fixture with an empty series
-    // would leave every assertion about the chart passing for the wrong
-    // reason.
-    series: [
-      { date: '2026-07-20', visits: 90, complete: true },
-      { date: '2026-07-21', visits: 140, complete: true },
-      { date: '2026-07-22', visits: 60, complete: true },
-      { date: '2026-07-23', visits: 200, complete: true },
-    ],
-    seriesStartsOn: '2026-07-20',
-  });
+// Module scope rather than inside one describe: the campaign and
+// busiest-times blocks below build their own fixtures from this one, and a
+// second hand-typed "populated" payload is how two blocks come to disagree
+// about what a populated screen looks like.
+const POPULATED = payload({
+  visits: 4100,
+  thisWeekVisits: 312,
+  priorWeekVisits: 240,
+  bookingTaps: { total: 512, days: 28, lowerBound: true },
+  byPath: [
+    { path: '/', visits: 2000 },
+    { path: '/catering', visits: 400 },
+    { path: '/never-heard-of-it', visits: 3 },
+  ],
+  byReferer: [
+    { kind: 'instagram', label: 'Instagram', host: null, visits: 1200 },
+    { kind: 'other', label: 'Other links', host: 't.co', visits: 40 },
+  ],
+  // Four points, so the trend card actually draws rather than falling back
+  // to "not enough days yet". A populated fixture with an empty series
+  // would leave every assertion about the chart passing for the wrong
+  // reason.
+  series: [
+    { date: '2026-07-20', visits: 90, complete: true },
+    { date: '2026-07-21', visits: 140, complete: true },
+    { date: '2026-07-22', visits: 60, complete: true },
+    { date: '2026-07-23', visits: 200, complete: true },
+  ],
+  seriesStartsOn: '2026-07-20',
+});
 
+describe('with real numbers', () => {
   const PAGES_ENTRY = {
     'pages.json': { data: [{ slug: 'catering', name: 'Catering' }], initial: [], sha: 'x' },
   } as unknown as ContentEntries;
@@ -234,6 +239,70 @@ describe('with real numbers', () => {
     renderNumbers(okFetch(POPULATED) as unknown as typeof fetch);
     await screen.findByText(CARD_HEADINGS.a);
     expect(screen.queryByText(/Visitor counting started on/)).not.toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The card the whole write path exists for. Its EMPTY state is the
+// deliverable: on the day it ships there are no tagged links in the world, so
+// what the card does is teach her how to make one and which words the write
+// path recognises.
+describe('the campaign card', () => {
+  function withCampaigns(campaigns: AnalyticsPayload['campaigns']) {
+    return okFetch(payload({ ...POPULATED, campaigns })) as unknown as typeof fetch;
+  }
+
+  const INSTAGRAM = [{ source: 'instagram', label: 'Instagram link', arrivals: 84 }];
+
+  it('shows each source with its exact count, in her words', async () => {
+    renderNumbers(withCampaigns(INSTAGRAM));
+
+    expect(await screen.findByText('Instagram link')).toBeInTheDocument();
+    expect(screen.getByText('84')).toBeInTheDocument();
+    // The machine value never reaches the screen -- "instagram" beside a
+    // referrer card that also says Instagram is the collision this avoids.
+    expect(screen.queryByText('instagram')).toBeNull();
+  });
+
+  it('teaches her how to make a tagged link when there is nothing to show yet', async () => {
+    renderNumbers(withCampaigns([]));
+    expect(await screen.findByText(/utm_source=instagram/)).toBeInTheDocument();
+  });
+
+  it('lists the words the site actually recognises, so a wrong tag is discoverable', async () => {
+    // Without this list she uses ?utm_source=insta, every arrival lands in
+    // "other", and the card tells her Instagram brought nobody.
+    //
+    // Read off the ONE paragraph that carries the list, rather than searched
+    // for anywhere on screen: the how-to sentence above it also contains the
+    // word instagram, so an unscoped query would match two elements whether
+    // or not the list is there -- and would then start PASSING the moment the
+    // list was deleted. Exactly backwards.
+    renderNumbers(withCampaigns([]));
+    const words = await screen.findByText(/Words this site recognises/);
+    for (const source of KNOWN_CAMPAIGN_SOURCES) {
+      expect(words.textContent).toContain(source);
+    }
+  });
+
+  it('says a tag is not a referrer, in both states', async () => {
+    renderNumbers(withCampaigns([]));
+    expect(await screen.findByText(CAMPAIGN_VS_REFERRER)).toBeInTheDocument();
+    cleanup();
+
+    renderNumbers(withCampaigns([{ source: 'other', label: 'Someone else’s link', arrivals: 12 }]));
+    expect(await screen.findByText(CAMPAIGN_VS_REFERRER)).toBeInTheDocument();
+  });
+
+  it('says what it cannot tell her, on the card', async () => {
+    renderNumbers(withCampaigns(INSTAGRAM));
+    const card = (await screen.findByText(CARD_HEADINGS.campaigns)).closest('div') as HTMLElement;
+    expect(within(card).getByText(CAMPAIGN_CAVEAT)).toBeInTheDocument();
+  });
+
+  it('groups everything she has not named into one row', async () => {
+    renderNumbers(withCampaigns([{ source: 'other', label: 'Someone else’s link', arrivals: 12 }]));
+    expect(await screen.findByText('Someone else’s link')).toBeInTheDocument();
   });
 });
 

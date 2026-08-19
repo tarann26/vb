@@ -32,8 +32,11 @@
 // rather than each re-explaining the same thing.
 import React, { useEffect, useRef, useState } from 'react';
 import {
+  CAMPAIGN_CAVEAT,
+  CAMPAIGN_VS_REFERRER,
   CARD_HEADINGS,
   VISIT_COUNTING_STARTED_ON,
+  campaignHowTo,
   formatCountingStartedOn,
   labelForPath,
   noVisitsYetSentence,
@@ -48,6 +51,7 @@ import TrendChart from '../manage/TrendChart';
 import BarList from '../manage/BarList';
 import StatCard from '../manage/StatCard';
 import { changeBetween } from '../manage/comparison';
+import { KNOWN_CAMPAIGN_SOURCES } from '../../shared/campaign-sources';
 import { isAnalyticsPayload } from '../../shared/analytics-payload';
 import type { AnalyticsFailureReason, AnalyticsPayload } from '../../shared/analytics-payload';
 import type { ContentRegistry } from '../publish';
@@ -136,6 +140,13 @@ const NumbersArea: React.FC<NumbersAreaProps> = ({ active, registry, fetchImpl }
   // reasoned about -- it is exactly what the e2e case for this screen
   // caught.
   const mountedRef = useRef(true);
+  // The web address she is looking at right now, so the example tagged link
+  // in the campaign card's empty state is one she can paste and one that
+  // cannot go stale. Read off the location rather than written down: this
+  // dashboard is served from the same origin as the public site, and a
+  // hard-coded domain would print the wrong example the day the site moves --
+  // the same self-configuring posture worker/index.ts's siteOriginOf takes.
+  const site = window.location.origin;
   useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -211,6 +222,11 @@ const NumbersArea: React.FC<NumbersAreaProps> = ({ active, registry, fetchImpl }
           <TrendCard outcome={outcome} />
           <CardB outcome={outcome} pages={pagesFromRegistry(registry)} />
           <CardC outcome={outcome} />
+          {/* Directly under Card C, and the adjacency IS the design: the two
+              cards that could be read as contradicting each other sit
+              together, with the sentence that tells them apart between
+              them. */}
+          <CampaignCard outcome={outcome} site={site} />
           <CardD outcome={outcome} />
         </>
       )}
@@ -330,6 +346,52 @@ const CardC: React.FC<{ outcome: Outcome }> = ({ outcome }) => (
           value: bucket.visits,
         }))}
       />
+    )}
+  </div>
+);
+
+// The one card on this panel fed by our OWN rows rather than by Cloudflare,
+// which is why its numbers are exact and say so nowhere -- exactness is the
+// absence of the word "about", not a claim to be made.
+//
+// Its empty state is the deliverable. Until she has pasted a tagged link
+// somewhere there is nothing to count, so what this card does on day one is
+// teach her the link format and name the words the write path recognises. A
+// wrong word is not an error anywhere: it is silently counted as "other", and
+// this list is the only thing that makes that discoverable.
+const CampaignCard: React.FC<{ outcome: Outcome; site: string }> = ({ outcome, site }) => (
+  <div className={CARD} data-card="campaigns">
+    <h3 className={CARD_TITLE}>{CARD_HEADINGS.campaigns}</h3>
+    {outcome.kind !== 'ok' ? (
+      <Skeleton />
+    ) : (
+      <>
+        {outcome.payload.campaigns.length === 0 ? (
+          <>
+            <p className="text-sm text-gray-600">{campaignHowTo(site)}</p>
+            <p className="mt-1 text-xs text-gray-600">
+              Words this site recognises: {KNOWN_CAMPAIGN_SOURCES.join(', ')}. Anything else is counted as one row.
+            </p>
+          </>
+        ) : (
+          <BarList
+            ordered={false}
+            rows={outcome.payload.campaigns.map((row) => ({
+              // row.label, never row.source. The machine value is the same
+              // string the referrer card already shows as a bucket, and two
+              // rows reading "instagram" on one screen meaning two different
+              // things is the collision this whole card is written around.
+              key: row.source,
+              label: row.label,
+              value: row.arrivals,
+            }))}
+          />
+        )}
+        {/* Both sentences render in BOTH states, because the confusion they
+            prevent exists in both. */}
+        <p className="mt-2 text-xs text-gray-500">{CAMPAIGN_VS_REFERRER}</p>
+        <p className="mt-1 text-xs text-gray-500">{CAMPAIGN_CAVEAT}</p>
+      </>
     )}
   </div>
 );

@@ -78,6 +78,11 @@ export const CARD_HEADINGS = {
   // The hero graphic, and the only heading that is a plain noun -- it is the
   // one thing on the screen a reader understands before reading a word of it.
   trend: 'Visits over time',
+  // "Your own links", not "campaigns". She places the links; the word
+  // campaign is the industry's, not hers, and the card directly above this
+  // one already answers "where did people come from?" about somebody else's
+  // website. The two headings have to be tellable apart at a glance.
+  campaigns: 'Which of your own links brought people?',
 } as const;
 
 // The chart says where its line begins rather than beginning at an
@@ -260,3 +265,29 @@ export function noVisitsYetSentence(taps: number): string {
     taps === 1 ? 'person has' : 'people have'
   } tapped Reserve a Table since ${formatCountingStartedOn(TAP_COUNTING_STARTED_ON)}.`;
 }
+
+// ---------------------------------------------------------------------------
+// The campaign card: which of HER links brought people.
+
+// Shown while there is nothing to count, which is the state this card ships
+// in and the most useful thing on the screen that day. "Nothing yet" alone
+// would leave her with no way to discover what the card wants, and until she
+// has pasted a tagged link somewhere there is nothing in the world for the
+// endpoint to record. The empty state is therefore the deliverable, not a
+// placeholder.
+export function campaignHowTo(site: string): string {
+  return `Add ?utm_source= and one of these words to the end of your web address, then paste that instead of the plain one. For example: ${site}/?utm_source=instagram`;
+}
+
+// What this card cannot tell her, ON the card rather than assumed. Both
+// directions are named because both are real: the same person on a phone and
+// a laptop is two arrivals, and someone whose browser refuses the write is
+// none.
+export const CAMPAIGN_CAVEAT =
+  'Counted once per person arriving, not once per page they read. It cannot tell that the same person came back on a different phone, and it misses anyone whose browser blocks it.';
+
+// A tag is not a referrer, and this card sits directly below one that says
+// "Instagram" meaning something different. Without this line the two read as
+// a contradiction and she has no way to tell which to believe.
+export const CAMPAIGN_VS_REFERRER =
+  'This is not the same as the card above. That one says which website someone clicked from; this one says which of your own links they clicked.';
