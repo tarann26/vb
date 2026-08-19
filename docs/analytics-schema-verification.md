@@ -118,12 +118,23 @@ committed document was accepted and returned `last28: []`. Grouping the whole
 account by `siteTag` over 90 days shows why: the tag in `wrangler.toml` and
 `index.html`, `de70f41296fe4d6486dbad51f983220f`, has **no rows at all**. The
 rows that exist belong to two earlier tags from before the 2026-08-18
-unification. The beacon itself is healthy — the live-site load above was
-accepted with HTTP 204 — so this is a dataset that started yesterday and has
-had almost no traffic, not a broken pipe. A probe pageload sent to production
-had still not surfaced in the API 25 minutes later, which is ingestion lag plus
-adaptive sampling, and is worth knowing before anyone reads an empty panel as a
-fault.
+unification. The beacon fires and is accepted — the live-site load above got
+HTTP 204 back from `/cdn-cgi/rum` under the production token — so this is a
+dataset that started yesterday, not an obviously broken pipe.
+
+**One thing this probe could not close, and it should be closed before Task 13
+switches the snapshot job on.** That accepted pageload had still not appeared
+in the API **two hours later**, under a 24-hour window with no `bot` filter.
+Two explanations fit and this run cannot separate them: the dataset is adaptive
+and the payload carried `"st":2`, so a single event is exactly what sampling
+discards; or nothing written under this token is being retained at all. The
+cheap way to tell them apart is volume — a handful of real visits over a day
+will surface if ingestion works and will not if it does not. **Until one row
+appears under `de70f41296fe4d6486dbad51f983220f`, treat every Cloudflare-fed
+card as unproven end to end**, and read a zero on the panel as "no answer yet"
+rather than "no visitors". The nightly snapshot job archives whatever this
+returns, and archiving zeros is the one thing in this plan that cannot be
+undone later.
 
 There is a second reason the panel reads zero, and it is structural rather than
 temporary: `worker/analytics.ts` sets `until` to **the start of today UTC**, so
