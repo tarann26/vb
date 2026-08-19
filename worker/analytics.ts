@@ -165,6 +165,8 @@ import type {
 } from '../src/shared/analytics-payload';
 import { readWaCounts } from './wa';
 import { readCampaignRows } from './campaign';
+import { dailySince, firstDailyDay, monthlyCount } from './analytics-store';
+import { RUM_CAPABILITIES } from './analytics-schema';
 import type { PagesEnv } from './status';
 
 // The Web Analytics site tag: an identifier, not a secret -- the same
@@ -177,6 +179,17 @@ import type { PagesEnv } from './status';
 // shape of the vars it actually reads.
 export interface WebAnalyticsEnv {
   CF_WEB_ANALYTICS_SITE_TAG: string;
+}
+
+// Exactly the three vars sending the document needs, and no more. NOT
+// `PagesEnv & WebAnalyticsEnv`: that drags in CLOUDFLARE_PAGES_PROJECT, which
+// this query has no use for and which the nightly job (worker/rollup.ts's
+// RollupEnv) therefore has no reason to carry. Narrowing it here is what lets
+// the scheduled handler send the same verified document without pretending to
+// be a Pages caller.
+export interface AnalyticsQueryEnv extends WebAnalyticsEnv {
+  CLOUDFLARE_API_TOKEN: string;
+  CLOUDFLARE_ACCOUNT_ID: string;
 }
 
 export type AnalyticsEnv = PagesEnv &
@@ -413,6 +426,49 @@ function totalVisits(rows: RumRow[]): number {
   return total;
 }
 
+// The one upstream call, factored out so the scheduled snapshot sends exactly
+// the document Task 1 verified rather than a second one. Returns null on any
+// failure -- the caller decides whether that is a 502 (the panel) or a
+// skipped night (the snapshot).
+//
+// The rows go through isExcludedPath before they are summed, exactly as every
+// card does, which is why requestPath is in the document at all. An archive
+// that counted her own editing visits would sit permanently above the number
+// printed beside it.
+export async function totalVisitsFor(
+  env: AnalyticsQueryEnv,
+  since: string,
+  until: string,
+): Promise<number | null> {
+  let upstream: Response;
+  try {
+    upstream = await fetch(GRAPHQL_ENDPOINT, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${env.CLOUDFLARE_API_TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        query: ANALYTICS_QUERY,
+        variables: {
+          accountTag: env.CLOUDFLARE_ACCOUNT_ID,
+          siteTag: env.CF_WEB_ANALYTICS_SITE_TAG,
+          sinceWindow: since,
+          sinceThisWeek: since,
+          sincePriorWeek: since,
+          until,
+        },
+      }),
+      signal: AbortSignal.timeout(10_000),
+    });
+  } catch {
+    return null;
+  }
+  if (!upstream.ok) return null;
+  const parsed = (await upstream.json().catch(() => null)) as { data?: unknown; errors?: unknown[] } | null;
+  if (!parsed || (Array.isArray(parsed.errors) && parsed.errors.length > 0)) return null;
+  const accounts = (parsed.data as { viewer?: { accounts?: unknown } } | undefined)?.viewer?.accounts;
+  if (!Array.isArray(accounts) || accounts.length === 0) return null;
+  return totalVisits(rowsOf((accounts[0] as RumAccount).last28));
+}
+
 function rankPaths(rows: RumRow[]): AnalyticsPathRow[] {
   const byPath = new Map<string, number>();
   for (const row of rows) {
@@ -642,6 +698,28 @@ export async function handleAnalytics(request: Request, env: AnalyticsEnv): Prom
   const sinceDay = istDateDaysAgo(today, windowDays - 1);
   const campaigns = await readCampaignRows(env.DB, sinceDay);
 
+  // The trend chart ALWAYS reads from our own snapshots, never from Cloudflare
+  // directly, whichever way the schema verification went (see
+  // worker/analytics-schema.ts). That is what collapses the date-dimension
+  // branch from two implementations to one optional backfill step, so no
+  // later task can rewrite an earlier one either way.
+  //
+  // `day` becomes `date` here and nowhere else: analytics-store.ts holds ONE
+  // row shape for days and months alike, because a chart draws a run of
+  // points against an ordered axis and does not care what a point is called.
+  // `seriesGrain` below is what says which this one is.
+  //
+  // Each read degrades on its own. A missing archive costs the chart and
+  // leaves every Cloudflare-fed card standing, the same bargain
+  // readCampaignRows and readWaCounts already keep.
+  const series = (await dailySince(env.DB, sinceDay).catch(() => [])).map((point) => ({
+    date: point.day,
+    visits: point.visits,
+    complete: point.complete,
+  }));
+  const seriesStartsOn = await firstDailyDay(env.DB).catch(() => null);
+  const yearAvailable = (await monthlyCount(env.DB).catch(() => 0)) > 0;
+
   const payload: AnalyticsPayload = {
     windowDays,
     visits: totalVisits(last28),
@@ -656,12 +734,14 @@ export async function handleAnalytics(request: Request, env: AnalyticsEnv): Prom
       lowerBound: true,
     },
     range,
-    // Filled by Task 13. Empty is the honest launch value: no snapshot rows
-    // exist until the nightly job has run once.
-    series: [],
+    series,
     seriesGrain: 'day',
-    seriesSource: 'snapshot',
-    seriesStartsOn: null,
+    // 'backfilled' only when the verification found a date dimension, which
+    // is the one thing that lets the nightly job's first run reach ninety
+    // days backwards. Set from RUM_CAPABILITIES so the chart's caption cannot
+    // claim a reach backwards that never happened.
+    seriesSource: RUM_CAPABILITIES.dateDimension === null ? 'snapshot' : 'backfilled',
+    seriesStartsOn,
     // Filled or permanently pinned null by Task 15.
     hourly: null,
     campaigns,
@@ -669,8 +749,7 @@ export async function handleAnalytics(request: Request, env: AnalyticsEnv): Prom
     // Filled by Task 19.
     visitsPrevious: 0,
     tapsPrevious: 0,
-    // Filled by Task 14.
-    yearAvailable: false,
+    yearAvailable,
   };
 
   // Built ONCE as a string, then two Responses -- see this file's header.

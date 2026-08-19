@@ -185,6 +185,19 @@ function respondWith(response: () => Response): void {
   fetchStub.mockImplementation(async () => response());
 }
 
+// The launch state THIS SITE produces, which is ZERO_DATA_PAYLOAD in every
+// field but one.
+//
+// `seriesSource` is read from worker/analytics-schema.ts, and that constant
+// records a real `date` dimension on this dataset -- so the nightly job's
+// first run reaches ninety days backwards and the payload says 'backfilled'
+// from the start. The shared fixture cannot know that: it lives in
+// src/shared/, which must never import from worker/, and it therefore holds
+// the value for a dataset with no date dimension. Spelled as a LITERAL rather
+// than derived from RUM_CAPABILITIES, so re-running the verification to a
+// different answer reddens this instead of quietly agreeing with itself.
+const ZERO_DATA_HERE: AnalyticsPayload = { ...ZERO_DATA_PAYLOAD, seriesSource: 'backfilled' };
+
 async function payloadOf(response: Response): Promise<AnalyticsPayload> {
   return (await response.json()) as AnalyticsPayload;
 }
@@ -264,7 +277,7 @@ describe('failure shapes', () => {
     const response = await handleAnalytics(await authed(), env);
 
     expect(response.status).toBe(200);
-    expect(await payloadOf(response)).toEqual(ZERO_DATA_PAYLOAD);
+    expect(await payloadOf(response)).toEqual(ZERO_DATA_HERE);
   });
 
   it('answers 502 upstream-error when GraphQL returns 200 with a non-empty errors array', async () => {
@@ -398,7 +411,7 @@ describe('the Cache API entry', () => {
     const second = await handleAnalytics(await authed(), env);
     expect(fetchStub).toHaveBeenCalledTimes(1);
     expect(second.status).toBe(200);
-    expect(await payloadOf(second)).toEqual(ZERO_DATA_PAYLOAD);
+    expect(await payloadOf(second)).toEqual(ZERO_DATA_HERE);
   });
 
   it('keys on a constructed in-zone path, never on the incoming URL', async () => {
@@ -518,6 +531,77 @@ describe('the range parameter', () => {
     // assertion rather than two hopes pointing at each other.
     const body = await (await handleAnalytics(await analyticsRequest(''), env)).json();
     expect(isAnalyticsPayload(body)).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The trend series and the archive, which come from OUR OWN rows and never
+// from Cloudflare -- the thing that collapses the date-dimension branch from
+// two implementations to one optional backfill step.
+// ---------------------------------------------------------------------------
+
+describe('the trend series on the payload', () => {
+  it('draws from the snapshot table, ascending, over the range it was asked for', async () => {
+    d1.dailyVisits.set(istDateDaysAgo(todayInKolkata(), 2), { visits: 12, recorded_at: 0 });
+    d1.dailyVisits.set(istDateDaysAgo(todayInKolkata(), 1), { visits: 30, recorded_at: 0 });
+
+    const body = await payloadOf(await handleAnalytics(await analyticsRequest('?range=7d'), env));
+    expect(body.series).toEqual([
+      { date: istDateDaysAgo(todayInKolkata(), 2), visits: 12, complete: true },
+      { date: istDateDaysAgo(todayInKolkata(), 1), visits: 30, complete: true },
+    ]);
+    expect(body.seriesGrain).toBe('day');
+  });
+
+  it('leaves a day older than the range out of the line', async () => {
+    d1.dailyVisits.set(istDateDaysAgo(todayInKolkata(), 7), { visits: 99, recorded_at: 0 });
+    const body = await payloadOf(await handleAnalytics(await analyticsRequest('?range=7d'), env));
+    expect(body.series).toEqual([]);
+  });
+
+  it('says where the line begins, from the earliest row rather than from a constant', async () => {
+    d1.dailyVisits.set('2026-01-04', { visits: 1, recorded_at: 0 });
+    d1.dailyVisits.set('2026-01-09', { visits: 1, recorded_at: 0 });
+    const body = await payloadOf(await handleAnalytics(await authed(), env));
+    expect(body.seriesStartsOn).toBe('2026-01-04');
+  });
+
+  it('says the archive holds nothing when it holds nothing, rather than a date it invented', async () => {
+    const body = await payloadOf(await handleAnalytics(await authed(), env));
+    expect(body.seriesStartsOn).toBeNull();
+  });
+
+  // The By-year button's whole condition. Offering a fourth button against an
+  // empty rollup on day one teaches her the feature is broken.
+  it('reports the by-year archive as empty until a month has been rolled', async () => {
+    const first = await payloadOf(await handleAnalytics(await authed(), env));
+    expect(first.yearAvailable).toBe(false);
+
+    d1.monthlyVisits.set('2026-07', { visits: 40, complete: 1, recorded_at: 0 });
+    cache = new FakeCache();
+    vi.stubGlobal('caches', { default: cache });
+    const second = await payloadOf(await handleAnalytics(await authed(), env));
+    expect(second.yearAvailable).toBe(true);
+  });
+
+  it('says the chart reaches backwards, because the verification found a date dimension', async () => {
+    // Spelled as a literal, not read back off RUM_CAPABILITIES: this is the
+    // caption the owner reads, and it must not agree with the code by
+    // construction. worker/analytics-schema.ts records `date`; if a re-run of
+    // the probe ever answers differently, this is where that surfaces.
+    const body = await payloadOf(await handleAnalytics(await authed(), env));
+    expect(body.seriesSource).toBe('backfilled');
+  });
+
+  it('still answers every other card when the archive reads fail', async () => {
+    respondWith(() => graphqlOk({ last28: [{ path: '/', visits: 12 }] }));
+    d1.failWith = 'D1 is down';
+
+    const body = await payloadOf(await handleAnalytics(await authed(), env));
+    expect(body.visits).toBe(12);
+    expect(body.series).toEqual([]);
+    expect(body.seriesStartsOn).toBeNull();
+    expect(body.yearAvailable).toBe(false);
   });
 });
 

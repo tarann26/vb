@@ -5,10 +5,17 @@
 // GET /api/content, GET /api/published, POST /api/campaign and POST/GET
 // /api/wa replies 404.
 //
-// This Worker has no `scheduled` export and wrangler.toml declares no cron
-// triggers: publishing is instantaneous. A commit lands, Cloudflare's own
-// GitHub integration builds on the push, and the change is live -- there is
-// no future-dated content for anything to wake up and notice.
+// Publishing is instantaneous and nothing here waits on a clock for it: a
+// commit lands, Cloudflare's own GitHub integration builds on the push, and
+// the change is live -- there is no future-dated content for anything to wake
+// up and notice.
+//
+// The `scheduled` export at the bottom is for the OTHER thing, and it is the
+// only thing this Worker does on a timer: once a night it copies yesterday's
+// visit total into D1 before Cloudflare's six-month window discards it
+// (worker/rollup.ts). Its cadence is wrangler.toml's [triggers], and the two
+// halves are pinned together by src/test/wrangler-config.test.ts because a
+// cron with no handler and a handler with no cron both fail silently.
 //
 // Deliberately typed against `@cloudflare/workers-types` (tsconfig.worker.json)
 // rather than tsconfig.node.json: this file needs `Response`/`Request`/`fetch`/
@@ -41,6 +48,7 @@ import { D1ConflictError, D1Store } from './d1';
 import { handlePublished } from './published';
 import { handlePostPage, slugFromPath } from './post-page';
 import { handleCampaignArrival } from './campaign';
+import { runDailyRollup } from './rollup';
 
 // Grows as later tasks need more bindings -- only what this file actually
 // reads belongs here. GITHUB_OWNER/REPO/BRANCH/TOKEN come in via GitHubEnv
@@ -1337,6 +1345,24 @@ export default {
   // across this Worker's modules.
   async fetch(request: Request, env: Env): Promise<Response> {
     return withSecurityHeaders(await route(request, env), request);
+  },
+
+  // The other half of wrangler.toml's [triggers] block, and neither half is
+  // useful alone: a cron with no handler here is a failed invocation a day
+  // against a script that cannot answer, and a handler with no cron is a
+  // function nothing calls. src/test/wrangler-config.test.ts pins both.
+  //
+  // waitUntil, not a bare await: a scheduled invocation's lifetime is the
+  // promise it registers, and an unregistered promise is cancelled the moment
+  // this function returns.
+  //
+  // The whole thing is swallowed and never rethrown. A scheduled invocation
+  // that throws is retried by Cloudflare and there is nothing here worth
+  // retrying -- a missed night is one gap in a chart, and the next night's
+  // run is unaffected. There is also nothing to report it to: the site needs
+  // to work, not to be watched.
+  async scheduled(event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil(runDailyRollup(env, event.scheduledTime).catch(() => undefined));
   },
 };
 

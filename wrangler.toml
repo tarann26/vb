@@ -96,37 +96,30 @@ CF_WEB_ANALYTICS_SITE_TAG = "de70f41296fe4d6486dbad51f983220f"
 # rollback, which is the whole reason the ContentStore indirection exists.
 CONTENT_STORE = "github"
 
-# An EXPLICIT empty list, not a deleted `[triggers]` section. Those are not
-# the same thing to `wrangler deploy`, and the difference is the whole reason
-# this stays here.
-#
-# Publishing is instantaneous, so there is no future-dated content for a cron
-# to wake up and notice, and worker/index.ts exports no `scheduled` handler
-# for one to call. But an hourly `0 * * * *` trigger was once registered on
-# the deployed `via-bianca-admin` Worker from here, and simply removing the
-# lines that registered it does not remove the registration -- Cloudflare
-# stores schedules on the script, not in this file. Read straight out of
-# wrangler's own deploy path (node_modules/wrangler/wrangler-dist/cli.js): an
-# absent section normalises to `{ crons: undefined }`, `deploy` forwards that
-# as `crons`, and the only call that can clear a schedule is guarded by
-# `if (crons) { ... PUT ${workerUrl}/schedules ... }`. `undefined` is falsy,
-# so no request is issued and whatever Cloudflare already has survives every
-# future deploy. `[]` is truthy, so the PUT fires with an empty list and
-# actually clears it. Confirmed against the live Worker while the section was
-# missing: its `/schedules` endpoint still reported `0 * * * *`, hours after
-# the removal, with 24 failed invocations a day against a script that no
-# longer had a handler to run.
-#
-# So: keep this. Deleting it later, once the schedule is gone, is not a
-# tidy-up -- it returns this Worker to the state where a `scheduled` export
-# added for some unrelated reason silently starts firing hourly again, and it
-# takes the only thing in the repo that records the cleared state with it.
-# src/test/wrangler-config.test.ts pins both halves (the section is present,
-# and the list is empty). Putting a real cadence back would also be a
-# standing charge against Pages Free's 500-build cap -- an unconditional
-# hourly hook is 720-744 builds/month on its own.
 [triggers]
-crons = []
+# 03:17 UTC, which is 08:47 in Kolkata -- after midnight UTC has closed
+# yesterday's window, and at a minute nobody else's cron is on.
+#
+# ONE cadence, once a day. Each invocation costs one GraphQL call and four D1
+# statements; 365 a year against Workers' 100,000 requests a day is not a
+# number worth thinking about. The monthly roll rides on the same invocation
+# rather than a second trigger, precisely so a missed month is impossible: it
+# re-rolls the last three months every night.
+#
+# THE 500-BUILD CAP DOES NOT APPLY HERE, and the previous comment's warning
+# about it is worth reading precisely rather than inheriting: the hourly hook
+# it describes was a standing charge against Pages Free's build cap because
+# that hook triggered a BUILD. This invokes this Worker's `scheduled` export.
+# One invocation a day, no build, no deploy.
+#
+# THE STANDING HAZARD, UNCHANGED: removing this section does NOT clear the
+# schedule. Cloudflare stores schedules on the script, and wrangler's clearing
+# PUT is guarded by `if (crons)` -- an absent section normalises to
+# `undefined`, which is falsy, so nothing is sent and whatever is registered
+# stays registered. An explicit `crons = []` is the only thing that clears
+# one. This is how an hourly trigger survived on the live Worker after its
+# config lines were deleted, at 24 failed invocations a day.
+crons = ["17 3 * * *"]
 
 [[kv_namespaces]]
 binding = "KV"
