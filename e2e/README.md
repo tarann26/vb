@@ -39,7 +39,14 @@ provide: `npx playwright install chromium`, once per machine.
    60s. A spec whose own waits — `waitForStableLayout` allows itself 10s, and
    `openCollage` calls it — could add up to more than half the budget on a
    quiet machine has no room left for a busy one.
-9. **Nothing here is typechecked.** `e2e/*.spec.ts` is in no tsconfig project,
+9. **`test.fail` goes on the test, never beside it.** `test.fail(title, body)`
+   declares one expected-to-fail test. The bare statement form,
+   `test.fail(true, '…')` written above a test, marks **every** test in the
+   enclosing `describe` — which inverts the three assertions standing beside
+   it, so they pass when they fail. And an expected-to-fail test that dies on
+   a bad locator instead of on its own assertion is reported as a pass, so
+   read the failure once, with the annotation off, before trusting it.
+10. **Nothing here is typechecked.** `e2e/*.spec.ts` is in no tsconfig project,
    so `npx tsc -b --noEmit` reads not one line of it, and Vitest does not
    typecheck either. ESLint and Playwright's own runtime are the only checks a
    spec file gets, and a type error in here has already survived a whole task

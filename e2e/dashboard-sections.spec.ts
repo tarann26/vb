@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { ANALYTICS_POPULATED, mockEditBackend } from './edit-backend';
+import { ANALYTICS_POPULATED, mockEditBackend, openDashboard } from './edit-backend';
 import { AREAS, PANELS, areaPath } from '../src/admin/manage/areas';
 import { AREA_SEEDED_KEY_PREFIX } from '../src/admin/open-sections';
 import { LOCKUP_ACCESSIBLE_NAME } from '../src/admin/manage/brand';
@@ -84,17 +84,6 @@ async function asReturningVisitor(page: Page): Promise<void> {
     },
     { prefix: AREA_SEEDED_KEY_PREFIX, slugs: AREAS.map((area) => area.slug) },
   );
-}
-
-async function openDashboard(page: Page, path = '/edit/manage'): Promise<void> {
-  await mockEditBackend(page);
-  await page.goto(path);
-  await expect(page.getByRole('heading', { name: LOCKUP_ACCESSIBLE_NAME })).toBeVisible();
-  // Every area's own fetches have settled -- otherwise anything measured
-  // below is measured against a page still filling in. All five areas load
-  // at once (they are mounted from the first render and merely hidden), so
-  // this covers the whole page, not just the visible area.
-  await expect(page.getByText(/^Loading /)).toHaveCount(0);
 }
 
 const CONTENT_AREAS = AREAS.filter((area) => area.panelIds.length > 0);
@@ -334,7 +323,8 @@ test.describe('thumbnails add no image traffic of their own', () => {
 });
 
 // ---------------------------------------------------------------------------
-// The lockup. Its accessible name is what openDashboard above waits on, so
+// The lockup. Its accessible name is what edit-backend.ts's openDashboard
+// waits on -- and it now waits on it for e2e/publish-write.spec.ts too, so
 // if this ever goes wrong every case in this file fails -- which is why the
 // specific failure it guards is worth naming on its own: a wordmark rendered
 // as an image with an empty alt would leave this page with NO h1 at all, and

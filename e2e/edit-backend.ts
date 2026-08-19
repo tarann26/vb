@@ -13,7 +13,9 @@
 // module the specs import.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
+import { LOCKUP_ACCESSIBLE_NAME } from '../src/admin/manage/brand';
 import { ZERO_DATA_PAYLOAD } from '../src/shared/analytics-payload';
 import type { AnalyticsPayload } from '../src/shared/analytics-payload';
 
@@ -192,4 +194,20 @@ export async function mockEditBackend(page: Page, options: EditBackendOptions = 
       body: JSON.stringify({ content: realContentJson(name), sha: 'e2e-test-sha' }),
     });
   });
+}
+
+// Moved here from dashboard-sections.spec.ts, byte-identical, the first time
+// a second spec needed it. The alternative -- a copy in the new file -- is
+// exactly how CONTENT_FILES above came to be maintained by hand in three
+// places, which this file's own header already records as the reason it
+// exists.
+export async function openDashboard(page: Page, path = '/edit/manage'): Promise<void> {
+  await mockEditBackend(page);
+  await page.goto(path);
+  await expect(page.getByRole('heading', { name: LOCKUP_ACCESSIBLE_NAME })).toBeVisible();
+  // Every area's own fetches have settled -- otherwise anything measured
+  // below is measured against a page still filling in. All five areas load
+  // at once (they are mounted from the first render and merely hidden), so
+  // this covers the whole page, not just the visible area.
+  await expect(page.getByText(/^Loading /)).toHaveCount(0);
 }
