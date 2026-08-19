@@ -142,6 +142,45 @@ describe('with real numbers', () => {
     expect(within(card).getByText(/lower bound, not a count/)).toBeInTheDocument();
   });
 
+  // POPULATED leaves visitsPrevious and tapsPrevious at zero, so BOTH stat
+  // cards fall into `direction: 'unknown'` and print the same sentence --
+  // which means every assertion above this one survives the two mutations
+  // that matter most here: swapping the two denominators, and swapping the
+  // two units. Neither is arithmetic and neither lives in comparison.ts or
+  // StatCard.tsx; both live in the four lines of JSX that decide WHICH
+  // number each card divides by and WHICH noun it names. So the comparison
+  // needs one fixture where the two cards cannot produce the same sentence:
+  // distinct non-zero previous values, both above MIN_PREVIOUS_FOR_CHANGE,
+  // giving percentages that are different from each other and different
+  // from what the crossed wiring would produce (4100/470 is 772% and
+  // 512/3300 is 84% fewer). These are e2e/edit-backend.ts's own numbers, so
+  // the browser and jsdom are reading the same story.
+  const WITH_HISTORY = payload({ ...POPULATED, visitsPrevious: 3300, tapsPrevious: 470 });
+
+  it('each stat card compares its own number against its own previous, in its own unit', async () => {
+    renderNumbers(okFetch(WITH_HISTORY) as unknown as typeof fetch);
+
+    const visits = (await screen.findByText('Visits')).closest('div') as HTMLElement;
+    expect(within(visits).getByText('about 4,100 visits')).toBeInTheDocument();
+    expect(within(visits).getByText('24% more visits than the period before.')).toBeInTheDocument();
+
+    const taps = screen.getByText('Reserve a Table').closest('div') as HTMLElement;
+    expect(within(taps).getByText('at least 512 tapped Reserve a Table')).toBeInTheDocument();
+    expect(within(taps).getByText('9% more taps than the period before.')).toBeInTheDocument();
+  });
+
+  // The other half of the same wiring: with nothing behind it, the card says
+  // so in the card's own words rather than printing a percentage off zero.
+  it('says it cannot compare when the period before is empty', async () => {
+    renderNumbers(okFetch(POPULATED) as unknown as typeof fetch);
+
+    const visits = (await screen.findByText('Visits')).closest('div') as HTMLElement;
+    expect(within(visits).getByText('Not enough of the period before to compare visits against.')).toBeInTheDocument();
+
+    const taps = screen.getByText('Reserve a Table').closest('div') as HTMLElement;
+    expect(within(taps).getByText('Not enough of the period before to compare taps against.')).toBeInTheDocument();
+  });
+
   it('Card B names the pages she recognises, and shows an unknown path raw', async () => {
     renderNumbers(okFetch(POPULATED) as unknown as typeof fetch, PAGES_ENTRY);
     const card = (await screen.findByText(CARD_HEADINGS.b)).closest('div') as HTMLElement;
