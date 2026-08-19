@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
 import sharp from 'sharp';
 
@@ -173,20 +175,32 @@ import sharp from 'sharp';
 
 type Band = { id: string; label: string; kind: 'wash' | 'wash-deep' | 'white' };
 
-// The eight homepage sections below the hero, in sections.json order --
-// load-bearing now that the loop below this array also checks each pair
-// against its true DOM neighbour. That order is NOT the object-literal key
-// order App.tsx's own SECTION_COMPONENTS lookup happens to be written in
-// (our story sits second-to-last on the real page, not second); confirmed
-// directly against src/content/sections.json rather than assumed, after an
-// earlier version of this array got that wrong and scrolled the wrong
-// section into the wrong place. The hero is excluded: it is a photograph
-// collage over white and has no flat band to sample. `kind: 'wash'` covers
-// both the cool token and its warm partner (they sample within the same
-// 15-to-20 band); `wash-deep` is the darker third token
-// tailwind.config.js's own comment assigns to experiences and our story, so
-// that neither shares an undifferentiated boundary with its DOM neighbour
-// (backlog items 8 and 9).
+// The eight homepage sections below the hero, in the order they are painted
+// down the page -- load-bearing, because the adjacency loop at the bottom of
+// this file reads its pairs from THIS array while measuring each row by
+// scrolling to `#id` individually. Every row is therefore correct wherever
+// its section sits, and only the PAIRING comes from the order written here.
+// That order is NOT the object-literal key order App.tsx's own
+// SECTION_COMPONENTS lookup happens to be written in (our story sits
+// second-to-last on the real page, not second), and an earlier version of
+// this array did get it wrong and paired the wrong two sections.
+//
+// So the order is asserted at the top of the test now, against both of the
+// things it claims to describe, rather than confirmed once by hand and
+// described in a comment. The comment that said "confirmed directly against
+// src/content/sections.json" was true on the day it was written and could
+// not stay true: src/admin/SectionList.tsx gives the owner Move up / Move
+// down over these nine sections, so she can put two same-token bands next to
+// each other from /edit and this file would go on diffing the committed
+// order and reporting every pair clear. See ORDER IS ASSERTED, NOT ASSUMED
+// inside the test.
+//
+// The hero is excluded: it is a photograph collage over white and has no
+// flat band to sample. `kind: 'wash'` covers both the cool token and its
+// warm partner (they sample within the same 15-to-20 band); `wash-deep` is
+// the darker third token tailwind.config.js's own comment assigns to
+// experiences and our story, so that neither shares an undifferentiated
+// boundary with its DOM neighbour (backlog items 8 and 9).
 const BANDS: readonly Band[] = [
   { id: 'gallery', label: 'atmosphere', kind: 'wash' },
   { id: 'menu', label: 'food', kind: 'white' },
@@ -198,6 +212,32 @@ const BANDS: readonly Band[] = [
   { id: 'visit', label: 'visit', kind: 'wash' },
 ];
 
+// The owner's source of truth for which sections are on the homepage and in
+// what order. Read off disk rather than imported, so this file needs no
+// tsconfig `resolveJsonModule` it is not covered by (e2e/*.spec.ts is in no
+// tsconfig project at all) and no assumption about how Playwright's loader
+// treats a JSON import.
+const SECTIONS_JSON = fileURLToPath(new URL('../src/content/sections.json', import.meta.url));
+
+// A section's content id and the DOM id it renders under are two
+// independently chosen strings -- src/content/types.ts says so about
+// SectionId, and four of the nine differ. Written out here rather than
+// derived, the same hand-maintained shape and for the same reason as
+// App.tsx's SECTION_COMPONENTS and SectionList.tsx's SECTION_NAMES: a table
+// that is complete is checkable, and a rule that infers `our-story` from
+// `ourStory` would also have to explain `press` rendering at `#blogs`. Any
+// id not listed renders under itself (drinks, experiences, awards, visit,
+// hero), which is what the fallback below means -- including a NEW section
+// the owner adds, whose unaliased id will not be in BANDS and will fail the
+// assertion, which is the correct outcome: a section inserted between two
+// bands changes a boundary this file is the only check on.
+const DOM_ID: Readonly<Record<string, string>> = {
+  atmosphere: 'gallery',
+  food: 'menu',
+  press: 'blogs',
+  ourStory: 'our-story',
+};
+
 function pointsBelowWhite(r: number, g: number, b: number): number {
   return 255 - (r + g + b) / 3;
 }
@@ -207,6 +247,53 @@ test.use({ viewport: { width: 390, height: 844 } });
 test('every wash band lands 15 to 20 points below white on a phone', async ({ page }, testInfo) => {
   await page.goto('/');
   await page.waitForLoadState('networkidle');
+
+  // ORDER IS ASSERTED, NOT ASSUMED.
+  //
+  // The adjacency loop at the bottom of this test is the only check anywhere
+  // that backlog item 9 is closed on the rendered page, and it takes its
+  // pairs from BANDS. Each row's pixel is measured by scrolling to its own
+  // `#id`, so every row stays correct no matter where its section sits --
+  // which means a wrong BANDS order does not make any row wrong, it makes
+  // the file diff pairs that are not neighbours and report a boundary that
+  // does not exist. It would stay green through exactly the regression it
+  // exists to catch. That is not hypothetical twice over: this array was
+  // wrong once during the task that wrote it, and the homepage order is
+  // OWNER-EDITABLE (src/admin/SectionList.tsx's Move up / Move down, through
+  // `moveTo`). If she moves `press` to sit under `atmosphere`, two bands
+  // carrying the same token become neighbours and the boundary between them
+  // goes to 0 points.
+  //
+  // Hard `expect`, deliberately unlike every measurement below it: a
+  // soft failure here would let the run print a table of eight correct
+  // numbers under a pairing that does not describe the page, which is the
+  // one output of this file nobody could tell from a good one.
+  //
+  // Two assertions, because they fail for different reasons. The first is
+  // the CONTENT: what the owner reordered, off the file she reorders. The
+  // second is the DOM: what a visitor's browser actually painted, which also
+  // covers App.tsx rendering in some order other than the file's, and a
+  // section that quietly stopped rendering at all.
+  const contentOrder = (JSON.parse(readFileSync(SECTIONS_JSON, 'utf8')) as { id: string; enabled: boolean }[])
+    .filter((section) => section.enabled)
+    .map((section) => DOM_ID[section.id] ?? section.id)
+    .filter((id) => id !== 'hero');
+  expect(
+    contentOrder,
+    'src/content/sections.json no longer matches BANDS -- the homepage order moved (or a section was added, removed or hidden) and the adjacency loop below would be diffing pairs that are not neighbours. Update BANDS, and re-check that no adjacent pair shares a wash token.',
+  ).toEqual(BANDS.map((band) => band.id));
+
+  // Every `<section>` on the homepage that carries an id, in document order.
+  // The hero's own <section> carries none, which is why it needs no
+  // filtering out here; the four template sections carry none either, so a
+  // template section the owner inserts between two bands is caught by the
+  // content assertion above rather than this one, and is caught.
+  const domOrder = await page.locator('section[id]').evaluateAll((els) => els.map((el) => el.id));
+  expect(
+    domOrder,
+    'the rendered homepage no longer matches BANDS -- consecutive rows in the table below are NOT consecutive sections on the page.',
+  ).toEqual(BANDS.map((band) => band.id));
+
   const rows: { label: string; kind: string; rgb: string; points: number; y: number }[] = [];
 
   for (const band of BANDS) {
@@ -330,9 +417,12 @@ test('every wash band lands 15 to 20 points below white on a phone', async ({ pa
   }
 
   // Backlog item 9's own check, on the rendered page rather than the palette
-  // arithmetic: BANDS is in true DOM order now (see its own header comment),
-  // so consecutive rows here ARE consecutive sections on the homepage.
-  // `expect.soft`, matching every assertion above, so a run reports every
+  // arithmetic. Consecutive rows here ARE consecutive sections on the
+  // homepage: `rows` is built in BANDS order, and BANDS was asserted equal to
+  // both sections.json's enabled order and the painted document order at the
+  // top of this test. That pairing used to rest on the header comment above
+  // instead, which is a guard that cannot fail.
+  // `expect.soft`, matching every measurement above, so a run reports every
   // failing boundary rather than stopping at the first one.
   for (let i = 1; i < rows.length; i += 1) {
     if (rows[i].points < 1 && rows[i - 1].points < 1) continue; // white against white is not a boundary anyone claimed
