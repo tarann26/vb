@@ -734,6 +734,56 @@ describe('the range control', () => {
     expect(await screen.findByRole('button', { name: 'By year' })).toBeInTheDocument();
   });
 
+  // Whole-branch review, finding 4. `yearAvailable` lives on the payload, so
+  // reading it straight off `outcome` made it false for the whole of a load --
+  // and RangeControl filters the pill row on it, so the button she had just
+  // pressed unmounted under her finger. For up to ten seconds on a cold Worker
+  // the row showed three pills with none pressed, and a keyboard user's focus
+  // fell to document.body because the focused element was gone.
+  //
+  // Driven with the deferred stub, so the assertion is made WHILE the request
+  // is genuinely in flight -- every other range case here resolves
+  // synchronously or asserts after the answer, which is precisely why nothing
+  // caught this.
+  it('keeps the By year pill on screen, and pressed, while its own answer loads', async () => {
+    const { impl, answer } = deferredAnalytics();
+    renderNumbers(impl as unknown as typeof fetch);
+
+    await answer('30d', { yearAvailable: true });
+    const byYear = await screen.findByRole('button', { name: 'By year' });
+    fireEvent.click(byYear);
+
+    // The request is out and nothing has answered it.
+    await waitFor(() => {
+      expect(impl).toHaveBeenCalledTimes(2);
+    });
+    const stillThere = screen.getByRole('button', { name: 'By year' });
+    expect(stillThere).toHaveAttribute('aria-pressed', 'true');
+    // And exactly one pill claims the range, so the row is never blank.
+    const pressed = screen
+      .getAllByRole('button', { pressed: true })
+      .map((el) => el.textContent);
+    expect(pressed).toEqual(['By year']);
+
+    await answer('year', { yearAvailable: true });
+    expect(screen.getByRole('button', { name: 'By year' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  // The other half: an answer that never says yes must not conjure the pill.
+  // Without this, "latch it once it is true" and "always show it" are the same
+  // test.
+  it('still offers no By year pill while a 30-day request that never said yes is loading', async () => {
+    const { impl, answer } = deferredAnalytics();
+    renderNumbers(impl as unknown as typeof fetch);
+    await answer('30d', { yearAvailable: false });
+    expect(await screen.findByRole('button', { name: 'Last 90 days' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Last 90 days' }));
+    await waitFor(() => {
+      expect(impl).toHaveBeenCalledTimes(2);
+    });
+    expect(screen.queryByRole('button', { name: 'By year' })).toBeNull();
+  });
+
   it('says the breakdown is not KEPT by year, rather than saying nobody visited', async () => {
     const fetchImpl = stubAnalytics((range) =>
       range === 'year' ? { yearAvailable: true, byPath: [], byReferer: [] } : { yearAvailable: true },

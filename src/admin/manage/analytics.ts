@@ -329,8 +329,17 @@ export function campaignHowTo(site: string): string {
 // directions are named because both are real: the same person on a phone and
 // a laptop is two arrivals, and someone whose browser refuses the write is
 // none.
+//
+// AND WHICH DAYS IT COUNTED, which is the third thing and the one a whole-
+// branch review found (finding 5). Under one "Last 30 days" pill this card
+// counts a window that INCLUDES today while the visits and taps beside it stop
+// at yesterday -- Cloudflare's figures for today do not exist yet, and this
+// card's rows are our own and do. Both behaviours are right; the pill above
+// them cannot say so, so the card does. This is the one card she can check by
+// hand -- she pastes a link, taps it, and looks -- and today's arrivals had
+// better be in the number she is looking at.
 export const CAMPAIGN_CAVEAT =
-  'Counted once per person arriving, not once per page they read. It cannot tell that the same person came back on a different phone, and it misses anyone whose browser blocks it.';
+  'Counted once per person arriving, not once per page they read, and today so far is included — the visitor numbers above stop at yesterday. It cannot tell that the same person came back on a different phone, and it misses anyone whose browser blocks it.';
 
 // A tag is not a referrer, and this card sits directly below one that says
 // "Instagram" meaning something different. Without this line the two read as

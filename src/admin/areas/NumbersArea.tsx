@@ -140,6 +140,22 @@ const CARD_TITLE = "mb-2 font-['Montserrat'] text-sm uppercase tracking-wide tex
 const NumbersArea: React.FC<NumbersAreaProps> = ({ active, registry, fetchImpl }) => {
   const [outcome, setOutcome] = useState<Outcome>({ kind: 'idle' });
   const [range, setRange] = useState<AnalyticsRange>(DEFAULT_RANGE);
+  // LATCHED, never read straight off the current answer, and the difference is
+  // a control that forgets what she just pressed.
+  //
+  // `yearAvailable` lives on the payload, so reading it off `outcome` makes it
+  // false for as long as `outcome` is `loading` -- which is exactly the window
+  // that opens the instant she presses "By year". RangeControl filters the
+  // pill row on it, so the button she just pressed unmounted under her finger:
+  // for up to ten seconds on a cold Worker the row showed three buttons with
+  // NONE pressed, and a keyboard user's focus fell to document.body because
+  // the focused element had been removed.
+  //
+  // Once true it stays true for the session. The archive only ever grows, so
+  // there is no state in which the answer legitimately goes back to false
+  // while she is looking at the screen -- and if a year request errors, she
+  // must still be left with a pill claiming the range she is reading.
+  const [yearEverAvailable, setYearEverAvailable] = useState(false);
   // Which ranges this session has already asked the Worker for. The single
   // boolean this replaces was right for a screen with one answer and is wrong
   // for one with four -- but the ORIGINAL guarantee it existed for is kept
@@ -229,6 +245,11 @@ const NumbersArea: React.FC<NumbersAreaProps> = ({ active, registry, fetchImpl }
     if (!mountedRef.current) return;
     if (next.kind === 'ok' && next.payload.range !== asked) return;
     answersRef.current.set(asked, next);
+    // Set BEFORE the "she has moved off this range" return below: an answer
+    // for a range she is no longer looking at is still a true answer about
+    // whether the archive holds anything, and the pill it governs is on
+    // screen either way.
+    if (next.kind === 'ok' && next.payload.yearAvailable) setYearEverAvailable(true);
     if (next.kind === 'ok' && next.payload.range !== rangeRef.current) return;
     setOutcome(next);
   }
@@ -293,7 +314,11 @@ const NumbersArea: React.FC<NumbersAreaProps> = ({ active, registry, fetchImpl }
         value={range}
         onChange={setRange}
         disabled={outcome.kind === 'loading'}
-        yearAvailable={outcome.kind === 'ok' && outcome.payload.yearAvailable}
+        // The latch, plus the range she is actually reading. The second term
+        // is not redundant: a year request that ERRORS leaves the latch
+        // wherever it was, and a pressed pill she cannot see is a screen with
+        // no state on it.
+        yearAvailable={yearEverAvailable || range === 'year'}
       />
 
       {outcome.kind === 'error' ? (

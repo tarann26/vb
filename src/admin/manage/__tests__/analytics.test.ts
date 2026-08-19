@@ -1,6 +1,7 @@
 // The four cards' judgements, without a component around them.
 import { describe, expect, it } from 'vitest';
 import {
+  CAMPAIGN_CAVEAT,
   MIN_PRIOR_WEEK_VISITS,
   TAP_COUNTING_STARTED_ON,
   VISIT_COUNTING_STARTED_ON,
@@ -177,5 +178,32 @@ describe('Card A at launch: one sentence, not two numbers side by side', () => {
 
   it('reads correctly for exactly one tap', () => {
     expect(noVisitsYetSentence(1)).toContain('1 person has tapped');
+  });
+});
+
+// Whole-branch review, finding 5. Under one "Last 30 days" pill this panel
+// draws three different windows: visits and taps stop at YESTERDAY, because
+// Cloudflare has no complete figure for today, while the campaign rows are our
+// own and include today the moment someone arrives. Both are right. The pill
+// cannot say so, so the card does -- and this card is the one she can check by
+// hand, so today's arrivals had better be in the number she is looking at.
+//
+// LITERALS, not a comparison against CAMPAIGN_CAVEAT itself. NumbersArea's own
+// case asserts the card renders the constant, which is the right claim there
+// and derives both sides of the equality from the same string: deleting this
+// clause leaves it green. The claim the copy has to MAKE is pinned here.
+describe('the campaign card names the window it counted', () => {
+  it('says today so far is in this number', () => {
+    expect(CAMPAIGN_CAVEAT).toMatch(/today so far is included/i);
+  });
+
+  it('says the numbers above it are not counting today', () => {
+    expect(CAMPAIGN_CAVEAT).toMatch(/stop at yesterday/i);
+  });
+
+  it('still says the two things it could never tell her', () => {
+    expect(CAMPAIGN_CAVEAT).toMatch(/once per person arriving/i);
+    expect(CAMPAIGN_CAVEAT).toMatch(/different phone/i);
+    expect(CAMPAIGN_CAVEAT).toMatch(/blocks it/i);
   });
 });

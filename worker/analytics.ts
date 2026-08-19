@@ -937,9 +937,35 @@ export async function handleAnalytics(request: Request, env: AnalyticsEnv): Prom
     waCounts = {};
   }
 
-  // IST dates, matching the column. `sinceDay` is windowDays back from the
-  // restaurant's today, INCLUSIVE, so a 7-day range covers seven of her
-  // calendar days rather than 168 hours ending at an arbitrary moment.
+  // THE THREE WINDOWS UNDER ONE PILL, stated here because they are not the
+  // same window and a reader who assumes they are will draw the wrong
+  // conclusion from any one of them. Whole-branch review, finding 5.
+  //
+  //   visits, visitsPrevious, pages, referrers -- `until` above is midnight
+  //     UTC TODAY, so the window is `windowDays` UTC days ENDING YESTERDAY.
+  //     Cloudflare has no complete figure for today and asking for a partial
+  //     one would draw a column that shrinks as the day goes on.
+  //
+  //   bookingTaps -- `recentIstDates(today, windowDays)` counts back from
+  //     yesterday, so `windowDays` of the restaurant's OWN calendar days,
+  //     also ending yesterday. IST rather than UTC because the KV keys were
+  //     written in IST and re-keying them would change the meaning of every
+  //     date already stored (see recentIstDates' own comment). The two
+  //     windows are therefore offset by 5h30m at their edges, which against
+  //     thirty days is a fraction of a percent and is accepted.
+  //
+  //   campaigns -- `windowDays` IST days INCLUDING TODAY, and this is the one
+  //     that genuinely differs rather than merely being offset. These rows are
+  //     OURS: they exist the moment someone arrives, so there is no upstream
+  //     lag to wait out, and this is the one card she can check by hand --
+  //     paste a link, tap it, look. A window that stopped at yesterday would
+  //     answer that check with a zero.
+  //
+  // The pill cannot say all of that, so the CARD does: CAMPAIGN_CAVEAT
+  // (src/admin/manage/analytics.ts) tells her in as many words that today so
+  // far is in this number and not in the ones above it. Changing either half
+  // without the other puts a label back in front of her that disagrees with
+  // what it counts.
   const today = todayInKolkata();
   const sinceDay = istDateDaysAgo(today, windowDays - 1);
   const campaigns = await readCampaignRows(env.DB, sinceDay);
