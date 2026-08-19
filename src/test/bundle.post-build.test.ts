@@ -1052,11 +1052,35 @@ describe('dist/assets/ keeps admin code out of the entry chunk', () => {
 // byte count would not have caught it -- 39073 is still under 39200 -- and the
 // rule-level diff did, which is the standing argument of this whole file.
 // Reworded to "narrow", rebuilt, and byte-identical again.
+//
+// Task 24, the washes: 39037 -> 39345 (+308), a real breach of the 39200
+// ceiling above -- moving experiences and ourStory onto `wash-deep` adds two
+// utilities nothing had asked for yet. Measured with the six-step procedure
+// this tier's own header states: the true parent commit built in a
+// worktree, the two stylesheets diffed rule by rule with postcss (never a
+// summary byte count), every added rule traced to the file that emits it.
+//
+//    93  `.bg-wash-deep{--tw-bg-opacity:1;background-color:rgb(214 225 239 /
+//        var(--tw-bg-opacity, 1))}` -- Experiences.tsx and OurStory.tsx both
+//        carry this className now; Tailwind emits the rule once regardless.
+//   215  `.from-wash-deep{--tw-gradient-from:...;--tw-gradient-to:...;
+//        --tw-gradient-stops:...}` -- Experiences.tsx's own carousel fade
+//        only (OurStory.tsx has no fade of its own), the larger of the two
+//        because a gradient-stop utility carries three custom properties
+//        where a background-colour utility carries one.
+//
+// Sum: 93 + 215 = 308, matching the whole-sheet delta exactly. `wash-deep`
+// itself mints no other rule: it is one background-colour utility and one
+// gradient-stop utility, however many files name it.
+//
+// THE CEILING IS RAISED, to 39500 -- 39345 rounded up to the next 100 (39400),
+// plus 100, per this tier's own procedure. Zero headroom is what let a past
+// breach on this project stay red for eleven tasks.
 describe('dist/assets/ keeps the shared stylesheet under a byte ceiling', () => {
-  it.skipIf(!REQUIRED && !existsSync(DIST_ASSETS))('the entry CSS file stays under 39200 bytes', () => {
+  it.skipIf(!REQUIRED && !existsSync(DIST_ASSETS))('the entry CSS file stays under 39500 bytes', () => {
     const cssFiles = readdirSync(DIST_ASSETS).filter((n) => /^index-.*\.css$/.test(n));
     expect(cssFiles.length).toBeGreaterThan(0);
     const size = statSync(join(DIST_ASSETS, cssFiles[0])).size;
-    expect(size).toBeLessThan(39200);
+    expect(size).toBeLessThan(39500);
   });
 });

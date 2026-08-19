@@ -171,19 +171,30 @@ import sharp from 'sharp';
 // ever scrolled past its own top -- which is the failure mode this file cannot
 // afford, since it would report a number that looks like a band and is not.
 
-type Band = { id: string; label: string; kind: 'wash' | 'white' };
+type Band = { id: string; label: string; kind: 'wash' | 'wash-deep' | 'white' };
 
-// The eight homepage sections below the hero, in sections.json order. The
-// hero is excluded: it is a photograph collage over white and has no flat
-// band to sample.
+// The eight homepage sections below the hero, in sections.json order --
+// load-bearing now that the loop below this array also checks each pair
+// against its true DOM neighbour. That order is NOT the object-literal key
+// order App.tsx's own SECTION_COMPONENTS lookup happens to be written in
+// (our story sits second-to-last on the real page, not second); confirmed
+// directly against src/content/sections.json rather than assumed, after an
+// earlier version of this array got that wrong and scrolled the wrong
+// section into the wrong place. The hero is excluded: it is a photograph
+// collage over white and has no flat band to sample. `kind: 'wash'` covers
+// both the cool token and its warm partner (they sample within the same
+// 15-to-20 band); `wash-deep` is the darker third token
+// tailwind.config.js's own comment assigns to experiences and our story, so
+// that neither shares an undifferentiated boundary with its DOM neighbour
+// (backlog items 8 and 9).
 const BANDS: readonly Band[] = [
   { id: 'gallery', label: 'atmosphere', kind: 'wash' },
   { id: 'menu', label: 'food', kind: 'white' },
   { id: 'drinks', label: 'drinks', kind: 'wash' },
-  { id: 'experiences', label: 'experiences', kind: 'wash' },
+  { id: 'experiences', label: 'experiences', kind: 'wash-deep' },
   { id: 'blogs', label: 'press', kind: 'wash' },
   { id: 'awards', label: 'awards', kind: 'white' },
-  { id: 'our-story', label: 'our story', kind: 'wash' },
+  { id: 'our-story', label: 'our story', kind: 'wash-deep' },
   { id: 'visit', label: 'visit', kind: 'wash' },
 ];
 
@@ -298,6 +309,15 @@ test('every wash band lands 15 to 20 points below white on a phone', async ({ pa
       // change. The same run re-confirmed note 2 in passing, since the
       // positioned section measured #FFE6E5 to the byte with no brick in it.
       expect.soft(255 - Math.max(r, g, b), `${band.label} shallowest channel`).toBeGreaterThanOrEqual(8);
+    } else if (band.kind === 'wash-deep') {
+      // The same argument as the wash range above, one lightness step down:
+      // src/test/palette.test.ts computes 29.0 from the hex alone with no
+      // browser involved. The shallowest-channel floor is reused rather than
+      // re-derived -- a token this much further from white cannot fail it for
+      // a reason the wash range above would not already catch.
+      expect.soft(points, `${band.label} mean drop`).toBeGreaterThanOrEqual(26);
+      expect.soft(points, `${band.label} mean drop`).toBeLessThanOrEqual(32);
+      expect.soft(255 - Math.max(r, g, b), `${band.label} shallowest channel`).toBeGreaterThanOrEqual(8);
     } else {
       // The white bands stay white, because a wash only reads as a boundary
       // if the thing on the other side of it is not also a wash. This is
@@ -307,6 +327,18 @@ test('every wash band lands 15 to 20 points below white on a phone', async ({ pa
       // for why those two numbers are so far apart.
       expect.soft(points, `${band.label} mean drop`).toBeLessThanOrEqual(3);
     }
+  }
+
+  // Backlog item 9's own check, on the rendered page rather than the palette
+  // arithmetic: BANDS is in true DOM order now (see its own header comment),
+  // so consecutive rows here ARE consecutive sections on the homepage.
+  // `expect.soft`, matching every assertion above, so a run reports every
+  // failing boundary rather than stopping at the first one.
+  for (let i = 1; i < rows.length; i += 1) {
+    if (rows[i].points < 1 && rows[i - 1].points < 1) continue; // white against white is not a boundary anyone claimed
+    expect
+      .soft(Math.abs(rows[i].points - rows[i - 1].points), `${rows[i - 1].label} against ${rows[i].label}`)
+      .toBeGreaterThanOrEqual(8);
   }
 
   await testInfo.attach('section-washes-390.json', { body: JSON.stringify(rows, null, 2), contentType: 'application/json' });
