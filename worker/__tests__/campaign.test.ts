@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { asD1, FakeD1 } from './fakeD1';
 import { CAMPAIGN_DAILY_CAP, CAMPAIGN_RATE_MAX, handleCampaignArrival } from '../campaign';
+import { todayInKolkata } from '../../src/shared/date';
 
 const ORIGIN = 'https://viabiancarestaurant.com';
 
@@ -135,6 +136,24 @@ describe('POST /api/campaign', () => {
     }
     expect(last.status).toBe(accepted.status);
     expect(await last.text()).toBe(await accepted.text());
+  });
+
+  // The case the test above does NOT reach, and the gap is worth naming: at
+  // ten a minute per address, thirteen requests from one address are refused
+  // by the PER-MINUTE limiter long before the 2,000-a-day cap is consulted,
+  // so nothing there can see what the cap's own branch answers. The day
+  // bucket is seeded to its limit instead of looped to it, exactly as
+  // count.test.ts seeds a fake KV at WA_DAILY_CAP rather than issuing
+  // hundreds of real requests.
+  it('answers a request refused by the DAILY CAP exactly as it answers an accepted one', async () => {
+    const { fake, env: e } = env();
+    const accepted = await handleCampaignArrival(post({ source: 'instagram' }, { 'CF-Connecting-IP': '7.7.7.7' }), e);
+    fake.campaignRate.set(`day:${todayInKolkata()}`, { hits: CAMPAIGN_DAILY_CAP, expires: 0 });
+    const capped = await handleCampaignArrival(post({ source: 'instagram' }, { 'CF-Connecting-IP': '8.8.8.8' }), e);
+    expect(capped.status).toBe(accepted.status);
+    expect(await capped.text()).toBe(await accepted.text());
+    // And it stopped: the arrival row from the accepted request is the only one.
+    expect(fake.campaignArrivals).toHaveLength(1);
   });
 
   it('answers 204 rather than throwing when the insert fails', async () => {
