@@ -1646,6 +1646,31 @@ describe('the insert menu, and the four kinds the toolbar cannot reach', () => {
   });
 });
 
+// Admin redesign Task 26: BlockFields' `numbered()` only turns "Photo" into
+// "Photo 2" when TOLD there is a second one -- this is what does the telling.
+// The count is of entries sharing this block's own kind, not of every block
+// in the post, because that is how she thinks about "the second photo I
+// added", whatever else sits between the two of them.
+describe('a photo entry’s number counts only its own kind', () => {
+  it('one photo entry in a post is just Photo', () => {
+    surface({ blocks: [{ kind: 'image', src: '/x.webp', alt: 'x' }] });
+    expect(screen.getByLabelText('Photo')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Photo 1')).toBeNull();
+  });
+
+  it('the second photo entry in a post is Photo 2, whatever sits between them', () => {
+    surface({
+      blocks: [
+        { kind: 'image', src: '/a.webp', alt: 'a' },
+        { kind: 'citation', publication: 'Vogue', date: '2026-01-01', url: null },
+        { kind: 'image', src: '/b.webp', alt: 'b' },
+      ],
+    });
+    expect(screen.getByLabelText('Photo')).toBeInTheDocument();
+    expect(screen.getByLabelText('Photo 2')).toBeInTheDocument();
+  });
+});
+
 // MOVING AND REMOVING, the two things this column could not do at all.
 //
 // What is being protected here is not a pair of buttons. Task 25 swapped the

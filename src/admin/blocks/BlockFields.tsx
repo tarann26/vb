@@ -51,6 +51,10 @@ export interface BlockFieldsProps {
   // stable-names.ts's StableNameGroup for the whole of what that costs her.
   // Omitted, the fallback below is correct for anything that does not remount.
   photoNames?: StableNames;
+  // Which entry this is among the entries of its own kind, 1-based; absent
+  // means the only one of its kind, which is the common case and renders the
+  // bare label.
+  ordinal?: number;
 }
 
 // Ad-hoc specs, declared once at module scope rather than rebuilt per render.
@@ -82,7 +86,12 @@ const LIST_HEADING_SPECS = {
 
 const PUBLICATION_SPEC = { label: 'Publication', kind: 'text' } satisfies FieldSpec<string>;
 
-const CITATION_DATE_SPEC = { label: 'Published on', kind: 'date' } satisfies FieldSpec<string>;
+// NOT "Published on". A post's own date field already owns that phrase, and a
+// post with a citation puts the two controls on one screen with one name
+// between them -- so a screen reader reading the label alone cannot tell
+// "when I published this" from "when the magazine published theirs", and
+// neither can she.
+const CITATION_DATE_SPEC = { label: 'Date on the original', kind: 'date' } satisfies FieldSpec<string>;
 
 // `kind: 'text'`, not 'textarea', and that is the type system's choice rather
 // than a design one: Kind<string | null> is `'text' | 'image' | 'readonly'`
@@ -124,6 +133,18 @@ function addLabel(noun: string): string {
   return `Add ${/^[aeiou]/.test(lower) ? 'an' : 'a'} ${lower}`;
 }
 
+// "Photo", "Photo 2", "Photo 3" -- numbered only when there is something to
+// distinguish it from, so the overwhelmingly common single-photo post keeps
+// the plain word. "Photo 1" on a post with one photo is worse than "Photo",
+// because the number implies a second one.
+//
+// The number counts entries OF THE SAME KIND, not overall position: "Photo 2"
+// in a post whose photo entries sit third and ninth in the whole post is
+// still the second photo she added, which is how she thinks about it.
+export function numbered(base: string, ordinal: number | undefined): string {
+  return ordinal === undefined || ordinal <= 1 ? base : `${base} ${String(ordinal)}`;
+}
+
 export default function BlockFields({
   block,
   onChange,
@@ -133,6 +154,7 @@ export default function BlockFields({
   onStaged,
   previewKeyPrefix,
   photoNames,
+  ordinal,
 }: BlockFieldsProps) {
   // The same fix BlockList applies to blocks, one level down, for the photos
   // inside a gallery block -- and the trigger here is REMOVE rather than a
@@ -268,7 +290,7 @@ export default function BlockFields({
         <>
           <PhotoField
             id={`${idPrefix}-src`}
-            label="Photo"
+            label={numbered('Photo', ordinal)}
             category="posts"
             value={block.src ?? null}
             onChange={(contentPath) => onChange({ ...block, src: contentPath ?? '' })}
@@ -279,7 +301,7 @@ export default function BlockFields({
           />
           <Field<string>
             id={`${idPrefix}-alt`}
-            spec={ALT_SPEC}
+            spec={{ ...ALT_SPEC, label: numbered(ALT_SPEC.label, ordinal) }}
             value={block.alt ?? ''}
             onChange={(next) => onChange({ ...block, alt: next })}
             problems={problemsFor('alt')}
@@ -371,7 +393,7 @@ export default function BlockFields({
           />
           <Field<string>
             id={`${idPrefix}-date`}
-            spec={CITATION_DATE_SPEC}
+            spec={{ ...CITATION_DATE_SPEC, label: numbered(CITATION_DATE_SPEC.label, ordinal) }}
             value={block.date ?? ''}
             onChange={(next) => onChange({ ...block, date: next })}
             problems={problemsFor('date')}

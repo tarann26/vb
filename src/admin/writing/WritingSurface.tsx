@@ -33,7 +33,7 @@ import { autoformat, revertFormat } from './autoformat';
 import { pasteChunks } from './paste';
 import Field from '../Field';
 import PhotoField from '../PhotoField';
-import BlockFields from '../blocks/BlockFields';
+import BlockFields, { numbered } from '../blocks/BlockFields';
 import BlockPicker from '../blocks/BlockPicker';
 import { blankBlock } from '../blocks/blank-block';
 import { ALT_SPEC, BLOCK_KIND_LABELS, INSERT_MENU_KINDS, UNKNOWN_BLOCK_LABEL } from '../blocks/block-meta';
@@ -1196,6 +1196,16 @@ export default function WritingSurface({
     );
   }
 
+  // 1-based position among the entries of this same kind, shared by every row
+  // renderer that draws a label needing one (imageRow's own PhotoField and
+  // description, fieldsRow's citation date). Recomputed per render off the
+  // array rather than stored, because moving or removing one changes the
+  // count and a stored number would go stale silently -- the same failure
+  // mode stable-names.ts exists to prevent for staged photos, one level up.
+  function ordinalOf(row: Row): number {
+    return safe.slice(0, row.index + 1).filter((entry) => entry.kind === row.block.kind).length;
+  }
+
   // A photograph, centred at column width, with its caption under it and its
   // description under that. SHE DOES NOT POSITION IT; the block does. There is
   // no alignment control anywhere on this surface, deliberately -- the
@@ -1209,6 +1219,7 @@ export default function WritingSurface({
     // derivative no build has produced yet -- see handleImagePick.
     const shown = previews.urls[previewKeyFor(row.name)] ?? src;
     const id = `posts-${postIndex}-block-${row.index}-alt`;
+    const ordinal = ordinalOf(row);
     return (
       <figure className="mb-6">
         {/* blocks.tsx:50's own <img>, character for character, so the column
@@ -1243,7 +1254,7 @@ export default function WritingSurface({
             width straight away. */}
         <PhotoField
           id={`posts-${postIndex}-block-${row.index}-src`}
-          label="Photo"
+          label={numbered('Photo', ordinal)}
           category="posts"
           value={src === '' ? null : src}
           onChange={(contentPath) => setSrc(row, contentPath)}
@@ -1261,7 +1272,7 @@ export default function WritingSurface({
             behaviour of the field this replaces. */}
         <Field<string>
           id={id}
-          spec={ALT_SPEC}
+          spec={{ ...ALT_SPEC, label: numbered(ALT_SPEC.label, ordinal) }}
           value={alt}
           onChange={(next) => setAlt(row, next)}
           problems={problemsOf(row, 'alt')}
@@ -1311,6 +1322,7 @@ export default function WritingSurface({
           // after she has moved it, and after the sheet this row is standing
           // in has closed and reopened.
           photoNames={photoNamesFor(row.name)}
+          ordinal={ordinalOf(row)}
         />
       </div>
     );

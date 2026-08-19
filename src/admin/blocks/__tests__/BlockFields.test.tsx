@@ -31,7 +31,7 @@ const EVERY_BLOCK: Record<BlockKind, Block> = {
 
 // The `field` shape validatePosts really emits for this block, so a test's
 // problem strings are the validator's strings and not a second convention.
-function renderFields(block: Block, problems: ValidationProblem[] = []) {
+function renderFields(block: Block, problems: ValidationProblem[] = [], ordinal?: number) {
   const onChange = vi.fn();
   const onStaged = vi.fn();
   const view = render(
@@ -43,6 +43,7 @@ function renderFields(block: Block, problems: ValidationProblem[] = []) {
       previews={NO_IMAGE_PREVIEWS}
       onStaged={onStaged}
       previewKeyPrefix="posts.json:fixture-a:blocks[0]"
+      ordinal={ordinal}
     />,
   );
   return { ...view, onChange, onStaged };
@@ -157,6 +158,22 @@ describe('each kind renders its own fields', () => {
     expect(screen.getByLabelText('Words underneath (optional)')).toHaveValue('Tielle, *sliced*');
   });
 
+  // "Photo 1" on a post with one photo is worse than "Photo", because the
+  // number implies a second one -- so the overwhelmingly common single-photo
+  // post has to keep the plain word whether `ordinal` arrives as 1 or is
+  // omitted entirely.
+  it('one photo entry is just Photo', () => {
+    renderFields(EVERY_BLOCK.image, [], 1);
+    expect(screen.getByLabelText('Photo')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Photo 1')).toBeNull();
+  });
+
+  it('the second photo entry in a post is Photo 2', () => {
+    renderFields(EVERY_BLOCK.image, [], 2);
+    expect(screen.getByLabelText('Photo 2')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Photo')).toBeNull();
+  });
+
   // The landmine this project has already defused once, now at the EDIT
   // boundary: caption and attribution are optional in BlockContentMap, so a
   // committed block may not carry the key at all. The fixture has the key
@@ -229,7 +246,7 @@ describe('each kind renders its own fields', () => {
     renderFields(EVERY_BLOCK.citation);
     expect(screen.getByLabelText('Publication')).toHaveValue('A Magazine');
     expect(screen.getByLabelText('Link')).toHaveValue('https://example.com/a');
-    expect(screen.getByLabelText('Published on')).toHaveValue('2026-03-04');
+    expect(screen.getByLabelText('Date on the original')).toHaveValue('2026-03-04');
   });
 
   it('citation clearing the link commits null, never an empty string', async () => {
