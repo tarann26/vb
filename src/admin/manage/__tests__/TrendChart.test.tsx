@@ -84,32 +84,59 @@ describe('TrendChart', () => {
 
 describe('trendCaption', () => {
   it('says the archive cannot reach back, and from when', () => {
-    expect(trendCaption('day', '2026-08-18', false)).toBe(
+    expect(trendCaption('day', '2026-08-18', '2026-08-18', false)).toBe(
       'This chart begins on 18 August 2026, when the record started. It cannot reach back before that.',
     );
   });
 
+  // The defect this pair exists for. The archive's first night backfills
+  // ninety days and the default range is thirty, so from day two the record
+  // reaches further back than the chart does -- and the sentence used to
+  // print the ARCHIVE's earliest day above a chart that begins two months
+  // later. She reads a thirty-day chart claiming three months of history and
+  // cannot tell a quiet month from a quiet quarter.
+  it('names the day the chart actually begins on, not the day the record does', () => {
+    expect(trendCaption('day', '2026-07-20', '2026-05-22', false)).toBe(
+      'This chart begins on 20 July 2026. The record itself goes back to 22 May 2026.',
+    );
+  });
+
+  it('does not claim the record started where the chart starts unless it did', () => {
+    expect(trendCaption('day', '2026-07-20', '2026-05-22', false)).not.toContain('when the record started');
+    expect(trendCaption('day', '2026-07-20', '2026-05-22', false)).not.toContain('cannot reach back');
+  });
+
   it('says something honest before the archive holds anything at all', () => {
-    expect(trendCaption('day', null, false)).toBe(
+    expect(trendCaption('day', null, null, false)).toBe(
+      'This chart fills in from today onwards. It cannot reach back before now.',
+    );
+    // An archive with rows but none inside the range draws no line, so the
+    // sentence is about the empty chart rather than about a day nothing is
+    // plotted on.
+    expect(trendCaption('day', null, '2026-05-22', false)).toBe(
       'This chart fills in from today onwards. It cannot reach back before now.',
     );
   });
 
   it('names the starting month in words, never a raw date code', () => {
-    // `seriesStartsOn` is 'YYYY-MM' at month grain, which the day-grain
-    // formatter cannot read and hands back untouched -- printing "2026-06" to
-    // a reader who has never seen an ISO date.
-    expect(trendCaption('month', '2026-06', false)).toBe(
+    // Both dates are 'YYYY-MM' at month grain, which the day-grain formatter
+    // cannot read and hands back untouched -- printing "2026-06" to a reader
+    // who has never seen an ISO date.
+    expect(trendCaption('month', '2026-06', '2026-06', false)).toBe(
       'This chart begins on June 2026, when the record started. It cannot reach back before that.',
+    );
+    expect(trendCaption('month', '2026-06', '2025-11', false)).toBe(
+      'This chart begins on June 2026. The record itself goes back to November 2025.',
     );
   });
 
   it('warns that a starred month is not a whole month', () => {
-    expect(trendCaption('month', '2026-06', true)).toContain('Months marked * are not complete.');
+    expect(trendCaption('month', '2026-06', '2026-06', true)).toContain('Months marked * are not complete.');
+    expect(trendCaption('month', '2026-06', '2025-11', true)).toContain('Months marked * are not complete.');
   });
 
   it('does not warn when every month in view is whole', () => {
-    expect(trendCaption('month', '2026-06', false)).not.toContain('*');
+    expect(trendCaption('month', '2026-06', '2026-06', false)).not.toContain('*');
   });
 });
 

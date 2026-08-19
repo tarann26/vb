@@ -140,7 +140,13 @@ export const ANALYTICS_POPULATED: AnalyticsPayload = {
   ],
   seriesGrain: 'day',
   seriesSource: 'snapshot',
-  seriesStartsOn: '2026-07-20',
+  // BEFORE the first point of `series`, deliberately, because that is what
+  // the real payload sends: the archive backfills ninety days on its first
+  // night and the default range draws thirty of them. Holding the two equal
+  // made the trend caption green whether it named the drawn series' first
+  // point or the archive's earliest row, in this suite and in jsdom both --
+  // and it named the wrong one.
+  seriesStartsOn: '2026-05-22',
   // A Friday evening and a Tuesday lunchtime, so the drawing has a real peak
   // and a real quiet cell to be measured against in a browser. An all-zero
   // week would leave every cell at the same opacity and every geometry claim
@@ -184,7 +190,10 @@ export const ANALYTICS_DRAWN: AnalyticsPayload = {
     { date: '2026-08-14', visits: 25, complete: true },
     { date: '2026-08-15', visits: 400, complete: true },
   ],
-  seriesStartsOn: '2026-08-11',
+  // Inherited from ANALYTICS_POPULATED above and repeated here only to say
+  // that it is EARLIER than this fixture's own first point too: the caption
+  // has two dates to tell apart and a fixture that hands it one cannot.
+  seriesStartsOn: '2026-05-22',
   byPath: [
     { path: '/', visits: 400 },
     { path: '/catering', visits: 100 },

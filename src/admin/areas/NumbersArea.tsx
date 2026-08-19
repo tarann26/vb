@@ -405,6 +405,11 @@ const TrendCard: React.FC<{ outcome: Outcome }> = ({ outcome }) => (
         <p className="mt-2 text-xs text-gray-500">
           {trendCaption(
             outcome.payload.seriesGrain,
+            // The first point DRAWN, taken from the same array the chart is
+            // handed, so the sentence and the line cannot name different
+            // days. `seriesStartsOn` is the archive's earliest bucket, which
+            // is the OTHER claim in that sentence and not this one.
+            outcome.payload.series[0]?.date ?? null,
             outcome.payload.seriesStartsOn,
             outcome.payload.series.some((point) => !point.complete),
           )}

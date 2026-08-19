@@ -126,7 +126,13 @@ const POPULATED = payload({
     { date: '2026-07-22', visits: 60, complete: true },
     { date: '2026-07-23', visits: 200, complete: true },
   ],
-  seriesStartsOn: '2026-07-20',
+  // EARLIER THAN series[0], deliberately. These two used to hold the same
+  // date, which made the trend caption green whether it read the drawn
+  // series' first point or the archive's earliest row -- and it read the
+  // wrong one. The real payload puts them apart from the archive's second
+  // day onwards (ninety backfilled days under a thirty-day range), so the
+  // fixture does too.
+  seriesStartsOn: '2026-05-22',
 });
 
 describe('with real numbers', () => {
@@ -206,18 +212,18 @@ describe('with real numbers', () => {
 
   // The trend card is the only place on this panel that draws anything, and
   // this is the wiring: that the card hands the chart the payload's own
-  // series and grain, and hands the caption the payload's own start. Passing
-  // a literal null for the start would leave the chart looking perfect and
-  // the sentence under it wrong.
-  it('the trend card draws the payload series and dates the record from it', async () => {
+  // series and grain, and hands the caption BOTH dates -- the first point
+  // drawn and the archive's earliest row. Passing a literal null for either
+  // would leave the chart looking perfect and the sentence under it wrong,
+  // and passing the archive's date as the chart's start is exactly the defect
+  // POPULATED's two dates now hold apart.
+  it('the trend card dates the chart from the series it draws, not from the archive', async () => {
     renderNumbers(okFetch(POPULATED) as unknown as typeof fetch);
     const card = (await screen.findByText(CARD_HEADINGS.trend)).closest('div') as HTMLElement;
 
     expect(within(card).getByRole('img', { name: 'Visits over the last 4 days, highest 200' })).toBeInTheDocument();
     expect(
-      within(card).getByText(
-        'This chart begins on 20 July 2026, when the record started. It cannot reach back before that.',
-      ),
+      within(card).getByText('This chart begins on 20 July 2026. The record itself goes back to 22 May 2026.'),
     ).toBeInTheDocument();
   });
 

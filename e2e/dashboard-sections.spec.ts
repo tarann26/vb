@@ -378,6 +378,15 @@ for (const viewport of VIEWPORTS) {
       await expect(cardA.getByText(/^at least /)).toBeVisible();
       await expect(page.getByText(/\d+ bookings?/)).toHaveCount(0);
       await expect(page.getByText('Busier than the week before — 312 visits, up from 240.')).toBeVisible();
+      // The caption names the day the LINE begins on, and says separately
+      // where the record goes back to. The fixture's series opens on
+      // 2026-07-20 while its archive opens on 2026-05-22, which is the shape
+      // of every real payload after the archive's first night -- and printing
+      // the archive's date over a thirty-day chart is a sentence she cannot
+      // tell a quiet month from a quiet quarter by.
+      await expect(
+        page.getByText('This chart begins on 20 July 2026. The record itself goes back to 22 May 2026.'),
+      ).toBeVisible();
       // No <canvas>, anywhere. The trend chart is hand-written SVG on
       // purpose; a canvas on this screen would mean a charting library got
       // pulled in, which is 50-150 KB for one polyline and is the thing the

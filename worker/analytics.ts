@@ -769,6 +769,16 @@ async function yearPayload(env: AnalyticsEnv): Promise<AnalyticsPayload> {
     series: series.map((point) => ({ date: point.day, visits: point.visits, complete: point.complete })),
     seriesGrain: 'month',
     seriesSource: RUM_CAPABILITIES.dateDimension === null ? 'snapshot' : 'backfilled',
+    // The earliest month IN VIEW, which is the earliest month the archive
+    // holds for as long as the archive is shorter than twelve months -- and
+    // monthly rows are never pruned (analytics-store.ts's pruneAnalytics
+    // sweeps daily_visits and campaign_rate only), so from about a year after
+    // the first roll these two stop being the same thing and the caption's
+    // "when the record started" clause becomes false here in exactly the way
+    // it was false at day grain. Closing it properly needs a MIN(month) read
+    // this branch does not make today; it is recorded rather than assumed
+    // away, and trendCaption already takes the two dates separately so the
+    // fix is one query and one argument.
     seriesStartsOn: series[0]?.day ?? null,
     // A year cannot be an hour grid. The rollup holds one row per month, and
     // an hour is not recoverable from it at any price.

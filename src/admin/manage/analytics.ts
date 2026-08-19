@@ -97,21 +97,44 @@ export const CARD_HEADINGS = {
 // different things are true in three different states and the sentence is
 // different in each.
 //
-// `startsOn` is 'YYYY-MM-DD' at day grain and 'YYYY-MM' at month grain, and
+// TWO DATES, NOT ONE, AND THEY ARE DIFFERENT QUESTIONS. `chartStartsOn` is
+// the first point actually DRAWN, which the selected range decides.
+// `recordStartsOn` is the earliest bucket the archive HOLDS, which nothing on
+// the screen decides. They are equal only while the record is shorter than
+// the range -- and the archive's first night backfills ninety days against a
+// default range of thirty, so they stop being equal on day two and never
+// coincide again.
+//
+// Printing the record's start above a thirty-day chart is what this used to
+// do: "This chart begins on 22 May 2026, when the record started", over a
+// line beginning on 20 July. She cannot then tell a quiet thirty days from a
+// quiet ninety, which is the one thing this chart exists to show her. So the
+// sentence claims each date for what it actually is, and the second clause --
+// "when the record started" -- is printed ONLY when the record really does
+// start there.
+//
+// Both are 'YYYY-MM-DD' at day grain and 'YYYY-MM' at month grain, and
 // formatCountingStartedOn cannot read the second -- it needs a day number and
 // returns the raw string when there is not one, which would print "2026-06"
 // to a reader who has never seen an ISO date. So the shape decides the
 // formatter, exactly as it does in seriesLabel below.
 export function trendCaption(
   grain: 'day' | 'month',
-  startsOn: string | null,
+  chartStartsOn: string | null,
+  recordStartsOn: string | null,
   hasPartialMonth: boolean,
 ): string {
-  if (startsOn === null) {
+  if (chartStartsOn === null) {
     return 'This chart fills in from today onwards. It cannot reach back before now.';
   }
-  const started = grain === 'month' ? seriesLabel(startsOn, true) : formatCountingStartedOn(startsOn);
-  const opening = `This chart begins on ${started}, when the record started. It cannot reach back before that.`;
+  const say = (date: string): string => (grain === 'month' ? seriesLabel(date, true) : formatCountingStartedOn(date));
+  // A plain string comparison, which is what ISO dates are for. Anything the
+  // archive holds that is older than the first drawn point means the record
+  // reaches further back than the range does.
+  const reachesFurther = recordStartsOn !== null && recordStartsOn < chartStartsOn;
+  const opening = reachesFurther
+    ? `This chart begins on ${say(chartStartsOn)}. The record itself goes back to ${say(recordStartsOn)}.`
+    : `This chart begins on ${say(chartStartsOn)}, when the record started. It cannot reach back before that.`;
   if (grain !== 'month' || !hasPartialMonth) return opening;
   // The spec's explicit requirement: the first year of the by-year view IS a
   // partial year, and the panel says so rather than drawing a misleading
