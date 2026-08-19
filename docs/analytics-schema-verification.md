@@ -1,0 +1,256 @@
+# The Cloudflare RUM schema, verified
+
+Run: `node scripts/verify-analytics-schema.mjs`, on the date below, by a human
+with a Cloudflare API token carrying Account Analytics: Read.
+
+This file exists because `worker/analytics.ts` shipped with a document nobody
+had run, and said so at length rather than claiming otherwise. This is the
+answer, so the next reader neither repeats the probe nor guesses at it.
+
+## Verdict
+
+```json
+{
+  "verifiedOn": "2026-08-19",
+  "baseDocumentAccepted": true,
+  "dateDimension": "date",
+  "hourDimension": "datetimeHour",
+  "dimensions": [
+    "bot",
+    "countryName",
+    "customTagInternalSxg",
+    "date",
+    "datetimeFifteenMinutes",
+    "datetimeFiveMinutes",
+    "datetimeHalfOfHour",
+    "datetimeHour",
+    "datetimeMinute",
+    "deliveryType",
+    "deviceType",
+    "navigationType",
+    "refererHost",
+    "refererPath",
+    "refererScheme",
+    "requestHost",
+    "requestPath",
+    "requestScheme",
+    "siteTag",
+    "userAgentBrowser",
+    "userAgentOS"
+  ]
+}
+```
+
+The block above is the machine copy. `worker/__tests__/analytics-schema.test.ts`
+parses it out of this file and deep-equals it against `RUM_CAPABILITIES` in
+`worker/analytics-schema.ts`, so this document and that constant cannot be
+edited apart.
+
+## What each verdict decides
+
+- `baseDocumentAccepted: false` means every card on the Numbers screen is a
+  502 today. Fix the document in `worker/analytics.ts` from the `errors[]`
+  printed below, re-run, and record the corrected document here.
+- `dateDimension: null` means the trend chart cannot reach backwards. The
+  nightly snapshot job is built either way (R8) and the chart draws from it
+  either way (R9); what is skipped is Task 13's one-off backfill step, so the
+  line starts the day the job was switched on and the caption says so.
+- `hourDimension: null` means the busiest-times chart is CUT (Tasks 15 and 21).
+  Nothing else depends on it, which is why the spec lists it last.
+
+## What this plan does with it
+
+Both conditional surfaces are BUILT and neither is struck. `date` and
+`datetimeHour` are both real dimensions on
+`AccountRumPageloadEventsAdaptiveGroupsDimensions`, and both were accepted in
+a real grouping rather than merely listed by introspection: the probe's
+`byDay` and `byHour` nodes ordered by `date_ASC` and `datetimeHour_ASC` came
+back HTTP 200 with `errors: null`. So Task 13 keeps its backfill step, Task 15
+takes its BUILD branch, and Task 21 draws the busiest-times chart. `bot` is a
+dimension too, and it is filterable — `bot: 0` was accepted inside the same
+grouping — so crawler traffic is excluded upstream rather than guessed at
+downstream.
+
+## The probe can report a rejection, and was made to
+
+An acceptance is only worth reading if a rejection was possible. The probe
+therefore ends with a negative control: one node grouped by `datetimeDay`, a
+name the introspection reply does not list. It came back
+`{"data":null,"errors":[{"message":"unknown field \"datetimeDay\""}]}`. That
+is what a wrong field name looks like from out here, and it is what
+`baseDocumentAccepted: true` is measured against.
+
+Two mechanical details of that rejection matter to
+`worker/analytics.ts`, and both are already handled there: the API answers a
+rejected document with **HTTP 200**, not a 4xx, and it answers it with
+`data: null` beside a populated `errors[]`. A check that reads only the status
+code would call this a success.
+
+## Four things the probe settled that the plan did not ask about
+
+**1. `requestPath` never carries a query string, so `utm_source` cannot reach
+Cloudflare at all.** This was the open question, and it is settled at the
+source rather than inferred from an absence. The Web Analytics beacon composes
+its own payload in the browser, and the field it sends is `location`. Loaded
+against the live site at `https://viabiancarestaurant.com/?utm_source=vbprobe`
+under a real Chromium, the beacon posted to `https://cloudflareinsights.com/cdn-cgi/rum`
+(HTTP 204) with `"location":"https://viabiancarestaurant.com/"` — the tag
+stripped before the request left the page, under the production site token.
+Corroborated upstream: across 90 days of the two legacy site tags, 36 returned
+rows over 22 distinct `requestPath` values, and not one value contains a `?`.
+
+Consequence, and it is the plan's premise rather than a problem for it: the
+campaign card **cannot** be derived from Cloudflare under any grouping. The
+first-party D1 rows of Tasks 6–12 are the only possible source, exactly as
+R5–R7 assume. It also means `normalizePath`'s query-stripping is defensive
+rather than load-bearing for this dataset — it still earns its place, because
+it is the same function the first-party path ever passes through.
+
+**2. `sum` offers exactly one field: `visits`.** Introspecting
+`AccountRumPageloadEventsAdaptiveGroupsSum` returns a single field, `visits`,
+of type `uint64`. There is no `pageViews` on this dataset. Every number the
+Numbers panel draws from Cloudflare is therefore a count of arrivals, and the
+spec's insistence that each card use the word matching what it counts is not
+merely careful — it is the only word available.
+
+**3. The dataset holds no rows for this site, and that is not an error.** The
+committed document was accepted and returned `last28: []`. Grouping the whole
+account by `siteTag` over 90 days shows why: the tag in `wrangler.toml` and
+`index.html`, `de70f41296fe4d6486dbad51f983220f`, has **no rows at all**. The
+rows that exist belong to two earlier tags from before the 2026-08-18
+unification. The beacon itself is healthy — the live-site load above was
+accepted with HTTP 204 — so this is a dataset that started yesterday and has
+had almost no traffic, not a broken pipe. A probe pageload sent to production
+had still not surfaced in the API 25 minutes later, which is ingestion lag plus
+adaptive sampling, and is worth knowing before anyone reads an empty panel as a
+fault.
+
+There is a second reason the panel reads zero, and it is structural rather than
+temporary: `worker/analytics.ts` sets `until` to **the start of today UTC**, so
+the window ends at yesterday's midnight and today is never counted. For a site
+whose visit history is measured in hours that is the whole history. The window
+is not changed here — Task 4 is where the contract is cut — but any later task
+that reads a zero off this route should know it is reading a window, not a
+count.
+
+**4. `npm run dev` traffic is not recorded, so it is not residue.**
+`worker/analytics.ts` records localhost traffic as accepted residue and
+declines to spend a dimension excluding it. Observed: from
+`http://localhost:8080` the beacon's POST is refused by CORS —
+`Access-Control-Allow-Origin: http://localhost` against an origin carrying the
+port — so the request never reaches Cloudflare. The residue that comment
+budgets for does not currently exist. Nothing needs changing; the comment is
+simply more conservative than reality.
+
+## How to re-run this
+
+```
+CLOUDFLARE_API_TOKEN=... CLOUDFLARE_ACCOUNT_ID=e352283475b003efeab1a35e45932927 \
+  CF_WEB_ANALYTICS_SITE_TAG=de70f41296fe4d6486dbad51f983220f \
+  node scripts/verify-analytics-schema.mjs
+```
+
+The token needs Account Analytics: Read and belongs in nothing this repository
+tracks. The script only ever reads.
+
+## Raw output
+
+```
+=== introspect AccountRumPageloadEventsAdaptiveGroupsDimensions ===
+{"data":{"__type":{"fields":[{"name":"bot","type":{"kind":"NON_NULL","name":""}},{"name":"countryName","type":{"kind":"NON_NULL","name":""}},{"name":"customTagInternalSxg","type":{"kind":"NON_NULL","name":""}},{"name":"date","type":{"kind":"NON_NULL","name":""}},{"name":"datetimeFifteenMinutes","type":{"kind":"NON_NULL","name":""}},{"name":"datetimeFiveMinutes","type":{"kind":"NON_NULL","name":""}},{"name":"datetimeHalfOfHour","type":{"kind":"NON_NULL","name":""}},{"name":"datetimeHour","type":{"kind":"NON_NULL","name":""}},{"name":"datetimeMinute","type":{"kind":"NON_NULL","name":""}},{"name":"deliveryType","type":{"kind":"NON_NULL","name":""}},{"name":"deviceType","type":{"kind":"NON_NULL","name":""}},{"name":"navigationType","type":{"kind":"NON_NULL","name":""}},{"name":"refererHost","type":{"kind":"NON_NULL","name":""}},{"name":"refererPath","type":{"kind":"NON_NULL","name":""}},{"name":"refererScheme","type":{"kind":"NON_NULL","name":""}},{"name":"requestHost","type":{"kind":"NON_NULL","name":""}},{"name":"requestPath","type":{"kind":"NON_NULL","name":""}},{"name":"requestScheme","type":{"kind":"NON_NULL","name":""}},{"name":"siteTag","type":{"kind":"NON_NULL","name":""}},{"name":"userAgentBrowser","type":{"kind":"NON_NULL","name":""}},{"name":"userAgentOS","type":{"kind":"NON_NULL","name":""}}],"name":"AccountRumPageloadEventsAdaptiveGroupsDimensions"}},"errors":null}
+
+=== introspect AccountRumPageloadEventsAdaptiveGroupsSum ===
+{"data":{"__type":{"fields":[{"name":"visits","type":{"kind":"NON_NULL","name":"","ofType":{"kind":"SCALAR","name":"uint64"}}}],"name":"AccountRumPageloadEventsAdaptiveGroupsSum"}},"errors":null}
+
+=== base document ===
+HTTP 200
+{"data":{"viewer":{"accounts":[{"last28":[]}]}},"errors":null}
+
+=== requestPath, with the bot flag beside it ===
+HTTP 200
+{"data":{"viewer":{"accounts":[{"paths":[]}]}},"errors":null}
+
+=== requestPath verdict ===
+rows: 0, distinct paths: 0, carrying a query string: 0
+no returned requestPath contained a "?"
+
+=== date and datetimeHour groupings, with bot: 0 ===
+HTTP 200
+{"data":{"viewer":{"accounts":[{"byDay":[],"byHour":[]}]}},"errors":null}
+
+=== negative control: a dimension introspection did NOT list ===
+HTTP 200
+{"data":null,"errors":[{"message":"unknown field \"datetimeDay\"","path":null,"extensions":{"timestamp":"2026-08-19T08:01:17.988805276Z","ray_id":"a2d7a1271a21fb2a-SEA"}}]}
+REJECTED as required, so an acceptance above is a real acceptance.
+
+=== sum fields ===
+["visits"]
+
+=== paste this into worker/analytics-schema.ts and the doc ===
+{
+  "verifiedOn": "2026-08-19",
+  "baseDocumentAccepted": true,
+  "dateDimension": "date",
+  "hourDimension": "datetimeHour",
+  "dimensions": [
+    "bot",
+    "countryName",
+    "customTagInternalSxg",
+    "date",
+    "datetimeFifteenMinutes",
+    "datetimeFiveMinutes",
+    "datetimeHalfOfHour",
+    "datetimeHour",
+    "datetimeMinute",
+    "deliveryType",
+    "deviceType",
+    "navigationType",
+    "refererHost",
+    "refererPath",
+    "refererScheme",
+    "requestHost",
+    "requestPath",
+    "requestScheme",
+    "siteTag",
+    "userAgentBrowser",
+    "userAgentOS"
+  ]
+}
+```
+
+## Raw output — the four side probes
+
+Run by hand beside the script, because each answers a question about the data
+rather than about the schema, and none of them belongs in a verdict a later
+task branches on.
+
+```
+--- every siteTag in the account, 90 days ---
+{"data":{"viewer":{"accounts":[{"p":[
+  {"dimensions":{"requestHost":"localhost","siteTag":"29e1ba52fba74885a5fc44875a48a078"},"sum":{"visits":8100}},
+  {"dimensions":{"requestHost":"localhost","siteTag":"7436888c55284db5af771c11311a10cc"},"sum":{"visits":3200}},
+  {"dimensions":{"requestHost":"viabiancarestaurant.com","siteTag":"29e1ba52fba74885a5fc44875a48a078"},"sum":{"visits":0}}
+]}]}},"errors":null}
+
+--- requestPath on the two legacy tags, 90 days ---
+29e1ba52fba74885a5fc44875a48a078 rows: 21 distinct paths: 12 with "?": 0
+["/edit","/edit/manage/menu","/edit/manage/story","/edit/manage/numbers","/edit/manage/pages","/edit/manage/details","/edit/manage","/","/membership","/cheeseboards","/cooking-class","/breads-and-dips"]
+7436888c55284db5af771c11311a10cc rows: 15 distinct paths: 10 with "?": 0
+["/edit/manage/story","/edit","/edit/manage/menu","/edit/manage/numbers","/edit/manage/pages","/blog/bw-hotelier-regional-flair","/edit/manage","/edit/manage/details","/","/lander"]
+
+--- the beacon's own payload, live site, tagged URL, real Chromium ---
+GET  https://static.cloudflareinsights.com/beacon.min.js
+POST https://cloudflareinsights.com/cdn-cgi/rum -> 204
+loaded: https://viabiancarestaurant.com/?utm_source=vbprobe
+location field sent: "https://viabiancarestaurant.com/"
+siteToken sent: "de70f41296fe4d6486dbad51f983220f"
+
+--- the same load from the dev server ---
+loaded: http://localhost:8080/?utm_source=vbprobe&utm_medium=schemaprobe
+location field composed: "http://localhost:8080/"
+POST https://cloudflareinsights.com/cdn-cgi/rum -> net::ERR_FAILED
+console: Access to XMLHttpRequest at 'https://cloudflareinsights.com/cdn-cgi/rum'
+from origin 'http://localhost:8080' has been blocked by CORS policy: the
+'Access-Control-Allow-Origin' header has a value 'http://localhost' that is
+not equal to the supplied origin.
+```

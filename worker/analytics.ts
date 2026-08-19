@@ -16,47 +16,29 @@
 // upstream answer into a reassuring empty one.
 //
 // ---------------------------------------------------------------------------
-// P0 -- THE STATE OF THE VERIFIED DOCUMENT. READ THIS BEFORE EDITING THE QUERY.
+// THE DOCUMENT BELOW HAS BEEN RUN AGAINST THE REAL API.
 // ---------------------------------------------------------------------------
-// The plan's prerequisite P0 says to run the document by hand against
-// https://api.cloudflare.com/client/v4/graphql and paste the VERIFIED text
-// here. That could not be done from the environment this module was written
-// in: no CLOUDFLARE_API_TOKEN is available to it, and inventing a
-// "verified" claim would be worse than none.
+// It had not been, for a long time, and this block used to say so. The
+// evidence is docs/analytics-schema-verification.md (the introspected
+// dimension list, the request, the response, the verdict) and
+// worker/analytics-schema.ts (the same verdict, typed). Re-run
+// `node scripts/verify-analytics-schema.mjs` and update both if this
+// document is ever changed.
 //
-// So the document below is written to depend on as little unverified surface
-// as possible, and the design takes spec section 7's DECIDED FALLBACK by
-// default rather than its preferred path:
+// Two things about the document are still deliberate and still load-bearing:
+//   - No requestPath prefix filter goes upstream. /edit is excluded HERE, by
+//     isExcludedPath, over returned rows. One filtered set feeds every card,
+//     so a card's total and its breakdown cannot disagree.
+//   - Every aliased node lives in ONE document. That is why a rejected field
+//     takes every card down at once, and it is why the probe above exists.
 //
-//   * NO `requestPath` prefix filter is used. Whether the dataset offers one
-//     is exactly what P0 was meant to answer, and a filter operator that
-//     does not exist fails the WHOLE query -- taking every card down -- for
-//     the sake of an exclusion this module can do itself. The /edit
-//     exclusion therefore happens HERE, over the returned rows
-//     (`isExcludedPath`), which is also the spec's stated fallback and has
-//     the advantage of being one implementation with its own tests.
-//   * THREE aliased nodes, not five. The spec describes five (totals,
-//     byPath, byReferer, thisWeek, priorWeek). Once the /edit exclusion
-//     moves into this module, separate `totals` and `byReferer` nodes become
-//     WRONG rather than merely redundant -- a dimensionless total cannot
-//     have admin traffic subtracted from it, which is the spec's own reason
-//     for saying the fallback must "compute Card A's and Card D's totals as
-//     sums over the filtered rows rather than from separate totals groups".
-//     So `last28` is grouped by (requestPath, refererHost) and totals,
-//     byPath and byReferer are all derived from its filtered rows.
-//   * The only fields assumed are the dataset name, `siteTag`,
-//     `datetime_geq`/`datetime_lt`, the `requestPath` and `refererHost`
-//     dimensions, `sum { visits }` and `orderBy: [sum_visits_DESC]` -- the
-//     set the spec already commits to, and the smallest set that can answer
-//     all four cards.
-//   * `requestHost` is NOT used. The spec already records `npm run dev`
-//     traffic as accepted residue, so excluding localhost is not worth
-//     another unverified dimension name that would fail the entire query.
-//
-// If a human runs P0 and finds the query rejected, the failure is VISIBLE
-// and honest, not silent: a GraphQL `errors[]` becomes 502 `upstream-error`
-// and the screen says "The visitor numbers aren't connected yet." Fix the
-// document here, and replace this block with the verified one.
+// Two facts the probe settled that constrain what this file may ever ask for:
+//   - `sum` offers exactly ONE field on this dataset, `visits`. There is no
+//     pageViews. Every number this route returns is a count of arrivals.
+//   - `requestPath` never carries a query string. The beacon strips it in the
+//     browser before the measurement is sent, so no utm tag can reach this
+//     dataset under any grouping. normalizePath's query-stripping is
+//     defensive here rather than load-bearing.
 //
 // TRUNCATION, recorded because it is the cost of grouping: `last28` is
 // grouped by (requestPath x refererHost) with `limit: 1000`. For a site with
