@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { asD1, FakeD1 } from './fakeD1';
 import { runDailyRollup, type RollupEnv } from '../rollup';
 import { RUM_CAPABILITIES } from '../analytics-schema';
+import worker, { type Env } from '../index';
 
 // The nightly archive job. Runs under this repo's single jsdom Vitest
 // environment like every other worker/__tests__ file, so `fetch`, `Request`
@@ -83,6 +84,22 @@ function stubGraphql(daily: unknown, byDay: unknown = { data: { viewer: { accoun
   );
 }
 
+// What each call actually ASKED FOR, not merely that a call happened. The
+// alias tells the two documents apart; the variables are the only place the
+// window lives, and the window is the half of "which day is this number" that
+// the row's key cannot show. A snapshot filed under yesterday's key holding
+// today's partial count looks perfect in the table and is permanently wrong.
+function sentDocuments(): { query: string; variables: Record<string, string> }[] {
+  const stub = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+  return stub.mock.calls.map(
+    (call) =>
+      JSON.parse((call[1] as RequestInit).body as string) as {
+        query: string;
+        variables: Record<string, string>;
+      },
+  );
+}
+
 afterEach(() => {
   vi.unstubAllGlobals();
 });
@@ -94,6 +111,25 @@ describe('the nightly rollup', () => {
     await runDailyRollup(env, Date.UTC(2026, 7, 20, 3, 17));
     expect([...fake.dailyVisits.keys()]).toEqual(['2026-08-19']);
     expect(fake.dailyVisits.get('2026-08-19')?.visits).toBe(140);
+  });
+
+  it("asks Cloudflare for yesterday's whole window, not today's partial day", async () => {
+    // The case above pins which KEY the row is filed under and NOTHING about
+    // where the number came from. Both halves have to be pinned separately,
+    // because every way of getting the window wrong -- asking for today, or
+    // for the last thirty days -- still writes exactly one row under exactly
+    // the right key. This table is never recomputed, so a number that arrives
+    // wrong stays wrong for as long as the site exists.
+    const { env } = rollupEnv();
+    stubGraphql(dayWithVisits(140));
+    await runDailyRollup(env, Date.UTC(2026, 7, 20, 3, 17));
+    const snapshot = sentDocuments().find((doc) => !doc.query.includes('byDay:'));
+    expect(snapshot, "the night's own snapshot document was never sent").toBeDefined();
+    // Midnight UTC to midnight UTC: one closed day, the same document the
+    // panel sends (worker/analytics.ts's totalVisitsFor), with its window
+    // narrowed to that day.
+    expect(snapshot!.variables.sinceWindow).toBe('2026-08-19T00:00:00.000Z');
+    expect(snapshot!.variables.until).toBe('2026-08-20T00:00:00.000Z');
   });
 
   it('running twice leaves one row, not two, holding the LATER number', async () => {
@@ -175,6 +211,19 @@ describe('the one-off backfill', () => {
     expect(fake.dailyVisits.get('2026-08-02')?.visits).toBe(11);
     // And the night's own snapshot still landed on top of it.
     expect(fake.dailyVisits.get('2026-08-19')?.visits).toBe(7);
+
+    // The REACH, which the rows above cannot show: a fixture answers whatever
+    // window it is handed, so a backfill that asked for thirty days would
+    // still write these two days and this case would still be green under a
+    // name promising ninety. The reach is only visible in what was asked for,
+    // and it is asked for exactly once, in production, on a table that is
+    // never recomputed -- a short first run leaves the panel's longest range
+    // permanently missing its history, with no symptom but a chart that
+    // starts late.
+    const backfill = sentDocuments().find((doc) => doc.query.includes('byDay:'));
+    expect(backfill, 'the backfill document was never sent').toBeDefined();
+    expect(backfill!.variables.since).toBe('2026-05-22T00:00:00.000Z'); // ninety days back
+    expect(backfill!.variables.until).toBe('2026-08-20T00:00:00.000Z'); // midnight UTC today
   });
 
   it('never runs again once the table holds anything at all', async () => {
@@ -192,12 +241,99 @@ describe('the one-off backfill', () => {
     const { env } = rollupEnv();
     stubGraphql(dayWithVisits(7));
     await runDailyRollup(env, Date.UTC(2026, 7, 20, 3, 17));
-    const stub = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
-    const documents = stub.mock.calls.map(
-      (call) => (JSON.parse((call[1] as RequestInit).body as string) as { query: string }).query,
-    );
-    const backfill = documents.find((query) => query.includes('byDay:'));
+    const backfill = sentDocuments().find((doc) => doc.query.includes('byDay:'));
     expect(backfill, 'the backfill document was never sent').toBeDefined();
-    expect(backfill).toContain(`dimensions { ${RUM_CAPABILITIES.dateDimension} requestPath }`);
+    expect(backfill!.query).toContain(`dimensions { ${RUM_CAPABILITIES.dateDimension} requestPath }`);
+    // And the window it was sent with, which is the other half of a document
+    // that can be wrong without anything failing: a correctly-spelled
+    // dimension over the wrong ninety days is still a chart that starts on
+    // the wrong day, forever.
+    expect(backfill!.variables.since).toBe('2026-05-22T00:00:00.000Z');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The cron's other half. Everything above calls `runDailyRollup` directly,
+// which proves nothing about anything ever calling it: an empty `scheduled`
+// export passes every case above, and it passes the source-text check in
+// src/test/wrangler-config.test.ts too. That failure is WORSE than the one
+// that check was written for -- a missing handler is 365 failed invocations a
+// year, visibly; a handler that runs and does nothing is 365 SUCCESSFUL
+// invocations a year against an archive that silently never fills.
+//
+// This repo has written that lesson down twice already (see
+// worker/__tests__/campaign.test.ts's 'through the Worker entry point' block
+// and worker/__tests__/analytics.test.ts's 'the route, reached through the
+// router'). So these two drive `worker.scheduled` itself.
+// ---------------------------------------------------------------------------
+
+describe("the nightly rollup, reached through the Worker's scheduled export", () => {
+  // A full Env because `scheduled` takes one, not because the job reads any
+  // of it beyond DB and the three analytics vars -- nothing on this path
+  // opens KV or GitHub.
+  function cronEnv(fake: FakeD1): Env {
+    return {
+      KV: {} as unknown as KVNamespace,
+      ADMIN_PASSWORD_HASH: 'rollup-test-only-password-hash-placeholder',
+      TOKEN_SECRET: 'rollup-test-token-secret',
+      GITHUB_OWNER: 'tarann26',
+      GITHUB_REPO: 'vb',
+      GITHUB_BRANCH: 'main',
+      GITHUB_TOKEN: 'rollup-test-github-token-not-real',
+      CLOUDFLARE_ACCOUNT_ID: 'rollup-test-account-id',
+      CLOUDFLARE_PAGES_PROJECT: 'rollup-test-project',
+      CLOUDFLARE_API_TOKEN: 'rollup-test-cf-token-not-real',
+      CF_WEB_ANALYTICS_SITE_TAG: 'rollup-test-site-tag',
+      DB: asD1(fake),
+    };
+  }
+
+  // The real ExecutionContext has members this test has no use for, so this
+  // is the same cast the KV fakes elsewhere in worker/__tests__ use. What it
+  // keeps is the one behaviour that matters: waitUntil COLLECTS the promise,
+  // so a handler that registers nothing is visible as an empty list rather
+  // than as work that quietly happened anyway.
+  function fakeCtx() {
+    const registered: Promise<unknown>[] = [];
+    const ctx = {
+      waitUntil: (promise: Promise<unknown>) => {
+        registered.push(promise);
+      },
+      passThroughOnException: () => undefined,
+    } as unknown as ExecutionContext;
+    return { registered, ctx };
+  }
+
+  function cronEvent(scheduledTime: number): ScheduledController {
+    return { scheduledTime, cron: '17 3 * * *', noRetry: () => undefined };
+  }
+
+  it('fires the cron and a row lands in D1', async () => {
+    const fake = new FakeD1();
+    stubGraphql(dayWithVisits(212));
+    const { registered, ctx } = fakeCtx();
+
+    await worker.scheduled(cronEvent(Date.UTC(2026, 7, 20, 3, 17)), cronEnv(fake), ctx);
+
+    // A scheduled invocation's lifetime is the promise it registers; one that
+    // registers none has done nothing at all.
+    expect(registered).toHaveLength(1);
+    await Promise.all(registered);
+    expect(fake.dailyVisits.get('2026-08-19')?.visits).toBe(212);
+  });
+
+  it("archives the day the CRON fired for, not the day the machine thinks it is", async () => {
+    // `event.scheduledTime`, not `Date.now()`. A retried or delayed invocation
+    // carries the time it was scheduled for, and that is the day being
+    // archived -- reading the wall clock instead files the number under
+    // whatever day the retry happened to land on.
+    const fake = new FakeD1();
+    stubGraphql(dayWithVisits(9));
+    const { registered, ctx } = fakeCtx();
+
+    await worker.scheduled(cronEvent(Date.UTC(2026, 0, 5, 3, 17)), cronEnv(fake), ctx);
+    await Promise.all(registered);
+
+    expect([...fake.dailyVisits.keys()]).toEqual(['2026-01-04']);
   });
 });
