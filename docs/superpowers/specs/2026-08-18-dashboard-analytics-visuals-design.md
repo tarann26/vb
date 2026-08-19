@@ -40,9 +40,10 @@ separate KV counter records Reserve a Table taps.
 **The query has never been run against the real API.** The file's own opening
 block says so, at length, and is written to depend on the fewest possible
 field names because an unverified dimension fails the whole query and takes
-every card down at once. This spec does not inherit that gamble: verifying the
-schema is the first task, and every feature below states what it does if the
-verification comes back negative.
+every card down at once. **This spec does not inherit that gamble at all** --
+nothing on screen ends up depending on that query. It is still verified once
+and the answer recorded, because an unverified query left in the tree is a trap
+for whoever reads it next.
 
 **Cloudflare's numbers are estimates.** The dataset is adaptive and sampled
 between 0.0001% and 100% depending on volume, which is why the card reads
@@ -59,18 +60,48 @@ Two sources, chosen per question rather than by preference.
 
 | Question | Source | Why |
 |---|---|---|
-| How many visits, which pages, which referrers | Cloudflare | Already built, already free, needs no new writes, and sampling is acceptable for a trend |
-| Which of *her* links brought them | **D1, first-party** | Must be exact, must not expire, and must not depend on an unverified field |
-| What happened more than six months ago | **D1, rolled up monthly** | Cloudflare has discarded it |
+| Every question this panel answers | **D1, first-party** | Exact rather than sampled, never expires, and depends on no unverified field |
+| A sanity check on our own numbers | Cloudflare | The beacon is already on the page and costs nothing. Nothing on screen depends on it |
 
-**Campaign visits are recorded by this site, not read back from Cloudflare.**
-The Worker already does exactly this for Reserve a Table taps, the site's
-Content Security Policy already permits `connect-src 'self'`, and D1 is already
-bound. Reading tags out of Cloudflare instead would inherit the sampling, the
-six-month cliff, and a dependency on `requestPath` carrying query strings that
-nobody has confirmed.
+**The panel draws from rows this site records, not from rows Cloudflare
+estimates.** That decision changed during design and it is worth stating why,
+because the first draft had it the other way round.
 
-**Campaign rows go to D1, never KV.** KV Free allows 1,000 writes a day and
+Reading from Cloudflare looked cheaper: the integration exists, the query is
+written, no new write path. But three facts undo that. Their numbers are
+**sampled** — the card says "about 4,100 visits" because it has to. Their data
+**expires** at roughly six months, which cannot satisfy a by-year view. And the
+query has **never been run against the real API**, so the trend chart and the
+busiest-times grid would both rest on a field nobody has confirmed exists.
+
+Recording a pageview ourselves costs one request and one small row. Workers
+Free allows 100,000 requests a day and this site sees a few hundred; D1 Free
+allows 500 MB and a row is about 50 bytes, so a thousand visits a day fills
+roughly 18 MB a year. In exchange every number is exact, every range is
+available, and nothing on screen can be taken down by a schema surprise.
+
+**What is recorded:** the path, the referrer host, the `utm_source` if present,
+and a timestamp. **What is not:** anything identifying the visitor. No cookie,
+no fingerprint, no visitor id. A row says a page was viewed, not who viewed it,
+which is the same privacy posture that made Cloudflare's beacon the right
+choice originally.
+
+**Two honest weaknesses.** Some ad blockers will block the write, though a
+same-origin request to the site's own domain is far less likely to be blocked
+than a known third-party tracker; the effect is undercounting, never wrong
+counting. And crawlers inflate counts unless filtered, so obvious bot traffic
+is excluded on the way in and the rule is stated in the file rather than
+implied.
+
+**Campaign rows and pageview rows are the same table**, distinguished by
+whether `utm_source` is set. One write path, one schema, one place to get
+right.
+
+**The write path is not new ground.** The Worker already records Reserve a
+Table taps this way, the site's Content Security Policy already permits
+`connect-src 'self'`, and D1 is already bound.
+
+**Rows go to D1, never KV.** KV Free allows 1,000 writes a day and
 this project's rate limiters, login counters and tap counter already commit
 roughly 800 of them. D1 Free allows 500 MB per database with rows bounded only
 by storage; a campaign row is about 50 bytes, so a thousand visits a day for a
@@ -86,13 +117,12 @@ polyline, a run of rectangles, or a grid of squares. SVG also draws with
 geometry attributes rather than utility classes, so it barely touches the CSS
 budget at all.
 
-**Visits over time.** An area chart, one point per day. The hero graphic, and
-the only element here that depends on a Cloudflare dimension the current query
-does not request.
+**Visits over time.** An area chart, one point per day. The hero graphic.
+Drawn from our own timestamps, so it depends on nothing unverified.
 
 **Top pages, and where they came from.** The existing two cards become
-horizontal bar lists, each row's width its share of the total. Same data, same
-query, no new risk. `normalizePath` keeps merging `/catering`,
+horizontal bar lists, each row's width its share of the total, now counted
+exactly rather than estimated. `normalizePath` still merges `/catering`,
 `/catering/` and `/catering?utm_source=ig` into one row — that merging is what
 stops a tagged link fracturing the pages list into near-identical rows.
 
@@ -100,18 +130,18 @@ stops a tagged link fracturing the pages list into near-identical rows.
 the previous equivalent period, with direction. The panel already fetches a
 prior week for its busier-or-quieter card, so the shape exists.
 
-**Busiest times.** A grid of day against hour. Genuinely useful for a
-restaurant, and dependent on an hour dimension, so it carries the same
-verification risk as the trend chart.
+**Busiest times.** A grid of day against hour -- genuinely useful for a
+restaurant, and the clearest argument for owning the data: an hour-of-day view
+needs an hour on every row, which our own timestamps give unconditionally.
 
 ## Tagged links
 
 She tags a link the ordinary way — `?utm_source=instagram` — and it works
 anywhere she pastes it. No redirect, no special path, no timing hazard.
 
-**How a visit is recorded.** On load, the site reads `utm_source` from its own
-URL and, when present, posts it to the Worker, which writes one row to D1.
-Nothing is recorded for an untagged visit, so the common case costs nothing.
+**How a visit is recorded.** Every pageview posts one row. When the URL carries
+a `utm_source`, that row carries it too -- a tagged visit is an ordinary visit
+with one extra column, not a separate mechanism.
 
 **What she sees.** A card listing each source and its exact count, ordered by
 volume, over the selected range. Exact, because these are our own rows rather
@@ -192,11 +222,11 @@ delaying the page. A counter that costs the restaurant a customer is worse
 than no counter — that principle is already written into `Hero.tsx` and it
 governs here too.
 
-**The trend chart and the busiest-times grid may not be buildable as
-described.** Both need a Cloudflare dimension the current query does not
-request. If the verification says no such dimension exists, both are cut and
-the remaining work is unaffected, because everything else is drawn from rows
-the query already returns or from our own D1.
+**Every card now depends on a write path that did not exist before.** That is
+the real cost of owning the data, and it is deliberate: the alternative was two
+cards resting on an unverified field. The write path is guarded the way
+`/api/wa` already is, and a failed write loses one row rather than breaking a
+page.
 
 ## Testing
 
@@ -260,7 +290,7 @@ is left "for later", because there is no later.
 | 18 | `worker/github.ts` sets no `AbortSignal` | A hung request has no ceiling |
 | 19 | Nothing in `e2e/` observes a publish | "What she publishes" is inferred from what a remount writes back, never from a request body — and the staged-photo bug that broke three times lives exactly there |
 | 20 | The browser suite depends on the first committed post being one paragraph and one citation | A new post landing first breaks the block-label assertions |
-| 21 | The analytics GraphQL query has never been run against the real API | Task one of this plan, and the thing the trend chart depends on |
+| 21 | The analytics GraphQL query has never been run against the real API | No longer load-bearing, now that the panel draws from our own rows. Verified anyway, once, and the result recorded -- an unverified query left in the tree is a trap for the next reader |
 
 **Written off rather than fixed:** nothing yet. Anything that turns out to cost
 more than it is worth gets recorded here with the reason, so the decision is
