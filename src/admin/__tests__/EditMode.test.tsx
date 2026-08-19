@@ -625,12 +625,30 @@ describe('EditMode: the page\'s own links do not fire', () => {
     delete (window.navigator as { sendBeacon?: unknown }).sendBeacon;
   });
 
-  // Owner request, 2026-08-17: the Reserve a Table button this test used to
-  // click was removed from Hero.tsx -- see that commit's brief. There is no
-  // remaining WhatsApp-opening control on the homepage for this describe
-  // block's "the page's own links do not fire" concern to cover; the Maps
-  // link and menu-download link tests below are unaffected and still prove
-  // the same class of thing for the controls that do still exist.
+  // Removed by owner request 2026-08-17 (the Reserve a Table button it
+  // clicked had left Hero.tsx -- see that commit's brief) and restored
+  // 2026-08-18 when the owner reversed that request and the button's render
+  // call site came back. Same concern as the Maps-link and BlogSection
+  // tests around it: a control living inside /edit's editable-text overlay
+  // must not fire its own real action on a click meant to select the text.
+  it('clicking the reserve button fires no beacon and opens no window', async () => {
+    stubFetch();
+    const beaconSpy = vi.fn(() => true);
+    Object.defineProperty(window.navigator, 'sendBeacon', { value: beaconSpy, configurable: true });
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);
+
+    render(
+      <MemoryRouter>
+        <EditMode />
+      </MemoryRouter>,
+    );
+
+    const button = await screen.findByRole('button', { name: COPY.hero.reserveButton });
+    fireEvent.click(button);
+
+    expect(beaconSpy).not.toHaveBeenCalled();
+    expect(openSpy).not.toHaveBeenCalled();
+  });
 
   it('clicking the Visit Us Maps link does not navigate -- preventDefault fires on the anchor itself', async () => {
     stubFetch();

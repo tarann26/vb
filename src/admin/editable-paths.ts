@@ -1,20 +1,21 @@
 // The explicit list of dotted copy.json paths edit mode lets her rewrite in
 // place -- Plan 5 Task 3, Step 1. Derived from COPY_FIELDS
 // (src/admin/fields.ts, Plan 4 Task 2's flat map), not re-typed by hand: a
-// second, hand-copied 25-entry list here could silently drift from
+// second, hand-copied 26-entry list here could silently drift from
 // fields.ts the moment a field is added, renamed, or reclassified as
 // attribute-only there. src/admin/__tests__/editable-paths.test.tsx imports
 // this same constant for its own "recorded calls match exactly" check, so
-// there is exactly one place this 25-entry set is ever written down.
+// there is exactly one place this 26-entry set is ever written down.
 // (32 through Phase 5, Task 7; Task 8 retired five blogsPage.* leaves along
 // with BlogsPage.tsx's own route, and the review of that task took the same
-// five out of COPY_FIELDS entirely -- see below. 26 through the owner
-// request of 2026-08-17, which retired `hero.reserveButton`'s in-place
-// affordance, not the field itself -- see below.)
+// five out of COPY_FIELDS entirely -- see below. Dipped to 25 for one day,
+// 2026-08-17 to 2026-08-18, while `hero.reserveButton`'s in-place affordance
+// was excluded rather than the field itself -- see below for why that
+// exclusion is gone again.)
 //
-// Five exclusions, and they are the two the edit mode plan's own coverage
-// table decided, this repair's own, Phase 5B Task 11's own, and the owner
-// request of 2026-08-17. Not re-litigated here:
+// Four exclusions, and they are the two the edit mode plan's own coverage
+// table decided, this repair's own, and Phase 5B Task 11's own. Not
+// re-litigated here:
 //   - the five COPY_FIELDS leaves wired straight to an HTML attribute
 //     (an aria-label, or VisitUs.tsx's <iframe title>) rather than painted
 //     as visible text -- no component has a content.renderText call for
@@ -54,11 +55,20 @@
 // left here to exclude: no descriptor, no dashboard control, no in-place
 // affordance. blogsPage.heading and blogsPage.intro were never part of it
 // and are untouched -- BlogIndex.tsx paints both through renderText.
+//
+// A sixth exclusion lived here even more briefly than the fifth, for the
+// opposite reason: not a control that turned out to change nothing, but a
+// control the owner asked back. `hero.reserveButton` landed in the set
+// below on 2026-08-17 when the Reserve a Table button's only render call
+// site left Hero.tsx (that commit's own brief covers the whole cascade).
+// The owner reversed the request the next day, the call site is back in
+// Hero.tsx, and this list follows it back out -- see that entry's own
+// history, now recorded where `press.readArticle` sits below.
 import { COPY_FIELDS } from './fields';
 import type { Copy } from '../content/types';
 
 // Named for what it MEANS -- "not offered as an in-place edit at /edit" --
-// rather than for the one reason six of its eight members happen to share.
+// rather than for the one reason six of its seven members happen to share.
 // Every member is still fully editable on the dashboard (/edit/manage
 // renders one Field per COPY_FIELDS key, this filter never reaches it);
 // what this set decides is only whether the LIVE PAGE puts an editing
@@ -72,16 +82,10 @@ const NOT_EDITABLE_IN_PLACE_COPY_FIELDS = new Set([
   'footer.linkedinLabel',
   // Painted as visible text, but inside a control that owns the click.
   'nav.pagesLabel',
-  // Owner request, 2026-08-17: the Reserve a Table button was removed from
-  // Hero.tsx (see that commit's brief). `hero.reserveButton`'s value and
-  // COPY_FIELDS entry both stay -- `withLeaf` spreads the fetched object
-  // rather than rebuilding from COPY_FIELDS, so deleting a value here would
-  // drop it on the owner's next publish and break every later build (the
-  // same reasoning that kept `press.readArticle` below). This just stops
-  // /edit from offering an in-place affordance over a control that no
-  // longer renders -- the orphaned-control class this project has shipped
-  // three times and fixed twice.
-  'hero.reserveButton',
+  // `hero.reserveButton` sat here from 2026-08-17 to 2026-08-18, while the
+  // Reserve a Table button had no render call site in Hero.tsx to be an
+  // in-place affordance over. The owner reversed that request the next day;
+  // the button is back in Hero.tsx, so this entry is not.
   // Phase 5B, Task 11: the homepage `press` section became the blog
   // (BlogSection.tsx), whose through-link reuses `press.viewAll` rather than
   // minting a second string -- see that component's own header comment for

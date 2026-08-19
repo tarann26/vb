@@ -296,6 +296,18 @@ import { AppRoutes } from '../App';
 // 18-point token renders as a ~30-point drop and two sections carrying the
 // same token measure differently. e2e/section-washes.spec.ts's header carries
 // that measurement in full.
+//
+// Owner request, 2026-08-18 (reversing the 2026-08-17 removal above):
+// 48134 -> 48325 (+191 bytes). Measured directly, by running this test with
+// Hero.tsx restored to its pre-removal form against the same test unchanged
+// otherwise -- not estimated, and not merely the mirror of the earlier -191,
+// though it lands on the identical number because the button's own markup
+// is byte-for-byte what it was before: the Reserve a Table button returns
+// to Hero.tsx as `<button class="bg-brand hover:bg-brand-dark text-ink
+// px-8 py-4 rounded-lg font-semibold uppercase tracking-wide shadow-lg
+// hover:shadow-xl transition-all duration-300">Reserve a Table</button>`.
+// The second phone number stays removed -- the owner did not ask for that
+// back -- so nothing else in this file's tally moves.
 describe('homepage byte count', () => {
   it('the public homepage is unchanged', () => {
     const { container } = render(
@@ -303,6 +315,6 @@ describe('homepage byte count', () => {
         <AppRoutes />
       </MemoryRouter>,
     );
-    expect(new TextEncoder().encode(container.innerHTML).length).toBe(48134);
+    expect(new TextEncoder().encode(container.innerHTML).length).toBe(48325);
   });
 });

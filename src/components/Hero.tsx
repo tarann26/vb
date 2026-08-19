@@ -82,6 +82,38 @@ const Hero: React.FC = () => {
  const content = useContent();
  const { site, galleries, copy } = content;
 
+ // `window.open` runs first, synchronously, as the very first statement --
+ // nothing above it may ever throw or await, so the WhatsApp link opening
+ // can never be delayed by (or made to depend on) the beacon below that
+ // counts the tap for worker/index.ts's POST /api/wa. A counter that costs
+ // her a customer is worse than no counter.
+ //
+ // The beacon itself is best-effort in two distinct ways, both guarded here:
+ // `navigator.sendBeacon` is undefined in some environments (optional
+ // chaining no-ops rather than throwing "not a function"), and even where
+ // present, a call to it can itself throw -- neither may ever propagate out
+ // of this handler. Fire-and-forget, not awaited: this is not `fetch`, so
+ // there is nothing to wait on regardless, and awaiting it would reintroduce
+ // exactly the delay this function exists to avoid.
+ //
+ // Defined inside the component body, not at module scope: it reads
+ // `site.whatsapp`, which must come from whatever content this render is
+ // showing (the live provider at /edit, the static default everywhere
+ // else) rather than a module-level import frozen at build time.
+ function openReservationWhatsApp(): void {
+   window.open(
+     `https://wa.me/${site.whatsapp.number}?text=${encodeURIComponent(site.whatsapp.prefilledMessage)}`,
+     '_blank',
+     'noopener',
+   );
+   try {
+     navigator.sendBeacon?.('/api/wa');
+   } catch {
+     // Never lets a broken beacon affect the click above -- see this
+     // function's own comment.
+   }
+ }
+
  return (
   <section className="min-h-screen bg-white relative flex items-center justify-center overflow-hidden">
     {/* brick background */}
@@ -150,6 +182,13 @@ const Hero: React.FC = () => {
         </div>
 
 
+
+       <button
+  onClick={openReservationWhatsApp}
+  className="bg-brand hover:bg-brand-dark text-ink px-8 py-4 rounded-lg font-semibold uppercase tracking-wide shadow-lg hover:shadow-xl transition-all duration-300"
+>
+  {content.renderText('hero.reserveButton', copy.hero.reserveButton)}
+</button>
 
      </div>
 
