@@ -360,7 +360,7 @@ type ImageTarget =
   // she swaps two -- and a replacement staged before the swap would follow
   // the box rather than the photo.
   | { kind: 'collage'; photoId: string; category: UploadCategory }
-  | { kind: 'item'; collection: 'dishes' | 'drinks' | 'press'; id: string; category: UploadCategory }
+  | { kind: 'item'; collection: 'dishes' | 'drinks'; id: string; category: UploadCategory }
   // Plan 7, Task 5, Step 1: a template section's own item-list photo
   // (`sections.<id>.content.items.<i>.image`) or gallery photo
   // (`sections.<id>.content.images.<i>`) -- `rest` is kept whole (not

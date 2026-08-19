@@ -37,8 +37,8 @@ import type {
   Post,
 } from '../content/types';
 
-// The twelve real files under src/content/, plus awards.json (D1-backed, not
-// a file on disk at all -- see its own entry below) -- thirteen in total, the
+// The eleven real files under src/content/, plus awards.json (D1-backed, not
+// a file on disk at all -- see its own entry below) -- twelve in total, the
 // same set validateContent (src/content/validate.ts) recognises and
 // commitFiles (worker/github.ts) allows; see worker/__tests__/github.test.ts's
 // "still accepts the real content file" block for that list's own authority.

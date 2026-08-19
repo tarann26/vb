@@ -2,10 +2,12 @@
 import { describe, expect, it } from 'vitest';
 import {
   CAMPAIGN_CAVEAT,
+  CAMPAIGN_VS_REFERRER,
   MIN_PRIOR_WEEK_VISITS,
   TAP_COUNTING_STARTED_ON,
   VISIT_COUNTING_STARTED_ON,
   WEEK_CHANGE_THRESHOLD,
+  archiveSentence,
   formatCountingStartedOn,
   labelForPath,
   noVisitsYetSentence,
@@ -205,5 +207,41 @@ describe('the campaign card names the window it counted', () => {
     expect(CAMPAIGN_CAVEAT).toMatch(/once per person arriving/i);
     expect(CAMPAIGN_CAVEAT).toMatch(/different phone/i);
     expect(CAMPAIGN_CAVEAT).toMatch(/blocks it/i);
+  });
+});
+
+// Re-review finding: both sides of NumbersArea's own assertion come from this
+// same constant (`getByText(archiveSentence())`), so deleting a clause from
+// it leaves that test green -- it tests wiring, not wording. LITERALS here,
+// not a comparison against the constant itself, are what pin the wording:
+// this is the one card where she would land on the By-year range, see an
+// empty Pages or Sources card, and need the sentence to actually say why and
+// how to get back.
+describe('archiveSentence names both the gap and the way back', () => {
+  it('says pages and links are not kept in the yearly archive', () => {
+    expect(archiveSentence()).toMatch(/pages and links are not kept in the yearly archive/i);
+  });
+
+  it('tells her to choose 90 days or less to see them', () => {
+    expect(archiveSentence()).toMatch(/choose 90 days or less to see them/i);
+  });
+});
+
+// Same finding, same fix, for the campaign card's other caveat: NumbersArea
+// only asserts `getByText(CAMPAIGN_VS_REFERRER)`, which is wiring, not
+// wording. Without this line the campaign card and the referrer card above it
+// read as a contradiction -- both claim to say "which channel brought her
+// visitors" -- so the distinction has to survive a wording pass.
+describe('CAMPAIGN_VS_REFERRER tells the two channel cards apart', () => {
+  it('says this card is not the same as the one above', () => {
+    expect(CAMPAIGN_VS_REFERRER).toMatch(/not the same as the card above/i);
+  });
+
+  it('says the card above is about which website someone clicked from', () => {
+    expect(CAMPAIGN_VS_REFERRER).toMatch(/which website someone clicked from/i);
+  });
+
+  it('says this card is about which of her own links they clicked', () => {
+    expect(CAMPAIGN_VS_REFERRER).toMatch(/which of your own links they clicked/i);
   });
 });

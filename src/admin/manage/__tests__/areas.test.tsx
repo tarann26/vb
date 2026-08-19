@@ -120,10 +120,14 @@ describe('AREAS covers every dashboard panel exactly once', () => {
   // the viewport actually constrains is the SUM of five wrapped row heights,
   // and the sum of the five lengths is the cheap proxy for that.
   //
-  // The bound is the current total exactly, because the screen is at its
-  // budget: 844px holds what is there now and nothing more. Growth is not
-  // forbidden, it is priced -- pay for it by shortening another description,
-  // or re-measure with that spec and move this number in the same commit.
+  // The bound was the current total exactly when this test was written,
+  // because the screen was at its budget: 844px held what was there and
+  // nothing more. The `story` description has since been shortened, leaving
+  // 7 characters of slack under the bound today -- the bound was not lowered
+  // to match, so it no longer proves the screen is at capacity, only that it
+  // is within it. Growth is still not free -- pay for it by shortening
+  // another description, or re-measure with that spec and move this number
+  // in the same commit.
   //
   // What it does NOT catch, stated rather than implied: lengthening one
   // description and shortening another by the same count leaves the total

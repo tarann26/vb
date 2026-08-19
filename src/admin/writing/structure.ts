@@ -259,9 +259,10 @@ export function backspaceAtStart(blocks: Block[], at: Caret): Edit | null {
   // second spelling of the invariant this task exists to keep.
   //
   // It answers `null` when there is nothing to outdent (a flat item, or a kind
-  // that may not nest at all), which falls through to the refusal below --
-  // still no merge of item three into item two, which remains a reasonable
-  // thing to want and remains out of scope.
+  // that may not nest at all), and that `null` is returned directly here, not
+  // fallen through to the refusal below -- the observable behaviour is the
+  // same either way: still no merge of item three into item two, which
+  // remains a reasonable thing to want and remains out of scope.
   if (match !== null) return indentAt(blocks, at, -1);
 
   // BACKSPACE MUST NEVER SILENTLY REMOVE A PHOTOGRAPH, and there are two ways

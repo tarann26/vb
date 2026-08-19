@@ -209,7 +209,9 @@ export default function BlockFields({
     // One entry per item, ALWAYS, read as defensively as `safe` above and for
     // the same reason: a restored draft's `levels` can be short, long or full
     // of nulls, and every such list reads as flat rather than throwing inside
-    // the Posts panel. structure.ts's own levelsOf does this identically.
+    // the Posts panel. Unlike structure.ts's own levelsOf, this does not clamp
+    // to MAX_LIST_DEPTH -- a depth of 7 from a draft passes straight through
+    // here, and validate.ts is what refuses it at publish.
     const depths = safe.map((_item, i) => {
       const level = Array.isArray(levels) ? levels[i] : 0;
       return typeof level === 'number' && Number.isInteger(level) && level > 0 ? level : 0;
@@ -379,7 +381,7 @@ export default function BlockFields({
             onChange={(next) => onChange({ ...block, heading: next })}
             problems={problemsFor('heading')}
           />
-          {itemList(block.items, block.items.map(() => 0), 'Ingredient', (next) => onChange({ ...block, items: next.items }))}
+          {itemList(block.items, [], 'Ingredient', (next) => onChange({ ...block, items: next.items }))}
         </>
       );
     case 'steps':
@@ -392,7 +394,7 @@ export default function BlockFields({
             onChange={(next) => onChange({ ...block, heading: next })}
             problems={problemsFor('heading')}
           />
-          {itemList(block.items, block.items.map(() => 0), 'Step', (next) => onChange({ ...block, items: next.items }))}
+          {itemList(block.items, [], 'Step', (next) => onChange({ ...block, items: next.items }))}
         </>
       );
     case 'citation':
