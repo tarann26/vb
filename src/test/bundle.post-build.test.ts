@@ -978,6 +978,70 @@ describe('dist/assets/ keeps admin code out of the entry chunk', () => {
 // The raise leaves 163 bytes of headroom, which is the ~150 this file's Task
 // 13 entry argued a branch should carry so that one honest new rule is a
 // passing build with a raise to write rather than a red build.
+//
+// ---------------------------------------------------------------------------
+// The Numbers panel, Tasks 17-22 of the numbers-panel plan, audited whole:
+// 39037 -> 39037, ZERO bytes, byte-identical output down to the same Vite
+// content hash (BeLXGgpF). ADDED: [], REMOVED: [] -- not zero net, zero of
+// each -- 546 selector groups on both sides.
+//
+// Measured the way this lineage requires: a worktree checkout of the true
+// parent commit of Task 17 (b45ee57, `git worktree add`, never a stash),
+// `vite build` in place against the same node_modules (package.json and
+// package-lock.json are untouched across the whole range, checked with `git
+// diff --stat` before the build), then `cmp` on the two shipped stylesheets
+// and a postcss walk of both rule trees compared as sets. `cmp` reports no
+// difference, which is the stronger result the rule-level diff is run to
+// check.
+//
+// SIX tasks of new UI at zero marginal cost is the number to be suspicious
+// of, so here is where it went instead:
+//   * The three charts are SVG. A polyline, 168 rects and a run of <text>
+//     elements are drawn with ATTRIBUTES -- d, viewBox, x, y, width, height,
+//     fill, opacity -- and an attribute is not a class. This is most of the
+//     answer, and it is why the spec ruled out a charting library on bytes
+//     rather than on taste.
+//   * BarList's per-row width is an inline style, because a width is DATA
+//     here: a class per percentage would mint up to a hundred rules for
+//     values used once each. That is the escape hatch this file has pointed
+//     at since Plan 6, and src/test/hosting.test.ts counts the components
+//     taking it.
+//   * The cards, the stat cards, the campaign card and the range pills are
+//     built from utilities that already had a rule in this sheet. The pills
+//     in particular are the Retry button's own string with `py-2` for `py-1`
+//     plus `bg-brand`, and every one of those five -- `py-2`, `bg-brand`,
+//     `mb-4`, `flex`, `flex-wrap`, `gap-2` -- already shipped (EditorSheet,
+//     Card A's own row, and the CARD binding above them).
+//   * The one colour change in the audit, `text-gray-500` -> `text-gray-600`
+//     on the panel's "Your own editing visits aren't counted." line, moves
+//     between two rules that both already exist. It is a contrast fix, not a
+//     style change: that line is the only text on the panel sitting directly
+//     on the shell's cream rather than inside a white card, where the lighter
+//     grey measures 4.44:1 against 4.83:1 on white.
+//
+// THE CEILING IS THEREFORE NOT MOVED. It stays at 39200 against this measured
+// 39037, with the same 163 bytes of headroom the entry above argued for.
+//
+// TWO PRE-EXISTING COMMENT LEAKS, found by the widened scan this entry ran and
+// recorded rather than fixed, because they predate this whole range and the
+// stylesheet is byte-identical across it. Method: extract every class selector
+// from the shipped sheet, strip block and line comments from every scanned
+// file under src/ plus index.html, and require each selector to appear on what
+// is left. 477 selectors, two unaccounted for:
+//   * `.container` -- Tailwind's own container utility, minted by the ordinary
+//     English word in prose comments in src/index.css, ManageShell.tsx,
+//     EditableImage.tsx, CollageEditor.tsx, CollageSelectBadge.tsx,
+//     RecordForm.tsx, ArraySection.tsx, AreaNav.tsx, article-date.ts and
+//     stable-names.ts. No className anywhere in this project uses it. It
+//     carries its own media-query ladder, so it is the larger of the two by
+//     some way -- plausibly more than the 163 bytes of headroom above.
+//   * `.max-w-[15rem]` -- minted by NavBar.tsx:323's comment ABOUT the class.
+//     The floating mobile menu that entry in the 68a70ec paragraph above
+//     credits it to no longer names it in any className; grep finds the string
+//     only in that comment and in this file's own ledger.
+// Both are dead weight shipped to every visitor. Neither is this range's to
+// spend a commit on -- a reword across ten unrelated files inside an audit is
+// how an audit stops being one -- and neither has moved a byte here.
 describe('dist/assets/ keeps the shared stylesheet under a byte ceiling', () => {
   it.skipIf(!REQUIRED && !existsSync(DIST_ASSETS))('the entry CSS file stays under 39200 bytes', () => {
     const cssFiles = readdirSync(DIST_ASSETS).filter((n) => /^index-.*\.css$/.test(n));

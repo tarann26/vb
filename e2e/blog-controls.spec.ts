@@ -1,4 +1,7 @@
 import { expect, test } from '@playwright/test';
+// Lifted into e2e/contrast.ts when e2e/numbers-visuals.spec.ts needed the same
+// three functions -- a second copy is how a shared fixture starts drifting.
+import { contrast } from './contrast';
 
 // Task 32. The three /blog control rows Task 30 shipped, in a real browser at
 // the two widths that matter. Everything here is either geometry or computed
@@ -46,22 +49,6 @@ const SEARCH_CAP = 672;
 const CONTROLS = ['All', 'Recipe', 'Story', 'In the press', 'Newest first', 'Oldest first'] as const;
 
 type Box = { x: number; y: number; width: number; height: number };
-
-function channel(value: number): number {
-  const c = value / 255;
-  return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
-}
-
-function luminance(rgb: string): number {
-  const m = rgb.match(/^rgb\((\d+),\s*(\d+),\s*(\d+)\)$/);
-  if (!m) throw new Error(`not an opaque rgb() colour: ${rgb}`);
-  return 0.2126 * channel(Number(m[1])) + 0.7152 * channel(Number(m[2])) + 0.0722 * channel(Number(m[3]));
-}
-
-function contrast(a: string, b: string): number {
-  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
-  return (hi + 0.05) / (lo + 0.05);
-}
 
 function overlaps(a: Box, b: Box): boolean {
   return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;

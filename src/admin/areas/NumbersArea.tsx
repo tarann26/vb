@@ -244,7 +244,15 @@ const NumbersArea: React.FC<NumbersAreaProps> = ({ active, registry, fetchImpl }
           /edit and every /edit/manage route -- so they are excluded at the
           query, and this is the line that stops her wondering why the
           numbers look low. */}
-      <p className="mb-4 font-['Montserrat'] text-xs text-gray-500">
+      {/* The darker grey, and it is not a taste change. This is the ONE line
+          on this panel that sits directly on the shell's cream rather than
+          inside a white card, and the lighter grey measures 4.44:1 there
+          against 4.83:1 on white -- under AA, on the sentence that stops her
+          wondering why the numbers look low. Found by the sweep in
+          e2e/brand-contrast.spec.ts, which is what that sweep is for, and it
+          costs the stylesheet nothing because this panel already paints its
+          empty states in the darker grey. */}
+      <p className="mb-4 font-['Montserrat'] text-xs text-gray-600">
         Your own editing visits aren&rsquo;t counted.
       </p>
 

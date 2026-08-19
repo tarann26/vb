@@ -1,5 +1,15 @@
 import { expect, test } from '@playwright/test';
+import type { Page } from '@playwright/test';
 import { contrastRatio } from '../src/test/contrast';
+import { ANALYTICS_DRAWN, openDashboard } from './edit-backend';
+
+// One text node, already composited down to two opaque colours.
+interface MeasuredText {
+  text: string;
+  bg: { r: number; g: number; b: number };
+  fg: { r: number; g: number; b: number };
+  where: string;
+}
 
 // Formats an already-composited, already-opaque {r,g,b} triple. Composited
 // and hexified separately, not in one regex-into-hex step, because the
@@ -11,11 +21,13 @@ function toHex({ r, g, b }: { r: number; g: number; b: number }): string {
   return '#' + [r, g, b].map((v) => Math.round(v).toString(16).padStart(2, '0')).join('');
 }
 
-test('every text node on the homepage meets AA against what it sits on', async ({ page }) => {
-  await page.goto('/');
-  await page.waitForLoadState('networkidle');
-
-  // Both directions, deliberately. An earlier version of this test only
+// The sweep itself, over whatever page is already open. Extracted from the
+// homepage test when the Numbers panel needed the same walk: every caption,
+// axis label, stat label and range pill that landed on that panel is inside
+// this test's scope, and a second copy of two hundred lines of compositing is
+// how two sweeps come to disagree about what a background IS.
+//
+// Both directions, deliberately. An earlier version of this test only
   // looked at elements whose own background was brand blue, which made it
   // structurally incapable of catching the far more common failure: brand
   // blue as TEXT on a white background, at 1.45:1. That shipped the entire
@@ -24,7 +36,8 @@ test('every text node on the homepage meets AA against what it sits on', async (
   // Walking computed style rather than class names is the other half: a
   // Tailwind token, an arbitrary value, and an inline style are
   // indistinguishable here, so this cannot be fooled by spelling.
-  const measured = await page.evaluate(() => {
+async function measureTextNodes(page: Page, root = ':root'): Promise<MeasuredText[]> {
+  return page.evaluate((rootSelector) => {
     // Parses `rgb(r, g, b)` / `rgba(r, g, b, a)` -- alpha included. Every
     // caller below composites through this, rather than reading the three
     // colour channels and silently discarding the fourth: a translucent
@@ -148,7 +161,9 @@ test('every text node on the homepage meets AA against what it sits on', async (
       fg: { r: number; g: number; b: number };
       where: string;
     }[] = [];
-    for (const el of Array.from(document.querySelectorAll<HTMLElement>('*'))) {
+    const scope = document.querySelector<HTMLElement>(rootSelector);
+    if (!scope) throw new Error(`brand-contrast: nothing matches ${rootSelector}`);
+    for (const el of Array.from(scope.querySelectorAll<HTMLElement>('*'))) {
       // Only elements holding their own text, so a wrapper is never blamed
       // for a child rendered on a different background.
       const ownText = Array.from(el.childNodes)
@@ -197,7 +212,17 @@ test('every text node on the homepage meets AA against what it sits on', async (
       });
     }
     return out;
-  });
+  }, root);
+}
+
+function unreadable(measured: MeasuredText[]): MeasuredText[] {
+  return measured.filter((m) => contrastRatio(toHex(m.fg), toHex(m.bg)) < 4.5);
+}
+
+test('every text node on the homepage meets AA against what it sits on', async ({ page }) => {
+  await page.goto('/');
+  await page.waitForLoadState('networkidle');
+  const measured = await measureTextNodes(page);
 
   // Non-vacuous: a render crash, a bad baseURL, or a selector regression
   // upstream would leave `measured` empty, and an empty array satisfies
@@ -206,7 +231,40 @@ test('every text node on the homepage meets AA against what it sits on', async (
   // while still requiring a real page to have rendered.
   expect(measured.length).toBeGreaterThan(50);
 
-  const unreadable = measured.filter((m) => contrastRatio(toHex(m.fg), toHex(m.bg)) < 4.5);
+  expect(unreadable(measured)).toEqual([]);
+});
 
-  expect(unreadable).toEqual([]);
+// The dashboard's Numbers panel, which the homepage sweep above has never
+// reached and cannot: /edit is behind a session and draws nothing without a
+// mocked backend. Everything the trend chart, the bar lists, the stat cards,
+// the campaign card, the busiest-times grid and the range pills put on screen
+// is text on a surface, and the two colours in play are the ones this project
+// keeps getting wrong -- brand blue, which is 1.45:1 on white and is a SURFACE
+// only, and the grey captions, which are 4.60:1 on white.
+//
+// SCOPED TO THE PANEL, and the reason is a finding rather than a convenience.
+// Run over the whole route, this sweep reports seven failures, none of them
+// from any card measured here: the shell's own `text-gray-500` area
+// descriptions sit on the cream sidebar rather than on white (4.42:1 and
+// 4.06:1 on the current row's tint), and PublishBar's disabled Publish button
+// is grey on grey. The second is exempt -- WCAG 1.4.3 excludes an inactive
+// control -- and the first is backlog item 10's family, which the washes task
+// owns and which is not this task's to move. Widening the root to ':root'
+// here is how a later task re-opens the question with the same instrument.
+test('every text node on the Numbers panel meets AA against what it sits on', async ({ page }) => {
+  await openDashboard(page, '/edit/manage/numbers', { analytics: ANALYTICS_DRAWN });
+  // ANSWERED, not merely mounted: every card shows its heading while the
+  // request is still out, and a panel measured mid-flight is a panel whose
+  // captions, axis labels and figures are not on screen yet.
+  await expect(page.getByRole('img', { name: /Visits over the last/ })).toBeVisible();
+  const measured = await measureTextNodes(page, '[data-area="numbers"]');
+
+  // The same non-vacuity floor the homepage carries, at this screen's own
+  // measured count: the panel measures 48 text nodes on this payload, and 40
+  // is comfortably below that while still requiring a real, answered screen.
+  // A payload that failed to render leaves seven headings and a loading line,
+  // which is far below this.
+  expect(measured.length).toBeGreaterThan(40);
+
+  expect(unreadable(measured)).toEqual([]);
 });

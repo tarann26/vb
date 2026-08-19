@@ -160,6 +160,42 @@ export const ANALYTICS_POPULATED: AnalyticsPayload = {
   yearAvailable: false,
 };
 
+// The body every geometric claim in e2e/numbers-visuals.spec.ts is measured
+// against. ANALYTICS_POPULATED above is the story fixture -- it exists so the
+// copy on the screen reads like a real week -- and its numbers were chosen for
+// what they SAY. These were chosen for what can be measured about them without
+// a tolerance argument:
+//
+//   * byPath is 400 against 100. Each bar is drawn as its share of the LEADER
+//     (src/admin/manage/chart-geometry.ts's barPercents), so the leader fills
+//     its track and the second row is a quarter of it -- two independent
+//     numbers a bounding box can be held to, rather than one ratio that a
+//     share-of-total mistake would satisfy just as well.
+//   * The series rises and falls with a single clear peak, so a chart drawn
+//     upside down is not symmetric with one drawn the right way up.
+//   * yearAvailable is true, so all four range pills are on screen and the
+//     overlap sweep has something to sweep.
+export const ANALYTICS_DRAWN: AnalyticsPayload = {
+  ...ANALYTICS_POPULATED,
+  series: [
+    { date: '2026-08-11', visits: 100, complete: true },
+    { date: '2026-08-12', visits: 50, complete: true },
+    { date: '2026-08-13', visits: 200, complete: true },
+    { date: '2026-08-14', visits: 25, complete: true },
+    { date: '2026-08-15', visits: 400, complete: true },
+  ],
+  seriesStartsOn: '2026-08-11',
+  byPath: [
+    { path: '/', visits: 400 },
+    { path: '/catering', visits: 100 },
+  ],
+  campaigns: [
+    { source: 'instagram', label: 'Instagram link', arrivals: 84 },
+    { source: 'other', label: 'Someone else’s link', arrivals: 21 },
+  ],
+  yearAvailable: true,
+};
+
 export interface EditBackendOptions {
   // When true, /build-info.json answers 404 -- the state the strip must
   // report as "couldn't check" rather than as the site being down.

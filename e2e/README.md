@@ -52,6 +52,14 @@ provide: `npx playwright install chromium`, once per machine.
    spec file gets, and a type error in here has already survived a whole task
    on this project. Run the spec.
 
+11. **A `page.route` glob matches the whole URL, query string included.**
+   `**/api/analytics` stops matching the moment the request becomes
+   `/api/analytics?range=30d`, and the failure is silent: the request reaches
+   the dev server, answers 404, and the screen under test renders its error
+   state instead of its content. That has now cost this repo twice — first on
+   `**/api/content**`, then on the analytics route when the range control
+   landed. End a route pattern at a path segment only when you mean it.
+
 ## What the config change was actually measured to do
 
 Recorded here because it is not what the change was expected to do, and the
