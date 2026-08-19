@@ -293,7 +293,11 @@ export class FakeD1 {
       const since = sql.includes('WHERE month >= ?') ? (args[0] as string) : '';
       const rows = [...this.monthlyVisits.entries()]
         .filter(([month]) => month >= since)
-        .sort((a, b) => a[0].localeCompare(b[0]))
+        // Read off the statement, exactly like the daily branch above: the
+        // by-year chart draws its points in the order this returns them, and
+        // a fake that sorted ascending whatever the SQL said would absorb a
+        // dropped ORDER BY and report green.
+        .sort((a, b) => (sql.includes('ORDER BY month ASC') ? a[0].localeCompare(b[0]) : b[0].localeCompare(a[0])))
         .map(([month, row]) => ({ month, visits: row.visits, complete: row.complete }));
       return { changes: 0, rows };
     }
