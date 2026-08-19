@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   handleAnalytics,
   bucketReferer,
+  hourCells,
   isExcludedPath,
   istDateDaysAgo,
   normalizePath,
@@ -10,6 +11,7 @@ import {
   type AnalyticsEnv,
 } from '../analytics';
 import { asD1, FakeD1 } from './fakeD1';
+import { RUM_CAPABILITIES } from '../analytics-schema';
 import { todayInKolkata } from '../../src/shared/date';
 import {
   PAYLOAD_SHAPE_VERSION,
@@ -151,6 +153,9 @@ async function authed(path = '/api/analytics', sessionCookie?: string): Promise<
 }
 
 type Row = { path?: string; referer?: string; visits: number };
+// The hourly node groups by (datetimeHour x requestPath), so its rows carry a
+// timestamp where the other three carry a referer.
+type HourRow = { at: string; visits: number; path?: string };
 
 function rowsToNodes(rows: Row[], withReferer: boolean): unknown[] {
   return rows.map((row) => ({
@@ -161,8 +166,17 @@ function rowsToNodes(rows: Row[], withReferer: boolean): unknown[] {
   }));
 }
 
+function hourRowsToNodes(rows: HourRow[]): unknown[] {
+  return rows.map((row) => ({
+    sum: { visits: row.visits },
+    dimensions: { datetimeHour: row.at, requestPath: row.path ?? '/' },
+  }));
+}
+
 // A well-formed Cloudflare GraphQL success body.
-function graphqlOk(opts: { last28?: Row[]; thisWeek?: Row[]; priorWeek?: Row[] } = {}): Response {
+function graphqlOk(
+  opts: { last28?: Row[]; thisWeek?: Row[]; priorWeek?: Row[]; hourly?: HourRow[] } = {},
+): Response {
   return new Response(
     JSON.stringify({
       data: {
@@ -172,6 +186,7 @@ function graphqlOk(opts: { last28?: Row[]; thisWeek?: Row[]; priorWeek?: Row[] }
               last28: rowsToNodes(opts.last28 ?? [], true),
               thisWeek: rowsToNodes(opts.thisWeek ?? [], false),
               priorWeek: rowsToNodes(opts.priorWeek ?? [], false),
+              hourly: hourRowsToNodes(opts.hourly ?? []),
             },
           ],
         },
@@ -186,7 +201,13 @@ function respondWith(response: () => Response): void {
 }
 
 // The launch state THIS SITE produces, which is ZERO_DATA_PAYLOAD in every
-// field but one.
+// field but two.
+//
+// `hourly` is an EMPTY ARRAY here, not the shared fixture's `null`. Null means
+// "this site cannot answer that question", and this site can: the
+// verification found `datetimeHour` on the dataset, so a window nobody
+// visited yields zero cells rather than no grid. src/shared/ must never
+// import from worker/, so the shared fixture cannot know that either.
 //
 // `seriesSource` is read from worker/analytics-schema.ts, and that constant
 // records a real `date` dimension on this dataset -- so the nightly job's
@@ -196,7 +217,7 @@ function respondWith(response: () => Response): void {
 // the value for a dataset with no date dimension. Spelled as a LITERAL rather
 // than derived from RUM_CAPABILITIES, so re-running the verification to a
 // different answer reddens this instead of quietly agreeing with itself.
-const ZERO_DATA_HERE: AnalyticsPayload = { ...ZERO_DATA_PAYLOAD, seriesSource: 'backfilled' };
+const ZERO_DATA_HERE: AnalyticsPayload = { ...ZERO_DATA_PAYLOAD, seriesSource: 'backfilled', hourly: [] };
 
 async function payloadOf(response: Response): Promise<AnalyticsPayload> {
   return (await response.json()) as AnalyticsPayload;
@@ -782,6 +803,33 @@ describe('the shaped payload', () => {
     ]);
   });
 
+  it('fills the busiest-times grid from the hourly node, not from the ranked list', async () => {
+    // The wiring, which the pure hourCells tests below cannot see: reading
+    // `account.last28` here instead of `account.hourly` would still produce a
+    // plausible-looking grid, from rows that carry no timestamp at all.
+    respondWith(() =>
+      graphqlOk({
+        last28: [{ path: '/', referer: '', visits: 900 }],
+        hourly: [{ at: '2026-08-21T12:00:00Z', visits: 4 }],
+      }),
+    );
+
+    const payload = await payloadOf(await handleAnalytics(await authed(), env));
+    expect(payload.hourly).toEqual([{ day: 5, hour: 17, visits: 4 }]);
+  });
+
+  it('asks Cloudflare for the hour dimension the verification recorded', async () => {
+    // The document is one aliased node per card. A missing node is not a
+    // missing card here -- it is a rejected document and every card at once,
+    // which is why the spelling is pinned to what introspection returned.
+    await handleAnalytics(await authed(), env);
+    const [, init] = fetchStub.mock.calls[0] as [string, RequestInit];
+    const { query } = JSON.parse(init.body as string) as { query: string };
+    expect(query).toContain('hourly:');
+    expect(query).toContain('datetimeHour');
+    expect(RUM_CAPABILITIES.hourDimension).toBe('datetimeHour');
+  });
+
   it('normalises a path so one page is one row', async () => {
     respondWith(() =>
       graphqlOk({
@@ -976,6 +1024,74 @@ describe('the Reserve a Table tap total', () => {
 // The pure helpers, table-tested. Each one carries a judgement a human would
 // argue with, which is exactly why it is a function and not an inline branch.
 // ---------------------------------------------------------------------------
+
+describe('hourCells', () => {
+  function row(datetimeHour: string, visits: number, requestPath = '/') {
+    return { sum: { visits }, dimensions: { datetimeHour, requestPath } };
+  }
+
+  it('buckets a UTC hour into the IST day and hour it actually was', () => {
+    // 19:00 UTC Friday is 00:30 IST Saturday, so the half-hour offset moves
+    // BOTH the day and the hour. This is the case a naive +5 gets wrong and
+    // nothing on screen would explain.
+    expect(hourCells([row('2026-08-21T19:00:00Z', 5)])).toEqual([{ day: 6, hour: 0, visits: 5 }]);
+  });
+
+  it('shifts by the full five and a half hours, not by five', () => {
+    // THE ROW ABOVE CANNOT SEE THIS, and that is worth stating rather than
+    // assuming. `datetimeHour` is truncated to the hour, so its minutes are
+    // always :00 -- and adding 5:00 to an :00 timestamp lands in the SAME
+    // hour bucket as adding 5:30, every single time. The half-hour is
+    // unobservable on the input this dataset actually sends, which means a
+    // fixture built from that input cannot pin the constant.
+    //
+    // This one can: at :45, five hours lands on Friday 23:00 IST and five and
+    // a half lands on Saturday 00:00, so the offset moves the day. The input
+    // is deliberately finer than `datetimeHour` because the introspected
+    // dimension list beside it (worker/analytics-schema.ts) also carries
+    // datetimeFifteenMinutes and datetimeFiveMinutes -- the day a later
+    // reader groups by one of those, this is what stops the grid quietly
+    // sliding an hour backwards.
+    expect(hourCells([row('2026-08-21T18:45:00Z', 5)])).toEqual([{ day: 6, hour: 0, visits: 5 }]);
+  });
+
+  it('adds rows that land in the same cell', () => {
+    expect(hourCells([row('2026-08-21T12:00:00Z', 2), row('2026-08-21T12:00:00Z', 3)])).toEqual([
+      { day: 5, hour: 17, visits: 5 },
+    ]);
+  });
+
+  it('leaves out her own editing visits', () => {
+    expect(hourCells([row('2026-08-21T12:00:00Z', 9, '/edit/manage/menu')])).toEqual([]);
+  });
+
+  it('ignores a row whose timestamp is unparseable rather than charting it at zero', () => {
+    expect(hourCells([row('not-a-time', 9)])).toEqual([]);
+  });
+
+  it('comes back ordered by day then hour', () => {
+    const cells = hourCells([row('2026-08-22T12:00:00Z', 1), row('2026-08-21T06:00:00Z', 1)]);
+    expect(cells.map((cell) => `${String(cell.day)}:${String(cell.hour)}`)).toEqual(['5:11', '6:17']);
+  });
+
+  it('gives the same answer whatever timezone the process is in', () => {
+    // The mutation this row exists for -- getDay()/getHours() in place of the
+    // UTC pair -- passes on a machine running in UTC and fails east of
+    // Greenwich. Asserting the PROPERTY rather than one machine's answer is
+    // what makes it fail everywhere.
+    const original = process.env.TZ;
+    const answers = new Set<string>();
+    try {
+      for (const zone of ['UTC', 'Asia/Kolkata', 'America/New_York', 'Pacific/Kiritimati']) {
+        process.env.TZ = zone;
+        answers.add(JSON.stringify(hourCells([row('2026-08-21T19:00:00Z', 5)])));
+      }
+    } finally {
+      process.env.TZ = original;
+    }
+    expect([...answers]).toEqual([JSON.stringify([{ day: 6, hour: 0, visits: 5 }])]);
+  });
+});
 
 describe('bucketReferer', () => {
   // Every accepted, deliberate mis-bucket the spec records, so they stay

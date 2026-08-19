@@ -72,6 +72,22 @@
 // "about N visits" because the dataset is adaptive and sampled; this sits
 // inside that same caveat rather than adding a new claim.
 //
+// THE `hourly` NODE TRUNCATES DIFFERENTLY, and the difference is worth
+// stating rather than discovering. It is grouped by
+// (datetimeHour x requestPath), so the number of groups grows with the RANGE:
+// 24 x days x pages. At 90 days over a dozen public pages that is far past
+// `limit: 1000`, and because the ordering is `datetimeHour_ASC` the rows lost
+// are the MOST RECENT hours rather than the smallest ones. The busiest-times
+// grid is drawn from a shape rather than from a total, so an under-filled
+// tail dims the recent end of a weekly pattern rather than moving a headline
+// number -- but if that grid ever looks emptier the longer the range gets,
+// this is why, and the fix is a coarser grouping (drop requestPath and filter
+// /edit upstream) rather than a larger limit.
+//
+// `datetimeHour` is the spelling INTROSPECTION returned
+// (worker/analytics-schema.ts's `hourDimension`), not one somebody
+// remembered. Re-run scripts/verify-analytics-schema.mjs before changing it.
+//
 // ---------------------------------------------------------------------------
 // SUBREQUEST AND CPU BUDGET, recomputed because this route grew.
 // ---------------------------------------------------------------------------
@@ -163,6 +179,7 @@ import { PAYLOAD_SHAPE_VERSION, RANGE_DAYS, parseRange } from '../src/shared/ana
 import type {
   AnalyticsError,
   AnalyticsFailureReason,
+  AnalyticsHourCell,
   AnalyticsPathRow,
   AnalyticsPayload,
   AnalyticsRefererBucket,
@@ -377,6 +394,14 @@ const ANALYTICS_QUERY = `query ViaBiancaAnalytics(
         sum { visits }
         dimensions { requestPath }
       }
+      hourly: rumPageloadEventsAdaptiveGroups(
+        filter: { siteTag: $siteTag, datetime_geq: $sinceWindow, datetime_lt: $until }
+        limit: 1000
+        orderBy: [datetimeHour_ASC]
+      ) {
+        sum { visits }
+        dimensions { datetimeHour requestPath }
+      }
     }
   }
 }`;
@@ -390,13 +415,14 @@ const GRAPHQL_ENDPOINT = 'https://api.cloudflare.com/client/v4/graphql';
 // expected must not silently become zeroes.
 interface RumRow {
   sum?: { visits?: unknown };
-  dimensions?: { requestPath?: unknown; refererHost?: unknown };
+  dimensions?: { requestPath?: unknown; refererHost?: unknown; datetimeHour?: unknown };
 }
 
 interface RumAccount {
   last28?: unknown;
   thisWeek?: unknown;
   priorWeek?: unknown;
+  hourly?: unknown;
 }
 
 function rowsOf(value: unknown): RumRow[] {
@@ -472,6 +498,38 @@ export async function totalVisitsFor(
   const accounts = (parsed.data as { viewer?: { accounts?: unknown } } | undefined)?.viewer?.accounts;
   if (!Array.isArray(accounts) || accounts.length === 0) return null;
   return totalVisits(rowsOf((accounts[0] as RumAccount).last28));
+}
+
+// day 0-6 with 0 = Sunday, hour 0-23, IN IST. A restaurant deciding when to
+// staff thinks in its own evenings; a chart in UTC would put Friday dinner in
+// two different cells and split the one pattern the card exists to show.
+//
+// datetimeHour comes back as an ISO timestamp truncated to the hour. Shifted
+// by a fixed +5:30 rather than through Intl, because Intl.DateTimeFormat in a
+// Worker is a per-call cost inside a loop over up to 1000 rows, and IST has
+// no daylight saving to get wrong.
+const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+
+export function hourCells(rows: RumRow[]): AnalyticsHourCell[] {
+  const totals = new Map<string, number>();
+  for (const row of rows) {
+    if (isExcludedPath(pathOf(row))) continue;
+    const raw = typeof row.dimensions?.datetimeHour === 'string' ? row.dimensions.datetimeHour : '';
+    const at = Date.parse(raw);
+    if (!Number.isFinite(at)) continue;
+    const ist = new Date(at + IST_OFFSET_MS);
+    // getUTCDay/getUTCHours on a Date ALREADY shifted by the offset -- not
+    // getDay/getHours, which would apply the host's own timezone a second
+    // time and give a different answer on every machine.
+    const key = `${String(ist.getUTCDay())}:${String(ist.getUTCHours())}`;
+    totals.set(key, (totals.get(key) ?? 0) + visitsOf(row));
+  }
+  return [...totals.entries()]
+    .map(([key, visits]) => {
+      const [day, hour] = key.split(':').map(Number);
+      return { day, hour, visits };
+    })
+    .sort((a, b) => a.day - b.day || a.hour - b.hour);
 }
 
 function rankPaths(rows: RumRow[]): AnalyticsPathRow[] {
@@ -833,8 +891,11 @@ export async function handleAnalytics(request: Request, env: AnalyticsEnv): Prom
     // claim a reach backwards that never happened.
     seriesSource: RUM_CAPABILITIES.dateDimension === null ? 'snapshot' : 'backfilled',
     seriesStartsOn,
-    // Filled or permanently pinned null by Task 15.
-    hourly: null,
+    // An array, because this dataset DOES have an hour dimension
+    // (worker/analytics-schema.ts). Empty means nobody arrived in any hour of
+    // the window; `null` -- which only the by-year branch above returns -- is
+    // the different sentence, "this range cannot answer that question".
+    hourly: hourCells(rowsOf(account.hourly)),
     campaigns,
     campaignsAreExact: true,
     // Filled by Task 19.
