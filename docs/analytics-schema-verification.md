@@ -86,7 +86,11 @@ rejected document with **HTTP 200**, not a 4xx, and it answers it with
 `data: null` beside a populated `errors[]`. A check that reads only the status
 code would call this a success.
 
-## Four things the probe settled that the plan did not ask about
+## Four things the probe looked at that the plan did not ask about
+
+The first three are settled. **The fourth is not**, and is kept in this list
+under its own heading rather than deleted, because an earlier revision of this
+file recorded it as settled and somebody may have read that version.
 
 **1. `requestPath` never carries a query string, so `utm_source` cannot reach
 Cloudflare at all.** This was the open question, and it is settled at the
@@ -144,14 +148,56 @@ is not changed here — Task 4 is where the contract is cut — but any later ta
 that reads a zero off this route should know it is reading a window, not a
 count.
 
-**4. `npm run dev` traffic is not recorded, so it is not residue.**
-`worker/analytics.ts` records localhost traffic as accepted residue and
-declines to spend a dimension excluding it. Observed: from
-`http://localhost:8080` the beacon's POST is refused by CORS —
+**4. `npm run dev` traffic: UNRESOLVED, and the evidence in this file points
+the other way.** An earlier revision recorded this as settled. It is not, and
+the rows in this same file are what refute it.
+
+Observed once: loading `http://localhost:8080` under a real Chromium produced a
+console CORS error against `https://cloudflareinsights.com/cdn-cgi/rum` —
 `Access-Control-Allow-Origin: http://localhost` against an origin carrying the
-port — so the request never reaches Cloudflare. The residue that comment
-budgets for does not currently exist. Nothing needs changing; the comment is
-simply more conservative than reality.
+port. The raw output sits at the bottom of this file.
+
+That observation does not support the conclusion drawn from it:
+
+- **A CORS error is about what the page may READ, not about what was sent.**
+  Chrome phrased it as an `Access-Control-Allow-Origin` mismatch on the
+  response rather than "response to preflight request doesn't pass access
+  control check", which is the wording for a POST that never left. So the
+  likeliest reading is that Cloudflare received the measurement and the browser
+  refused to hand the reply back to the page. The beacon never uses the reply
+  for anything.
+- **The observation only covers one of the beacon's two send paths.** Read
+  from `https://static.cloudflareinsights.com/beacon.min.js` (31,612 bytes,
+  fetched 2026-08-19): when `navigator.sendBeacon` is available it stamps
+  `st: 1` and posts `new Blob([json], { type: 'application/json' })`; otherwise
+  it stamps `st: 2` and posts the same body through `XMLHttpRequest` with
+  `content-type: application/json`. A console message naming `XMLHttpRequest`
+  is the `st: 2` path, and says nothing about `st: 1`. The production capture
+  in this file also carried `"st":2`, so the two runs are not even comparing
+  the same code path in the way the original claim assumed.
+- **The 90-day grouping in this file contradicts the claim outright.** Under
+  the two legacy site tags the rows are
+  `{"requestHost":"localhost","siteTag":"29e1ba52…"} visits: 8100` and
+  `{"requestHost":"localhost","siteTag":"7436888c…"} visits: 3200`, against
+  `{"requestHost":"viabiancarestaurant.com","siteTag":"29e1ba52…"} visits: 0`.
+  Whatever the mechanism, dev-server pageloads reached this dataset — under
+  those tags, essentially all the recorded traffic was dev-server traffic. One
+  negative observation in one browser on one day does not outweigh 11,300
+  recorded localhost visits.
+
+**So treat localhost traffic as recorded until something proves otherwise.**
+`worker/analytics.ts` asks for no `requestHost` dimension and applies no
+`requestHost` filter, and its header now says so and says what it costs: a
+developer's `npm run dev` load of a public page is counted as an ordinary
+visit, inside Card A's "about N visits" and inside Card B's page list. The
+`/edit` exclusion does not catch it, because the path is `/`. That is accepted
+residue with a written trade-off, not an absence.
+
+The cheap way to settle it, if anyone wants to: run `npm run dev`, load a
+public path that production never serves, and look for that path under
+`de70f41296fe4d6486dbad51f983220f`. That is blocked behind the same open
+question as the section above — nothing has appeared under the current tag yet
+from any origin — so it cannot be run until ingestion is proven at all.
 
 ## How to re-run this
 
