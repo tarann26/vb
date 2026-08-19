@@ -45,6 +45,7 @@ import {
 } from '../manage/analytics';
 import type { PageNaming } from '../manage/analytics';
 import TrendChart from '../manage/TrendChart';
+import BarList from '../manage/BarList';
 import { isAnalyticsPayload } from '../../shared/analytics-payload';
 import type { AnalyticsFailureReason, AnalyticsPayload } from '../../shared/analytics-payload';
 import type { ContentRegistry } from '../publish';
@@ -280,14 +281,19 @@ const CardB: React.FC<{ outcome: Outcome; pages: PageNaming[] }> = ({ outcome, p
     ) : outcome.payload.byPath.length === 0 ? (
       <p className="text-sm text-gray-600">Nothing to rank yet — this fills in once people start visiting.</p>
     ) : (
-      <ol className="text-sm text-ink">
-        {outcome.payload.byPath.map((row) => (
-          <li key={row.path} className="flex justify-between gap-4 border-b border-gray-100 py-1 last:border-0">
-            <span>{labelForPath(row.path, pages)}</span>
-            <span className="text-gray-500">{row.visits.toLocaleString('en-IN')}</span>
-          </li>
-        ))}
-      </ol>
+      <BarList
+        ordered
+        rows={outcome.payload.byPath.map((row) => ({
+          // row.path arrives already normalised by the Worker (no query
+          // string, no trailing slash) -- that is what makes it a stable
+          // React key here and what stops a tagged arrival at
+          // /catering?utm_source=instagram splitting into its own row now
+          // that tagged links exist.
+          key: row.path,
+          label: labelForPath(row.path, pages),
+          value: row.visits,
+        }))}
+      />
     )}
   </div>
 );
@@ -303,20 +309,15 @@ const CardC: React.FC<{ outcome: Outcome }> = ({ outcome }) => (
         Nothing yet — this will show whether people found you through Instagram, Google, or by typing your address in.
       </p>
     ) : (
-      <ul className="text-sm text-ink">
-        {outcome.payload.byReferer.map((bucket) => (
-          <li
-            key={`${bucket.kind}:${bucket.host ?? ''}`}
-            className="flex justify-between gap-4 border-b border-gray-100 py-1 last:border-0"
-          >
-            <span>
-              {bucket.label}
-              {bucket.host !== null && <span className="ml-2 text-xs text-gray-500">{bucket.host}</span>}
-            </span>
-            <span className="text-gray-500">{bucket.visits.toLocaleString('en-IN')}</span>
-          </li>
-        ))}
-      </ul>
+      <BarList
+        ordered={false}
+        rows={outcome.payload.byReferer.map((bucket) => ({
+          key: `${bucket.kind}:${bucket.host ?? ''}`,
+          label: bucket.label,
+          sub: bucket.host ?? undefined,
+          value: bucket.visits,
+        }))}
+      />
     )}
   </div>
 );
