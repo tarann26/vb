@@ -1061,6 +1061,28 @@ describe('the previous window', () => {
     expect(body.visitsPrevious).toBe(35);
   });
 
+  // The test above hands the fixture its own `previousWindow` array, so it
+  // cannot see what FILTER actually asked Cloudflare for it -- the fake fetch
+  // returns whatever this file gives it, whatever the query's filter clause
+  // says. Wiring `datetime_geq` to $sinceWindow instead of $sincePrevious
+  // would silently ask Cloudflare for the CURRENT window twice, and nothing
+  // above would notice. This is the query-string pin the hourly node's own
+  // test above uses for the identical reason.
+  it('asks Cloudflare for the window immediately before this one, not this one twice', async () => {
+    await handleAnalytics(await authed(), env);
+    const [, init] = fetchStub.mock.calls[0] as [string, RequestInit];
+    const { query } = JSON.parse(init.body as string) as { query: string };
+    const flattened = query.replace(/\s+/g, ' ');
+
+    expect(flattened).toContain(
+      'previousWindow: rumPageloadEventsAdaptiveGroups( ' +
+        'filter: { siteTag: $siteTag, datetime_geq: $sincePrevious, datetime_lt: $sinceWindow } ' +
+        'limit: 1000 ' +
+        'orderBy: [sum_visits_DESC] ' +
+        ') { sum { visits } dimensions { requestPath } }',
+    );
+  });
+
   it('counts the previous window of taps too, and does not double-count today', async () => {
     // The fixture uses DIFFERENT daily counts per window -- 1 a day for the
     // recent seven, 2 a day for the seven before -- so that "the same window
