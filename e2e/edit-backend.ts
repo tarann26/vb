@@ -110,7 +110,7 @@ export const ANALYTICS_POPULATED: AnalyticsPayload = {
   visits: 4100,
   thisWeekVisits: 312,
   priorWeekVisits: 240,
-  bookingTaps: { total: 512, days: 28, lowerBound: true },
+  bookingTaps: { total: 512, days: 30, lowerBound: true },
   byPath: [
     { path: '/', visits: 2000 },
     { path: '/catering', visits: 400 },
@@ -119,6 +119,25 @@ export const ANALYTICS_POPULATED: AnalyticsPayload = {
     { kind: 'instagram', label: 'Instagram', host: null, visits: 1200 },
     { kind: 'direct', label: 'Typed it in or used a bookmark', host: null, visits: 900 },
   ],
+  range: '30d',
+  series: [
+    { date: '2026-07-20', visits: 90, complete: true },
+    { date: '2026-07-21', visits: 140, complete: true },
+    { date: '2026-07-22', visits: 60, complete: true },
+    { date: '2026-07-23', visits: 200, complete: true },
+  ],
+  seriesGrain: 'day',
+  seriesSource: 'snapshot',
+  seriesStartsOn: '2026-07-20',
+  hourly: null,
+  campaigns: [
+    { source: 'instagram', label: 'Instagram link', arrivals: 84 },
+    { source: 'other', label: 'Someone else’s link', arrivals: 12 },
+  ],
+  campaignsAreExact: true,
+  visitsPrevious: 3300,
+  tapsPrevious: 470,
+  yearAvailable: false,
 };
 
 export interface EditBackendOptions {

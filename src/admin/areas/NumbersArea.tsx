@@ -43,6 +43,7 @@ import {
   weekSentence,
 } from '../manage/analytics';
 import type { PageNaming } from '../manage/analytics';
+import { isAnalyticsPayload } from '../../shared/analytics-payload';
 import type { AnalyticsFailureReason, AnalyticsPayload } from '../../shared/analytics-payload';
 import type { ContentRegistry } from '../publish';
 import type { Page } from '../../content/types';
@@ -78,27 +79,12 @@ function errorSentence(reason: AnalyticsFailureReason): string {
     : "The visitor numbers aren't connected yet.";
 }
 
-// A 200 whose body is not the shape this screen renders is an ERROR, not an
-// empty state. The same refusal worker/status.ts already documents for
-// Cloudflare's REST `success: false`: collapsing a malformed answer into
-// "nothing to report" reports the most reassuring state possible at exactly
-// the wrong moment -- and here it would also throw mid-render on the first
-// `undefined.toLocaleString()`, costing the whole area rather than one card.
-function isPayload(value: unknown): value is AnalyticsPayload {
-  if (value === null || typeof value !== 'object') return false;
-  const body = value as Partial<AnalyticsPayload>;
-  return (
-    typeof body.visits === 'number' &&
-    typeof body.windowDays === 'number' &&
-    typeof body.thisWeekVisits === 'number' &&
-    typeof body.priorWeekVisits === 'number' &&
-    Array.isArray(body.byPath) &&
-    Array.isArray(body.byReferer) &&
-    typeof body.bookingTaps?.total === 'number' &&
-    typeof body.bookingTaps?.days === 'number'
-  );
-}
-
+// The shape guard used to live HERE, as a private copy. It moved to
+// src/shared/analytics-payload.ts, beside the type it checks: the module that
+// DEFINES the shape is the module that decides whether a body has it, and the
+// Worker's own tests can then assert that what it emits passes the same guard
+// this screen applies -- a real end-to-end claim rather than two hopes
+// pointing at each other.
 async function loadAnalytics(fetchImpl?: typeof fetch): Promise<Outcome> {
   // Wrapped rather than passed as a bare reference -- see `fetchImpl`'s own
   // prop comment on why `fetch` detached from its global throws.
@@ -107,7 +93,7 @@ async function loadAnalytics(fetchImpl?: typeof fetch): Promise<Outcome> {
     const response = await request('/api/analytics');
     if (response.ok) {
       const body: unknown = await response.json();
-      if (!isPayload(body)) return { kind: 'error', reason: 'upstream-error' };
+      if (!isAnalyticsPayload(body)) return { kind: 'error', reason: 'upstream-error' };
       return { kind: 'ok', payload: body };
     }
     const body = (await response.json().catch(() => ({}))) as { reason?: AnalyticsFailureReason };

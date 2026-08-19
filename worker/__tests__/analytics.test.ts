@@ -6,11 +6,15 @@ import {
   normalizePath,
   recentIstDates,
   sumWaCounts,
-  ZERO_DATA_PAYLOAD,
   type AnalyticsEnv,
+} from '../analytics';
+import {
+  PAYLOAD_SHAPE_VERSION,
+  ZERO_DATA_PAYLOAD,
+  isAnalyticsPayload,
   type AnalyticsError,
   type AnalyticsPayload,
-} from '../analytics';
+} from '../../src/shared/analytics-payload';
 import worker, { type Env } from '../index';
 import { signToken } from '../auth';
 import { site } from '../../src/content';
@@ -49,7 +53,11 @@ import { site } from '../../src/content';
 
 const SITE_ORIGIN = new URL(site.seo.url).origin;
 const SITE_HOST = new URL(site.seo.url).host;
-const CACHE_KEY_URL = `${SITE_ORIGIN}/__cache/analytics/v1`;
+// The key carries the shape version AND the range. Spelled out with the
+// version interpolated and the range as a literal, so leaving CACHE_KEY_PREFIX
+// at v1 moves this and the assertions below go red -- which is the whole
+// point of putting a version in a cache key.
+const DEFAULT_CACHE_KEY_URL = `${SITE_ORIGIN}/__cache/analytics/${PAYLOAD_SHAPE_VERSION}/30d`;
 
 const TOKEN_SECRET = 'analytics-test-token-secret';
 // Deliberately NOT in `pbkdf2$<iterations>$<salt>$<hash>` shape:
@@ -383,11 +391,11 @@ describe('the Cache API entry', () => {
     expect(await payloadOf(second)).toEqual(ZERO_DATA_PAYLOAD);
   });
 
-  it('keys on a fixed in-zone path, never on the incoming URL', async () => {
+  it('keys on a constructed in-zone path, never on the incoming URL', async () => {
     await handleAnalytics(await authed(), env);
 
-    expect(cache.matches).toEqual([CACHE_KEY_URL]);
-    expect(cache.puts.map((put) => put.url)).toEqual([CACHE_KEY_URL]);
+    expect(cache.matches).toEqual([DEFAULT_CACHE_KEY_URL]);
+    expect(cache.puts.map((put) => put.url)).toEqual([DEFAULT_CACHE_KEY_URL]);
   });
 
   it('serves two different sessions from the same entry', async () => {
@@ -405,7 +413,11 @@ describe('the Cache API entry', () => {
     expect(new Set(cache.matches).size).toBe(1);
   });
 
-  it('ignores query parameters entirely, so no caller can multiply the upstream calls', async () => {
+  it('ignores every query parameter but `range`, so no caller can multiply the upstream calls', async () => {
+    // `range` is the ONE parameter this route reads, and parseRange narrows
+    // it to four values. Everything else -- `?days=90` here -- is not read at
+    // all and produces the default key, the default upstream call and the
+    // default body.
     const first = await handleAnalytics(await authed(), env);
     const second = await handleAnalytics(await authed('/api/analytics?days=90'), env);
 
@@ -450,11 +462,61 @@ describe('the Cache API entry', () => {
 });
 
 // ---------------------------------------------------------------------------
+// The range parameter -- the ONE query parameter this route reads.
+// ---------------------------------------------------------------------------
+
+// `analyticsRequest(query)` mirrors worker/__tests__/status.test.ts's
+// statusRequest(): an authenticated GET whose query string is the thing under
+// test. `authed()` already builds one, so this is that helper with the path
+// spelled once.
+async function analyticsRequest(query: string): Promise<Request> {
+  return authed(`/api/analytics${query}`);
+}
+
+describe('the range parameter', () => {
+  it('serves 7d and 30d from DIFFERENT cache entries', async () => {
+    const seven = await handleAnalytics(await analyticsRequest('?range=7d'), env);
+    const thirty = await handleAnalytics(await analyticsRequest('?range=30d'), env);
+    expect((await payloadOf(seven)).windowDays).toBe(7);
+    expect((await payloadOf(thirty)).windowDays).toBe(30);
+  });
+
+  it('answers an unrecognised range with the default, not an error', async () => {
+    const response = await handleAnalytics(await analyticsRequest('?range=90'), env);
+    expect(response.status).toBe(200);
+    const body = await payloadOf(response);
+    expect(body.range).toBe('30d');
+    expect(body.windowDays).toBe(30);
+  });
+
+  it('echoes the range it actually served', async () => {
+    const body = await payloadOf(await handleAnalytics(await analyticsRequest('?range=90d'), env));
+    expect(body.range).toBe('90d');
+  });
+
+  // The stale-body outage, as a red test rather than as ten minutes of
+  // "the visitor numbers aren't connected yet" after every deploy.
+  it('stores every entry under the current shape version', async () => {
+    await handleAnalytics(await analyticsRequest('?range=7d'), env);
+    expect(cache.puts.map((entry) => entry.url)).toEqual([
+      expect.stringContaining(`/__cache/analytics/${PAYLOAD_SHAPE_VERSION}/7d`),
+    ]);
+  });
+
+  it('emits a body its own consumer accepts', async () => {
+    // The two sides now share one guard, so this is a real end-to-end
+    // assertion rather than two hopes pointing at each other.
+    const body = await (await handleAnalytics(await analyticsRequest(''), env)).json();
+    expect(isAnalyticsPayload(body)).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // The numbers themselves.
 // ---------------------------------------------------------------------------
 
 describe('the shaped payload', () => {
-  it('totals, ranks and buckets the last 28 days', async () => {
+  it('totals, ranks and buckets the default 30-day window', async () => {
     respondWith(() =>
       graphqlOk({
         last28: [
@@ -470,7 +532,7 @@ describe('the shaped payload', () => {
 
     const payload = await payloadOf(await handleAnalytics(await authed(), env));
 
-    expect(payload.windowDays).toBe(28);
+    expect(payload.windowDays).toBe(30);
     expect(payload.visits).toBe(157);
     expect(payload.visitsAreEstimate).toBe(true);
     expect(payload.byPath).toEqual([
@@ -626,30 +688,30 @@ describe('excluding her own editing sessions', () => {
 
 describe('the Reserve a Table tap total', () => {
   beforeEach(() => {
-    // Fixed so "the last 28 IST dates, ending yesterday" is a set this test
+    // Fixed so "the last 30 IST dates, ending yesterday" is a set this test
     // can name rather than one it has to recompute.
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-08-04T12:00:00Z'));
   });
 
-  it('sums only the last 28 IST dates, ending yesterday', async () => {
+  it('sums only the last 30 IST dates, ending yesterday', async () => {
     await kv.put(
       'wa:counts',
       JSON.stringify({
         '2026-08-04': 7, // today -- outside the window, which ends yesterday
         '2026-08-03': 5, // yesterday -- the newest date counted
-        '2026-07-07': 3, // the 28th day back -- the oldest date counted
-        '2026-07-06': 99, // one day too old
+        '2026-07-05': 3, // the 30th day back -- the oldest date counted
+        '2026-07-04': 99, // one day too old
         '2026-01-01': 1000, // ancient; wa:counts has no expiry
       }),
     );
 
     const payload = await payloadOf(await handleAnalytics(await authed(), env));
 
-    // 5 + 3. The two boundary dates are the whole point: 2026-07-07 is the
-    // same day `since28` opens the visits window on, so the tap numerator
-    // and the visit denominator cover the same 28 days.
-    expect(payload.bookingTaps).toEqual({ total: 8, days: 28, lowerBound: true });
+    // 5 + 3. The two boundary dates are the whole point: 2026-07-05 is the
+    // same day `sinceWindow` opens the visits window on, so the tap numerator
+    // and the visit denominator cover the same 30 days.
+    expect(payload.bookingTaps).toEqual({ total: 8, days: 30, lowerBound: true });
   });
 
   it('reads the counter without writing to it', async () => {
@@ -789,14 +851,25 @@ describe('ZERO_DATA_PAYLOAD', () => {
   // asserts by comparing the two.
   it('is every count at zero, every list empty, and still says the tap number is a lower bound', () => {
     expect(ZERO_DATA_PAYLOAD).toEqual({
-      windowDays: 28,
+      windowDays: 30,
       visits: 0,
       visitsAreEstimate: true,
       byPath: [],
       byReferer: [],
       thisWeekVisits: 0,
       priorWeekVisits: 0,
-      bookingTaps: { total: 0, days: 28, lowerBound: true },
+      bookingTaps: { total: 0, days: 30, lowerBound: true },
+      range: '30d',
+      series: [],
+      seriesGrain: 'day',
+      seriesSource: 'snapshot',
+      seriesStartsOn: null,
+      hourly: null,
+      campaigns: [],
+      campaignsAreExact: true,
+      visitsPrevious: 0,
+      tapsPrevious: 0,
+      yearAvailable: false,
     });
   });
 });
@@ -899,9 +972,18 @@ describe('the upstream request', () => {
       // Every window ends at the start of TODAY, so no partial day is ever
       // compared against a whole one.
       until: '2026-08-04T00:00:00.000Z',
-      since28: '2026-07-07T00:00:00.000Z',
+      sinceWindow: '2026-07-05T00:00:00.000Z',
       sinceThisWeek: '2026-07-28T00:00:00.000Z',
       sincePriorWeek: '2026-07-21T00:00:00.000Z',
     });
+  });
+
+  it('opens the visits window at the range it was asked for, not at a fixed 28 days', async () => {
+    // The variable is named `sinceWindow` rather than `since28` precisely
+    // because it is no longer 28 days and no longer one length.
+    await handleAnalytics(await authed('/api/analytics?range=7d'), env);
+    const [, init] = fetchStub.mock.calls[0] as [string, RequestInit];
+    const { variables } = JSON.parse(init.body as string) as { variables: Record<string, string> };
+    expect(variables.sinceWindow).toBe('2026-07-28T00:00:00.000Z');
   });
 });

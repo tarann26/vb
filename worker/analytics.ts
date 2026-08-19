@@ -99,12 +99,15 @@
 //      environment has no `caches` global at all -- a module-scope
 //      `caches.default` is a ReferenceError at import time and takes the
 //      whole test file with it.
-//   2. The key is a FIXED, CONSTRUCTED, IN-ZONE request:
-//      `/__cache/analytics/v1` on this Worker's own origin. Fixed and
-//      constructed rather than derived from the incoming request, so the
-//      session cookie can never enter the key (two logins would fragment the
-//      cache, and a cached body could be keyed to a credential) and no query
-//      string can multiply it into an unbounded number of upstream calls.
+//   2. The key is a CONSTRUCTED, IN-ZONE request on this Worker's own
+//      origin: `/__cache/analytics/<shape version>/<range>`. Constructed
+//      rather than derived from the incoming request, so the session cookie
+//      can never enter the key (two logins would fragment the cache, and a
+//      cached body could be keyed to a credential). The only caller-supplied
+//      input that reaches it is the range, which parseRange narrows to FOUR
+//      values before it gets here -- so the key space is bounded at four
+//      entries and no query string can multiply it into an unbounded number
+//      of upstream calls.
 //      In-zone because Cloudflare documents the Cache API working on
 //      Workers/Pages routes and custom domains but does NOT document
 //      `caches.default` accepting an arbitrary off-zone host -- if it
@@ -129,10 +132,10 @@
 // by calling `handleAnalytics` directly.)
 //
 // TTL is 600 seconds. Cloudflare's own RUM aggregation is not real-time,
-// every question these four cards ask is a 7- or 28-day question so nothing
-// she can perceive changes inside ten minutes, and it bounds upstream
-// GraphQL calls to six per hour per colo however often the dashboard
-// reloads or misbehaves.
+// every question these cards ask is a 7-, 30-, 90-day or by-year question so
+// nothing she can perceive changes inside ten minutes, and it bounds
+// upstream GraphQL calls to six per hour per colo PER RANGE -- 24 an hour
+// across all four -- however often the dashboard reloads or misbehaves.
 //
 // `await cache.put(...)` inline rather than `ctx.waitUntil(...)`: this
 // Worker's `fetch` handler and its `route()` take `(request, env)` with no
@@ -140,6 +143,15 @@
 // sub-millisecond edge write is a wider change than it is worth.
 import { parseCookie, verifyToken } from './auth';
 import { todayInKolkata } from '../src/shared/date';
+import { PAYLOAD_SHAPE_VERSION, RANGE_DAYS, parseRange } from '../src/shared/analytics-payload';
+import type {
+  AnalyticsError,
+  AnalyticsFailureReason,
+  AnalyticsPathRow,
+  AnalyticsPayload,
+  AnalyticsRefererBucket,
+  RefererBucketKind,
+} from '../src/shared/analytics-payload';
 import { readWaCounts } from './wa';
 import type { PagesEnv } from './status';
 
@@ -163,83 +175,15 @@ export type AnalyticsEnv = PagesEnv &
   };
 
 // ---------------------------------------------------------------------------
-// The response body. Shared with the dashboard that renders it.
-//
-// SCOPE NOTE, recorded rather than left as a surprise: the plan's task C1
-// puts these declarations in `src/shared/analytics-payload.ts`, so the Worker
-// that produces the body and the React area that renders it cannot drift.
-// This module was written under an instruction not to touch anything outside
-// `worker/` and `wrangler.toml`, so they live here for now and are exported.
-// When C1 lands, this block MOVES there and this file imports it -- the
-// shapes below are written to be that module's contents verbatim so the move
-// is a move, not a rewrite.
+// The response body lives in `src/shared/analytics-payload.ts`, imported
+// above. It used to be declared HERE as well, because this module was
+// written under an instruction not to touch anything outside `worker/`, and
+// `src/shared/__tests__/analytics-payload.test.ts` compared the two copies as
+// text so neither could be edited alone. That guard has done its job and is
+// now inert by its own design: there is one declaration, this file imports
+// it, and the Worker that produces the body and the React area that renders
+// it cannot drift because there is nothing left to drift from.
 // ---------------------------------------------------------------------------
-
-// Which of Card C's four buckets a referring host fell into. `kind` is the
-// machine value the UI switches on; `label` is the words the spec fixes,
-// kept beside it so the Worker's bucketing and the screen's wording cannot
-// disagree about what a bucket IS. `host` is set only for `other`, where the
-// card shows the real hostname in smaller text under "Other links".
-export type RefererBucketKind = 'direct' | 'instagram' | 'google' | 'other';
-
-export interface AnalyticsRefererBucket {
-  kind: RefererBucketKind;
-  label: string;
-  host: string | null;
-  visits: number;
-}
-
-export interface AnalyticsPathRow {
-  // Already normalised: no query string, no trailing slash except for `/`
-  // itself. Deliberately NOT translated into a page name here -- that is
-  // `labelForPath` on the dashboard, which has pages.json to hand and is a
-  // pure function with its own table test.
-  path: string;
-  visits: number;
-}
-
-export interface AnalyticsPayload {
-  // 28. Stated in the body rather than assumed by the reader, because every
-  // number below is scoped to it and the card copy quotes it.
-  windowDays: number;
-  // An ESTIMATE. `rumPageloadEventsAdaptiveGroups` is an adaptive, sampled
-  // dataset, which is why Card A reads "about 4,100 visits" and not "4,100".
-  visits: number;
-  visitsAreEstimate: true;
-  byPath: AnalyticsPathRow[];
-  byReferer: AnalyticsRefererBucket[];
-  thisWeekVisits: number;
-  priorWeekVisits: number;
-  // A LOWER BOUND, not a count -- origin-checked, rate-limited, capped per
-  // day and delivered by fire-and-forget sendBeacon (see worker/index.ts's
-  // /api/wa file comment). `lowerBound` is in the body, not just in a
-  // comment, so the dashboard cannot forget: the card says "at least 41
-  // tapped Reserve a Table", never "41 bookings".
-  bookingTaps: { total: number; days: number; lowerBound: true };
-}
-
-export type AnalyticsFailureReason = 'unreachable' | 'upstream-auth' | 'upstream-error';
-
-export interface AnalyticsError {
-  reason: AnalyticsFailureReason;
-  message: string;
-}
-
-// The launch state, and the fixture both sides test against. Every count is
-// zero and every list is empty -- which is what "the beacon shipped
-// yesterday" looks like, and is NOT an error. That distinction is the whole
-// reason the failure bodies above carry a `reason` instead of the route
-// answering 200-with-nothing for both.
-export const ZERO_DATA_PAYLOAD: AnalyticsPayload = {
-  windowDays: 28,
-  visits: 0,
-  visitsAreEstimate: true,
-  byPath: [],
-  byReferer: [],
-  thisWeekVisits: 0,
-  priorWeekVisits: 0,
-  bookingTaps: { total: 0, days: 28, lowerBound: true },
-};
 
 // ---------------------------------------------------------------------------
 // Pure helpers. Exported because they carry every judgement on this route
@@ -247,7 +191,6 @@ export const ZERO_DATA_PAYLOAD: AnalyticsPayload = {
 // the only honest place to put a judgement.
 // ---------------------------------------------------------------------------
 
-const WINDOW_DAYS = 28;
 const WEEK_DAYS = 7;
 const DAY_MS = 86_400_000;
 const BYPATH_LIMIT = 10;
@@ -358,7 +301,7 @@ export function sumWaCounts(counts: Record<string, number>, dates: string[]): nu
 const ANALYTICS_QUERY = `query ViaBiancaAnalytics(
   $accountTag: String!
   $siteTag: String!
-  $since28: Time!
+  $sinceWindow: Time!
   $sinceThisWeek: Time!
   $sincePriorWeek: Time!
   $until: Time!
@@ -366,7 +309,7 @@ const ANALYTICS_QUERY = `query ViaBiancaAnalytics(
   viewer {
     accounts(filter: { accountTag: $accountTag }) {
       last28: rumPageloadEventsAdaptiveGroups(
-        filter: { siteTag: $siteTag, datetime_geq: $since28, datetime_lt: $until }
+        filter: { siteTag: $siteTag, datetime_geq: $sinceWindow, datetime_lt: $until }
         limit: 1000
         orderBy: [sum_visits_DESC]
       ) {
@@ -501,7 +444,11 @@ function rankReferers(rows: RumRow[], selfHost: string): AnalyticsRefererBucket[
 // The handler.
 // ---------------------------------------------------------------------------
 
-const CACHE_KEY_PATH = '/__cache/analytics/v1';
+// The key carries BOTH the shape version and the range. The version retires
+// every entry written by the previous deploy the moment this one lands (see
+// PAYLOAD_SHAPE_VERSION's own ledger); the range is what stops four
+// different questions sharing one answer.
+const CACHE_KEY_PREFIX = `/__cache/analytics/${PAYLOAD_SHAPE_VERSION}`;
 const CACHE_TTL_SECONDS = 600;
 
 function jsonString(status: number, body: string): Response {
@@ -548,13 +495,17 @@ export async function handleAnalytics(request: Request, env: AnalyticsEnv): Prom
   // Lazily, inside the handler -- see this file's header for why module
   // scope would break every test that imports this file.
   const cache = caches.default;
-  // NO query parameters are read, anywhere in this handler. The windows are
-  // fixed in this module. A caller-supplied range would be an unbounded
-  // cache-key space, and therefore an unbounded number of upstream calls,
-  // behind an endpoint whose entire load control is this single entry.
-  // `?days=90` therefore produces this same key, this same upstream call and
-  // this same body as the bare URL, and that is pinned by a test.
-  const cacheKey = new Request(new URL(CACHE_KEY_PATH, request.url).toString());
+  // ONE query parameter is read, and it can take four values. See
+  // src/shared/analytics-payload.ts's parseRange for why it is an enum and
+  // not a number: this endpoint's entire load control is the entry below, and
+  // a numeric parameter would make the key space unbounded.
+  //
+  // Unrecognised input is not an error -- `?range=90`, `?range=` and
+  // `?range=<anything>` all produce the 30-day key, the 30-day upstream call
+  // and the 30-day body, and that is pinned by a test.
+  const range = parseRange(new URL(request.url).searchParams.get('range'));
+  const windowDays = RANGE_DAYS[range];
+  const cacheKey = new Request(new URL(`${CACHE_KEY_PREFIX}/${range}`, request.url).toString());
 
   const cached = await cache.match(cacheKey);
   if (cached) {
@@ -580,7 +531,7 @@ export async function handleAnalytics(request: Request, env: AnalyticsEnv): Prom
         variables: {
           accountTag: env.CLOUDFLARE_ACCOUNT_ID,
           siteTag: env.CF_WEB_ANALYTICS_SITE_TAG,
-          since28: iso(until - WINDOW_DAYS * DAY_MS),
+          sinceWindow: iso(until - windowDays * DAY_MS),
           sinceThisWeek: iso(until - WEEK_DAYS * DAY_MS),
           sincePriorWeek: iso(until - 2 * WEEK_DAYS * DAY_MS),
           until: iso(until),
@@ -658,7 +609,7 @@ export async function handleAnalytics(request: Request, env: AnalyticsEnv): Prom
   }
 
   const payload: AnalyticsPayload = {
-    windowDays: WINDOW_DAYS,
+    windowDays,
     visits: totalVisits(last28),
     visitsAreEstimate: true,
     byPath: rankPaths(last28),
@@ -666,10 +617,27 @@ export async function handleAnalytics(request: Request, env: AnalyticsEnv): Prom
     thisWeekVisits: totalVisits(rowsOf(account.thisWeek)),
     priorWeekVisits: totalVisits(rowsOf(account.priorWeek)),
     bookingTaps: {
-      total: sumWaCounts(waCounts, recentIstDates(todayInKolkata(), WINDOW_DAYS)),
-      days: WINDOW_DAYS,
+      total: sumWaCounts(waCounts, recentIstDates(todayInKolkata(), windowDays)),
+      days: windowDays,
       lowerBound: true,
     },
+    range,
+    // Filled by Task 13. Empty is the honest launch value: no snapshot rows
+    // exist until the nightly job has run once.
+    series: [],
+    seriesGrain: 'day',
+    seriesSource: 'snapshot',
+    seriesStartsOn: null,
+    // Filled or permanently pinned null by Task 15.
+    hourly: null,
+    // Filled by Task 12.
+    campaigns: [],
+    campaignsAreExact: true,
+    // Filled by Task 19.
+    visitsPrevious: 0,
+    tapsPrevious: 0,
+    // Filled by Task 14.
+    yearAvailable: false,
   };
 
   // Built ONCE as a string, then two Responses -- see this file's header.
