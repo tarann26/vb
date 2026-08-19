@@ -194,8 +194,7 @@ const NumbersArea: React.FC<NumbersAreaProps> = ({ active, registry, fetchImpl }
   // Records the answer against the range it was asked for, and paints it only
   // if she is still looking at that range.
   //
-  // TWO different refusals live here and they are not interchangeable, which
-  // is why they are two tests rather than one.
+  // TWO different refusals live here and they are not interchangeable.
   //
   // The first: a body whose OWN echoed range is not the range this call asked
   // for was served under the wrong cache key. It answers no question this
@@ -209,13 +208,22 @@ const NumbersArea: React.FC<NumbersAreaProps> = ({ active, registry, fetchImpl }
   // is not disabled while a range loads, so that click is always available.
   //
   // The second: a body that IS the answer to what it was asked, for a range
-  // she has since moved off. Tapping 7 days and then 90 days quickly
-  // otherwise paints the 7-day answer under the 90-day pill. That one is
-  // kept -- it is a true answer for its own range, and returning to that
-  // range should paint it -- and simply not painted now. `disabled` on the
-  // control narrows this window but cannot close it: a request already in
-  // flight when the control switches off is still in flight when it switches
-  // back on, which happens the moment any earlier answer lands.
+  // she has since moved off. Tapping 7 days and then 90 days quickly would
+  // otherwise paint the 7-day answer under the 90-day pill. That one is kept
+  // -- it is a true answer for its own range, and returning to that range
+  // should paint it -- and simply not painted now.
+  //
+  // NO TEST CAN REDDEN THAT SECOND LINE TODAY, and it stays anyway. Removing
+  // it leaves all 48 cases green, because nothing this component does can put
+  // two requests in flight at once: every path that starts one sets `loading`
+  // first, `loading` is what disables the pills, and the only path out of
+  // `loading` is that same request answering. So `asked` and `rangeRef` agree
+  // for as long as the pills honour `disabled`. Two cases pin `disabled`
+  // ("cannot be pressed while a request is in flight", "starts no second
+  // request while the first is still out"), and this line is what stops a
+  // number appearing under the wrong pill on the day one of them is relaxed.
+  // Recorded in report-T22-23.md as a surviving mutation rather than left for
+  // a reader to mistake for covered code.
   function receive(asked: AnalyticsRange, next: Outcome) {
     if (!mountedRef.current) return;
     if (next.kind === 'ok' && next.payload.range !== asked) return;

@@ -571,7 +571,7 @@ describe('the range control', () => {
     });
   });
 
-  // TWO guards close this, and they close different halves of it.
+  // TWO mechanisms close this, and they close different halves of it.
   //
   // The first is the disabled control below: while an answer is outstanding
   // she cannot start a second request, so two answers are never in flight at
@@ -583,6 +583,9 @@ describe('the range control', () => {
   // built for rather than the one that was asked. The panel refuses it
   // instead of relabelling 7 days as 90 -- which is the whole reason
   // AnalyticsPayload carries its own `range`.
+  //
+  // Refusing to PAINT it is only half of refusing it; the case below this one
+  // covers the other half, and the two fail for different reasons.
   it('discards an answer for a range she is no longer looking at', async () => {
     const backend = deferredAnalytics();
     renderNumbers(backend.impl as unknown as typeof fetch);
