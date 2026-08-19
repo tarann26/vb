@@ -48,3 +48,34 @@ export function problemsFor(problems: ValidationProblem[], index: number | undef
   // per-item form to place them on individually).
   return problems.filter((p) => p.field === key || p.field.startsWith(`${key}[`));
 }
+
+// A problem's message says what is wrong; a banner line has to say WHICH
+// record it is wrong on, because the record's own field is not on screen when
+// the banner is -- the list shows rows, not forms.
+//
+// The name comes from the record where it has one. A record with no name yet
+// -- which is the most common way to reach this message at all -- is
+// identified by its position instead, because "the 4th one" is something she
+// can count to and "" is not.
+export function bannerLine(problem: ValidationProblem, recordName: string | undefined, index: number): string {
+  const who = recordName !== undefined && recordName.trim() !== '' ? recordName : `the ${ordinal(index + 1)} one`;
+  return `${who}: ${problem.message}`;
+}
+
+// 1st, 2nd, 3rd, 4th... spelled out rather than through Intl.PluralRules,
+// which is a locale-dependent answer to a question that is not about locale --
+// this admin surface is English and the ordinals are four cases.
+function ordinal(n: number): string {
+  const rest = n % 100;
+  if (rest >= 11 && rest <= 13) return `${String(n)}th`;
+  switch (n % 10) {
+    case 1:
+      return `${String(n)}st`;
+    case 2:
+      return `${String(n)}nd`;
+    case 3:
+      return `${String(n)}rd`;
+    default:
+      return `${String(n)}th`;
+  }
+}

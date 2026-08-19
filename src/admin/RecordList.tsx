@@ -5,7 +5,7 @@ import EditorSheet from './manage/EditorSheet';
 import ItemList, { type ItemRow } from './manage/ItemList';
 import { moveTo } from './blocks/reorder';
 import type { ImagePreviews } from './previews';
-import { arrayIndexOf } from './problems';
+import { arrayIndexOf, bannerLine } from './problems';
 import type { FieldsOf } from './fields';
 import type { StagedPhoto } from './PhotoField';
 import type { ValidationProblem } from '../content/validate';
@@ -137,9 +137,20 @@ function RecordList<T extends { id: string }>({
           className="mb-4 rounded border border-red-300 bg-red-50 p-3 text-sm text-red-700"
         >
           <ul className="list-disc pl-5">
-            {banner.map((p, i) => (
-              <li key={i}>{p.message}</li>
-            ))}
+            {banner.map((p, i) => {
+              // Named where it CAN be named: a problem shaped `[N].key` is
+              // about one record, so the line gets that record's own name (or
+              // its position, when the record has none -- bannerLine's own
+              // fallback, exactly the case an empty name field reaches). A
+              // problem with no such shape -- a file-level rule with nothing
+              // to blame ('the menu needs at least one dish') -- names no
+              // record because it is not about one; inventing "the 1st one"
+              // for it would point at a record the problem never meant.
+              const recordIndex = arrayIndexOf(p.field);
+              if (recordIndex === undefined) return <li key={i}>{p.message}</li>;
+              const record = items[recordIndex];
+              return <li key={i}>{bannerLine(p, record === undefined ? undefined : itemLabel(record), recordIndex)}</li>;
+            })}
           </ul>
         </div>
       )}

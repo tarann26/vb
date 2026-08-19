@@ -291,7 +291,8 @@ describe('RecordList: the aggregate guarantee -- closing an editor must not hide
     renderList({ problems });
 
     expect(screen.getByRole('alert', { name: 'Problems with this list' })).toBeInTheDocument();
-    expect(screen.getByText('this dish needs a name')).toBeInTheDocument();
+    // Named after the record it is wrong on (Bellini, index 2) -- Task 27.
+    expect(screen.getByText('Bellini: this dish needs a name')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Bellini needs attention' })).toBeInTheDocument();
   });
 
@@ -300,7 +301,9 @@ describe('RecordList: the aggregate guarantee -- closing an editor must not hide
     renderList({ problems });
 
     expect(screen.getByRole('alert', { name: 'Problems with this list' })).toBeInTheDocument();
-    expect(screen.getByText('dish 9 needs a name')).toBeInTheDocument();
+    // No record sits at index 9 (THREE_DISHES has three), so bannerLine falls
+    // back to counting -- the 10th one, since bannerLine counts from 1.
+    expect(screen.getByText('the 10th one: dish 9 needs a name')).toBeInTheDocument();
   });
 
   it('a file-level problem appears exactly once while an editor is open', async () => {
@@ -335,7 +338,9 @@ describe('RecordList: the aggregate guarantee -- closing an editor must not hide
     const problems: ValidationProblem[] = [{ field: '[3].name', message: 'dish 3 needs a name' }];
     renderList({ problems });
     expect(screen.getByRole('alert', { name: 'Problems with this list' })).toBeInTheDocument();
-    expect(screen.getByText('dish 3 needs a name')).toBeInTheDocument();
+    // Index 3 is one past THREE_DISHES' last real item, so no record names
+    // it -- "the 4th one", the same fallback as the far-out-of-range case.
+    expect(screen.getByText('the 4th one: dish 3 needs a name')).toBeInTheDocument();
   });
 });
 
