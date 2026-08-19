@@ -241,9 +241,16 @@ mutating the code and watching it go red.
   and 1280px, bars proportional to their values, the grid legible on a phone,
   and no control overlapping another. jsdom has no layout engine and cannot
   honestly assert any of it.
-- **The write path is proven end to end**, not merely called: a tagged visit
-  produces exactly one row, an untagged visit produces none, and a failed
-  write never blocks the page.
+- **The write path is proven end to end**, not merely called: one visit
+  produces exactly one row and never two, a tagged visit carries its source
+  and an untagged one carries none, an excluded crawler produces nothing, and
+  a failed write loses a row without ever blocking the page.
+
+  This is the claim to be most suspicious of. Nothing in this project's
+  browser suite has ever observed a real write — every publish assertion reads
+  the source back after a remount rather than inspecting a request — and the
+  one bug that broke three times lived precisely in that blind spot. A test
+  that mocks the write and asserts the mock was called proves nothing.
 
 ## The backlog, closed out here
 
