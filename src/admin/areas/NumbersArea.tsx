@@ -156,7 +156,10 @@ const NumbersArea: React.FC<NumbersAreaProps> = ({ active, registry, fetchImpl }
   //
   // Deliberately NOT re-fetched on a return visit: the ten-minute Cache API
   // entry behind this route means a second request would usually hand back
-  // the same body anyway.
+  // the same body anyway. Which is also why what goes IN here is guarded --
+  // see `receive`. Whatever is stored under a range is shown for that range
+  // for the rest of the session, with no further chance to notice it is the
+  // wrong body.
   const answersRef = useRef<Map<AnalyticsRange, Outcome>>(new Map());
   // The range she is looking at RIGHT NOW, readable from inside a promise
   // that was started under a different one. The captured `range` in an effect
@@ -191,19 +194,31 @@ const NumbersArea: React.FC<NumbersAreaProps> = ({ active, registry, fetchImpl }
   // Records the answer against the range it was asked for, and paints it only
   // if she is still looking at that range.
   //
-  // The answer for a range she has moved on from is DISCARDED. Tapping 7
-  // days and then 90 days quickly otherwise paints the 7-day answer under the
-  // 90-day pill, with no error and no way for her to tell. `disabled` on the
-  // control narrows that window but cannot close it: a request already in
+  // TWO different refusals live here and they are not interchangeable, which
+  // is why they are two tests rather than one.
+  //
+  // The first: a body whose OWN echoed range is not the range this call asked
+  // for was served under the wrong cache key. It answers no question this
+  // screen asked, so it is neither painted NOR recorded -- and the recording
+  // half is the load-bearing one. The memory below is replayed every time she
+  // opens this area, so a body that was kept after being refused is handed
+  // back to her the moment she clicks away and returns, under the very pill
+  // that refused it: 7 days' figures beneath a pressed "Last 90 days". That
+  // is the exact mismatch `AnalyticsPayload.range` was put in the contract to
+  // expose, arriving one click later instead of straight away. The area nav
+  // is not disabled while a range loads, so that click is always available.
+  //
+  // The second: a body that IS the answer to what it was asked, for a range
+  // she has since moved off. Tapping 7 days and then 90 days quickly
+  // otherwise paints the 7-day answer under the 90-day pill. That one is
+  // kept -- it is a true answer for its own range, and returning to that
+  // range should paint it -- and simply not painted now. `disabled` on the
+  // control narrows this window but cannot close it: a request already in
   // flight when the control switches off is still in flight when it switches
   // back on, which happens the moment any earlier answer lands.
-  //
-  // The comparison is against the payload's OWN echoed range, not against the
-  // range this call asked for, so it also catches a body served under the
-  // wrong cache key -- the thing `AnalyticsPayload.range` was put in the
-  // contract to expose rather than let pass silently.
   function receive(asked: AnalyticsRange, next: Outcome) {
     if (!mountedRef.current) return;
+    if (next.kind === 'ok' && next.payload.range !== asked) return;
     answersRef.current.set(asked, next);
     if (next.kind === 'ok' && next.payload.range !== rangeRef.current) return;
     setOutcome(next);
@@ -211,6 +226,13 @@ const NumbersArea: React.FC<NumbersAreaProps> = ({ active, registry, fetchImpl }
 
   useEffect(() => {
     if (!active) return;
+    // Replayed as recorded, with no second look at what it says. That is safe
+    // for exactly one reason: `receive` above is the only writer, and it
+    // refuses to record a body whose own echoed range is not the one it was
+    // asked for. Re-checking here instead of there would leave the bad body
+    // in the map for some later reader to find; checking in BOTH places would
+    // add a branch no test could ever redden. The invariant belongs at the
+    // write.
     const answered = answersRef.current.get(range);
     if (answered !== undefined) {
       setOutcome(answered);

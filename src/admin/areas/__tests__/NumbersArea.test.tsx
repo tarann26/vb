@@ -597,6 +597,37 @@ describe('the range control', () => {
     expect(screen.queryByText('about 4,100 visits')).toBeNull();
   });
 
+  // The other half of that refusal, and it is the half that decides whether
+  // she ever sees the refused number. Refusing to PAINT a body and refusing
+  // to KEEP it are two separate decisions: the panel remembers each range's
+  // answer and replays it whenever she opens this area, so a body that was
+  // refused but kept is handed back to her on the next visit, under the pill
+  // that refused it. The area nav is not disabled while a range loads, so
+  // "the next visit" is one click away the whole time.
+  it('does not hand back a refused answer when she leaves the area and returns', async () => {
+    const backend = deferredAnalytics();
+    const registry = fakeRegistry();
+    const impl = backend.impl as unknown as typeof fetch;
+    const view = render(<NumbersArea active registry={registry} fetchImpl={impl} />);
+    await backend.answer('30d', { visits: 4100 });
+    expect(await screen.findByText('about 4,100 visits')).toBeInTheDocument();
+
+    await pressRange('Last 90 days');
+    // Her 90-day question, answered with a body carrying the 7-day label.
+    await backend.answer('90d', { range: '7d', visits: 7 });
+    expect(screen.queryByText('about 7 visits')).toBeNull();
+
+    // She clicks Pages, then clicks Numbers again.
+    view.rerender(<NumbersArea active={false} registry={registry} fetchImpl={impl} />);
+    view.rerender(<NumbersArea active registry={registry} fetchImpl={impl} />);
+
+    // Still on the range she chose, and still without an answer for it.
+    expect(screen.getByRole('button', { name: 'Last 90 days' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.queryByText('about 7 visits')).toBeNull();
+    expect(screen.queryByText(/visits$/)).toBeNull();
+    expect(screen.getAllByText('Loading…').length).toBeGreaterThan(0);
+  });
+
   it('cannot be pressed while a request is in flight', async () => {
     renderNumbers(neverResolvingAnalytics() as unknown as typeof fetch);
     await waitFor(() => {
