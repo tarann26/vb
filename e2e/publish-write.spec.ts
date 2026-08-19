@@ -170,17 +170,40 @@ test.describe('what a publish actually sends', () => {
     expect(uploads).toHaveLength(1);
   });
 
+  // Review finding, and it was right: the first version of this test wrapped
+  // its whole body in `if (await publish.isEnabled())`. The button is
+  // disabled with nothing dirty, so that body never ran, and the only live
+  // assertion left was that merely opening the dashboard publishes nothing --
+  // which no mutation in this task's table targets. Both gates that stand
+  // between a clean registry and a request are asserted directly here, and
+  // neither is behind a conditional that can skip itself.
   test('a publish with nothing changed sends no request at all', async ({ page }) => {
     await mockEditBackend(page);
     await acceptPublishes(page);
     const writes = observeRequests(page, PUBLISH);
     await openDashboard(page, '/edit/manage/menu');
 
+    // Gate one: the trigger she can actually see.
     const publish = page.getByRole('button', { name: /^Publish/ });
-    if (await publish.isEnabled()) {
-      await publish.click();
-      await page.waitForTimeout(500);
-    }
+    await expect(publish).toBeDisabled();
+
+    // Gate two: the confirmation's own accept button, which carries the same
+    // `!isDirty` test and is the gate that decides, because a panel can stay
+    // open across a registry change while the trigger behind it is not being
+    // looked at (PublishBar.tsx's ConfirmPanel says so in its own comment).
+    // Submitting the form directly is how the panel is reached at all here --
+    // a disabled trigger cannot open it, and what is under test is what the
+    // panel does once open with nothing to send, not the route in. The form
+    // is addressed through the button it contains rather than by position,
+    // since the dashboard mounts all five areas at once.
+    const bar = page.locator('form').filter({ has: page.getByRole('button', { name: /^Publish/ }) });
+    await bar.dispatchEvent('submit');
+    const accept = page.getByRole('button', { name: /^Yes, publish/ });
+    await expect(accept).toBeVisible();
+    await expect(accept).toBeDisabled();
+
+    // And nothing left the browser while all of that was on screen.
+    await page.waitForTimeout(500);
     expect(writes).toEqual([]);
   });
 });
