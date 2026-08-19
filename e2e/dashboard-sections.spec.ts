@@ -348,13 +348,13 @@ for (const viewport of VIEWPORTS) {
 // ---------------------------------------------------------------------------
 // The Numbers screen, at the widths she uses. What each card SAYS is pinned
 // in src/admin/areas/__tests__/NumbersArea.test.tsx; this is the part only a
-// browser can answer -- that four cards' worth of copy fits, that nothing is
-// painted over anything, and that the screen genuinely reaches the route.
+// browser can answer -- that every card's copy fits, that nothing is painted
+// over anything, and that the screen genuinely reaches the route.
 for (const viewport of VIEWPORTS) {
   test.describe(`Numbers at ${viewport.label}`, () => {
     test.use({ viewport: { width: viewport.width, height: viewport.height } });
 
-    test('shows the four cards, framed once as early rather than four times as broken', async ({ page }) => {
+    test('shows every card, framed once as early rather than once per card as broken', async ({ page }) => {
       await openDashboard(page, '/edit/manage/numbers');
 
       // The framing sits ONCE, above the cards.
@@ -378,7 +378,10 @@ for (const viewport of VIEWPORTS) {
       await expect(cardA.getByText(/^at least /)).toBeVisible();
       await expect(page.getByText(/\d+ bookings?/)).toHaveCount(0);
       await expect(page.getByText('Busier than the week before — 312 visits, up from 240.')).toBeVisible();
-      // No chart, anywhere -- the owner asked for plain words.
+      // No <canvas>, anywhere. The trend chart is hand-written SVG on
+      // purpose; a canvas on this screen would mean a charting library got
+      // pulled in, which is 50-150 KB for one polyline and is the thing the
+      // spec ruled out.
       await expect(page.locator('#section-panel-numbers canvas, [data-area="numbers"] canvas')).toHaveCount(0);
     });
   });

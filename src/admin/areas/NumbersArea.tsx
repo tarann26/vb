@@ -1,9 +1,9 @@
 // The Numbers area: how many people visited, which pages they looked at,
 // where they came from, and whether this week was busier than last.
 //
-// ONE request behind four cards. One loading state, one error state, four
-// cards -- not four routes and not four spinners. Windows are fixed and
-// stated in the copy; there is no date picker, no chart and no export.
+// ONE request behind every card. One loading state, one error state -- not a
+// route per card and not a spinner per card. The window each number covers is
+// stated in the copy; there is no date picker and no export.
 //
 // ---------------------------------------------------------------------------
 // THE `active` PROP IS NOT COSMETIC.
@@ -26,10 +26,10 @@
 // for a week or two. So the zero state was designed first, and it has to
 // read as TOO EARLY rather than as BROKEN -- that distinction is the whole
 // difference between her trusting this screen and deciding it does not work.
-// Four independent grey empty messages stacked vertically read as four
-// things wrong, not one thing early, which is why the framing sits ONCE at
-// the top and the cards below it are muted rather than each re-explaining
-// the same thing.
+// A separate grey empty message inside every card, stacked one above
+// another, reads as several things wrong rather than one thing early, which
+// is why the framing sits ONCE at the top and the cards below it are muted
+// rather than each re-explaining the same thing.
 import React, { useEffect, useRef, useState } from 'react';
 import {
   CARD_HEADINGS,
@@ -39,10 +39,12 @@ import {
   noVisitsYetSentence,
   ratioSentence,
   tapsSentence,
+  trendCaption,
   visitsSentence,
   weekSentence,
 } from '../manage/analytics';
 import type { PageNaming } from '../manage/analytics';
+import TrendChart from '../manage/TrendChart';
 import { isAnalyticsPayload } from '../../shared/analytics-payload';
 import type { AnalyticsFailureReason, AnalyticsPayload } from '../../shared/analytics-payload';
 import type { ContentRegistry } from '../publish';
@@ -197,11 +199,13 @@ const NumbersArea: React.FC<NumbersAreaProps> = ({ active, registry, fetchImpl }
               </p>
             </div>
           )}
-          {/* Four skeleton cards with their REAL headings already visible --
-              never a bare spinner and never four spinners. The first tap in
-              any session waits on a Worker call with a ten-second timeout,
-              so it will show something before it shows numbers. */}
+          {/* Every skeleton card shows its REAL heading from the first paint
+              -- never a bare spinner and never one spinner per card. The
+              first tap in any session waits on a Worker call with a
+              ten-second timeout, so it will show something before it shows
+              numbers. */}
           <CardA outcome={outcome} />
+          <TrendCard outcome={outcome} />
           <CardB outcome={outcome} pages={pagesFromRegistry(registry)} />
           <CardC outcome={outcome} />
           <CardD outcome={outcome} />
@@ -215,8 +219,12 @@ function Skeleton() {
   return <p className="text-sm text-gray-400">Loading…</p>;
 }
 
+// `data-card` on every card wrapper, so e2e/ has a hook that is not a class
+// name. A browser assertion written against a utility class breaks the moment
+// the drawing is restyled, and it is forbidden in this project's spec files
+// for that reason.
 const CardA: React.FC<{ outcome: Outcome }> = ({ outcome }) => (
-  <div className={CARD}>
+  <div className={CARD} data-card="a">
     <h3 className={CARD_TITLE}>{CARD_HEADINGS.a}</h3>
     {outcome.kind !== 'ok' ? (
       <Skeleton />
@@ -244,8 +252,28 @@ const CardA: React.FC<{ outcome: Outcome }> = ({ outcome }) => (
   </div>
 );
 
+const TrendCard: React.FC<{ outcome: Outcome }> = ({ outcome }) => (
+  <div className={CARD} data-card="trend">
+    <h3 className={CARD_TITLE}>{CARD_HEADINGS.trend}</h3>
+    {outcome.kind !== 'ok' ? (
+      <Skeleton />
+    ) : (
+      <>
+        <TrendChart series={outcome.payload.series} grain={outcome.payload.seriesGrain} />
+        <p className="mt-2 text-xs text-gray-500">
+          {trendCaption(
+            outcome.payload.seriesGrain,
+            outcome.payload.seriesStartsOn,
+            outcome.payload.series.some((point) => !point.complete),
+          )}
+        </p>
+      </>
+    )}
+  </div>
+);
+
 const CardB: React.FC<{ outcome: Outcome; pages: PageNaming[] }> = ({ outcome, pages }) => (
-  <div className={CARD}>
+  <div className={CARD} data-card="b">
     <h3 className={CARD_TITLE}>{CARD_HEADINGS.b}</h3>
     {outcome.kind !== 'ok' ? (
       <Skeleton />
@@ -265,7 +293,7 @@ const CardB: React.FC<{ outcome: Outcome; pages: PageNaming[] }> = ({ outcome, p
 );
 
 const CardC: React.FC<{ outcome: Outcome }> = ({ outcome }) => (
-  <div className={CARD}>
+  <div className={CARD} data-card="c">
     <h3 className={CARD_TITLE}>{CARD_HEADINGS.c}</h3>
     {outcome.kind !== 'ok' ? (
       <Skeleton />
@@ -294,7 +322,7 @@ const CardC: React.FC<{ outcome: Outcome }> = ({ outcome }) => (
 );
 
 const CardD: React.FC<{ outcome: Outcome }> = ({ outcome }) => (
-  <div className={CARD}>
+  <div className={CARD} data-card="d">
     <h3 className={CARD_TITLE}>{CARD_HEADINGS.d}</h3>
     {outcome.kind !== 'ok' ? (
       <Skeleton />

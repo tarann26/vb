@@ -61,16 +61,64 @@ export function formatCountingStartedOn(iso: string): string {
   return `${day} ${MONTHS[month - 1]} ${year}`;
 }
 
-// The four headings. Here rather than in the component because the skeleton
-// state has to show the REAL headings while it loads -- never a bare spinner
-// -- and because a test asserting "all four headings are on screen during
+// Every card's heading. Here rather than in the component because the
+// skeleton state has to show the REAL headings while it loads -- never a bare
+// spinner -- and because a test asserting "every heading is on screen during
 // the wait" should quote one list.
+//
+// ONE ENTRY PER CARD THAT EXISTS. Both the jsdom wait test and
+// e2e/dashboard-sections.spec.ts walk Object.values() and require each one to
+// be on screen, so a heading added ahead of its card is a red suite rather
+// than a quiet inconsistency -- which is the behaviour worth keeping.
 export const CARD_HEADINGS = {
   a: 'How many visits, and how many tapped Reserve a Table?',
   b: 'Which pages did people look at?',
   c: 'Where did people come from?',
   d: 'Busier or quieter than usual?',
+  // The hero graphic, and the only heading that is a plain noun -- it is the
+  // one thing on the screen a reader understands before reading a word of it.
+  trend: 'Visits over time',
 } as const;
+
+// The chart says where its line begins rather than beginning at an
+// unexplained zero, and it says whether any month in it is partial. Three
+// different things are true in three different states and the sentence is
+// different in each.
+//
+// `startsOn` is 'YYYY-MM-DD' at day grain and 'YYYY-MM' at month grain, and
+// formatCountingStartedOn cannot read the second -- it needs a day number and
+// returns the raw string when there is not one, which would print "2026-06"
+// to a reader who has never seen an ISO date. So the shape decides the
+// formatter, exactly as it does in seriesLabel below.
+export function trendCaption(
+  grain: 'day' | 'month',
+  startsOn: string | null,
+  hasPartialMonth: boolean,
+): string {
+  if (startsOn === null) {
+    return 'This chart fills in from today onwards. It cannot reach back before now.';
+  }
+  const started = grain === 'month' ? seriesLabel(startsOn, true) : formatCountingStartedOn(startsOn);
+  const opening = `This chart begins on ${started}, when the record started. It cannot reach back before that.`;
+  if (grain !== 'month' || !hasPartialMonth) return opening;
+  // The spec's explicit requirement: the first year of the by-year view IS a
+  // partial year, and the panel says so rather than drawing a misleading
+  // column. The month is DRAWN -- an omitted month is a gap she cannot see.
+  return `${opening} Months marked * are not complete.`;
+}
+
+// `date` is 'YYYY-MM' at month grain and 'YYYY-MM-DD' at day grain, and
+// formatCountingStartedOn would mangle the first. One function, two shapes,
+// so the label is built where the shape is known -- and the ASTERISK lives
+// here rather than in the component, because the rule "a partial month is
+// marked" is a copy decision and belongs beside the sentence that explains
+// it.
+export function seriesLabel(date: string, complete: boolean): string {
+  const [year, month, day] = date.split('-').map(Number);
+  const named = MONTHS[(month ?? 1) - 1] ?? date;
+  const label = day === undefined ? `${named} ${String(year)}` : `${String(day)} ${named}`;
+  return complete ? label : `${label}*`;
+}
 
 // ---------------------------------------------------------------------------
 // Card B: a path, as a page she would recognise.

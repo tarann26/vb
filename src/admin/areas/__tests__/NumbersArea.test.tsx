@@ -1,4 +1,4 @@
-// The four cards as she reads them, from fixed payloads.
+// Every card as she reads it, from fixed payloads.
 //
 // Every one of these zero-data strings is the state this screen SHIPS in --
 // the dataset was empty the day it was written and will be near-empty for a
@@ -112,6 +112,17 @@ describe('with real numbers', () => {
       { kind: 'instagram', label: 'Instagram', host: null, visits: 1200 },
       { kind: 'other', label: 'Other links', host: 't.co', visits: 40 },
     ],
+    // Four points, so the trend card actually draws rather than falling back
+    // to "not enough days yet". A populated fixture with an empty series
+    // would leave every assertion about the chart passing for the wrong
+    // reason.
+    series: [
+      { date: '2026-07-20', visits: 90, complete: true },
+      { date: '2026-07-21', visits: 140, complete: true },
+      { date: '2026-07-22', visits: 60, complete: true },
+      { date: '2026-07-23', visits: 200, complete: true },
+    ],
+    seriesStartsOn: '2026-07-20',
   });
 
   const PAGES_ENTRY = {
@@ -149,12 +160,34 @@ describe('with real numbers', () => {
     expect(within(card).getByText('t.co')).toBeInTheDocument();
   });
 
-  it('Card D is one sentence, and there is no chart anywhere', async () => {
+  // The trend card is the only place on this panel that draws anything, and
+  // this is the wiring: that the card hands the chart the payload's own
+  // series and grain, and hands the caption the payload's own start. Passing
+  // a literal null for the start would leave the chart looking perfect and
+  // the sentence under it wrong.
+  it('the trend card draws the payload series and dates the record from it', async () => {
+    renderNumbers(okFetch(POPULATED) as unknown as typeof fetch);
+    const card = (await screen.findByText(CARD_HEADINGS.trend)).closest('div') as HTMLElement;
+
+    expect(within(card).getByRole('img', { name: 'Visits over the last 4 days, highest 200' })).toBeInTheDocument();
+    expect(
+      within(card).getByText(
+        'This chart begins on 20 July 2026, when the record started. It cannot reach back before that.',
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('Card D is one sentence, and nothing on the panel is drawn on a canvas', async () => {
     const { container } = renderNumbers(okFetch(POPULATED) as unknown as typeof fetch);
     const card = (await screen.findByText(CARD_HEADINGS.d)).closest('div') as HTMLElement;
 
     expect(within(card).getByText('Busier than the week before — 312 visits, up from 240.')).toBeInTheDocument();
-    expect(container.querySelector('svg')).toBeNull();
+    // Card D itself stays wordless of any drawing: the owner's stated
+    // requirement for THIS card is a sentence, not something to interpret.
+    expect(card.querySelector('svg')).toBeNull();
+    // And nowhere on the panel is there a <canvas>. The trend card above
+    // draws hand-written SVG; a canvas would mean a charting library had been
+    // pulled in for one polyline, which is what the spec ruled out.
     expect(container.querySelector('canvas')).toBeNull();
   });
 
@@ -167,7 +200,7 @@ describe('with real numbers', () => {
 
 // ---------------------------------------------------------------------------
 describe('the wait, and the two ways it can fail', () => {
-  it('shows four REAL headings while it loads, never a spinner with nothing named', async () => {
+  it("shows every card's REAL heading while it loads, never a spinner with nothing named", async () => {
     let release!: (value: Response) => void;
     const gate = new Promise<Response>((resolve) => {
       release = resolve;
