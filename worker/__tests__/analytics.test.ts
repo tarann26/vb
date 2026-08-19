@@ -176,7 +176,13 @@ function hourRowsToNodes(rows: HourRow[]): unknown[] {
 
 // A well-formed Cloudflare GraphQL success body.
 function graphqlOk(
-  opts: { last28?: Row[]; thisWeek?: Row[]; priorWeek?: Row[]; hourly?: HourRow[] } = {},
+  opts: {
+    last28?: Row[];
+    previousWindow?: Row[];
+    thisWeek?: Row[];
+    priorWeek?: Row[];
+    hourly?: HourRow[];
+  } = {},
 ): Response {
   return new Response(
     JSON.stringify({
@@ -185,6 +191,7 @@ function graphqlOk(
           accounts: [
             {
               last28: rowsToNodes(opts.last28 ?? [], true),
+              previousWindow: rowsToNodes(opts.previousWindow ?? [], false),
               thisWeek: rowsToNodes(opts.thisWeek ?? [], false),
               priorWeek: rowsToNodes(opts.priorWeek ?? [], false),
               hourly: hourRowsToNodes(opts.hourly ?? []),
@@ -1040,6 +1047,61 @@ describe('excluding her own editing sessions', () => {
   });
 });
 
+describe('the previous window', () => {
+  it('is the same length, ending where this one begins', async () => {
+    respondWith(() =>
+      graphqlOk({
+        last28: [{ path: '/', visits: 70 }],
+        previousWindow: [{ path: '/', visits: 35 }],
+      }),
+    );
+
+    const body = await payloadOf(await handleAnalytics(await analyticsRequest('?range=7d'), env));
+    expect(body.visits).toBe(70);
+    expect(body.visitsPrevious).toBe(35);
+  });
+
+  it('counts the previous window of taps too, and does not double-count today', async () => {
+    // The fixture uses DIFFERENT daily counts per window -- 1 a day for the
+    // recent seven, 2 a day for the seven before -- so that "the same window
+    // twice" and "the window before" produce different numbers. A uniform
+    // fixture would make both mutations below green for the wrong reason.
+    const today = todayInKolkata();
+    const fourteenDays = recentIstDates(today, 14);
+    const counts: Record<string, number> = {};
+    fourteenDays.slice(0, 7).forEach((date) => {
+      counts[date] = 1;
+    });
+    fourteenDays.slice(7).forEach((date) => {
+      counts[date] = 2;
+    });
+    await kv.put('wa:counts', JSON.stringify(counts));
+
+    const body = await payloadOf(await handleAnalytics(await analyticsRequest('?range=7d'), env));
+    expect(body.bookingTaps.total).toBe(7);
+    expect(body.tapsPrevious).toBe(14);
+  });
+
+  it('moves with the range, unlike Card D which is a fixed seven days', async () => {
+    // thisWeekVisits/priorWeekVisits is Card D's fixed seven-day comparison.
+    // Reusing it here would leave visitsPrevious frozen at the same number
+    // for every range, which would only ever be caught by asking at a range
+    // other than 7d.
+    respondWith(() =>
+      graphqlOk({
+        last28: [{ path: '/', visits: 100 }],
+        previousWindow: [{ path: '/', visits: 40 }],
+        thisWeek: [{ path: '/', visits: 9 }],
+        priorWeek: [{ path: '/', visits: 6 }],
+      }),
+    );
+
+    const body = await payloadOf(await handleAnalytics(await analyticsRequest('?range=30d'), env));
+    expect(body.visitsPrevious).toBe(40);
+    expect(body.visitsPrevious).not.toBe(body.priorWeekVisits);
+  });
+});
+
 describe('the Reserve a Table tap total', () => {
   beforeEach(() => {
     // Fixed so "the last 30 IST dates, ending yesterday" is a set this test
@@ -1402,7 +1464,7 @@ describe('the upstream request', () => {
     vi.setSystemTime(new Date('2026-08-04T12:00:00Z'));
   });
 
-  it('posts one document to Cloudflare with the account, the site tag and three windows', async () => {
+  it('posts one document to Cloudflare with the account, the site tag and four windows', async () => {
     await handleAnalytics(await authed(), env);
 
     expect(fetchStub).toHaveBeenCalledTimes(1);
@@ -1418,8 +1480,9 @@ describe('the upstream request', () => {
       query: string;
       variables: Record<string, string>;
     };
-    // ONE round trip for all four cards, not five.
+    // ONE round trip for all five cards, not six.
     expect(body.query).toContain('last28:');
+    expect(body.query).toContain('previousWindow:');
     expect(body.query).toContain('thisWeek:');
     expect(body.query).toContain('priorWeek:');
     expect(body.variables).toEqual({
@@ -1431,6 +1494,10 @@ describe('the upstream request', () => {
       sinceWindow: '2026-07-05T00:00:00.000Z',
       sinceThisWeek: '2026-07-28T00:00:00.000Z',
       sincePriorWeek: '2026-07-21T00:00:00.000Z',
+      // The window immediately BEFORE sinceWindow, same length: the default
+      // 30-day range's window opens 2026-07-05, so the previous window opens
+      // 30 days before that.
+      sincePrevious: '2026-06-05T00:00:00.000Z',
     });
   });
 

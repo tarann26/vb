@@ -46,6 +46,8 @@ import {
 import type { PageNaming } from '../manage/analytics';
 import TrendChart from '../manage/TrendChart';
 import BarList from '../manage/BarList';
+import StatCard from '../manage/StatCard';
+import { changeBetween } from '../manage/comparison';
 import { isAnalyticsPayload } from '../../shared/analytics-payload';
 import type { AnalyticsFailureReason, AnalyticsPayload } from '../../shared/analytics-payload';
 import type { ContentRegistry } from '../publish';
@@ -239,8 +241,18 @@ const CardA: React.FC<{ outcome: Outcome }> = ({ outcome }) => (
     ) : (
       <>
         <div className="flex flex-wrap gap-6">
-          <p className="text-sm text-ink">{visitsSentence(outcome.payload.visits)}</p>
-          <p className="text-sm text-ink">{tapsSentence(outcome.payload.bookingTaps.total)}</p>
+          <StatCard
+            label="Visits"
+            value={visitsSentence(outcome.payload.visits)}
+            change={changeBetween(outcome.payload.visits, outcome.payload.visitsPrevious)}
+            unit="visits"
+          />
+          <StatCard
+            label="Reserve a Table"
+            value={tapsSentence(outcome.payload.bookingTaps.total)}
+            change={changeBetween(outcome.payload.bookingTaps.total, outcome.payload.tapsPrevious)}
+            unit="taps"
+          />
         </div>
         {ratioSentence(outcome.payload) !== null && (
           <p className="mt-2 text-sm text-ink">{ratioSentence(outcome.payload)}</p>

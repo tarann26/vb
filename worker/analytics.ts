@@ -424,6 +424,7 @@ const ANALYTICS_QUERY = `query ViaBiancaAnalytics(
   $sinceWindow: Time!
   $sinceThisWeek: Time!
   $sincePriorWeek: Time!
+  $sincePrevious: Time!
   $until: Time!
 ) {
   viewer {
@@ -435,6 +436,14 @@ const ANALYTICS_QUERY = `query ViaBiancaAnalytics(
       ) {
         sum { visits }
         dimensions { requestPath refererHost }
+      }
+      previousWindow: rumPageloadEventsAdaptiveGroups(
+        filter: { siteTag: $siteTag, datetime_geq: $sincePrevious, datetime_lt: $sinceWindow }
+        limit: 1000
+        orderBy: [sum_visits_DESC]
+      ) {
+        sum { visits }
+        dimensions { requestPath }
       }
       thisWeek: rumPageloadEventsAdaptiveGroups(
         filter: { siteTag: $siteTag, datetime_geq: $sinceThisWeek, datetime_lt: $until }
@@ -478,6 +487,7 @@ interface RumRow {
 
 interface RumAccount {
   last28?: unknown;
+  previousWindow?: unknown;
   thisWeek?: unknown;
   priorWeek?: unknown;
   hourly?: unknown;
@@ -823,6 +833,10 @@ export async function handleAnalytics(request: Request, env: AnalyticsEnv): Prom
           sinceWindow: iso(until - windowDays * DAY_MS),
           sinceThisWeek: iso(until - WEEK_DAYS * DAY_MS),
           sincePriorWeek: iso(until - 2 * WEEK_DAYS * DAY_MS),
+          // The window immediately BEFORE this one, same length, ending where
+          // this one begins -- see `visitsPrevious` below for why this is a
+          // different question than thisWeek/priorWeek.
+          sincePrevious: iso(until - 2 * windowDays * DAY_MS),
           until: iso(until),
         },
       }),
@@ -955,9 +969,20 @@ export async function handleAnalytics(request: Request, env: AnalyticsEnv): Prom
     hourly: hourCells(rowsOf(account.hourly)),
     campaigns,
     campaignsAreExact: true,
-    // Filled by Task 19.
-    visitsPrevious: 0,
-    tapsPrevious: 0,
+    // NOT thisWeekVisits/priorWeekVisits. Those two are Card D's, they are a
+    // fixed seven days against the seven before, and they are correct for the
+    // sentence that card writes. Reusing them here would make the stat cards
+    // and Card D disagree at every range EXCEPT 7d -- she would read
+    // "18% more visits" beside "about the same as usual" on one screen, with
+    // nothing to tell her which was answering which question.
+    visitsPrevious: totalVisits(rowsOf(account.previousWindow)),
+    tapsPrevious: sumWaCounts(
+      waCounts,
+      // The window BEFORE this one: skip the current windowDays, then take
+      // the next windowDays back. recentIstDates already ends yesterday, so
+      // slicing is the whole of it.
+      recentIstDates(today, windowDays * 2).slice(windowDays),
+    ),
     yearAvailable,
   };
 
