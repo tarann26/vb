@@ -3,11 +3,14 @@ import {
   handleAnalytics,
   bucketReferer,
   isExcludedPath,
+  istDateDaysAgo,
   normalizePath,
   recentIstDates,
   sumWaCounts,
   type AnalyticsEnv,
 } from '../analytics';
+import { asD1, FakeD1 } from './fakeD1';
+import { todayInKolkata } from '../../src/shared/date';
 import {
   PAYLOAD_SHAPE_VERSION,
   ZERO_DATA_PAYLOAD,
@@ -108,6 +111,7 @@ class FakeCache {
 
 let kv: FakeKV;
 let cache: FakeCache;
+let d1: FakeD1;
 let env: AnalyticsEnv;
 let fetchStub: ReturnType<typeof vi.fn>;
 
@@ -120,6 +124,11 @@ function buildEnv(overrides: Partial<AnalyticsEnv> = {}): AnalyticsEnv {
     CLOUDFLARE_PAGES_PROJECT: 'analytics-test-project',
     CLOUDFLARE_API_TOKEN: 'analytics-test-cf-token-not-real',
     CF_WEB_ANALYTICS_SITE_TAG: 'analytics-test-site-tag',
+    // A REAL fake, not an empty object: readCampaignRows swallows a D1
+    // failure by design, so an env whose DB throws on every statement would
+    // make every campaign assertion in this file pass on the catch arm
+    // instead of on the query.
+    DB: asD1(d1),
     ...overrides,
   };
 }
@@ -187,6 +196,7 @@ async function errorOf(response: Response): Promise<AnalyticsError> {
 beforeEach(() => {
   kv = new FakeKV();
   cache = new FakeCache();
+  d1 = new FakeD1();
   env = buildEnv();
   fetchStub = vi.fn(async () => graphqlOk());
   vi.stubGlobal('caches', { default: cache });
@@ -508,6 +518,46 @@ describe('the range parameter', () => {
     // assertion rather than two hopes pointing at each other.
     const body = await (await handleAnalytics(await analyticsRequest(''), env)).json();
     expect(isAnalyticsPayload(body)).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The campaign card. The wiring, not just the helper -- a correct
+// readCampaignRows called over the wrong window still puts a wrong number on
+// the screen.
+// ---------------------------------------------------------------------------
+
+describe('the campaign card on the payload', () => {
+  it('carries the rows for the range it was asked for', async () => {
+    d1.campaignArrivals.push({ source: 'instagram', day: todayInKolkata(), created_at: 0 });
+    const body = await payloadOf(await handleAnalytics(await analyticsRequest('?range=7d'), env));
+    expect(body.campaigns).toEqual([{ source: 'instagram', label: 'Instagram link', arrivals: 1 }]);
+    expect(body.campaignsAreExact).toBe(true);
+  });
+
+  it('counts the whole first day of the window, inclusive', async () => {
+    // The off-by-one. A 7-day window ending today must include the day seven
+    // calendar days ago, not six.
+    d1.campaignArrivals.push({ source: 'instagram', day: istDateDaysAgo(todayInKolkata(), 6), created_at: 0 });
+    const body = await payloadOf(await handleAnalytics(await analyticsRequest('?range=7d'), env));
+    expect(body.campaigns[0].arrivals).toBe(1);
+  });
+
+  it('leaves out an arrival one day older than the window', async () => {
+    // The other direction. Both boundaries exist because either one alone
+    // stays green under one of the two ways this window can be built wrong.
+    d1.campaignArrivals.push({ source: 'instagram', day: istDateDaysAgo(todayInKolkata(), 7), created_at: 0 });
+    const body = await payloadOf(await handleAnalytics(await analyticsRequest('?range=7d'), env));
+    expect(body.campaigns).toEqual([]);
+  });
+
+  it('still answers every other card when the campaign read fails', async () => {
+    respondWith(() => graphqlOk({ last28: [{ path: '/', visits: 12 }] }));
+    d1.failWith = 'D1 is down';
+
+    const body = await payloadOf(await handleAnalytics(await authed(), env));
+    expect(body.visits).toBe(12);
+    expect(body.campaigns).toEqual([]);
   });
 });
 
@@ -835,6 +885,43 @@ describe('recentIstDates', () => {
   });
 });
 
+describe('istDateDaysAgo', () => {
+  it.each([
+    ['2026-08-18', 0, '2026-08-18'],
+    ['2026-08-18', 6, '2026-08-12'],
+    ['2026-08-18', 29, '2026-07-20'],
+    ['2026-03-01', 1, '2026-02-28'],
+    ['2026-01-01', 1, '2025-12-31'],
+  ])('%s minus %i days is %s', (today, days, expected) => {
+    expect(istDateDaysAgo(today as string, days as number)).toBe(expected);
+  });
+
+  it('hands back a date it cannot read rather than inventing one', () => {
+    expect(istDateDaysAgo('not-a-date', 5)).toBe('not-a-date');
+  });
+
+  // THE TABLE ABOVE CANNOT SEE THE DEFECT THIS FUNCTION IS BUILT AGAINST, and
+  // that is worth stating rather than assuming. Rebuilding the base as
+  // `new Date(y, m - 1, d)` -- a LOCAL-time parse -- gives the identical
+  // answer everywhere from UTC westward, so every row above stays green on a
+  // machine in New York and reddens only on one east of Greenwich. This case
+  // makes the property itself the assertion: the same date, from every
+  // offset, including the two that straddle the boundary.
+  it('gives the same answer whatever timezone the process is in', () => {
+    const original = process.env.TZ;
+    const answers = new Set<string>();
+    try {
+      for (const zone of ['UTC', 'Asia/Kolkata', 'America/New_York', 'Pacific/Kiritimati']) {
+        process.env.TZ = zone;
+        answers.add(istDateDaysAgo('2026-08-18', 6));
+      }
+    } finally {
+      process.env.TZ = original;
+    }
+    expect([...answers]).toEqual(['2026-08-12']);
+  });
+});
+
 describe('sumWaCounts', () => {
   it('adds only the dates it was asked for', () => {
     expect(sumWaCounts({ a: 1, b: 2, c: 4 }, ['a', 'c'])).toBe(5);
@@ -889,9 +976,6 @@ describe('the route, reached through the router', () => {
       GITHUB_REPO: 'vb',
       GITHUB_BRANCH: 'main',
       GITHUB_TOKEN: 'analytics-test-github-token-not-real',
-      // Phase 2. Unused by any test in this file -- required only for
-      // `env` to satisfy `Env`.
-      DB: {} as unknown as D1Database,
     };
   }
 

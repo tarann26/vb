@@ -73,13 +73,24 @@
 // inside that same caveat rather than adding a new claim.
 //
 // ---------------------------------------------------------------------------
-// SUBREQUEST AND CPU BUDGET -- recomputed if anything is added here.
+// SUBREQUEST AND CPU BUDGET, recomputed because this route grew.
 // ---------------------------------------------------------------------------
-// Workers Free allows 50 subrequests and 10ms CPU per invocation, and Cache
-// API calls count toward the 50 the same way KV calls do. This route's WORST
-// case is FOUR: `cache.match`, one GraphQL `fetch`, one `KV.get`,
-// `cache.put`. A cache HIT is ONE. CPU is one HMAC verify (the session gate)
-// plus a `JSON.parse` and a single pass over at most 1000 small rows.
+// Workers Free allows 50 subrequests and 10ms CPU per invocation. Cloudflare
+// counts a subrequest per outbound fetch and per Cache API call. D1 queries
+// through a binding are NOT subrequests -- they are billed as rows read,
+// against 5,000,000 a day, and this route reads at most a handful per miss.
+//
+//   cache HIT:  1  (cache.match)
+//   cache MISS: 4  (cache.match, one GraphQL fetch, one KV get, cache.put)
+//               + 1 D1 query for the campaign card
+//               + 2 D1 queries for the trend series and its first day
+//               + 1 D1 query for whether the by-year archive holds anything
+//
+// The SUBREQUEST count is therefore UNCHANGED at 4, which is the number that
+// mattered. Recompute this block again if anything is added.
+//
+// CPU is one HMAC verify (the session gate) plus a `JSON.parse` and a single
+// pass over at most 1000 small rows.
 //
 // ---------------------------------------------------------------------------
 // CACHING: THE CLOUDFLARE CACHE API, NEVER KV.
@@ -153,6 +164,7 @@ import type {
   RefererBucketKind,
 } from '../src/shared/analytics-payload';
 import { readWaCounts } from './wa';
+import { readCampaignRows } from './campaign';
 import type { PagesEnv } from './status';
 
 // The Web Analytics site tag: an identifier, not a secret -- the same
@@ -172,6 +184,10 @@ export type AnalyticsEnv = PagesEnv &
     KV: KVNamespace;
     TOKEN_SECRET: string;
     ADMIN_PASSWORD_HASH: string;
+    // The campaign card, the trend series and the by-year archive are all our
+    // own rows. Reads only on this route; the write path is worker/campaign.ts
+    // and the nightly job is worker/rollup.ts.
+    DB: D1Database;
   };
 
 // ---------------------------------------------------------------------------
@@ -288,6 +304,17 @@ export function recentIstDates(today: string, days: number): string[] {
     dates.push(new Date(base - i * DAY_MS).toISOString().slice(0, 10));
   }
   return dates;
+}
+
+// N days back from an IST calendar date, as an IST calendar date. Built on
+// Date.UTC arithmetic over the parsed parts rather than on a Date in local
+// time -- the Worker's own clock is UTC and a local-time Date would shift the
+// answer by a day for five and a half hours out of every twenty-four.
+export function istDateDaysAgo(today: string, days: number): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(today)) return today;
+  const [year, month, day] = today.split('-').map(Number);
+  const base = Date.UTC(year, month - 1, day);
+  return new Date(base - days * DAY_MS).toISOString().slice(0, 10);
 }
 
 export function sumWaCounts(counts: Record<string, number>, dates: string[]): number {
@@ -608,6 +635,13 @@ export async function handleAnalytics(request: Request, env: AnalyticsEnv): Prom
     waCounts = {};
   }
 
+  // IST dates, matching the column. `sinceDay` is windowDays back from the
+  // restaurant's today, INCLUSIVE, so a 7-day range covers seven of her
+  // calendar days rather than 168 hours ending at an arbitrary moment.
+  const today = todayInKolkata();
+  const sinceDay = istDateDaysAgo(today, windowDays - 1);
+  const campaigns = await readCampaignRows(env.DB, sinceDay);
+
   const payload: AnalyticsPayload = {
     windowDays,
     visits: totalVisits(last28),
@@ -617,7 +651,7 @@ export async function handleAnalytics(request: Request, env: AnalyticsEnv): Prom
     thisWeekVisits: totalVisits(rowsOf(account.thisWeek)),
     priorWeekVisits: totalVisits(rowsOf(account.priorWeek)),
     bookingTaps: {
-      total: sumWaCounts(waCounts, recentIstDates(todayInKolkata(), windowDays)),
+      total: sumWaCounts(waCounts, recentIstDates(today, windowDays)),
       days: windowDays,
       lowerBound: true,
     },
@@ -630,8 +664,7 @@ export async function handleAnalytics(request: Request, env: AnalyticsEnv): Prom
     seriesStartsOn: null,
     // Filled or permanently pinned null by Task 15.
     hourly: null,
-    // Filled by Task 12.
-    campaigns: [],
+    campaigns,
     campaignsAreExact: true,
     // Filled by Task 19.
     visitsPrevious: 0,

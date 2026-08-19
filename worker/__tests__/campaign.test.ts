@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { asD1, FakeD1 } from './fakeD1';
-import { CAMPAIGN_DAILY_CAP, CAMPAIGN_RATE_MAX, handleCampaignArrival } from '../campaign';
+import { CAMPAIGN_DAILY_CAP, CAMPAIGN_RATE_MAX, handleCampaignArrival, readCampaignRows } from '../campaign';
+import { recordArrival } from '../analytics-store';
 import worker, { type Env } from '../index';
 import { todayInKolkata } from '../../src/shared/date';
 
@@ -17,6 +18,13 @@ function post(body: unknown, headers: Record<string, string> = {}, origin = ORIG
 function env() {
   const fake = new FakeD1();
   return { fake, env: { DB: asD1(fake) } };
+}
+
+// The read half takes a plain D1Database, not an env -- same shape
+// worker/__tests__/analytics-store.test.ts's own `store()` hands out.
+function store() {
+  const fake = new FakeD1();
+  return { fake, db: asD1(fake) };
 }
 
 describe('POST /api/campaign', () => {
@@ -177,6 +185,39 @@ describe('POST /api/campaign', () => {
 
   it('has a daily cap larger than one address can reach alone', () => {
     expect(CAMPAIGN_DAILY_CAP).toBeGreaterThan((CAMPAIGN_RATE_MAX * 60 * 24) / 10);
+  });
+});
+
+// The READ half. A correct table can still produce a wrong card: the words
+// beside each row, and what happens when the database is not there at all.
+describe('readCampaignRows', () => {
+  it('gives every row the words the card shows', async () => {
+    const { db } = store();
+    await recordArrival(db, 'instagram', '2026-08-18', 0);
+    await recordArrival(db, 'instagram', '2026-08-18', 0);
+    await recordArrival(db, 'zomato', '2026-08-17', 0);
+    expect(await readCampaignRows(db, '2026-08-01')).toEqual([
+      { source: 'instagram', label: 'Instagram link', arrivals: 2 },
+      { source: 'zomato', label: 'Zomato link', arrivals: 1 },
+    ]);
+  });
+
+  it('shows a source it has no words for rather than dropping the row', async () => {
+    // Written straight into the table, because normalizeSource on the write
+    // path cannot produce this -- a row the Worker has no label for means a
+    // deploy that half-landed, and the card showing it is how that becomes
+    // visible instead of becoming a missing row.
+    const { db, fake } = store();
+    fake.campaignArrivals.push({ source: 'mystery', day: '2026-08-18', created_at: 0 });
+    expect(await readCampaignRows(db, '2026-08-01')).toEqual([
+      { source: 'mystery', label: 'mystery', arrivals: 1 },
+    ]);
+  });
+
+  it('degrades to empty when the database is down, and never throws', async () => {
+    const { fake, db } = store();
+    fake.failWith = 'D1 is down';
+    await expect(readCampaignRows(db, '2026-08-01')).resolves.toEqual([]);
   });
 });
 

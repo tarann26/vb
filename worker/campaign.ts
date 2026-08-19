@@ -22,10 +22,11 @@
 //
 // UNAUTHENTICATED, deliberately, exactly like POST /api/wa: the person
 // arriving through her Instagram link is a diner, not the owner.
-import { normalizeSource } from '../src/shared/campaign-sources';
+import { CAMPAIGN_LABELS, normalizeSource } from '../src/shared/campaign-sources';
 import { todayInKolkata } from '../src/shared/date';
 import { sha256Hex } from './d1';
-import { recordArrival, takeRateSlot } from './analytics-store';
+import { campaignTotals, recordArrival, takeRateSlot } from './analytics-store';
+import type { AnalyticsCampaignRow } from '../src/shared/analytics-payload';
 import type { D1Database } from '@cloudflare/workers-types';
 
 // Ten a minute per address. A person arrives through a tagged link once; ten
@@ -118,4 +119,29 @@ export async function handleCampaignArrival(request: Request, env: CampaignEnv):
   // browser never reads this response, so a distinct status tells a prober
   // something and tells the visitor nothing.
   return new Response(null, { status: 204 });
+}
+
+// The READ half, for the panel's campaign card.
+//
+// NEVER THROWS. A D1 failure here degrades the campaign card to empty and
+// leaves the six cards that have nothing to do with D1 alone -- the same
+// contract readWaCounts already keeps for the tap number, and for the same
+// reason: one storage failure must not take a screen down. The catch lives
+// HERE and not in analytics-store.ts, because "what a failure costs" is a
+// decision per caller and the nightly job makes the opposite one.
+export async function readCampaignRows(db: D1Database, sinceDay: string): Promise<AnalyticsCampaignRow[]> {
+  try {
+    const totals = await campaignTotals(db, sinceDay);
+    return totals.map((row) => ({
+      source: row.source,
+      // Falls back to the raw source rather than hiding a row whose label is
+      // missing. A source string in the table this Worker has no words for is
+      // a deploy that half-landed, and showing it is how that becomes visible
+      // instead of becoming a missing row.
+      label: CAMPAIGN_LABELS[row.source] ?? row.source,
+      arrivals: row.arrivals,
+    }));
+  } catch {
+    return [];
+  }
 }
