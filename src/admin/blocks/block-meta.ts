@@ -124,7 +124,7 @@ export const ALT_SPEC = {
 // in a post whose photo entries sit third and ninth in the whole post is
 // still the second photo she added, which is how she thinks about it.
 //
-// Lives here, beside every other owner-facing name for a block, rather than
+// Lives here, beside every other owner-facing name for an entry, rather than
 // in BlockFields.tsx or WritingSurface.tsx: both of those default-export a
 // component, and `react-refresh/only-export-components` warns on a value
 // exported from such a file that is not a plain constant -- the same trap

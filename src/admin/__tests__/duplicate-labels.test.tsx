@@ -73,7 +73,7 @@ async function openPostEditor(posts: Post[]): Promise<void> {
   await user.click(await within(panel).findByRole('button', { name: posts[0].title }));
 }
 
-it('no two controls in one editor share a visible label', async () => {
+it('no two controls in one editor share an on-screen label', async () => {
   await openPostEditor(postWithTwoPhotosAndACitation);
   // Scoped to the OPEN EDITOR (EditorSheet's own `role="dialog"`), never the
   // whole document: the rest of the dashboard legitimately repeats a label

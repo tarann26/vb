@@ -1646,11 +1646,11 @@ describe('the insert menu, and the four kinds the toolbar cannot reach', () => {
   });
 });
 
-// Admin redesign Task 26: BlockFields' `numbered()` only turns "Photo" into
-// "Photo 2" when TOLD there is a second one -- this is what does the telling.
-// The count is of entries sharing this block's own kind, not of every block
-// in the post, because that is how she thinks about "the second photo I
-// added", whatever else sits between the two of them.
+// Admin redesign Task 26: block-meta.ts's `numbered()` only turns "Photo"
+// into "Photo 2" when TOLD there is a second one -- this is what does the
+// telling. The count is of entries sharing this one's own kind, not of every
+// entry in the post, because that is how she thinks about "the second photo
+// I added", whatever else sits between the two of them.
 describe('a photo entry’s number counts only its own kind', () => {
   it('one photo entry in a post is just Photo', () => {
     surface({ blocks: [{ kind: 'image', src: '/x.webp', alt: 'x' }] });
