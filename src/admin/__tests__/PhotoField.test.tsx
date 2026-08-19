@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import PhotoField, { MAX_STAGED_PHOTOS_PER_PUBLISH, MAX_STAGED_PHOTO_BYTES, type StagedPhoto } from '../PhotoField';
+import type { ImagePreviews } from '../previews';
 import type { ValidationProblem } from '../../content/validate';
 
 // Mocked for the identical reason src/admin/__tests__/heic.test.ts mocks it:
@@ -437,5 +438,62 @@ describe('PhotoField', () => {
     const problems: ValidationProblem[] = [{ field: 'image', message: 'a photo is required' }];
     renderField({ problems });
     expect(screen.getByLabelText('Photo')).toHaveAccessibleDescription('a photo is required');
+  });
+});
+
+// Backlog item 6. `previewSrc` used to read `previewUrl ?? value ?? null`:
+// this component's own just-picked object URL, then the committed value, and
+// nothing in between. Reopening an editor REMOUNTS this component, which
+// resets `previewUrl` to null and falls through to `value` -- the path from
+// BEFORE the pick. The bytes were never at risk (they sit in the shared
+// collector under their own key); the picture was.
+describe('PhotoField: the preview survives a remount, because it reads the shared store', () => {
+  // A stand-in for previews.ts's own useImagePreviews, holding exactly the
+  // `urls` map that hook's `set` maintains -- the store outlives this
+  // component, which is the whole point, so the test has to hold it outside
+  // the render too.
+  function storeOf(entries: Record<string, string>): ImagePreviews {
+    const urls = { ...entries };
+    return { urls, set: () => {} };
+  }
+
+  const KEY = 'dishes.json:dish-3:image';
+
+  it('a reopened editor shows the photo she just picked, not the one before it', () => {
+    const previews = storeOf({ [KEY]: 'blob:new-pick' });
+    const { unmount } = render(
+      <PhotoField id="dish-image" label="Photo" category="food" value="/food/old.webp" onChange={vi.fn()} previews={previews} previewKey={KEY} problems={[]} />,
+    );
+    unmount(); // closing the editor
+
+    const { container } = render(
+      <PhotoField id="dish-image" label="Photo" category="food" value="/food/old.webp" onChange={vi.fn()} previews={previews} previewKey={KEY} problems={[]} />,
+    );
+    expect(container.querySelector('img')).toHaveAttribute('src', 'blob:new-pick');
+  });
+
+  it('prefers her just-picked photo over the store, when both exist', async () => {
+    // The ORDERING, not just the presence. Reading the store first would show
+    // the previous pick for one render after every new one -- so the store is
+    // seeded with a DIFFERENT url from the one this pick creates, and the
+    // assertion is that the store's is not what is on screen.
+    const user = userEvent.setup();
+    const previews = storeOf({ [KEY]: 'blob:older' });
+    const { container } = render(
+      <PhotoField id="dish-image" label="Photo" category="food" value="/food/old.webp" onChange={vi.fn()} previews={previews} previewKey={KEY} problems={[]} />,
+    );
+
+    await user.upload(screen.getByLabelText('Photo'), jpegFile());
+
+    const src = container.querySelector('img')?.getAttribute('src');
+    expect(src).toMatch(/^blob:/);
+    expect(src).not.toBe('blob:older');
+  });
+
+  it('falls back to the committed value when the store has nothing', () => {
+    const { container } = render(
+      <PhotoField id="dish-image" label="Photo" category="food" value="/food/old.webp" onChange={vi.fn()} previews={storeOf({})} previewKey={KEY} problems={[]} />,
+    );
+    expect(container.querySelector('img')).toHaveAttribute('src', '/food/old.webp');
   });
 });

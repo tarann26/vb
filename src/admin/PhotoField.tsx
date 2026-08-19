@@ -238,13 +238,23 @@ function PhotoField({
   const statusId = message ? `${id}-status` : undefined;
   const describedBy = [helpId, errorId, statusId].filter((part): part is string => Boolean(part)).join(' ') || undefined;
 
-  // The local, just-picked preview (an object URL) always wins over
-  // `value`: it shows the photo she just chose immediately, even though
-  // `value` was ALSO optimistically updated to the eventual published
-  // `contentPath` -- that path has nothing live behind it yet (the build
-  // that would put a real file there hasn't run), so rendering it as an
-  // <img src> before a publish would just be a broken image.
-  const previewSrc = previewUrl ?? value ?? null;
+  // Three sources, most recently true first:
+  //   1. this component's own just-picked object URL;
+  //   2. the SHARED preview store, which survives this component being
+  //      unmounted and remounted -- the whole of backlog item 6: reopening an
+  //      editor remounted this, reset (1) to null, and fell through to (3),
+  //      which is the value from BEFORE the pick;
+  //   3. the committed value.
+  // The bytes were never at risk; the picture was.
+  //
+  // The local pick is read FIRST and that ordering is load-bearing: the store
+  // is written from inside `handlePick`, one setState later than `setPreviewUrl`
+  // in the same handler, so reading it first would show the PREVIOUS pick for
+  // one render after every new one. Reading `previews.urls` rather than
+  // calling a getter keeps this a plain render-time read of the same object
+  // every other consumer of the store reads (Thumbnail.tsx does the same).
+  const stored = previewKey === undefined ? null : previews.urls[previewKey] ?? null;
+  const previewSrc = previewUrl ?? stored ?? value ?? null;
 
   return (
     <div className="mb-4">

@@ -195,6 +195,14 @@ function PhotoRows({
   // identity `patchAt` already carries forward across an edit.
   const rowIds = images.map((item) => rowIdFor(item));
 
+  // The one spelling of this list's staged/preview key. Four places need it --
+  // the row thumbnail, the editor's onStaged, the editor's previewKey and the
+  // delete path -- and four hand-typed copies of it is exactly how a delete
+  // comes to release a key nothing was ever staged under.
+  function keyForRow(rowId: string): string {
+    return `galleries.json:${prefix}:${rowId}:src`;
+  }
+
   const openRowId = openKey !== null && openKey.startsWith(`${prefix}:`) ? openKey.slice(prefix.length + 1) : undefined;
   const openIndex = openRowId === undefined ? -1 : rowIds.indexOf(openRowId);
   const open = openIndex === -1 ? undefined : images[openIndex];
@@ -209,7 +217,7 @@ function PhotoRows({
   const rows: ItemRow[] = images.map((item, index) => ({
     id: rowIds[index],
     name: item.alt || 'Photo with no description yet',
-    thumbnail: <Thumbnail path={item.src} previewKey={`galleries.json:${prefix}:${rowIds[index]}:src`} previews={previews} />,
+    thumbnail: <Thumbnail path={item.src} previewKey={keyForRow(rowIds[index])} previews={previews} />,
     needsAttention: relevant.some((p) => itemOf(prefix, p.field)?.index === index),
   }));
 
@@ -241,6 +249,13 @@ function PhotoRows({
           title={open.alt || 'Photo with no description yet'}
           onClose={() => setOpenKey(null)}
           onDelete={() => {
+            // The removed row's staged photo goes with it, keyed exactly the
+            // way this list's own onStaged below keys it -- both read
+            // `rowIds[openIndex]`, the row's own identity, so the key
+            // released is the key that was written. Left behind, the bytes
+            // keep occupying one of the eight slots a publish allows and are
+            // still SENT, an upload for a row nothing references any more.
+            stage(keyForRow(rowIds[openIndex]), null);
             onChangeList(images.filter((_, i) => i !== openIndex));
             setOpenKey(null);
           }}
@@ -274,9 +289,9 @@ function PhotoRows({
             // Confirmed directly (review finding): 4 picks on one row left
             // 3 staged files, 2 of them dead weight nothing on screen
             // could remove.
-            onStaged={(staged) => stage(`galleries.json:${prefix}:${rowIds[openIndex]}:src`, fromStagedPhoto(staged))}
+            onStaged={(staged) => stage(keyForRow(rowIds[openIndex]), fromStagedPhoto(staged))}
             previews={previews}
-            previewKey={`galleries.json:${prefix}:${rowIds[openIndex]}:src`}
+            previewKey={keyForRow(rowIds[openIndex])}
             problems={shown.filter((p) => itemOf(prefix, p.field)?.sub === 'src')}
           />
           <Field

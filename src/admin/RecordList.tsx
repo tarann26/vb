@@ -6,7 +6,7 @@ import ItemList, { type ItemRow } from './manage/ItemList';
 import { moveTo } from './blocks/reorder';
 import type { ImagePreviews } from './previews';
 import { arrayIndexOf, bannerLine } from './problems';
-import type { FieldsOf } from './fields';
+import type { FieldsOf, FieldSpec } from './fields';
 import type { StagedPhoto } from './PhotoField';
 import type { ValidationProblem } from '../content/validate';
 
@@ -88,6 +88,17 @@ export const REMOVE_BUTTON_CLASSNAME =
 export const ADD_BUTTON_CLASSNAME =
   "mt-2 w-full rounded border-2 border-dashed border-brand py-2 font-['Montserrat'] text-sm uppercase tracking-wide text-accent transition hover:bg-brand/10";
 
+// The key ONE of a record's fields stages under, spelled in exactly one
+// place. The editor below composes it on the way up (RecordForm hands back
+// the field's own key, this adds the record's id, ArraySection adds the file
+// name) and the delete path below has to name the identical string. Two
+// spellings of it is how a delete releases nothing at all, or releases
+// another record's photograph -- the identity failure this project has met
+// three times.
+function stagedKey(id: string, fieldKey: string): string {
+  return `${id}:${fieldKey}`;
+}
+
 function RecordList<T extends { id: string }>({
   fields,
   items,
@@ -117,6 +128,33 @@ function RecordList<T extends { id: string }>({
   // and nothing is dropped.
   const shown = open === undefined ? [] : problems.filter((p) => arrayIndexOf(p.field) === openIndex);
   const banner = problems.filter((p) => !shown.includes(p));
+
+  // A deleted record's staged photo goes with it. Without this the bytes stay
+  // in the collector, occupy one of the eight slots a publish allows, and are
+  // still SENT -- an upload for a record nothing references any more.
+  //
+  // Reported through the SAME `onStaged` channel the fields themselves report
+  // on, never a second call into the collector: `onStaged` is what adds the
+  // file name (ArraySection), so releasing through it is what makes the key
+  // released the key that was written.
+  //
+  // A `null` down that channel becomes `stage(key, null)` -- the "whatever is
+  // at that key now is stale" case stage's own contract names, and the right
+  // one here because there is no in-flight request whose identity could be
+  // confused with it. clearSent's identity matching is for the
+  // publish-SUCCESS path.
+  //
+  // Which keys: every field this record type declares `kind: 'image'` for,
+  // read off the SAME `fields` descriptor RecordForm renders from, so a
+  // record type that grows a second photo releases both without this list
+  // being edited.
+  const imageFieldKeys = Object.keys(fields).filter(
+    (key) => (fields as Record<string, FieldSpec>)[key]?.kind === 'image',
+  );
+  function releaseStagedFor(record: T): void {
+    if (onStaged === undefined) return;
+    for (const fieldKey of imageFieldKeys) onStaged(stagedKey(record.id, fieldKey), null);
+  }
 
   const rows: ItemRow[] = items.map((item, index) => ({
     id: item.id,
@@ -168,6 +206,7 @@ function RecordList<T extends { id: string }>({
           title={itemLabel(open)}
           onClose={() => setOpenId(null)}
           onDelete={() => {
+            releaseStagedFor(open);
             onRemove(openIndex);
             setOpenId(null);
           }}
@@ -179,7 +218,7 @@ function RecordList<T extends { id: string }>({
             value={open}
             onChange={(next) => onChange(openIndex, next)}
             problems={shown}
-            onStaged={onStaged ? (fieldKey, staged) => onStaged(`${open.id}:${fieldKey}`, staged) : undefined}
+            onStaged={onStaged ? (fieldKey, staged) => onStaged(stagedKey(open.id, fieldKey), staged) : undefined}
             previews={previews}
             previewKeyPrefix={previewKeyPrefix === undefined ? undefined : `${previewKeyPrefix}:${open.id}`}
             scope={scope}

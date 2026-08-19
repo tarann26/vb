@@ -112,15 +112,11 @@ test.describe('what a publish actually sends', () => {
   // record's upload has always still been in the body; the reason nobody
   // could tell is that nothing ever read the body.
   //
-  // Declared with test.fail here and turned into a plain test() in Task 28.
-  // That ordering is deliberate and honest: the observation is what makes the
-  // fix provable, so it lands first and the fix turns it green.
-  //
-  // test.fail(title, body) rather than a bare `test.fail(true, ...)` statement
-  // above it: the statement form marks EVERY test in the enclosing describe as
-  // expected-to-fail, which silently turned the three real assertions in this
-  // file into ones that pass when they fail and fail when they pass.
-  test.fail('a record deleted before publishing takes its staged photo bytes with it', async ({ page }) => {
+  // Landed with a `test.fail` marker at Task 11 and turned into a plain
+  // test() at Task 28, when RecordList's own `releaseStagedFor` made it pass.
+  // That ordering was deliberate and honest: the observation is what makes the
+  // fix provable, so it landed first and the fix turned it green.
+  test('a record deleted before publishing takes its staged photo bytes with it', async ({ page }) => {
     await mockEditBackend(page);
     await acceptPublishes(page);
     await acceptStagedUploads(page);

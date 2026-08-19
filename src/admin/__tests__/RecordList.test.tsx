@@ -4,6 +4,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import RecordList from '../RecordList';
 import { DISH_FIELDS } from '../fields';
+import { fromStagedPhoto, useStagedFiles, type StagedFile } from '../staged';
 import type { Dish } from '../../content/types';
 import { validateContent, type ValidationProblem } from '../../content/validate';
 
@@ -505,5 +506,94 @@ describe("RecordList: Task 9's collector wiring -- a staged photo reaches onStag
     );
     await user.click(screen.getByRole('button', { name: 'Negroni' }));
     expect(screen.getByLabelText(DISH_FIELDS.image.label)).toHaveAttribute('type', 'file');
+  });
+});
+
+// Backlog item 5, from the jsdom side. The e2e sibling
+// (e2e/publish-write.spec.ts, "a record deleted before publishing takes its
+// staged photo bytes with it") is the assertion that actually reads a publish
+// body; these read the collector the body is built from, through the REAL
+// chain -- a real upload into a real useStagedFiles, keyed exactly the way
+// ArraySection keys it. A test that handed `stage` a synthetic entry and then
+// called a delete handler by hand would prove nothing about whether the key
+// the delete path names is the key the field wrote.
+describe('RecordList: deleting a record releases its staged photo bytes', () => {
+  beforeEach(() => {
+    FakeXHR.instances = [];
+    vi.stubGlobal('XMLHttpRequest', FakeXHR as unknown as typeof XMLHttpRequest);
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  // `dishes.json:` is ArraySection's own prefix, applied here for the same
+  // reason the upload below is real: the key under test is the whole,
+  // fully-qualified one the publish body is keyed by, not RecordList's own
+  // half of it.
+  function StagedHarness({ report }: { report: (files: Record<string, StagedFile>) => void }) {
+    const staged = useStagedFiles();
+    const [list, setList] = useState<Dish[]>(THREE_DISHES);
+    report(staged.files);
+    return (
+      <RecordList<Dish>
+        fields={DISH_FIELDS}
+        items={list}
+        onChange={(index, next) => setList((prev) => prev.map((item, j) => (j === index ? next : item)))}
+        onReorder={vi.fn()}
+        onAdd={() => 'new-id'}
+        onRemove={(index) => setList((prev) => prev.filter((_, j) => j !== index))}
+        noun="dish"
+        itemLabel={(d) => d.name}
+        problems={[]}
+        onStaged={(key, photo) => staged.stage(`dishes.json:${key}`, fromStagedPhoto(photo))}
+      />
+    );
+  }
+
+  function renderStaged() {
+    let files: Record<string, StagedFile> = {};
+    render(<StagedHarness report={(next) => { files = next; }} />);
+    return { keys: () => Object.keys(files) };
+  }
+
+  async function stagePhotoOn(user: ReturnType<typeof userEvent.setup>, name: string, uploaded: string) {
+    await user.click(screen.getByRole('button', { name }));
+    await user.upload(screen.getByLabelText(DISH_FIELDS.image.label), jpegFile(`${uploaded}.jpg`));
+    const index = FakeXHR.instances.length - 1;
+    await waitFor(() => expect(FakeXHR.instances).toHaveLength(index + 1));
+    FakeXHR.instances[index].respond(200, {
+      path: `assets-source/food/${uploaded}.jpg`,
+      contentPath: `/food/${uploaded}.webp`,
+    });
+  }
+
+  it('a deleted record releases its staged photo', async () => {
+    const user = userEvent.setup();
+    const { keys } = renderStaged();
+
+    await stagePhotoOn(user, 'Bellini', 'bbb222bbb222');
+    await waitFor(() => expect(keys()).toContain('dishes.json:bellini:image'));
+
+    await user.click(screen.getByRole('button', { name: 'Delete Bellini' }));
+    await user.click(screen.getByRole('button', { name: 'Yes, delete bellini' }));
+
+    await waitFor(() => expect(keys()).not.toContain('dishes.json:bellini:image'));
+  });
+
+  it("a deleted record does not release another record's staged photo", async () => {
+    const user = userEvent.setup();
+    const { keys } = renderStaged();
+
+    await stagePhotoOn(user, 'Negroni', 'aaa111aaa111');
+    await waitFor(() => expect(keys()).toContain('dishes.json:negroni:image'));
+    await user.click(screen.getByRole('button', { name: 'Done' }));
+
+    await stagePhotoOn(user, 'Bellini', 'bbb222bbb222');
+    await waitFor(() => expect(keys()).toContain('dishes.json:bellini:image'));
+
+    await user.click(screen.getByRole('button', { name: 'Delete Bellini' }));
+    await user.click(screen.getByRole('button', { name: 'Yes, delete bellini' }));
+
+    await waitFor(() => expect(keys()).toEqual(['dishes.json:negroni:image']));
   });
 });
