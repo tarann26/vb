@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   commitFiles,
@@ -684,5 +685,60 @@ describe('getHeadCommit / getTreeBlobShas: reading what an undo needs', () => {
       trees: { [PARENT_TREE_SHA]: { truncated: true, tree: [{ path: 'src/content/dishes.json', sha: 'blob-a', type: 'blob' }] } },
     });
     await expect(getTreeBlobShas(envWith(stub), PARENT_TREE_SHA)).rejects.toBeInstanceOf(UndoNotPossibleError);
+  });
+});
+
+// Backlog item 18. Nine `fetch` calls in this module carried no AbortSignal,
+// so a GitHub request that never answers had no ceiling at all: it held a
+// Worker invocation open until the platform killed it, and she watched a
+// Publish spinner that resolved into neither an error nor a commit. Every
+// other outbound call in this Worker already carried one.
+describe('a GitHub request that never answers', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it('gives up rather than holding the Worker invocation open', async () => {
+    vi.useFakeTimers();
+    // Rejects only when the signal it was HANDED aborts -- so a call that
+    // passed no signal, or passed one that never fires, hangs this test's own
+    // promise forever and the assertion below times out red.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        (_url: string, init: RequestInit) =>
+          new Promise<Response>((_resolve, reject) => {
+            const signal = init.signal as AbortSignal | undefined;
+            if (signal === undefined) return; // no ceiling: hang, exactly as the defect did
+            signal.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+          }),
+      ),
+    );
+
+    const promise = getFileContent(NO_FETCH_ENV, 'src/content/dishes.json');
+    // Asserted BEFORE the clock is advanced, so a rejection for any other
+    // reason (a throw before the fetch, a stub that rejects immediately)
+    // cannot be mistaken for the timeout firing.
+    const settled = vi.fn();
+    void promise.then(settled, settled);
+    await Promise.resolve();
+    expect(settled).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(11_000);
+    await expect(promise).rejects.toThrow();
+  });
+
+  // Cheaper and stronger than nine separate timeout tests: the defect was
+  // "SOME calls have one", so what is asserted is that none do not. A tenth
+  // call added later with a bare `fetch` reddens this without anyone
+  // remembering to write a test for it.
+  it('passes an abort signal on every GitHub call', () => {
+    const source = readFileSync('worker/github.ts', 'utf8');
+    expect(source).not.toMatch(/await fetch\(/);
+    // And the wrapper every call goes through really does set one -- without
+    // this the assertion above passes on a `ghFetch` that forwards `init`
+    // untouched.
+    expect(source).toMatch(/signal: AbortSignal\.timeout\(/);
   });
 });

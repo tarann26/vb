@@ -157,6 +157,28 @@ function repoUrl(env: GitHubEnv, path: string): string {
   return `${API}/repos/${env.GITHUB_OWNER}/${env.GITHUB_REPO}${path}`;
 }
 
+// The same bound handleBuildStatus and handleAnalytics already use. Every
+// outbound call in this Worker carries one except the nine in this file, and a
+// GitHub request that never answers had no ceiling at all: it held a Worker
+// invocation open until the platform killed it, and she watched a Publish
+// spinner that would never resolve into either an error or a commit.
+//
+// The ceiling is per REQUEST, not per publish, and that is the right unit: a
+// publish is several of these in sequence, and a slow-but-progressing one must
+// not be cut off partway through a write. What this bounds is a request that
+// has stopped making progress.
+//
+// An abort rejects the fetch promise, which every function below already lets
+// propagate to the handler that called it -- handlePublish, handleUndo,
+// handleContent and handleUpload each catch and answer with a sentence.
+// Checked call site by call site rather than assumed: an unhandled abort would
+// be a 500 where the existing code returns a message.
+const GITHUB_TIMEOUT_MS = 10_000;
+
+function ghFetch(url: string, init: RequestInit = {}): Promise<Response> {
+  return fetch(url, { ...init, signal: AbortSignal.timeout(GITHUB_TIMEOUT_MS) });
+}
+
 // Only `status` used to survive into a thrown message ("... (GitHub
 // returned 403)"), dropping GitHub's own, far more actionable explanation
 // (e.g. "Resource not accessible by personal access token" for a token
@@ -180,7 +202,7 @@ async function describeFailure(res: Response): Promise<string> {
 // request.
 async function getBranchHeadSha(env: GitHubEnv): Promise<string> {
   const url = repoUrl(env, `/git/ref/heads/${env.GITHUB_BRANCH}`);
-  const res = await fetch(url, { headers: ghHeaders(env) });
+  const res = await ghFetch(url, { headers: ghHeaders(env) });
   if (!res.ok) {
     throw new Error(`could not read the current ${env.GITHUB_BRANCH} branch (GitHub returned ${res.status})${await describeFailure(res)}`);
   }
@@ -207,7 +229,7 @@ async function getBranchHeadSha(env: GitHubEnv): Promise<string> {
 // slightly differently in a second place.
 export async function getCommitTreeSha(env: GitHubEnv, commitSha: string): Promise<string> {
   const url = repoUrl(env, `/git/commits/${commitSha}`);
-  const res = await fetch(url, { headers: ghHeaders(env) });
+  const res = await ghFetch(url, { headers: ghHeaders(env) });
   if (!res.ok) {
     throw new Error(`could not read commit ${commitSha} (GitHub returned ${res.status})${await describeFailure(res)}`);
   }
@@ -293,7 +315,7 @@ export interface FileContent {
 // quietly pretend nothing changed on a genuine failure.
 export async function getFileContent(env: GitHubEnv, path: string): Promise<FileContent | null> {
   const url = repoUrl(env, `/contents/${path}?ref=${env.GITHUB_BRANCH}`);
-  const res = await fetch(url, { headers: ghHeaders(env) });
+  const res = await ghFetch(url, { headers: ghHeaders(env) });
   if (res.status === 404) return null;
   if (!res.ok) {
     throw new Error(`could not read ${path} (GitHub returned ${res.status})${await describeFailure(res)}`);
@@ -319,7 +341,7 @@ export async function getFileContent(env: GitHubEnv, path: string): Promise<File
 // hardcoded encoding would corrupt a photo.
 async function createBlob(env: GitHubEnv, file: CommitFile): Promise<string> {
   const url = repoUrl(env, '/git/blobs');
-  const res = await fetch(url, {
+  const res = await ghFetch(url, {
     method: 'POST',
     headers: ghHeaders(env),
     body: JSON.stringify({ content: file.content, encoding: file.encoding }),
@@ -344,7 +366,7 @@ async function createTree(
   entries: { path: string; sha: string }[],
 ): Promise<string> {
   const url = repoUrl(env, '/git/trees');
-  const res = await fetch(url, {
+  const res = await ghFetch(url, {
     method: 'POST',
     headers: ghHeaders(env),
     body: JSON.stringify({
@@ -364,7 +386,7 @@ async function createTree(
 // rather than an orphan commit with no history.
 async function createCommit(env: GitHubEnv, treeSha: string, parentSha: string, message: string): Promise<string> {
   const url = repoUrl(env, '/git/commits');
-  const res = await fetch(url, {
+  const res = await ghFetch(url, {
     method: 'POST',
     headers: ghHeaders(env),
     body: JSON.stringify({ message, tree: treeSha, parents: [parentSha] }),
@@ -387,7 +409,7 @@ async function createCommit(env: GitHubEnv, treeSha: string, parentSha: string, 
 // surfaced as a sentence the owner can act on rather than a raw code.
 async function updateBranchHead(env: GitHubEnv, commitSha: string): Promise<void> {
   const url = repoUrl(env, `/git/refs/heads/${env.GITHUB_BRANCH}`);
-  const res = await fetch(url, {
+  const res = await ghFetch(url, {
     method: 'PATCH',
     headers: ghHeaders(env),
     body: JSON.stringify({ sha: commitSha }),
@@ -479,7 +501,7 @@ const COMMIT_FILES_PAGE_CAP = 300;
 // either case. A file list at the page cap may be incomplete.
 export async function getHeadCommit(env: GitHubEnv): Promise<HeadCommit> {
   const url = repoUrl(env, `/commits/${env.GITHUB_BRANCH}`);
-  const res = await fetch(url, { headers: ghHeaders(env) });
+  const res = await ghFetch(url, { headers: ghHeaders(env) });
   if (!res.ok) {
     throw new Error(`could not read the latest commit on ${env.GITHUB_BRANCH} (GitHub returned ${res.status})${await describeFailure(res)}`);
   }
@@ -514,7 +536,7 @@ export async function getHeadCommit(env: GitHubEnv): Promise<HeadCommit> {
 // turning a truncated response into a quietly incomplete revert.
 export async function getTreeBlobShas(env: GitHubEnv, treeSha: string): Promise<Record<string, string>> {
   const url = repoUrl(env, `/git/trees/${treeSha}?recursive=1`);
-  const res = await fetch(url, { headers: ghHeaders(env) });
+  const res = await ghFetch(url, { headers: ghHeaders(env) });
   if (!res.ok) {
     throw new Error(`could not read the tree of ${treeSha} (GitHub returned ${res.status})${await describeFailure(res)}`);
   }

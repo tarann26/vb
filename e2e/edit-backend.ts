@@ -77,6 +77,27 @@ export function realContentJson(name: string): string {
   return readFileSync(join(process.cwd(), 'src', 'content', name), 'utf8');
 }
 
+// The suite must not depend on WHICH post is first. A new post landing at the
+// top of posts.json broke the block-label assertions once and would again --
+// the three committed posts happen to share a shape today, and the moment one
+// does not, whichever spec reached for index 0 fails somewhere far from the
+// change that caused it.
+//
+// Finds a post carrying every named block kind, and throws a sentence naming
+// what it wanted when none does. That refusal is the point: a helper that fell
+// back to `posts[0]` would put the assumption back where it was and hide it
+// behind a function name.
+export function postWithBlocks(kinds: string[]): { slug: string; title: string } {
+  const posts = JSON.parse(realContentJson('posts.json')) as Array<{
+    slug: string;
+    title: string;
+    blocks: Array<{ kind: string }>;
+  }>;
+  const found = posts.find((post) => kinds.every((kind) => post.blocks.some((block) => block.kind === kind)));
+  if (!found) throw new Error(`no committed post has all of: ${kinds.join(', ')}`);
+  return { slug: found.slug, title: found.title };
+}
+
 // EditMode.tsx's own `useSession` treats a 200 JSON response from GET
 // /api/wa as "logged in" -- it doubles as the session probe (see that
 // hook's own header comment for why), so faking that one response is
