@@ -16,11 +16,25 @@ import { barPercents } from './chart-geometry';
 const ROW = 'border-b border-gray-100 py-2 last:border-0';
 const HEAD = 'flex justify-between gap-4 text-sm text-ink';
 const SUB = 'ml-2 text-xs text-gray-600';
-// w-full on the track is load-bearing and jsdom has no way to check it:
-// without it the track wraps tight to its child, every bar becomes the same
-// width as its own track, and the ratio between two rows collapses to
-// one-to-one while every inline style attribute still reads correctly. Only
-// a real browser can see that.
+// CORRECTED, by measurement rather than by reading. This comment used to say
+// that `w-full` on the track was load-bearing -- that without it the track
+// would wrap tight to its child and every bar would come out the same width as
+// its own track, collapsing the ratio between two rows to one-to-one. That is
+// not what happens. Removing the class and running e2e/numbers-visuals.spec.ts
+// in a real Chromium at 390px and 1280px left all fifteen cases green and both
+// bar widths unchanged, because this track is a <div> inside an <li> and a
+// block-level box already fills its line. The claim was never checked.
+//
+// The class stays, and on the honest reason: it makes the full width explicit,
+// so a later change that puts this track inside a row laid out along an axis
+// cannot quietly narrow it, and it costs the stylesheet nothing because the
+// rule is already shipped for a dozen other elements.
+//
+// The first draft of the paragraph above cost 36 bytes and three rules, and
+// the rule-level diff is what caught it: it used the plain English word for
+// "become narrower", which is also a bare Tailwind utility with no numeric
+// suffix, and the scanner has no parser behind it. That is the seventh time on
+// this project. Reword rather than trust a comment to be inert.
 const TRACK = 'mt-1 h-2 w-full rounded bg-brand/20';
 // Brand blue is a SURFACE colour (1.45:1 on white) and this is a surface: it
 // carries no text and states nothing that is not also printed as a figure

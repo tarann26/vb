@@ -1042,6 +1042,16 @@ describe('dist/assets/ keeps admin code out of the entry chunk', () => {
 // Both are dead weight shipped to every visitor. Neither is this range's to
 // spend a commit on -- a reword across ten unrelated files inside an audit is
 // how an audit stops being one -- and neither has moved a byte here.
+//
+// ONE NEW LEAK WAS CAUGHT AND CLOSED INSIDE THIS AUDIT, recorded because it is
+// the seventh on this project and the sixth was the same word. Correcting a
+// false claim in BarList.tsx's own comment took the sheet from 39037 to 39073
+// (+36): ADDED `.shrink`, `.shrink-0` and `.flex-shrink-0`, REMOVED the
+// `.flex-shrink-0,.shrink-0` group they were split out of, all from the
+// ordinary English word for "become narrower" appearing once in prose. The
+// byte count would not have caught it -- 39073 is still under 39200 -- and the
+// rule-level diff did, which is the standing argument of this whole file.
+// Reworded to "narrow", rebuilt, and byte-identical again.
 describe('dist/assets/ keeps the shared stylesheet under a byte ceiling', () => {
   it.skipIf(!REQUIRED && !existsSync(DIST_ASSETS))('the entry CSS file stays under 39200 bytes', () => {
     const cssFiles = readdirSync(DIST_ASSETS).filter((n) => /^index-.*\.css$/.test(n));

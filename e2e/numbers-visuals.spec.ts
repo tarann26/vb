@@ -165,10 +165,22 @@ test.describe('the busiest-times chart on a phone', () => {
     // not exist for a site whose RUM dataset offers no hour dimension, and a
     // red test would be the wrong report of that.
     if ((await hours.count()) === 0) test.skip(true, 'no hour dimension: the busiest-times card is cut');
-    const box = await boxOf(hours);
-    // Twenty-four hours across, plus a day-name gutter. Below one CSS pixel a
-    // cell stops being a cell and the card becomes a smear she cannot read
-    // anything off.
-    expect(box.width / 24).toBeGreaterThanOrEqual(1);
+
+    // The CELL, measured, not the chart divided by 24. Those are different
+    // numbers and the difference is a whole gutter: the drawing is 24 hours
+    // across PLUS a day-name column, inside a viewBox this spec deliberately
+    // does not re-derive. Dividing the chart's own width by 24 overstates a
+    // cell by about 14% and, at the width that first breaks this, passes.
+    const cells = hours.locator('rect');
+    // Seven days by twenty-four hours. A drawing that lost its rows would
+    // otherwise satisfy every claim below by having one cell left to measure.
+    await expect(cells).toHaveCount(168);
+    const cell = await boxOf(cells.first());
+
+    // Below one CSS pixel a cell stops being a cell and the card is a smear
+    // she can read nothing off -- which is the whole question this card
+    // answers, on the screen she is most likely to answer it from.
+    expect(cell.width).toBeGreaterThanOrEqual(1);
+    expect(cell.height).toBeGreaterThanOrEqual(1);
   });
 });
