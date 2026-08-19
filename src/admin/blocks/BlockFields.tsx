@@ -13,7 +13,7 @@ import Field from '../Field';
 import PhotoField from '../PhotoField';
 import InlineTextField from './InlineTextField';
 import BlockProblemMessage from './BlockProblemMessage';
-import { ALT_SPEC, BLOCK_KIND_LABELS } from './block-meta';
+import { ALT_SPEC, BLOCK_KIND_LABELS, numbered } from './block-meta';
 import { swapAt } from './reorder';
 import { useStableNames, type StableNames } from './stable-names';
 import { MOVE_BUTTON_CLASSNAME, REMOVE_BUTTON_CLASSNAME, ADD_BUTTON_CLASSNAME } from '../RecordList';
@@ -131,18 +131,6 @@ const ROW_BUTTONS_CLASSNAME = 'mb-3 flex flex-wrap items-center gap-2';
 function addLabel(noun: string): string {
   const lower = noun.toLocaleLowerCase('en');
   return `Add ${/^[aeiou]/.test(lower) ? 'an' : 'a'} ${lower}`;
-}
-
-// "Photo", "Photo 2", "Photo 3" -- numbered only when there is something to
-// distinguish it from, so the overwhelmingly common single-photo post keeps
-// the plain word. "Photo 1" on a post with one photo is worse than "Photo",
-// because the number implies a second one.
-//
-// The number counts entries OF THE SAME KIND, not overall position: "Photo 2"
-// in a post whose photo entries sit third and ninth in the whole post is
-// still the second photo she added, which is how she thinks about it.
-export function numbered(base: string, ordinal: number | undefined): string {
-  return ordinal === undefined || ordinal <= 1 ? base : `${base} ${String(ordinal)}`;
 }
 
 export default function BlockFields({
