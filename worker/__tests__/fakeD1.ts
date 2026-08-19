@@ -18,6 +18,13 @@ export interface RevisionRow { id: number; path: string; publish_id: string; bod
 export class FakeD1 {
   content = new Map<string, ContentRow>();
   revisions: RevisionRow[] = [];
+  // worker/analytics-store.ts's four tables. Kept as plain collections rather
+  // than rows-with-a-schema for the same reason the two above are: this is a
+  // stand-in for the statements that module issues, not a database.
+  campaignArrivals: Array<{ source: string; day: string; created_at: number }> = [];
+  campaignRate = new Map<string, { hits: number; expires: number }>();
+  dailyVisits = new Map<string, { visits: number; recorded_at: number }>();
+  monthlyVisits = new Map<string, { visits: number; complete: number; recorded_at: number }>();
   statements: string[] = [];
   private nextId = 1;
   // Set to a message to make every subsequent call reject -- how the
@@ -155,6 +162,149 @@ export class FakeD1 {
     if (sql.startsWith('SELECT path, body FROM content')) {
       return { changes: 0, rows: [...this.content.values()].map((r) => ({ path: r.path, body: r.body })) };
     }
+
+    // ---- worker/analytics-store.ts ------------------------------------
+    //
+    // These branches READ the clauses their tests hold the statement to --
+    // the ORDER BY direction and tiebreak, the presence of a WHERE, the
+    // comparison in a DELETE, the reset arm of the limiter's CASE, whether a
+    // DO UPDATE replaces or accumulates -- rather than reimplementing the
+    // intended behaviour from memory. A fake that hard-codes what the query
+    // was MEANT to do absorbs an edit to the query and reports green, which
+    // is the same defect as accepting an unknown statement, one layer in.
+    if (sql.startsWith('INSERT INTO campaign_arrivals')) {
+      const [source, day, createdAt] = args as [string, string, number];
+      this.campaignArrivals.push({ source, day, created_at: createdAt });
+      return { changes: 1 };
+    }
+    if (sql.startsWith('SELECT source, COUNT(*) AS arrivals FROM campaign_arrivals')) {
+      const since = sql.includes('WHERE day >= ?') ? (args[0] as string) : '';
+      const totals = new Map<string, number>();
+      const firstSeen: string[] = [];
+      for (const row of this.campaignArrivals) {
+        if (row.day < since) continue;
+        if (!totals.has(row.source)) firstSeen.push(row.source);
+        totals.set(row.source, (totals.get(row.source) ?? 0) + 1);
+      }
+      // SQLite promises nothing about the order of rows a query does not
+      // order. When the statement names no second key, this fake hands back
+      // the legal-but-opposite tie order, so a caller that depends on an
+      // unspecified one fails here instead of reshuffling the card between
+      // refreshes in production.
+      const tie = sql.includes(', source ASC')
+        ? (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
+        : (a: string, b: string) => firstSeen.indexOf(b) - firstSeen.indexOf(a);
+      const direction = sql.includes('ORDER BY arrivals DESC') ? -1 : 1;
+      const rows = [...totals.entries()]
+        .sort((a, b) => (a[1] === b[1] ? tie(a[0], b[0]) : direction * (a[1] - b[1])))
+        .map(([source, arrivals]) => ({ source, arrivals }));
+      return { changes: 0, rows };
+    }
+    if (sql.startsWith('INSERT INTO campaign_rate')) {
+      const [bucket, expires] = args as [string, number];
+      const existing = this.campaignRate.get(bucket);
+      // Three clauses read off the statement rather than assumed.
+      //
+      // `increments`: a DO UPDATE that wrote a literal 1 would let every
+      // request through, so the arm that counts has to be visible here.
+      //
+      // `resets`: an expiry-comparing CASE arm is the defect this limiter was
+      // repaired for -- it resets whenever the new expiry is larger than the
+      // stored one, and both callers bind an expiry that grows every second.
+      // Mirrored so that re-adding it reddens a test instead of silently
+      // switching the limiter and the daily cap off.
+      //
+      // `refreshes`: without `expires = excluded.expires` a bucket still
+      // being written to keeps its first expiry and the night's prune deletes
+      // it mid-window, which restarts the day's cap from zero.
+      const increments = sql.includes('campaign_rate.hits + 1');
+      const resets = sql.includes('CASE WHEN campaign_rate.expires <= excluded.expires - 1');
+      const refreshes = sql.includes('expires = excluded.expires');
+      const stale = resets && existing !== undefined && existing.expires <= expires - 1;
+      const hits = existing === undefined || stale || !increments ? 1 : existing.hits + 1;
+      this.campaignRate.set(bucket, { hits, expires: existing !== undefined && !refreshes ? existing.expires : expires });
+      return { changes: 0, row: { hits } };
+    }
+    if (sql.startsWith('DELETE FROM campaign_rate WHERE expires')) {
+      const cutoff = args[0] as number;
+      const dead = sql.includes('expires < ?')
+        ? (expires: number) => expires < cutoff
+        : (expires: number) => expires > cutoff;
+      for (const [bucket, row] of [...this.campaignRate]) if (dead(row.expires)) this.campaignRate.delete(bucket);
+      return { changes: 0 };
+    }
+    if (sql.startsWith('INSERT INTO daily_visits')) {
+      const [day, visits, recordedAt] = args as [string, number, number];
+      const existing = this.dailyVisits.get(day);
+      // ON CONFLICT(day) DO NOTHING keeps the first number it ever saw; the
+      // real statement replaces it. Which of the two is written is what the
+      // "corrects a day it has already recorded" test is about.
+      if (existing !== undefined && !sql.includes('DO UPDATE SET visits = excluded.visits')) return { changes: 0 };
+      this.dailyVisits.set(day, { visits, recorded_at: recordedAt });
+      return { changes: 1 };
+    }
+    if (sql.startsWith('SELECT day, visits FROM daily_visits')) {
+      const since = sql.includes('WHERE day >= ?') ? (args[0] as string) : '';
+      const rows = [...this.dailyVisits.entries()]
+        .filter(([day]) => day >= since)
+        .sort((a, b) => (sql.includes('ORDER BY day ASC') ? a[0].localeCompare(b[0]) : b[0].localeCompare(a[0])))
+        .map(([day, row]) => ({ day, visits: row.visits }));
+      return { changes: 0, rows };
+    }
+    if (sql.startsWith('SELECT MIN(day) AS first_day FROM daily_visits')) {
+      // An aggregate over an empty table returns ONE row holding NULL, not
+      // zero rows -- the difference the store's `null` check is written for.
+      const days = [...this.dailyVisits.keys()].sort();
+      return { changes: 0, row: { first_day: days.length > 0 ? days[0] : null } };
+    }
+    if (sql.startsWith('DELETE FROM daily_visits WHERE day')) {
+      const cutoff = args[0] as string;
+      const dead = sql.includes('day < ?') ? (day: string) => day < cutoff : (day: string) => day > cutoff;
+      for (const day of [...this.dailyVisits.keys()]) if (dead(day)) this.dailyVisits.delete(day);
+      return { changes: 0 };
+    }
+    if (sql.startsWith('SELECT substr(day')) {
+      const width = Number(sql.match(/substr\(day, 1, (\d+)\)/)?.[1] ?? 7);
+      const since = sql.includes('WHERE day >= ?') ? (args[0] as string) : '';
+      const totals = new Map<string, { visits: number; days: number }>();
+      for (const [day, row] of this.dailyVisits) {
+        if (day < since) continue;
+        const month = day.slice(0, width);
+        const current = totals.get(month) ?? { visits: 0, days: 0 };
+        totals.set(month, { visits: current.visits + row.visits, days: current.days + 1 });
+      }
+      return {
+        changes: 0,
+        rows: [...totals.entries()].map(([month, value]) => ({ month, visits: value.visits, days: value.days })),
+      };
+    }
+    if (sql.startsWith('INSERT INTO monthly_visits')) {
+      const [month, visits, complete, recordedAt] = args as [string, number, number, number];
+      const existing = this.monthlyVisits.get(month);
+      // `visits = excluded.visits` REPLACES. A statement that added to the
+      // stored total instead would double a month on the second run of the
+      // night, which is the one number on this panel she would believe.
+      const replaces = sql.includes('DO UPDATE SET visits = excluded.visits');
+      const total = existing !== undefined && !replaces ? existing.visits + visits : visits;
+      this.monthlyVisits.set(month, { visits: total, complete, recorded_at: recordedAt });
+      return { changes: 1 };
+    }
+    if (sql.startsWith('SELECT month, visits, complete FROM monthly_visits')) {
+      const since = sql.includes('WHERE month >= ?') ? (args[0] as string) : '';
+      const rows = [...this.monthlyVisits.entries()]
+        .filter(([month]) => month >= since)
+        // Read off the statement, exactly like the daily branch above: the
+        // by-year chart draws its points in the order this returns them, and
+        // a fake that sorted ascending whatever the SQL said would absorb a
+        // dropped ORDER BY and report green.
+        .sort((a, b) => (sql.includes('ORDER BY month ASC') ? a[0].localeCompare(b[0]) : b[0].localeCompare(a[0])))
+        .map(([month, row]) => ({ month, visits: row.visits, complete: row.complete }));
+      return { changes: 0, rows };
+    }
+    if (sql.startsWith('SELECT COUNT(*) AS n FROM monthly_visits')) {
+      return { changes: 0, row: { n: this.monthlyVisits.size } };
+    }
+
     throw new Error(`FakeD1 does not know this statement: ${sql}`);
   }
 }

@@ -13,7 +13,7 @@ import Field from '../Field';
 import PhotoField from '../PhotoField';
 import InlineTextField from './InlineTextField';
 import BlockProblemMessage from './BlockProblemMessage';
-import { ALT_SPEC, BLOCK_KIND_LABELS } from './block-meta';
+import { ALT_SPEC, BLOCK_KIND_LABELS, numbered } from './block-meta';
 import { swapAt } from './reorder';
 import { useStableNames, type StableNames } from './stable-names';
 import { MOVE_BUTTON_CLASSNAME, REMOVE_BUTTON_CLASSNAME, ADD_BUTTON_CLASSNAME } from '../RecordList';
@@ -51,6 +51,10 @@ export interface BlockFieldsProps {
   // stable-names.ts's StableNameGroup for the whole of what that costs her.
   // Omitted, the fallback below is correct for anything that does not remount.
   photoNames?: StableNames;
+  // Which entry this is among the entries of its own kind, 1-based; absent
+  // means the only one of its kind, which is the common case and renders the
+  // bare label.
+  entryNumber?: number;
 }
 
 // Ad-hoc specs, declared once at module scope rather than rebuilt per render.
@@ -82,7 +86,12 @@ const LIST_HEADING_SPECS = {
 
 const PUBLICATION_SPEC = { label: 'Publication', kind: 'text' } satisfies FieldSpec<string>;
 
-const CITATION_DATE_SPEC = { label: 'Published on', kind: 'date' } satisfies FieldSpec<string>;
+// NOT "Published on". A post's own date field already owns that phrase, and a
+// post with a citation puts the two controls on one screen with one name
+// between them -- so a screen reader reading the label alone cannot tell
+// "when I published this" from "when the magazine published theirs", and
+// neither can she.
+const CITATION_DATE_SPEC = { label: 'Date on the original', kind: 'date' } satisfies FieldSpec<string>;
 
 // `kind: 'text'`, not 'textarea', and that is the type system's choice rather
 // than a design one: Kind<string | null> is `'text' | 'image' | 'readonly'`
@@ -133,6 +142,7 @@ export default function BlockFields({
   onStaged,
   previewKeyPrefix,
   photoNames,
+  entryNumber,
 }: BlockFieldsProps) {
   // The same fix BlockList applies to blocks, one level down, for the photos
   // inside a gallery block -- and the trigger here is REMOVE rather than a
@@ -170,12 +180,42 @@ export default function BlockFields({
   // `commit` is passed in rather than built here from `block`, so each branch
   // hands over its own already-narrowed block and no `as Block` cast is
   // needed to put the new list back on it.
-  function itemList(items: string[], noun: string, commit: (next: string[]) => void): React.ReactNode {
+  // `items` and `levels` are PARALLEL ARRAYS and every operation over them has
+  // to keep them the same length. Both write boundaries refuse a pair whose
+  // lengths disagree (guards.ts's assertBlock, validate.ts's validateBlock)
+  // rather than guessing which of the two is right, and a refusal reads to her
+  // as "your edit was rejected" about a shape she never saw.
+  //
+  // The previous signature took `items` alone and committed them alone, which
+  // left every caller to remember to carry `levels` across by hand -- and the
+  // one that forgot produced exactly that block. Taking and committing both is
+  // what makes a desync a tsc error instead of a runtime refusal.
+  //
+  // The two kinds that carry no `levels` at all (a recipe's ingredients and
+  // its method -- see structure.ts's NESTABLE) pass a flat array and drop it
+  // again on commit. That is not a wart: it keeps ONE list renderer for all
+  // four kinds, and the alternative is a second copy of every button below.
+  function itemList(
+    items: string[],
+    levels: number[],
+    noun: string,
+    commit: (next: { items: string[]; levels: number[] }) => void,
+  ): React.ReactNode {
     // A draft saved by an older build restores through an unchecked cast, so
     // the type's promise of an array is not a runtime fact -- and the only
     // error boundary between here and the page is per-SECTION, so an
     // unguarded `.map` would take the Posts panel's heading down with it.
     const safe = Array.isArray(items) ? items : [];
+    // One entry per item, ALWAYS, read as defensively as `safe` above and for
+    // the same reason: a restored draft's `levels` can be short, long or full
+    // of nulls, and every such list reads as flat rather than throwing inside
+    // the Posts panel. Unlike structure.ts's own levelsOf, this does not clamp
+    // to MAX_LIST_DEPTH -- a depth of 7 from a draft passes straight through
+    // here, and validate.ts is what refuses it at publish.
+    const depths = safe.map((_item, i) => {
+      const level = Array.isArray(levels) ? levels[i] : 0;
+      return typeof level === 'number' && Number.isInteger(level) && level > 0 ? level : 0;
+    });
     return (
       <>
         {safe.map((item, i) => (
@@ -184,7 +224,7 @@ export default function BlockFields({
               id={`${idPrefix}-items-${i}`}
               label={`${noun} ${i + 1}`}
               value={item ?? ''}
-              onChange={(next) => commit(safe.map((existing, j) => (j === i ? next : existing)))}
+              onChange={(next) => commit({ items: safe.map((existing, j) => (j === i ? next : existing)), levels: depths })}
               problems={problemsFor(`items[${i}]`)}
             />
             <div className={ROW_BUTTONS_CLASSNAME}>
@@ -195,7 +235,7 @@ export default function BlockFields({
                 <button
                   type="button"
                   aria-label={`Move ${noun} ${i + 1} up`}
-                  onClick={() => commit(swapAt(safe, i, i - 1))}
+                  onClick={() => commit({ items: swapAt(safe, i, i - 1), levels: swapAt(depths, i, i - 1) })}
                   className={MOVE_BUTTON_CLASSNAME}
                 >
                   Up
@@ -205,7 +245,7 @@ export default function BlockFields({
                 <button
                   type="button"
                   aria-label={`Move ${noun} ${i + 1} down`}
-                  onClick={() => commit(swapAt(safe, i, i + 1))}
+                  onClick={() => commit({ items: swapAt(safe, i, i + 1), levels: swapAt(depths, i, i + 1) })}
                   className={MOVE_BUTTON_CLASSNAME}
                 >
                   Down
@@ -214,7 +254,7 @@ export default function BlockFields({
               <button
                 type="button"
                 aria-label={`Remove ${noun} ${i + 1}`}
-                onClick={() => commit(safe.filter((_, j) => j !== i))}
+                onClick={() => commit({ items: safe.filter((_, j) => j !== i), levels: depths.filter((_, j) => j !== i) })}
                 className={REMOVE_BUTTON_CLASSNAME}
               >
                 Remove
@@ -231,7 +271,7 @@ export default function BlockFields({
         {problemsFor('items').map((problem, i) => (
           <BlockProblemMessage key={i}>{problem.message}</BlockProblemMessage>
         ))}
-        <button type="button" onClick={() => commit([...safe, ''])} className={ADD_BUTTON_CLASSNAME}>
+        <button type="button" onClick={() => commit({ items: [...safe, ''], levels: [...depths, 0] })} className={ADD_BUTTON_CLASSNAME}>
           {addLabel(noun)}
         </button>
       </>
@@ -260,15 +300,26 @@ export default function BlockFields({
         />
       );
     case 'bulletList':
-      return itemList(block.items, 'Item', (next) => onChange({ ...block, items: next }));
     case 'numberList':
-      return itemList(block.items, 'Item', (next) => onChange({ ...block, items: next }));
+      // `levels` is DELETED, never written as an all-zero array, once every
+      // item is flat again -- structure.ts's own withItems removes it for the
+      // same reason: an own key holding a value this site's committed lists do
+      // not carry is still SEEN by `unknownKeys` (guards.ts), so the block
+      // would be refused by the very boundary the key was removed to satisfy.
+      return itemList(block.items, block.levels ?? [], 'Item', (next) => {
+        if (next.levels.some((level) => level > 0)) onChange({ ...block, items: next.items, levels: next.levels });
+        else {
+          const flat = { ...block, items: next.items };
+          delete flat.levels;
+          onChange(flat);
+        }
+      });
     case 'image':
       return (
         <>
           <PhotoField
             id={`${idPrefix}-src`}
-            label="Photo"
+            label={numbered('Photo', entryNumber)}
             category="posts"
             value={block.src ?? null}
             onChange={(contentPath) => onChange({ ...block, src: contentPath ?? '' })}
@@ -279,7 +330,7 @@ export default function BlockFields({
           />
           <Field<string>
             id={`${idPrefix}-alt`}
-            spec={ALT_SPEC}
+            spec={{ ...ALT_SPEC, label: numbered(ALT_SPEC.label, entryNumber) }}
             value={block.alt ?? ''}
             onChange={(next) => onChange({ ...block, alt: next })}
             problems={problemsFor('alt')}
@@ -330,7 +381,7 @@ export default function BlockFields({
             onChange={(next) => onChange({ ...block, heading: next })}
             problems={problemsFor('heading')}
           />
-          {itemList(block.items, 'Ingredient', (next) => onChange({ ...block, items: next }))}
+          {itemList(block.items, [], 'Ingredient', (next) => onChange({ ...block, items: next.items }))}
         </>
       );
     case 'steps':
@@ -343,7 +394,7 @@ export default function BlockFields({
             onChange={(next) => onChange({ ...block, heading: next })}
             problems={problemsFor('heading')}
           />
-          {itemList(block.items, 'Step', (next) => onChange({ ...block, items: next }))}
+          {itemList(block.items, [], 'Step', (next) => onChange({ ...block, items: next.items }))}
         </>
       );
     case 'citation':
@@ -371,7 +422,7 @@ export default function BlockFields({
           />
           <Field<string>
             id={`${idPrefix}-date`}
-            spec={CITATION_DATE_SPEC}
+            spec={{ ...CITATION_DATE_SPEC, label: numbered(CITATION_DATE_SPEC.label, entryNumber) }}
             value={block.date ?? ''}
             onChange={(next) => onChange({ ...block, date: next })}
             problems={problemsFor('date')}

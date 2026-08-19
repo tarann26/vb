@@ -10,7 +10,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { markEveryAreaSeeded, renderDashboard } from './renderDashboard';
-import { COPY, GALLERIES, MENUS, PRESS, SECTIONS, SITE, STORY, WA_RESPONSE, contentResponse, dish } from './dashboardFixtures';
+import { COPY, GALLERIES, MENUS, SECTIONS, SITE, STORY, WA_RESPONSE, contentResponse, dish } from './dashboardFixtures';
 import TemplateContentForm from '../TemplateContentForm';
 import type { Drink, TemplateSection } from '../../content/types';
 
@@ -29,7 +29,6 @@ function stubFetchWithPhotos(): void {
       if (url === '/api/wa') return WA_RESPONSE();
       if (url.includes('dishes.json')) return contentResponse([dish('a', 'Dish A')], 'sha-dishes');
       if (url.includes('drinks.json')) return contentResponse(DRINKS_WITH_PHOTOS, 'sha-drinks');
-      if (url.includes('press.json')) return contentResponse(PRESS, 'sha-press');
       if (url.includes('sections.json')) return contentResponse(SECTIONS, 'sha-sections');
       if (url.includes('site.json')) return contentResponse(SITE, 'sha-site');
       if (url.includes('galleries.json')) return contentResponse(GALLERIES, 'sha-galleries');
@@ -62,11 +61,10 @@ function thumbnails(root: HTMLElement): Element[] {
 }
 
 // ---------------------------------------------------------------------------
-describe('the six row types that get a thumbnail', () => {
+describe('the row types that get a thumbnail', () => {
   it.each([
     { label: 'Dishes', route: '/edit/manage/menu', heading: 'Dishes', panel: 'dishes', src: '/food/a.webp' },
     { label: 'Drinks', route: '/edit/manage/menu', heading: 'Drinks', panel: 'drinks', src: '/mocktails/x.webp' },
-    { label: 'Press', route: '/edit/manage/story', heading: 'Press', panel: 'press', src: '/press/p.webp' },
   ])('$label rows carry one, showing the record\'s own image path', async ({ route, heading, panel, src }) => {
     markEveryAreaSeeded();
     stubFetchWithPhotos();
@@ -77,7 +75,9 @@ describe('the six row types that get a thumbnail', () => {
     expect(found.length).toBeGreaterThan(0);
     expect(found.some((node) => node.getAttribute('src') === src)).toBe(true);
     // Mutation this guards: delete the <Thumbnail/> from RecordList --
-    // exactly these three rows go red and no others.
+    // exactly these two rows go red and no others. (It was three until
+    // backlog item 17 retired the Press panel; the two that remain are the
+    // same wiring through the same component.)
   });
 
   it('Galleries rows carry one, for atmosphere and Our Story photos', async () => {

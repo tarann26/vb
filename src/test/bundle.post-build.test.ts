@@ -978,11 +978,119 @@ describe('dist/assets/ keeps admin code out of the entry chunk', () => {
 // The raise leaves 163 bytes of headroom, which is the ~150 this file's Task
 // 13 entry argued a branch should carry so that one honest new rule is a
 // passing build with a raise to write rather than a red build.
+//
+// ---------------------------------------------------------------------------
+// The Numbers panel, Tasks 17-22 of the numbers-panel plan, audited whole:
+// 39037 -> 39037, ZERO bytes, byte-identical output down to the same Vite
+// content hash (BeLXGgpF). ADDED: [], REMOVED: [] -- not zero net, zero of
+// each -- 546 selector groups on both sides.
+//
+// Measured the way this lineage requires: a worktree checkout of the true
+// parent commit of Task 17 (b45ee57, `git worktree add`, never a stash),
+// `vite build` in place against the same node_modules (package.json and
+// package-lock.json are untouched across the whole range, checked with `git
+// diff --stat` before the build), then `cmp` on the two shipped stylesheets
+// and a postcss walk of both rule trees compared as sets. `cmp` reports no
+// difference, which is the stronger result the rule-level diff is run to
+// check.
+//
+// SIX tasks of new UI at zero marginal cost is the number to be suspicious
+// of, so here is where it went instead:
+//   * The three charts are SVG. A polyline, 168 rects and a run of <text>
+//     elements are drawn with ATTRIBUTES -- d, viewBox, x, y, width, height,
+//     fill, opacity -- and an attribute is not a class. This is most of the
+//     answer, and it is why the spec ruled out a charting library on bytes
+//     rather than on taste.
+//   * BarList's per-row width is an inline style, because a width is DATA
+//     here: a class per percentage would mint up to a hundred rules for
+//     values used once each. That is the escape hatch this file has pointed
+//     at since Plan 6, and src/test/hosting.test.ts counts the components
+//     taking it.
+//   * The cards, the stat cards, the campaign card and the range pills are
+//     built from utilities that already had a rule in this sheet. The pills
+//     in particular are the Retry button's own string with `py-2` for `py-1`
+//     plus `bg-brand`, and every one of those five -- `py-2`, `bg-brand`,
+//     `mb-4`, `flex`, `flex-wrap`, `gap-2` -- already shipped (EditorSheet,
+//     Card A's own row, and the CARD binding above them).
+//   * The one colour change in the audit, `text-gray-500` -> `text-gray-600`
+//     on the panel's "Your own editing visits aren't counted." line, moves
+//     between two rules that both already exist. It is a contrast fix, not a
+//     style change: that line is the only text on the panel sitting directly
+//     on the shell's cream rather than inside a white card, where the lighter
+//     grey measures 4.44:1 against 4.83:1 on white.
+//
+// THE CEILING IS THEREFORE NOT MOVED. It stays at 39200 against this measured
+// 39037, with the same 163 bytes of headroom the entry above argued for.
+//
+// TWO PRE-EXISTING COMMENT LEAKS, found by the widened scan this entry ran and
+// recorded rather than fixed, because they predate this whole range and the
+// stylesheet is byte-identical across it. Method: extract every class selector
+// from the shipped sheet, strip block and line comments from every scanned
+// file under src/ plus index.html, and require each selector to appear on what
+// is left. 477 selectors, two unaccounted for:
+//   * `.container` -- Tailwind's own container utility, minted by the ordinary
+//     English word in prose comments in src/index.css, ManageShell.tsx,
+//     EditableImage.tsx, CollageEditor.tsx, CollageSelectBadge.tsx,
+//     RecordForm.tsx, ArraySection.tsx, AreaNav.tsx, article-date.ts and
+//     stable-names.ts. No className anywhere in this project uses it. It
+//     carries its own media-query ladder, so it is the larger of the two by
+//     some way -- plausibly more than the 163 bytes of headroom above.
+//   * `.max-w-[15rem]` -- minted by NavBar.tsx:323's comment ABOUT the class.
+//     The floating mobile menu that entry in the 68a70ec paragraph above
+//     credits it to no longer names it in any className; grep finds the string
+//     only in that comment and in this file's own ledger.
+// Both are dead weight shipped to every visitor. Neither is this range's to
+// spend a commit on -- a reword across ten unrelated files inside an audit is
+// how an audit stops being one -- and neither has moved a byte here.
+//
+// ONE NEW LEAK WAS CAUGHT AND CLOSED INSIDE THIS AUDIT, recorded because it is
+// the seventh on this project and the sixth was the same word. Correcting a
+// false claim in BarList.tsx's own comment took the sheet from 39037 to 39073
+// (+36): ADDED `.shrink`, `.shrink-0` and `.flex-shrink-0`, REMOVED the
+// `.flex-shrink-0,.shrink-0` group they were split out of, all from the
+// ordinary English word for "become narrower" appearing once in prose. The
+// byte count would not have caught it -- 39073 is still under 39200 -- and the
+// rule-level diff did, which is the standing argument of this whole file.
+// Reworded to "narrow", rebuilt, and byte-identical again.
+//
+// Task 24, the washes: 39037 -> 39345 (+308), a real breach of the 39200
+// ceiling above -- moving experiences and ourStory onto `wash-deep` adds two
+// utilities nothing had asked for yet. Measured with the six-step procedure
+// this tier's own header states: the true parent commit built in a
+// worktree, the two stylesheets diffed rule by rule with postcss (never a
+// summary byte count), every added rule traced to the file that emits it.
+//
+//    93  `.bg-wash-deep{--tw-bg-opacity:1;background-color:rgb(214 225 239 /
+//        var(--tw-bg-opacity, 1))}` -- Experiences.tsx and OurStory.tsx both
+//        carry this className now; Tailwind emits the rule once regardless.
+//   215  `.from-wash-deep{--tw-gradient-from:...;--tw-gradient-to:...;
+//        --tw-gradient-stops:...}` -- Experiences.tsx's own carousel fade
+//        only (OurStory.tsx has no fade of its own), the larger of the two
+//        because a gradient-stop utility carries three custom properties
+//        where a background-colour utility carries one.
+//
+// Sum: 93 + 215 = 308, matching the whole-sheet delta exactly. `wash-deep`
+// itself mints no other rule: it is one background-colour utility and one
+// gradient-stop utility, however many files name it.
+//
+// THE CEILING IS RAISED, to 39500 -- 39345 rounded up to the next 100 (39400),
+// plus 100, per this tier's own procedure. Zero headroom is what let a past
+// breach on this project stay red for eleven tasks.
+//
+// Tasks 28-30 (the backlog close-out): 39409, unchanged to the byte. Recorded
+// because two of those tasks DELETE files Tailwind was scanning -- BlockList
+// and the dashboard's Press panel -- and the freed headroom people expected is
+// zero. Every utility those two files named is named by something else that is
+// still on disk, and the scanner emits a rule once however many files ask for
+// it, so removing one of several askers frees nothing. THE CEILING IS
+// DELIBERATELY LEFT AT 39500: a ceiling with more headroom than it needs costs
+// nothing, and lowering one is how a build goes red on the next unrelated
+// change.
 describe('dist/assets/ keeps the shared stylesheet under a byte ceiling', () => {
-  it.skipIf(!REQUIRED && !existsSync(DIST_ASSETS))('the entry CSS file stays under 39200 bytes', () => {
+  it.skipIf(!REQUIRED && !existsSync(DIST_ASSETS))('the entry CSS file stays under 39500 bytes', () => {
     const cssFiles = readdirSync(DIST_ASSETS).filter((n) => /^index-.*\.css$/.test(n));
     expect(cssFiles.length).toBeGreaterThan(0);
     const size = statSync(join(DIST_ASSETS, cssFiles[0])).size;
-    expect(size).toBeLessThan(39200);
+    expect(size).toBeLessThan(39500);
   });
 });

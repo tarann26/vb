@@ -227,6 +227,30 @@ describe('the /blog controls', () => {
     }
   });
 
+  // The rest of backlog item 15. The case above is the identity-shaped call --
+  // the one a future in-place `sort()` would slip through, because both
+  // filters hand their input straight on. This is the other half: a list that
+  // really does get sorted, where the mutation would be visible to whoever
+  // else is holding the same array.
+  it('never mutates the array it was given', () => {
+    const posts = [post('b', '2026-02-01'), post('a', '2026-01-01'), post('c', '2026-03-01')];
+    const before = [...posts];
+    visiblePosts(posts, 'all', '', 'newest');
+    expect(posts).toEqual(before);
+  });
+
+  it('returns a different array object, not the one it was given', () => {
+    const posts = [post('a', '2026-01-01')];
+    expect(visiblePosts(posts, 'all', '', 'newest')).not.toBe(posts);
+  });
+
+  it('does not mutate even when nothing is filtered or sorted', () => {
+    const posts = [post('a', '2026-02-01'), post('b', '2026-01-01')];
+    const before = [...posts];
+    visiblePosts(posts, 'all', '', 'oldest');
+    expect(posts).toEqual(before);
+  });
+
   it('says something different about an empty result than about an empty blog', () => {
     expect(NO_MATCHING_POSTS_MESSAGE).not.toBe(EMPTY_POSTS_MESSAGE);
   });

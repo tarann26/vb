@@ -101,7 +101,7 @@ describe.each([
 
     await screen.findByRole('heading', { name: 'Galleries' });
     expect(screen.getByRole('heading', { name: 'About' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Press' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Posts' })).toBeInTheDocument();
     // Menu's, Pages' and Hours & Wording's panels are mounted but hidden, so
     // a role query -- which is what a screen reader and the tab order both
     // see -- does not reach them.
@@ -464,7 +464,13 @@ describe('a button the shell brought inside the publish form', () => {
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input);
         if (url === '/api/wa') return new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } });
-        if (url === '/api/analytics') {
+        // startsWith, not equality: the panel now names the range it is
+        // asking about (`?range=30d`), and an exact match would drop this
+        // request through to the generic content answer below -- a 200 whose
+        // body is not the payload shape, which the screen correctly reports
+        // as "not connected yet" and which carries no Retry button for this
+        // test to click.
+        if (url.startsWith('/api/analytics')) {
           return new Response(JSON.stringify({ reason: 'unreachable', message: 'nope' }), { status: 502 });
         }
         return new Response(JSON.stringify({ content: '[]', sha: 'sha' }));

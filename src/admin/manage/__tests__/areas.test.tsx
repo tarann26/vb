@@ -30,14 +30,19 @@ import { AREAS, PANELS, areaForFile, findArea, panelForFile, slugFromPathname } 
 import type { PanelId } from '../areas';
 import { CONTENT_FILES, CONTENT_FILE_LABELS } from '../../content';
 
-// The thirteen ids, spelled out as a literal rather than derived from `PANELS` --
+// The twelve ids, spelled out as a literal rather than derived from `PANELS` --
 // deriving both sides of an equality from the same constant asserts nothing.
-// This list is what the dashboard has rendered since folding landed, and the
-// stored fold state on every device she has ever used is keyed on it.
+// This list is what the dashboard renders, and the stored fold state on every
+// device she has ever used is keyed on it.
+//
+// Backlog item 17: 'press' was the thirteenth and is gone. It edited
+// press.json, which the blog superseded and which nothing a visitor can reach
+// has rendered since -- so the panel offered her an afternoon's work with no
+// effect on her site. A stored fold entry for it is simply never read again
+// (open-sections.ts reads by id and ignores what it does not know).
 const EXPECTED_PANEL_IDS = [
   'dishes',
   'drinks',
-  'press',
   'sections',
   'pages',
   'hours',
@@ -115,10 +120,14 @@ describe('AREAS covers every dashboard panel exactly once', () => {
   // the viewport actually constrains is the SUM of five wrapped row heights,
   // and the sum of the five lengths is the cheap proxy for that.
   //
-  // The bound is the current total exactly, because the screen is at its
-  // budget: 844px holds what is there now and nothing more. Growth is not
-  // forbidden, it is priced -- pay for it by shortening another description,
-  // or re-measure with that spec and move this number in the same commit.
+  // The bound was the current total exactly when this test was written,
+  // because the screen was at its budget: 844px held what was there and
+  // nothing more. The `story` description has since been shortened, leaving
+  // 7 characters of slack under the bound today -- the bound was not lowered
+  // to match, so it no longer proves the screen is at capacity, only that it
+  // is within it. Growth is still not free -- pay for it by shortening
+  // another description, or re-measure with that spec and move this number
+  // in the same commit.
   //
   // What it does NOT catch, stated rather than implied: lengthening one
   // description and shortening another by the same count leaves the total
@@ -135,12 +144,13 @@ describe('AREAS covers every dashboard panel exactly once', () => {
     expect([...files].sort()).toEqual([...CONTENT_FILES].sort());
   });
 
-  // The Posts panel goes in "Story & Photos", after Press. It is the same
-  // kind of thing to her as press coverage is -- words about the restaurant
-  // -- and a sixth area for one panel would split one idea into two doors,
-  // the same reasoning that put Awards inside "Pages" rather than beside it.
+  // The Posts panel goes in "Story & Photos", last. It is the same kind of
+  // thing to her as the press coverage that used to sit beside it -- words
+  // about the restaurant -- and a sixth area for one panel would split one
+  // idea into two doors, the same reasoning that put Awards inside "Pages"
+  // rather than beside it.
   it('the Posts panel is the last one in Story & Photos', () => {
-    expect(findArea('story')?.panelIds).toEqual(['galleries', 'story', 'press', 'posts']);
+    expect(findArea('story')?.panelIds).toEqual(['galleries', 'story', 'posts']);
   });
 
   it('maps a content file back to the area and panel that edits it', () => {
@@ -244,8 +254,8 @@ describe('slugFromPathname', () => {
   });
 });
 
-describe('the dashboard renders exactly the thirteen frozen panel ids', () => {
-  it('every aria-controls value is section-panel-<id>, for those thirteen ids and no others', async () => {
+describe('the dashboard renders exactly the twelve frozen panel ids', () => {
+  it('every aria-controls value is section-panel-<id>, for those twelve ids and no others', async () => {
     stubFetchFailingContent();
     const { container } = render(
       <MemoryRouter initialEntries={['/edit/manage']}>

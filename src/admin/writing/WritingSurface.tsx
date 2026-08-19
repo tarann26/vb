@@ -36,7 +36,7 @@ import PhotoField from '../PhotoField';
 import BlockFields from '../blocks/BlockFields';
 import BlockPicker from '../blocks/BlockPicker';
 import { blankBlock } from '../blocks/blank-block';
-import { ALT_SPEC, BLOCK_KIND_LABELS, INSERT_MENU_KINDS, UNKNOWN_BLOCK_LABEL } from '../blocks/block-meta';
+import { ALT_SPEC, BLOCK_KIND_LABELS, INSERT_MENU_KINDS, UNKNOWN_BLOCK_LABEL, numbered } from '../blocks/block-meta';
 import { MOVE_BUTTON_CLASSNAME, REMOVE_BUTTON_CLASSNAME } from '../RecordList';
 import { checkPhotoSize, convertHeic, uploadAndEncode } from '../upload-photo';
 import { EMPTY_HISTORY, record, redo, undo, type History, type Snapshot } from './history';
@@ -257,7 +257,24 @@ function wordsIn(block: Block): string {
     .join(' ');
 }
 
+// A conversion BETWEEN the two list kinds, which is the one conversion that
+// must not go through `wordsIn`. `wordsIn` joins every item into one string,
+// so bulleted-to-numbered rebuilt a three-item list as a single item -- and
+// `levels`, the parallel array holding each item's nesting depth, went with
+// it. Nothing undoes that: converting back gives one item too, because the
+// items were already gone from the array by then.
+//
+// The kind is changed on the SAME object, spread rather than rebuilt, so
+// `items` and `levels` come out the far side as the identical arrays that
+// went in and cannot come apart from each other.
+function isListKind(kind: string | undefined): kind is 'bulletList' | 'numberList' {
+  return kind === 'bulletList' || kind === 'numberList';
+}
+
 function asKind(block: Block, kind: ToolbarKind | 'paragraph'): Block {
+  if (isListKind(kind) && isListKind(kindOf(block))) {
+    return { ...(block as Extract<Block, { kind: 'bulletList' | 'numberList' }>), kind };
+  }
   const words = wordsIn(block);
   switch (kind) {
     case 'bulletList':
@@ -1196,6 +1213,16 @@ export default function WritingSurface({
     );
   }
 
+  // 1-based position among the entries of this same kind, shared by every row
+  // renderer that draws a label needing one (imageRow's own PhotoField and
+  // description, fieldsRow's citation date). Recomputed per render off the
+  // array rather than stored, because moving or removing one changes the
+  // count and a stored number would go stale silently -- the same failure
+  // mode stable-names.ts exists to prevent for staged photos, one level up.
+  function entryNumberOf(row: Row): number {
+    return safe.slice(0, row.index + 1).filter((entry) => entry.kind === row.block.kind).length;
+  }
+
   // A photograph, centred at column width, with its caption under it and its
   // description under that. SHE DOES NOT POSITION IT; the block does. There is
   // no alignment control anywhere on this surface, deliberately -- the
@@ -1209,6 +1236,7 @@ export default function WritingSurface({
     // derivative no build has produced yet -- see handleImagePick.
     const shown = previews.urls[previewKeyFor(row.name)] ?? src;
     const id = `posts-${postIndex}-block-${row.index}-alt`;
+    const entryNumber = entryNumberOf(row);
     return (
       <figure className="mb-6">
         {/* blocks.tsx:50's own <img>, character for character, so the column
@@ -1243,7 +1271,7 @@ export default function WritingSurface({
             width straight away. */}
         <PhotoField
           id={`posts-${postIndex}-block-${row.index}-src`}
-          label="Photo"
+          label={numbered('Photo', entryNumber)}
           category="posts"
           value={src === '' ? null : src}
           onChange={(contentPath) => setSrc(row, contentPath)}
@@ -1261,7 +1289,7 @@ export default function WritingSurface({
             behaviour of the field this replaces. */}
         <Field<string>
           id={id}
-          spec={ALT_SPEC}
+          spec={{ ...ALT_SPEC, label: numbered(ALT_SPEC.label, entryNumber) }}
           value={alt}
           onChange={(next) => setAlt(row, next)}
           problems={problemsOf(row, 'alt')}
@@ -1311,6 +1339,7 @@ export default function WritingSurface({
           // after she has moved it, and after the sheet this row is standing
           // in has closed and reopened.
           photoNames={photoNamesFor(row.name)}
+          entryNumber={entryNumberOf(row)}
         />
       </div>
     );

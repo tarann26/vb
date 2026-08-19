@@ -1271,6 +1271,19 @@ describe('changeBetween', () => {
     // test are indistinguishable and the mutation table's fourth row cannot
     // redden. It is in the table from the start for that reason.
     [105, 100, 'up', 5],
+    // Two rows whose percentage does NOT land on a whole number, because
+    // every other row here does, and while that is true Math.round is
+    // interchangeable with Math.floor and with Math.ceil -- the operator that
+    // decides the figure on the card cannot be tested by a table that never
+    // asks it to decide anything. One row cannot pin all three: Math.round of
+    // a value always agrees with either Math.floor or Math.ceil of it, so it
+    // takes one row of each.
+    //   1275 against 1000 is 27.500000000000004 raw:
+    //     Math.round and Math.ceil say 28, Math.floor says 27.
+    [1275, 1000, 'up', 28],
+    //   728 against 1000 is 27.200000000000003 raw:
+    //     Math.round and Math.floor say 27, Math.ceil says 28.
+    [728, 1000, 'down', 27],
     // Previous period below the floor: no claim, whatever current is.
     [500, 19, 'unknown', null],
     [500, 0, 'unknown', null],
@@ -1333,6 +1346,8 @@ describe('changeSentence', () => {
 | change `<` to `<=` in the flat test | `[105, 100, 'up', 5]` | The boundary row is missing from the table. It is written into Step 2 for this row alone; put it back. |
 | swap `'up'` and `'down'` in the sentence map | "names the unit it is comparing" | — |
 | return `previous` in place of `MIN_PREVIOUS_FOR_CHANGE` | "states the two thresholds it depends on" | — |
+| `Math.round(Math.abs(ratio) * 100)` to `Math.floor(…)` | `[1275, 1000, 'up', 28]` | Every row lands on a whole percent. Both fractional rows are written into Step 2 for these two mutations alone; put them back. |
+| `Math.round(Math.abs(ratio) * 100)` to `Math.ceil(…)` | `[728, 1000, 'down', 27]` | As above. `Math.round` agrees with `Math.ceil` on the `1275` row, so that row alone does not cover this mutation. |
 
 **CSS ceiling:** zero bytes. A pure module with no JSX and no class strings.
 
@@ -1683,9 +1698,27 @@ export async function recordArrival(db: D1Database, source: string, day: string,
 // they were under the limit. `ON CONFLICT ... DO UPDATE` with `RETURNING`
 // makes the increment and the answer one atomic step.
 //
-// The `expires` comparison in the UPDATE arm is what resets a stale bucket:
-// without it, a bucket that filled an hour ago is still full, and the limiter
-// becomes a permanent ban rather than a window.
+// THE BUCKET NAMES THE WINDOW. That is the contract, and every caller already
+// honours it: worker/campaign.ts hashes the window number into the
+// per-address bucket, and the daily cap's bucket is the literal
+// 'day:<IST date>'. A window that has moved on therefore has a DIFFERENT name
+// and no row of its own, so the first request of a new window inserts at 1
+// and the limiter is a window rather than a permanent ban. A caller that
+// passes a bucket which outlives its window gets a permanent ban, and there
+// is no way for this statement to rescue it.
+//
+// SO THERE IS NO EXPIRY COMPARISON IN THE UPDATE ARM. An arm reading
+// `campaign_rate.expires <= excluded.expires - 1` resets whenever the new
+// expiry is larger than the stored one -- and both callers bind
+// `nowSeconds + <lifetime>`, which grows by one every second, so the reset
+// fires on very nearly every request and BOTH the ten-a-minute limit and the
+// 2,000-a-day cap refuse nothing at all. The daily cap is the case that
+// cannot survive it: its bucket is stable for a whole IST day while its
+// expiry advances all day long.
+//
+// `expires` is a LIFETIME, not a window boundary: it is what the nightly
+// prune reads, and refreshing it on every hit is what keeps a bucket that is
+// still being written to from being deleted out from under its own count.
 //
 // `bucket` is OPAQUE by construction and the caller is responsible for
 // keeping it so -- see worker/campaign.ts, which hashes the address with the
@@ -1701,7 +1734,7 @@ export async function takeRateSlot(
     .prepare(
       'INSERT INTO campaign_rate (bucket, hits, expires) VALUES (?, 1, ?) ' +
         'ON CONFLICT(bucket) DO UPDATE SET ' +
-        'hits = CASE WHEN campaign_rate.expires <= excluded.expires - 1 THEN 1 ELSE campaign_rate.hits + 1 END, ' +
+        'hits = campaign_rate.hits + 1, ' +
         'expires = excluded.expires ' +
         'RETURNING hits',
     )
@@ -1792,11 +1825,15 @@ The two branches worth writing out, because they are the two with real logic:
     if (sql.startsWith('INSERT INTO campaign_rate')) {
       const [bucket, expires] = bindings as [string, number];
       const existing = this.campaignRate.get(bucket);
-      // Mirrors the CASE arm exactly: a bucket whose recorded expiry is at or
-      // below the new one minus a second is a window that has moved on, and
-      // starts again at 1.
-      const hits = existing === undefined || existing.expires <= expires - 1 ? 1 : existing.hits + 1;
-      this.campaignRate.set(bucket, { hits, expires });
+      // Read off the statement rather than assumed: the arm that counts, an
+      // expiry-comparing CASE arm if anybody re-adds one, and whether the
+      // stored expiry is refreshed. See fakeD1.ts for the whole comment.
+      const increments = sql.includes('campaign_rate.hits + 1');
+      const resets = sql.includes('CASE WHEN campaign_rate.expires <= excluded.expires - 1');
+      const refreshes = sql.includes('expires = excluded.expires');
+      const stale = resets && existing !== undefined && existing.expires <= expires - 1;
+      const hits = existing === undefined || stale || !increments ? 1 : existing.hits + 1;
+      this.campaignRate.set(bucket, { hits, expires: existing !== undefined && !refreshes ? existing.expires : expires });
       return { row: { hits } };
     }
     if (sql.startsWith('SELECT substr(day, 1, 7) AS month')) {
@@ -1871,9 +1908,28 @@ describe('the limiter', () => {
 
   it('starts again once the window has moved on', async () => {
     const { db } = store();
-    await takeRateSlot(db, 'opaque-bucket', 1, 60);
-    expect(await takeRateSlot(db, 'opaque-bucket', 1, 60)).toBe(false);
-    expect(await takeRateSlot(db, 'opaque-bucket', 1, 120)).toBe(true);
+    await takeRateSlot(db, 'r:window-1', 1, 60);
+    expect(await takeRateSlot(db, 'r:window-1', 1, 60)).toBe(false);
+    expect(await takeRateSlot(db, 'r:window-2', 1, 120)).toBe(true);
+  });
+
+  it('keeps counting one bucket whose expiry advances by a second on every request', async () => {
+    const { db } = store();
+    const now = 1_760_000_000;
+    const cap: boolean[] = [];
+    for (let i = 0; i < 8; i += 1) cap.push(await takeRateSlot(db, 'day:2026-08-19', 3, now + i + 172_800));
+    expect(cap).toEqual([true, true, true, false, false, false, false, false]);
+    const perAddress: boolean[] = [];
+    for (let i = 0; i < 8; i += 1) perAddress.push(await takeRateSlot(db, 'r:one-window', 3, now + i + 60));
+    expect(perAddress).toEqual([true, true, true, false, false, false, false, false]);
+  });
+
+  it('pushes a bucket still being written to out of the prune it would otherwise die in', async () => {
+    const { fake, db } = store();
+    await takeRateSlot(db, 'day:2026-08-19', 500, 100);
+    await takeRateSlot(db, 'day:2026-08-19', 500, 200);
+    await pruneAnalytics(db, '2000-01-01', 150);
+    expect(fake.campaignRate.size).toBe(1);
   });
 });
 
@@ -1977,7 +2033,10 @@ describe('daysInMonth', () => {
 | drop `, source ASC` from the ORDER BY | the same test (the two 2-arrival rows swap) | The fake sorts stably by insertion. Make `FakeD1`'s branch sort by `arrivals` alone so the tie order is genuinely unspecified, then re-run. |
 | `WHERE day >= ?` → no `WHERE` clause | "leaves rows older than the range out of the count" | — |
 | `<= limit` → `< limit` in `takeRateSlot` | "allows exactly the limit and refuses the next one" | — |
-| drop the `CASE WHEN … expires` arm and always increment | "starts again once the window has moved on" | — |
+| re-add a `CASE WHEN campaign_rate.expires <= excluded.expires - 1` reset arm | "keeps counting one bucket whose expiry advances by a second on every request" | — |
+| `hits = campaign_rate.hits + 1` → `hits = 1` | "allows exactly the limit and refuses the next one" | — |
+| drop `expires = excluded.expires` from the DO UPDATE | "pushes a bucket still being written to out of the prune it would otherwise die in" | — |
+| drop `ORDER BY month ASC` from `monthlySeries` | "rolls every month the window touches…" | `FakeD1`'s monthly branch must READ the clause, like its daily sibling does. A branch that sorts ascending regardless makes the assertion unfalsifiable. |
 | `ON CONFLICT(day) DO NOTHING` in `recordDailyVisits` | "corrects a day it has already recorded rather than adding a second row" | — |
 | roll only the current month (`sinceDay` = first of this month) | "rolls every month the window touches…", "picks up a day that arrives late, on the next run" | — |
 | `rollMonths` adds to the existing total instead of replacing it | "recomputes rather than accumulating…" | — |
@@ -2175,6 +2234,12 @@ export async function handleCampaignArrival(request: Request, env: CampaignEnv):
   // The per-address bucket first, the daily cap second, both the same
   // statement shape so the cost is symmetric and a refused request never
   // reaches the arrival insert.
+  //
+  // BOTH BUCKETS NAME THEIR WINDOW -- the hash carries the window number, the
+  // cap carries the IST date -- and takeRateSlot has nothing else to reset
+  // on. Dropping the window from either bucket turns that limit into a
+  // permanent ban. The `expires` argument is only the row's lifetime for the
+  // nightly prune; it is not what decides a window.
   const underRate = await takeRateSlot(
     env.DB,
     await bucketFor(ip, window),

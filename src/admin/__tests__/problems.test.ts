@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { problemsFor, arrayIndexOf } from '../problems';
+import { problemsFor, arrayIndexOf, bannerLine } from '../problems';
 import type { ValidationProblem } from '../../content/validate';
 
 function problem(field: string, message = field || 'file-level'): ValidationProblem {
@@ -105,5 +105,35 @@ describe('problemsFor: non-array files (bare key, or key[i]/key[i].sub)', () => 
   it('returns nothing for a field-level ("") problem', () => {
     const problems = [problem('', "articles must be sorted newest first")];
     expect(problemsFor(problems, undefined, 'heading')).toEqual([]);
+  });
+});
+
+describe('bannerLine', () => {
+  it('names the record when it has a name', () => {
+    expect(bannerLine({ message: 'A dish needs a name.' } as ValidationProblem, 'Aglio e Pepperoncini', 0)).toBe(
+      'Aglio e Pepperoncini: A dish needs a name.',
+    );
+  });
+
+  it('counts to the record when its name is only whitespace', () => {
+    // Which is exactly the case that produces "A dish needs a name" -- so the
+    // naming fix has to work when there is no usable name.
+    expect(bannerLine({ message: 'A dish needs a name.' } as ValidationProblem, '   ', 3)).toBe(
+      'the 4th one: A dish needs a name.',
+    );
+  });
+
+  it('counts to it when the name is missing entirely', () => {
+    expect(bannerLine({ message: 'A dish needs a name.' } as ValidationProblem, undefined, 0)).toBe(
+      'the 1st one: A dish needs a name.',
+    );
+  });
+
+  it.each([
+    [1, '1st'], [2, '2nd'], [3, '3rd'], [4, '4th'],
+    [11, '11th'], [12, '12th'], [13, '13th'],
+    [21, '21st'], [22, '22nd'], [111, '111th'],
+  ])('counts %i as %s', (n, expected) => {
+    expect(bannerLine({ message: 'x' } as ValidationProblem, '', n - 1)).toBe(`the ${expected} one: x`);
   });
 });

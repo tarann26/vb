@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { ANALYTICS_POPULATED, mockEditBackend } from './edit-backend';
+import { ANALYTICS_POPULATED, mockEditBackend, openDashboard } from './edit-backend';
 import { AREAS, PANELS, areaPath } from '../src/admin/manage/areas';
 import { AREA_SEEDED_KEY_PREFIX } from '../src/admin/open-sections';
 import { LOCKUP_ACCESSIBLE_NAME } from '../src/admin/manage/brand';
@@ -84,17 +84,6 @@ async function asReturningVisitor(page: Page): Promise<void> {
     },
     { prefix: AREA_SEEDED_KEY_PREFIX, slugs: AREAS.map((area) => area.slug) },
   );
-}
-
-async function openDashboard(page: Page, path = '/edit/manage'): Promise<void> {
-  await mockEditBackend(page);
-  await page.goto(path);
-  await expect(page.getByRole('heading', { name: LOCKUP_ACCESSIBLE_NAME })).toBeVisible();
-  // Every area's own fetches have settled -- otherwise anything measured
-  // below is measured against a page still filling in. All five areas load
-  // at once (they are mounted from the first render and merely hidden), so
-  // this covers the whole page, not just the visible area.
-  await expect(page.getByText(/^Loading /)).toHaveCount(0);
 }
 
 const CONTENT_AREAS = AREAS.filter((area) => area.panelIds.length > 0);
@@ -334,7 +323,8 @@ test.describe('thumbnails add no image traffic of their own', () => {
 });
 
 // ---------------------------------------------------------------------------
-// The lockup. Its accessible name is what openDashboard above waits on, so
+// The lockup. Its accessible name is what edit-backend.ts's openDashboard
+// waits on -- and it now waits on it for e2e/publish-write.spec.ts too, so
 // if this ever goes wrong every case in this file fails -- which is why the
 // specific failure it guards is worth naming on its own: a wordmark rendered
 // as an image with an empty alt would leave this page with NO h1 at all, and
@@ -358,13 +348,13 @@ for (const viewport of VIEWPORTS) {
 // ---------------------------------------------------------------------------
 // The Numbers screen, at the widths she uses. What each card SAYS is pinned
 // in src/admin/areas/__tests__/NumbersArea.test.tsx; this is the part only a
-// browser can answer -- that four cards' worth of copy fits, that nothing is
-// painted over anything, and that the screen genuinely reaches the route.
+// browser can answer -- that every card's copy fits, that nothing is painted
+// over anything, and that the screen genuinely reaches the route.
 for (const viewport of VIEWPORTS) {
   test.describe(`Numbers at ${viewport.label}`, () => {
     test.use({ viewport: { width: viewport.width, height: viewport.height } });
 
-    test('shows the four cards, framed once as early rather than four times as broken', async ({ page }) => {
+    test('shows every card, framed once as early rather than once per card as broken', async ({ page }) => {
       await openDashboard(page, '/edit/manage/numbers');
 
       // The framing sits ONCE, above the cards.
@@ -388,7 +378,19 @@ for (const viewport of VIEWPORTS) {
       await expect(cardA.getByText(/^at least /)).toBeVisible();
       await expect(page.getByText(/\d+ bookings?/)).toHaveCount(0);
       await expect(page.getByText('Busier than the week before — 312 visits, up from 240.')).toBeVisible();
-      // No chart, anywhere -- the owner asked for plain words.
+      // The caption names the day the LINE begins on, and says separately
+      // where the record goes back to. The fixture's series opens on
+      // 2026-07-20 while its archive opens on 2026-05-22, which is the shape
+      // of every real payload after the archive's first night -- and printing
+      // the archive's date over a thirty-day chart is a sentence she cannot
+      // tell a quiet month from a quiet quarter by.
+      await expect(
+        page.getByText('This chart begins on 20 July 2026. The record itself goes back to 22 May 2026.'),
+      ).toBeVisible();
+      // No <canvas>, anywhere. The trend chart is hand-written SVG on
+      // purpose; a canvas on this screen would mean a charting library got
+      // pulled in, which is 50-150 KB for one polyline and is the thing the
+      // spec ruled out.
       await expect(page.locator('#section-panel-numbers canvas, [data-area="numbers"] canvas')).toHaveCount(0);
     });
   });

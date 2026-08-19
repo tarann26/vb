@@ -308,6 +308,32 @@ import { AppRoutes } from '../App';
 // hover:shadow-xl transition-all duration-300">Reserve a Table</button>`.
 // The second phone number stays removed -- the owner did not ask for that
 // back -- so nothing else in this file's tally moves.
+//
+// Task 24, the washes: 48325 -> 48325 (+0 bytes, measured rather than
+// assumed). Backlog items 8 and 9 -- Drinks and Experiences sharing a token,
+// and two wash/wash-warm boundaries measuring 1.02:1 against each other --
+// are fixed by moving Experiences and OurStory onto a third, darker token
+// (`wash-deep`, tailwind.config.js's own comment carries the full walk and
+// why those two are the ones that move). Each row below is a real
+// measurement: the other file left at its post-edit content, the named one
+// restored to its pre-Task-24 content, re-run, and compared against 48325.
+//
+//   +0  Experiences.tsx   section :32 `bg-wash-warm` -> `bg-wash-deep`, and
+//                         fade :111 `from-wash-warm` -> `from-wash-deep` --
+//                         `warm` and `deep` are both four letters, so
+//                         neither replacement moves a byte.
+//   +0  OurStory.tsx      section :63 `bg-wash-warm` -> `bg-wash-deep`, the
+//                         identical four-for-four swap, no fade of its own.
+//
+// Sum: 0 + 0 = 0, matching the whole-page delta exactly (this file's own
+// `TextEncoder`-measured count did not move, confirmed by running the suite
+// rather than inferred from the two rows). No other component in Task 24's
+// file list (Drinks.tsx, PlaceGallery.tsx, VisitUs.tsx, BlogSection.tsx,
+// Awards.tsx, templates/ItemListSection.tsx) changes a class string: the
+// walk in tailwind.config.js keeps every one of them on the token it
+// already carried, because only the drinks/experiences boundary and the
+// two wash/wash-warm boundaries either side of experiences and ourStory
+// were undifferentiated.
 describe('homepage byte count', () => {
   it('the public homepage is unchanged', () => {
     const { container } = render(

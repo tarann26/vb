@@ -114,3 +114,21 @@ export const ALT_SPEC = {
   kind: 'text',
   help: 'Say what is in the photo, in a few words. Anyone who cannot see it hears this instead.',
 } satisfies FieldSpec<string>;
+
+// "Photo", "Photo 2", "Photo 3" -- numbered only when there is something to
+// distinguish it from, so the overwhelmingly common single-photo post keeps
+// the plain word. "Photo 1" on a post with one photo is worse than "Photo",
+// because the number implies a second one.
+//
+// The number counts entries OF THE SAME KIND, not overall position: "Photo 2"
+// in a post whose photo entries sit third and ninth in the whole post is
+// still the second photo she added, which is how she thinks about it.
+//
+// Lives here, beside every other owner-facing name for an entry, rather than
+// in BlockFields.tsx or WritingSurface.tsx: both of those default-export a
+// component, and `react-refresh/only-export-components` warns on a value
+// exported from such a file that is not a plain constant -- the same trap
+// this module's own header comment already names for ALT_SPEC.
+export function numbered(base: string, entryNumber: number | undefined): string {
+  return entryNumber === undefined || entryNumber <= 1 ? base : `${base} ${String(entryNumber)}`;
+}

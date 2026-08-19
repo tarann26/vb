@@ -1,24 +1,25 @@
-// The Story & Photos area: the photo galleries, the About prose, and
-// press coverage.
+// The Story & Photos area: the photo galleries, the About prose, and her
+// blog.
 //
-// Three files, one thing to her. Every panel body below was MOVED here from
+// Two files here plus the Posts panel, one thing to her. The Press panel that
+// stood beside them is gone (backlog item 17): the blog superseded it, its
+// content file was read by nothing a visitor could reach, and a panel that
+// edits a file nothing renders is a place to spend an afternoon for no effect. Every panel body below was MOVED here from
 // AdminApp.tsx, byte-identical apart from imports -- see
 // src/admin/__tests__/panel-snapshots.test.tsx.
 import React, { useEffect, useState } from 'react';
 import CollapsibleSection from '../CollapsibleSection';
 import SectionErrorBoundary from '../SectionErrorBoundary';
-import ArraySection from '../sections/ArraySection';
 import { registerLoaded } from '../sections/register-loaded';
 import GalleryList from '../GalleryList';
 import StoryForm from '../StoryForm';
 import { fetchContent } from '../content';
-import { ARTICLE_FIELDS } from '../fields';
 import { useValidation } from '../useValidation';
 import type { StagedFile } from '../staged';
 import type { ContentRegistry } from '../publish';
 import type { DraftMap } from '../drafts';
 import type { ImagePreviews } from '../previews';
-import type { Article, Galleries, StoryContent } from '../../content/types';
+import type { Galleries, StoryContent } from '../../content/types';
 import type { AreaProps } from './area-props';
 
 const StoryPhotosArea: React.FC<AreaProps> = ({ registry, restoreDraft, stage, publishLocked, previews }) => (
@@ -31,24 +32,6 @@ const StoryPhotosArea: React.FC<AreaProps> = ({ registry, restoreDraft, stage, p
     <SectionErrorBoundary name="About">
       <CollapsibleSection id="story" heading="About" locked={publishLocked}>
         <StorySection registry={registry} restoreDraft={restoreDraft} stage={stage} previews={previews} />
-      </CollapsibleSection>
-    </SectionErrorBoundary>
-    <SectionErrorBoundary name="Press">
-      <CollapsibleSection id="press" heading="Press" locked={publishLocked}>
-        <ArraySection<Article>
-          file="press.json"
-          load={() => fetchContent('press.json')}
-          heading="Press"
-          noun="article"
-          fields={ARTICLE_FIELDS}
-          itemLabel={(article) => article.title || 'Untitled article'}
-          makeBlank={blankArticle}
-          imageField={{ key: 'image', path: (article) => article.image }}
-          previews={previews}
-          stage={stage}
-          registry={registry}
-          restoreDraft={restoreDraft}
-        />
       </CollapsibleSection>
     </SectionErrorBoundary>
   </>
@@ -195,14 +178,6 @@ function StorySection({
       />
     </>
   );
-}
-
-// A blank starting point for "Add an article" -- every required field
-// present and empty/neutral, so the freshly-added record renders and
-// immediately shows her, through the same debounced validation as everything
-// else, exactly what it still needs.
-function blankArticle(): Article {
-  return { id: crypto.randomUUID(), title: '', publication: '', date: '', excerpt: '', url: null, image: '' };
 }
 
 export default StoryPhotosArea;

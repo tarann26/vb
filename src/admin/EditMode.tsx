@@ -347,10 +347,9 @@ const GALLERY_LIST_CATEGORY: Record<'atmosphere' | 'ourStory', UploadCategory> =
 // src/content/types.ts). One category, named once.
 const HERO_COLLAGE_CATEGORY: UploadCategory = 'hero';
 
-const ITEM_CATEGORY: Record<'dishes' | 'drinks' | 'press', UploadCategory> = {
+const ITEM_CATEGORY: Record<'dishes' | 'drinks', UploadCategory> = {
   dishes: 'food',
   drinks: 'mocktails',
-  press: 'press',
 };
 
 type ImageTarget =
@@ -361,7 +360,7 @@ type ImageTarget =
   // she swaps two -- and a replacement staged before the swap would follow
   // the box rather than the photo.
   | { kind: 'collage'; photoId: string; category: UploadCategory }
-  | { kind: 'item'; collection: 'dishes' | 'drinks' | 'press'; id: string; category: UploadCategory }
+  | { kind: 'item'; collection: 'dishes' | 'drinks'; id: string; category: UploadCategory }
   // Plan 7, Task 5, Step 1: a template section's own item-list photo
   // (`sections.<id>.content.items.<i>.image`) or gallery photo
   // (`sections.<id>.content.images.<i>`) -- `rest` is kept whole (not
@@ -407,9 +406,9 @@ function resolveImageTarget(path: string): ImageTarget | null {
     const photoId = path.slice(COLLAGE_PATH_PREFIX.length + 1);
     if (photoId.length > 0) return { kind: 'collage', photoId, category: HERO_COLLAGE_CATEGORY };
   }
-  const item = path.match(/^(dishes|drinks|press)\.([^.]+)\.image$/);
+  const item = path.match(/^(dishes|drinks)\.([^.]+)\.image$/);
   if (item) {
-    const collection = item[1] as 'dishes' | 'drinks' | 'press';
+    const collection = item[1] as 'dishes' | 'drinks';
     return { kind: 'item', collection, id: item[2], category: ITEM_CATEGORY[collection] };
   }
   const section = parseSectionContentPath(path);
@@ -526,7 +525,6 @@ export function buildBundle(
   const galleries = pick(entries, 'galleries.json', EMPTY_GALLERIES);
   const dishes = pick(entries, 'dishes.json', []);
   const drinks = pick(entries, 'drinks.json', []);
-  const press = pick(entries, 'press.json', []);
   const sections = pick(entries, 'sections.json', []);
 
   // Undefined until copy.json has actually loaded (registered at least
@@ -547,7 +545,6 @@ export function buildBundle(
   const galleriesLoaded = entries['galleries.json'] !== undefined;
   const dishesLoaded = entries['dishes.json'] !== undefined;
   const drinksLoaded = entries['drinks.json'] !== undefined;
-  const pressLoaded = entries['press.json'] !== undefined;
   // Plan 7, Task 5, Step 1: the identical gate, for sections.json -- what
   // makes a template section's own heading/paragraph/item/fact text (and,
   // via `targetLoaded` below, its photos) editable only once there is
@@ -608,8 +605,7 @@ export function buildBundle(
       return;
     }
     if (target.collection === 'dishes') registry.updateData('dishes.json', setItemImage(dishes, target.id, contentPath));
-    else if (target.collection === 'drinks') registry.updateData('drinks.json', setItemImage(drinks, target.id, contentPath));
-    else registry.updateData('press.json', setItemImage(press, target.id, contentPath));
+    else registry.updateData('drinks.json', setItemImage(drinks, target.id, contentPath));
   }
 
   // Which registry file `target` names, and whether that file has loaded
@@ -619,8 +615,7 @@ export function buildBundle(
     if (target.kind === 'gallery' || target.kind === 'collage') return galleriesLoaded;
     if (target.kind === 'section') return sectionsLoaded;
     if (target.collection === 'dishes') return dishesLoaded;
-    if (target.collection === 'drinks') return drinksLoaded;
-    return pressLoaded;
+    return drinksLoaded;
   }
 
   return {
@@ -628,7 +623,16 @@ export function buildBundle(
     galleries,
     dishes,
     drinks,
-    press,
+    // press.json is no longer one of the dashboard's files (backlog item 17):
+    // the blog superseded it, and the panel that edited it is gone. The file
+    // itself stays on disk because three components still read it
+    // (NewsPress, BlogTeaser, BlogsPage) and all three are under the owner's
+    // explicit never-delete constraint -- src/test/no-dead-backend.test.ts
+    // asserts they are still there. None of them is routed, so nothing /edit
+    // renders reads this. An empty list, which is exactly what this bundle
+    // already showed for the whole of first paint before press.json had
+    // loaded.
+    press: [],
     story: pick(entries, 'story.json', EMPTY_STORY),
     menus: pick(entries, 'menus.json', []),
     copy,
@@ -967,7 +971,6 @@ const EditMode: React.FC = () => {
     ...useValidation('galleries.json', entries['galleries.json']?.data as Galleries | undefined),
     ...useValidation('dishes.json', entries['dishes.json']?.data as ContentTypeMap['dishes.json'] | undefined),
     ...useValidation('drinks.json', entries['drinks.json']?.data as ContentTypeMap['drinks.json'] | undefined),
-    ...useValidation('press.json', entries['press.json']?.data as ContentTypeMap['press.json'] | undefined),
     ...useValidation('sections.json', entries['sections.json']?.data as ContentTypeMap['sections.json'] | undefined),
     ...useValidation('pages.json', entries['pages.json']?.data as ContentTypeMap['pages.json'] | undefined),
   ];

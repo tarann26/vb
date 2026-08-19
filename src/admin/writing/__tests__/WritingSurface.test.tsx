@@ -1105,6 +1105,24 @@ describe('the toolbar', () => {
     expect((spy.mock.calls[0][0] as Block[])[0]).toEqual({ kind: 'quote', text: 'one two three' });
   });
 
+  // Backlog item 11. `asKind` ran every conversion through `wordsIn`, which
+  // joins a list's items into ONE string -- so bulleted-to-numbered came back
+  // as a single item and every indent she had made went with it. Nothing
+  // undoes that: converting back rebuilds one item too.
+  it('keeps nesting when a bulleted list becomes numbered', () => {
+    const spy = vi.fn();
+    const view = ready([{ kind: 'bulletList', items: ['a', 'b', 'c'], levels: [0, 1, 1] }], spy);
+    press(view.container, 'Numbered list');
+    expect((spy.mock.calls[0][0] as Block[])[0]).toEqual({ kind: 'numberList', items: ['a', 'b', 'c'], levels: [0, 1, 1] });
+  });
+
+  it('keeps nesting in the other direction too', () => {
+    const spy = vi.fn();
+    const view = ready([{ kind: 'numberList', items: ['a', 'b'], levels: [0, 1] }], spy);
+    press(view.container, 'Bulleted list');
+    expect((spy.mock.calls[0][0] as Block[])[0]).toEqual({ kind: 'bulletList', items: ['a', 'b'], levels: [0, 1] });
+  });
+
   it('never lets a kind button dissolve a photograph', () => {
     // `wordsIn` can only carry a block's markdown slots across, so converting
     // an image would keep its caption and destroy the picture.
@@ -1643,6 +1661,31 @@ describe('the insert menu, and the four kinds the toolbar cannot reach', () => {
       expect(view.container.querySelector(BANNER)?.textContent).toContain('A photo she has since removed.');
       expect(once(view.container, 'A photo she has since removed.')).toBe(1);
     });
+  });
+});
+
+// Admin redesign Task 26: block-meta.ts's `numbered()` only turns "Photo"
+// into "Photo 2" when TOLD there is a second one -- this is what does the
+// telling. The count is of entries sharing this one's own kind, not of every
+// entry in the post, because that is how she thinks about "the second photo
+// I added", whatever else sits between the two of them.
+describe('a photo entry’s number counts only its own kind', () => {
+  it('one photo entry in a post is just Photo', () => {
+    surface({ blocks: [{ kind: 'image', src: '/x.webp', alt: 'x' }] });
+    expect(screen.getByLabelText('Photo')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Photo 1')).toBeNull();
+  });
+
+  it('the second photo entry in a post is Photo 2, whatever sits between them', () => {
+    surface({
+      blocks: [
+        { kind: 'image', src: '/a.webp', alt: 'a' },
+        { kind: 'citation', publication: 'Vogue', date: '2026-01-01', url: null },
+        { kind: 'image', src: '/b.webp', alt: 'b' },
+      ],
+    });
+    expect(screen.getByLabelText('Photo')).toBeInTheDocument();
+    expect(screen.getByLabelText('Photo 2')).toBeInTheDocument();
   });
 });
 

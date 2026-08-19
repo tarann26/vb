@@ -60,7 +60,7 @@ const OurStory: React.FC<OurStoryProps> = ({ fetchImpl = fetch }: OurStoryProps 
   }, [reduceMotion, galleries.ourStory.length]);
 
   return (
-    <section id = "our-story" className="py-20 relative bg-wash-warm">
+    <section id = "our-story" className="py-20 relative bg-wash-deep">
       <div className="max-w-7xl mx-auto px-4">
         <div className="grid lg:grid-cols-2 gap-12 items-center">
           {/* Story Text */}

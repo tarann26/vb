@@ -27,19 +27,44 @@
 //    green with nothing behind it.
 //
 // The real, committed posts.json is the fixture (e2e/edit-backend.ts serves
-// the file on disk), so the first post opens with a paragraph and a citation
-// and nothing here depends on a hand-built block that the product never
-// produces.
+// the file on disk), and the post these tests open is SEARCHED FOR by the
+// blocks it carries (`postWithBlocks`, below) rather than taken from row 0 --
+// so nothing here depends on a hand-built block the product never produces,
+// and nothing here depends on which post happens to be first.
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { mockEditBackend } from './edit-backend';
+import { mockEditBackend, postWithBlocks, realContentJson } from './edit-backend';
 
 // The route-scoped selector CollapsibleSection.tsx:123 specifies, never the
 // bare `[data-panel="posts"]`: the shell mounts all five areas and hides four,
 // so the bare attribute matches on every route.
 const POSTS_PANEL = '[data-area="story"]:not([hidden]) [data-panel="posts"]';
 
-// The first committed post -- one paragraph and one citation.
-const FIRST_POST_SLUG = 'bw-hotelier-regional-flair';
+// The post these tests write in, found by its SHAPE rather than by its
+// position. Backlog item 20: every helper below used to reach for row 0 and
+// assume it held a paragraph and a citation, so a new post landing at the top
+// of posts.json would have broken the block-label assertions far from the
+// change that caused it. `postWithBlocks` throws a sentence naming what it
+// wanted if no committed post has both, which is the point -- a fallback to
+// row 0 would put the assumption straight back.
+const WRITING_POST = postWithBlocks(['paragraph', 'citation']);
+
+// A run of WRITING_POST's own committed paragraph, READ rather than retyped,
+// so the published page below is found by words this post actually carries
+// whichever post `postWithBlocks` picked. The longest word in it is used, not
+// a fixed prefix: a single word cannot straddle inline markdown, so what is
+// matched against the rendered page is a string that renders verbatim.
+const WRITING_POST_WORDS = (() => {
+  const posts = JSON.parse(realContentJson('posts.json')) as Array<{
+    slug: string;
+    blocks: Array<{ kind: string; text?: string }>;
+  }>;
+  const source = posts.find((post) => post.slug === WRITING_POST.slug)?.blocks
+    .find((block) => block.kind === 'paragraph')?.text ?? '';
+  const words = source.split(/[^A-Za-z]+/).filter((word) => word.length > 0);
+  const longest = words.reduce((best, word) => (word.length > best.length ? word : best), '');
+  if (longest.length < 6) throw new Error(`${WRITING_POST.slug}'s paragraph has no word long enough to match on`);
+  return longest;
+})();
 
 // A real 1x1 PNG. `convertHeic` passes a PNG straight through and
 // `checkPhotoSize` is nowhere near its 5MB cap, so the only thing standing
@@ -76,12 +101,18 @@ async function addPost(page: Page): Promise<Locator> {
   return panel;
 }
 
-// Opens the FIRST committed post's editor and returns the writing surface's
-// own root -- the element that holds the toolbar, so a locator built on it can
-// never wander into the row list above or the publish bar below.
+// The row for WRITING_POST, addressed by the title on it rather than by where
+// it sits in the list.
+function writingPostRow(panel: Locator): Locator {
+  return panel.locator('[data-item-row]').filter({ hasText: WRITING_POST.title }).getByRole('button').first();
+}
+
+// Opens WRITING_POST's editor and returns the writing surface's own root --
+// the element that holds the toolbar, so a locator built on it can never
+// wander into the row list above or the publish bar below.
 async function openWriting(page: Page): Promise<Locator> {
   const panel = await openPostsPanel(page);
-  await panel.locator('[data-item-row] button').first().click();
+  await writingPostRow(panel).click();
   const surface = panel.locator('div:has(> [role="group"][aria-label="Formatting"])');
   await expect(surface.locator('[data-slot]').first()).toBeVisible();
   return surface;
@@ -147,14 +178,14 @@ async function writeFirst(page: Page, words: string): Promise<Locator> {
 // remembers what it was told the host holds, so a host whose DOM the browser
 // changed underneath a commit is never rewritten while it is on screen. A
 // remount has no memo and no elements, so every host is written from the array.
-async function reopenTheFirstPost(page: Page): Promise<void> {
+async function reopenTheWritingPost(page: Page): Promise<void> {
   const panel = page.locator(POSTS_PANEL);
   // The editor is EditorSheet's own `fixed inset-0` dialog, so the row list
   // behind it is not clickable until Done has closed it -- measured, a click
   // aimed at a row lands on the overlay.
   await panel.getByRole('button', { name: 'Done' }).click();
   await expect(panel.locator('[role="dialog"]')).toHaveCount(0);
-  await panel.locator('[data-item-row]').first().getByRole('button').first().click();
+  await writingPostRow(panel).click();
   await expect(hosts(page).first()).toBeVisible();
 }
 
@@ -307,7 +338,7 @@ test.describe('the writing surface', () => {
     // it is exactly what the JIT hazard above forbids reading.
     await expect(list).toHaveCSS('list-style-type', 'decimal');
     // ...AND nothing on the surface still says "1.".
-    expect((await slots(page)).join(' ')).not.toContain('1.');
+    expect((await slots(page)).join(' ')).not.toContain('1.');
   });
 
   test('Enter on an empty list item leaves the list', async ({ page }) => {
@@ -373,7 +404,7 @@ test.describe('the writing surface', () => {
     // dom-inline.ts reads a break back as a space, so what she publishes is
     // one paragraph with a gap in it. Proved by leaving the host and coming
     // back, which is what makes the layout effect rewrite it from the array.
-    await reopenTheFirstPost(page);
+    await reopenTheWritingPost(page);
     await expect(hosts(page).first()).toHaveText('Alpha Beta');
   });
 
@@ -783,7 +814,7 @@ test.describe('the writing surface', () => {
     // fixing rather than a cosmetic one. Her selection is not asserted after
     // the reopen: the surface has been unmounted and there is no caret to
     // keep.
-    await reopenTheFirstPost(page);
+    await reopenTheWritingPost(page);
     await expect(hosts(page).first().locator('strong')).toHaveCount(0);
     await expect(hosts(page).first()).toHaveText('One Two Three');
   });
@@ -1174,13 +1205,15 @@ test.describe('the writing surface', () => {
         const style = getComputedStyle(el);
         return { font: style.fontFamily, size: style.fontSize, line: style.lineHeight, colour: style.color };
       });
-      await page.goto(`/blog/${FIRST_POST_SLUG}`);
-      // The BLOCK paragraph, named by its own committed words. `article p`
-      // first is the date line (PostPage.tsx:111), which is a different size
-      // and a different grey on purpose.
+      await page.goto(`/blog/${WRITING_POST.slug}`);
+      // The BLOCK paragraph, named by its own committed words -- read out of
+      // posts.json above rather than retyped here, so this does not depend on
+      // WHICH post carries a paragraph and a citation. `article p` first is
+      // the date line (PostPage.tsx:111), which is a different size and a
+      // different grey on purpose.
       const published = await page
         .locator('article p')
-        .filter({ hasText: 'handcrafted pastas' })
+        .filter({ hasText: WRITING_POST_WORDS })
         .first()
         .evaluate((el) => {
           const style = getComputedStyle(el);
@@ -1293,8 +1326,9 @@ test.describe('the writing surface', () => {
   // below is 0 and the click has nothing to land on.
   test('removing the last block leaves her a paragraph to write in', async ({ page }) => {
     const surface = await openWriting(page);
-    // The first committed post is a paragraph and a citation, so this empties
-    // a real post one real block at a time rather than a hand-built one.
+    // The post openWriting found carries a paragraph and a citation, so this
+    // empties a real post one real block at a time rather than a hand-built
+    // one.
     await surface.getByRole('button', { name: 'Remove Paragraph block 1' }).click();
     await surface.getByRole('button', { name: 'Remove Where it was published block 1' }).click();
 
@@ -1314,7 +1348,7 @@ test.describe('the writing surface', () => {
     const panel = page.locator(POSTS_PANEL);
     await panel.getByRole('button', { name: 'Done' }).click();
     await expect(panel.locator('[role="dialog"]')).toHaveCount(0);
-    await panel.locator('[data-item-row] button').first().click();
+    await writingPostRow(panel).click();
     await expect(surface.locator('[data-slot]').first()).toHaveText('Starting over');
   });
 });

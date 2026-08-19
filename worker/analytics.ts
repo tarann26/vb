@@ -16,47 +16,53 @@
 // upstream answer into a reassuring empty one.
 //
 // ---------------------------------------------------------------------------
-// P0 -- THE STATE OF THE VERIFIED DOCUMENT. READ THIS BEFORE EDITING THE QUERY.
+// THE DOCUMENT BELOW HAS BEEN RUN AGAINST THE REAL API.
 // ---------------------------------------------------------------------------
-// The plan's prerequisite P0 says to run the document by hand against
-// https://api.cloudflare.com/client/v4/graphql and paste the VERIFIED text
-// here. That could not be done from the environment this module was written
-// in: no CLOUDFLARE_API_TOKEN is available to it, and inventing a
-// "verified" claim would be worse than none.
+// It had not been, for a long time, and this block used to say so. The
+// evidence is docs/analytics-schema-verification.md (the introspected
+// dimension list, the request, the response, the verdict) and
+// worker/analytics-schema.ts (the same verdict, typed). Re-run
+// `node scripts/verify-analytics-schema.mjs` and update both if this
+// document is ever changed.
 //
-// So the document below is written to depend on as little unverified surface
-// as possible, and the design takes spec section 7's DECIDED FALLBACK by
-// default rather than its preferred path:
+// Two things about the document are still deliberate and still load-bearing:
+//   - No requestPath prefix filter goes upstream. /edit is excluded HERE, by
+//     isExcludedPath, over returned rows. One filtered set feeds every card,
+//     so a card's total and its breakdown cannot disagree.
+//   - Every aliased node lives in ONE document. That is why a rejected field
+//     takes every card down at once, and it is why the probe above exists.
 //
-//   * NO `requestPath` prefix filter is used. Whether the dataset offers one
-//     is exactly what P0 was meant to answer, and a filter operator that
-//     does not exist fails the WHOLE query -- taking every card down -- for
-//     the sake of an exclusion this module can do itself. The /edit
-//     exclusion therefore happens HERE, over the returned rows
-//     (`isExcludedPath`), which is also the spec's stated fallback and has
-//     the advantage of being one implementation with its own tests.
-//   * THREE aliased nodes, not five. The spec describes five (totals,
-//     byPath, byReferer, thisWeek, priorWeek). Once the /edit exclusion
-//     moves into this module, separate `totals` and `byReferer` nodes become
-//     WRONG rather than merely redundant -- a dimensionless total cannot
-//     have admin traffic subtracted from it, which is the spec's own reason
-//     for saying the fallback must "compute Card A's and Card D's totals as
-//     sums over the filtered rows rather than from separate totals groups".
-//     So `last28` is grouped by (requestPath, refererHost) and totals,
-//     byPath and byReferer are all derived from its filtered rows.
-//   * The only fields assumed are the dataset name, `siteTag`,
-//     `datetime_geq`/`datetime_lt`, the `requestPath` and `refererHost`
-//     dimensions, `sum { visits }` and `orderBy: [sum_visits_DESC]` -- the
-//     set the spec already commits to, and the smallest set that can answer
-//     all four cards.
-//   * `requestHost` is NOT used. The spec already records `npm run dev`
-//     traffic as accepted residue, so excluding localhost is not worth
-//     another unverified dimension name that would fail the entire query.
+// AND THE THIRD, WHICH COSTS HER A WRONG NUMBER RATHER THAN A CRASH:
+// `requestHost` is NOT asked for and NOT filtered on, so a developer's
+// `npm run dev` pageload of a PUBLIC page is counted as an ordinary visit.
+// It lands inside Card A's "about N visits" and inside Card B's page list,
+// and the /edit exclusion above does not catch it because the path is `/`.
 //
-// If a human runs P0 and finds the query rejected, the failure is VISIBLE
-// and honest, not silent: a GraphQL `errors[]` becomes 502 `upstream-error`
-// and the screen says "The visitor numbers aren't connected yet." Fix the
-// document here, and replace this block with the verified one.
+// This is accepted residue, and it is recorded here rather than assumed away,
+// because the residue is REAL and was measured. The 90-day grouping in
+// docs/analytics-schema-verification.md returns 8,100 and 3,200 visits under
+// `requestHost: "localhost"` against 0 under `viabiancarestaurant.com`, for
+// the two site tags that predate the 2026-08-18 unification -- i.e. under
+// those tags essentially every row was a dev-server row. The current tag has
+// no rows at all yet, so nothing is wrong on the screen today; the day it
+// starts ingesting, this is what "about" in Card A is partly covering for.
+//
+// The trade-off, so a later task can reverse it deliberately: excluding
+// localhost means adding `requestHost` to the upstream filter, which means
+// pinning the production hostname somewhere and keeping it in step with the
+// domain this Worker is routed on -- the same hostname problem bucketReferer
+// solves by reading the INCOMING request's host, which is not available to a
+// query built for a fixed site tag. If the numbers she reads are ever visibly
+// inflated by development traffic, that is the change to make, and it belongs
+// with the range contract rather than bolted on here.
+//
+// Two facts the probe settled that constrain what this file may ever ask for:
+//   - `sum` offers exactly ONE field on this dataset, `visits`. There is no
+//     pageViews. Every number this route returns is a count of arrivals.
+//   - `requestPath` never carries a query string. The beacon strips it in the
+//     browser before the measurement is sent, so no utm tag can reach this
+//     dataset under any grouping. normalizePath's query-stripping is
+//     defensive here rather than load-bearing.
 //
 // TRUNCATION, recorded because it is the cost of grouping: `last28` is
 // grouped by (requestPath x refererHost) with `limit: 1000`. For a site with
@@ -66,14 +72,80 @@
 // "about N visits" because the dataset is adaptive and sampled; this sits
 // inside that same caveat rather than adding a new claim.
 //
+// THE `hourly` NODE TRUNCATES DIFFERENTLY, and the arithmetic is written out
+// here because the first version of it got the direction wrong.
+//
+// It is grouped by (datetimeHour x requestPath), so the number of groups grows
+// with the RANGE rather than being bounded by the site: 24 x days x
+// trafficked-paths. dist/sitemap.xml carries ten public URLs, so at two to
+// four groups per trafficked hour the 1000 ceiling is reached somewhere around
+// ten to twenty days -- inside the 30d range and far inside 90d.
+//
+// The ordering therefore decides WHICH rows survive, and it used to be
+// `datetimeHour_ASC`, which kept the OLDEST. That is the worst available
+// choice and it degrades as the range grows: the 7d answer is complete, the
+// 90d answer is built from roughly the oldest third of the window, so the
+// longer the range she picks the more the card answers "when were we busiest
+// three months ago" while the heading still says ninety days. Nothing on the
+// screen could explain that, and the chart -- which scales opacity by whatever
+// peak survived -- would draw the truncated shape as confidently as a whole
+// one.
+//
+// It is now `sum_visits_DESC`, the same ordering the other three nodes use and
+// the same one the verified document already proved this dataset accepts on
+// this node. The rows lost are the QUIETEST (hour x path) groups instead of
+// the most recent hours, which is the trade-off `last28` above already makes
+// and the one a shape can absorb: the busy cells are the answer, they survive
+// at every range, and the pattern no longer marches across the calendar as the
+// range widens. `hourCells` aggregates into a map and sorts at the end, so it
+// never depended on the rows arriving in time order.
+//
+// THE RESIDUE, so it is a decision and not a discovery: at 90 days the quiet
+// cells under-report, so the grid reads slightly flatter than the truth. It
+// cannot invert the pattern, because inverting it would mean a quiet cell
+// outranking a busy one.
+//
+// THE CHEAPER GROUPING IS BLOCKED ON A PROBE, not on effort. Dropping
+// requestPath would divide the group count by the number of trafficked paths
+// and bring 90 days close to the ceiling -- but requestPath is what
+// isExcludedPath filters on downstream, so dropping it means moving the /edit
+// exclusion UPSTREAM into the filter, and that needs a string operator
+// (requestPath_notlike or similar) that nothing has run against this API.
+// docs/analytics-schema-verification.md records an accepted EQUALITY filter
+// (`bot: 0`) and nothing about string operators. A rejected field here answers
+// HTTP 200 with `data: null` and takes every card down at once, so the
+// operator has to come back from a real probe run before it goes in the
+// document. Re-run scripts/verify-analytics-schema.mjs with that filter added
+// and this becomes a one-line change.
+//
+// `datetimeHour` is the spelling INTROSPECTION returned
+// (worker/analytics-schema.ts's `hourDimension`), not one somebody
+// remembered. Re-run scripts/verify-analytics-schema.mjs before changing it.
+//
 // ---------------------------------------------------------------------------
-// SUBREQUEST AND CPU BUDGET -- recomputed if anything is added here.
+// SUBREQUEST AND CPU BUDGET, recomputed because this route grew.
 // ---------------------------------------------------------------------------
-// Workers Free allows 50 subrequests and 10ms CPU per invocation, and Cache
-// API calls count toward the 50 the same way KV calls do. This route's WORST
-// case is FOUR: `cache.match`, one GraphQL `fetch`, one `KV.get`,
-// `cache.put`. A cache HIT is ONE. CPU is one HMAC verify (the session gate)
-// plus a `JSON.parse` and a single pass over at most 1000 small rows.
+// Workers Free allows 50 subrequests and 10ms CPU per invocation. Cloudflare
+// counts a subrequest per outbound fetch and per Cache API call. D1 queries
+// through a binding are NOT subrequests -- they are billed as rows read,
+// against 5,000,000 a day, and this route reads at most a handful per miss.
+//
+//   cache HIT:  1  (cache.match)
+//   cache MISS: 4  (cache.match, one GraphQL fetch, one KV get, cache.put)
+//               + 1 D1 query for the campaign card
+//               + 2 D1 queries for the trend series and its first day
+//               + 1 D1 query for whether the by-year archive holds anything
+//
+//   ?range=year, cache MISS: 2 subrequests (cache.match, cache.put)
+//                            + 2 D1 queries + 1 KV get
+// No GraphQL call on this path at all, which is why it is also the one range
+// that cannot answer 502 upstream-error.
+//
+// The SUBREQUEST count is therefore UNCHANGED at 4 worst case, which is the
+// number that mattered. Recompute this block again if anything is added.
+//
+// CPU is one HMAC verify (the session gate) plus a `JSON.parse` and a single
+// pass over at most 1000 small rows.
 //
 // ---------------------------------------------------------------------------
 // CACHING: THE CLOUDFLARE CACHE API, NEVER KV.
@@ -93,12 +165,15 @@
 //      environment has no `caches` global at all -- a module-scope
 //      `caches.default` is a ReferenceError at import time and takes the
 //      whole test file with it.
-//   2. The key is a FIXED, CONSTRUCTED, IN-ZONE request:
-//      `/__cache/analytics/v1` on this Worker's own origin. Fixed and
-//      constructed rather than derived from the incoming request, so the
-//      session cookie can never enter the key (two logins would fragment the
-//      cache, and a cached body could be keyed to a credential) and no query
-//      string can multiply it into an unbounded number of upstream calls.
+//   2. The key is a CONSTRUCTED, IN-ZONE request on this Worker's own
+//      origin: `/__cache/analytics/<shape version>/<range>`. Constructed
+//      rather than derived from the incoming request, so the session cookie
+//      can never enter the key (two logins would fragment the cache, and a
+//      cached body could be keyed to a credential). The only caller-supplied
+//      input that reaches it is the range, which parseRange narrows to FOUR
+//      values before it gets here -- so the key space is bounded at four
+//      entries and no query string can multiply it into an unbounded number
+//      of upstream calls.
 //      In-zone because Cloudflare documents the Cache API working on
 //      Workers/Pages routes and custom domains but does NOT document
 //      `caches.default` accepting an arbitrary off-zone host -- if it
@@ -123,10 +198,10 @@
 // by calling `handleAnalytics` directly.)
 //
 // TTL is 600 seconds. Cloudflare's own RUM aggregation is not real-time,
-// every question these four cards ask is a 7- or 28-day question so nothing
-// she can perceive changes inside ten minutes, and it bounds upstream
-// GraphQL calls to six per hour per colo however often the dashboard
-// reloads or misbehaves.
+// every question these cards ask is a 7-, 30-, 90-day or by-year question so
+// nothing she can perceive changes inside ten minutes, and it bounds
+// upstream GraphQL calls to six per hour per colo PER RANGE -- 24 an hour
+// across all four -- however often the dashboard reloads or misbehaves.
 //
 // `await cache.put(...)` inline rather than `ctx.waitUntil(...)`: this
 // Worker's `fetch` handler and its `route()` take `(request, env)` with no
@@ -134,7 +209,20 @@
 // sub-millisecond edge write is a wider change than it is worth.
 import { parseCookie, verifyToken } from './auth';
 import { todayInKolkata } from '../src/shared/date';
+import { PAYLOAD_SHAPE_VERSION, RANGE_DAYS, parseRange } from '../src/shared/analytics-payload';
+import type {
+  AnalyticsError,
+  AnalyticsFailureReason,
+  AnalyticsHourCell,
+  AnalyticsPathRow,
+  AnalyticsPayload,
+  AnalyticsRefererBucket,
+  RefererBucketKind,
+} from '../src/shared/analytics-payload';
 import { readWaCounts } from './wa';
+import { readCampaignRows } from './campaign';
+import { dailySince, firstDailyDay, monthlyCount, monthlySeries } from './analytics-store';
+import { RUM_CAPABILITIES } from './analytics-schema';
 import type { PagesEnv } from './status';
 
 // The Web Analytics site tag: an identifier, not a secret -- the same
@@ -149,91 +237,38 @@ export interface WebAnalyticsEnv {
   CF_WEB_ANALYTICS_SITE_TAG: string;
 }
 
+// Exactly the three vars sending the document needs, and no more. NOT
+// `PagesEnv & WebAnalyticsEnv`: that drags in CLOUDFLARE_PAGES_PROJECT, which
+// this query has no use for and which the nightly job (worker/rollup.ts's
+// RollupEnv) therefore has no reason to carry. Narrowing it here is what lets
+// the scheduled handler send the same verified document without pretending to
+// be a Pages caller.
+export interface AnalyticsQueryEnv extends WebAnalyticsEnv {
+  CLOUDFLARE_API_TOKEN: string;
+  CLOUDFLARE_ACCOUNT_ID: string;
+}
+
 export type AnalyticsEnv = PagesEnv &
   WebAnalyticsEnv & {
     KV: KVNamespace;
     TOKEN_SECRET: string;
     ADMIN_PASSWORD_HASH: string;
+    // The campaign card, the trend series and the by-year archive are all our
+    // own rows. Reads only on this route; the write path is worker/campaign.ts
+    // and the nightly job is worker/rollup.ts.
+    DB: D1Database;
   };
 
 // ---------------------------------------------------------------------------
-// The response body. Shared with the dashboard that renders it.
-//
-// SCOPE NOTE, recorded rather than left as a surprise: the plan's task C1
-// puts these declarations in `src/shared/analytics-payload.ts`, so the Worker
-// that produces the body and the React area that renders it cannot drift.
-// This module was written under an instruction not to touch anything outside
-// `worker/` and `wrangler.toml`, so they live here for now and are exported.
-// When C1 lands, this block MOVES there and this file imports it -- the
-// shapes below are written to be that module's contents verbatim so the move
-// is a move, not a rewrite.
+// The response body lives in `src/shared/analytics-payload.ts`, imported
+// above. It used to be declared HERE as well, because this module was
+// written under an instruction not to touch anything outside `worker/`, and
+// `src/shared/__tests__/analytics-payload.test.ts` compared the two copies as
+// text so neither could be edited alone. That guard has done its job and is
+// now inert by its own design: there is one declaration, this file imports
+// it, and the Worker that produces the body and the React area that renders
+// it cannot drift because there is nothing left to drift from.
 // ---------------------------------------------------------------------------
-
-// Which of Card C's four buckets a referring host fell into. `kind` is the
-// machine value the UI switches on; `label` is the words the spec fixes,
-// kept beside it so the Worker's bucketing and the screen's wording cannot
-// disagree about what a bucket IS. `host` is set only for `other`, where the
-// card shows the real hostname in smaller text under "Other links".
-export type RefererBucketKind = 'direct' | 'instagram' | 'google' | 'other';
-
-export interface AnalyticsRefererBucket {
-  kind: RefererBucketKind;
-  label: string;
-  host: string | null;
-  visits: number;
-}
-
-export interface AnalyticsPathRow {
-  // Already normalised: no query string, no trailing slash except for `/`
-  // itself. Deliberately NOT translated into a page name here -- that is
-  // `labelForPath` on the dashboard, which has pages.json to hand and is a
-  // pure function with its own table test.
-  path: string;
-  visits: number;
-}
-
-export interface AnalyticsPayload {
-  // 28. Stated in the body rather than assumed by the reader, because every
-  // number below is scoped to it and the card copy quotes it.
-  windowDays: number;
-  // An ESTIMATE. `rumPageloadEventsAdaptiveGroups` is an adaptive, sampled
-  // dataset, which is why Card A reads "about 4,100 visits" and not "4,100".
-  visits: number;
-  visitsAreEstimate: true;
-  byPath: AnalyticsPathRow[];
-  byReferer: AnalyticsRefererBucket[];
-  thisWeekVisits: number;
-  priorWeekVisits: number;
-  // A LOWER BOUND, not a count -- origin-checked, rate-limited, capped per
-  // day and delivered by fire-and-forget sendBeacon (see worker/index.ts's
-  // /api/wa file comment). `lowerBound` is in the body, not just in a
-  // comment, so the dashboard cannot forget: the card says "at least 41
-  // tapped Reserve a Table", never "41 bookings".
-  bookingTaps: { total: number; days: number; lowerBound: true };
-}
-
-export type AnalyticsFailureReason = 'unreachable' | 'upstream-auth' | 'upstream-error';
-
-export interface AnalyticsError {
-  reason: AnalyticsFailureReason;
-  message: string;
-}
-
-// The launch state, and the fixture both sides test against. Every count is
-// zero and every list is empty -- which is what "the beacon shipped
-// yesterday" looks like, and is NOT an error. That distinction is the whole
-// reason the failure bodies above carry a `reason` instead of the route
-// answering 200-with-nothing for both.
-export const ZERO_DATA_PAYLOAD: AnalyticsPayload = {
-  windowDays: 28,
-  visits: 0,
-  visitsAreEstimate: true,
-  byPath: [],
-  byReferer: [],
-  thisWeekVisits: 0,
-  priorWeekVisits: 0,
-  bookingTaps: { total: 0, days: 28, lowerBound: true },
-};
 
 // ---------------------------------------------------------------------------
 // Pure helpers. Exported because they carry every judgement on this route
@@ -241,7 +276,6 @@ export const ZERO_DATA_PAYLOAD: AnalyticsPayload = {
 // the only honest place to put a judgement.
 // ---------------------------------------------------------------------------
 
-const WINDOW_DAYS = 28;
 const WEEK_DAYS = 7;
 const DAY_MS = 86_400_000;
 const BYPATH_LIMIT = 10;
@@ -341,8 +375,43 @@ export function recentIstDates(today: string, days: number): string[] {
   return dates;
 }
 
+// N days back from an IST calendar date, as an IST calendar date. Built on
+// Date.UTC arithmetic over the parsed parts rather than on a Date in local
+// time -- the Worker's own clock is UTC and a local-time Date would shift the
+// answer by a day for five and a half hours out of every twenty-four.
+export function istDateDaysAgo(today: string, days: number): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(today)) return today;
+  const [year, month, day] = today.split('-').map(Number);
+  const base = Date.UTC(year, month - 1, day);
+  return new Date(base - days * DAY_MS).toISOString().slice(0, 10);
+}
+
 export function sumWaCounts(counts: Record<string, number>, dates: string[]): number {
   return dates.reduce((total, date) => total + (counts[date] ?? 0), 0);
+}
+
+// The EARLIEST month the by-year view may show, given today. Twelve calendar
+// months ending with the current one, so the answer is ELEVEN months back and
+// not twelve.
+//
+// That off-by-one is the whole reason this is a named function with its own
+// tests. `monthlySeries` filters `month >= ?` INCLUSIVELY, so subtracting a
+// full year lands on the same month one year ago and hands back THIRTEEN
+// buckets -- last August through this August -- summed into a headline
+// labelled 365 days, beside a taps number covering 365 days exactly. A month
+// of over-count on one card and not its neighbour is precisely the
+// quietly-wrong number this range was added to prevent, inverted.
+//
+// Integer arithmetic on a month index rather than a Date: constructing a Date
+// and calling setMonth(-4) is correct here but relies on a rollover rule that
+// is easy to misread, and every value in play is already a calendar month
+// string.
+export function firstMonthOfYearWindow(today: string): string {
+  const year = Number(today.slice(0, 4));
+  const monthIndex = Number(today.slice(5, 7)) - 1 - 11;
+  const shiftedYear = year + Math.floor(monthIndex / 12);
+  const shiftedMonth = (((monthIndex % 12) + 12) % 12) + 1;
+  return `${String(shiftedYear)}-${String(shiftedMonth).padStart(2, '0')}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -352,20 +421,29 @@ export function sumWaCounts(counts: Record<string, number>, dates: string[]): nu
 const ANALYTICS_QUERY = `query ViaBiancaAnalytics(
   $accountTag: String!
   $siteTag: String!
-  $since28: Time!
+  $sinceWindow: Time!
   $sinceThisWeek: Time!
   $sincePriorWeek: Time!
+  $sincePrevious: Time!
   $until: Time!
 ) {
   viewer {
     accounts(filter: { accountTag: $accountTag }) {
       last28: rumPageloadEventsAdaptiveGroups(
-        filter: { siteTag: $siteTag, datetime_geq: $since28, datetime_lt: $until }
+        filter: { siteTag: $siteTag, datetime_geq: $sinceWindow, datetime_lt: $until }
         limit: 1000
         orderBy: [sum_visits_DESC]
       ) {
         sum { visits }
         dimensions { requestPath refererHost }
+      }
+      previousWindow: rumPageloadEventsAdaptiveGroups(
+        filter: { siteTag: $siteTag, datetime_geq: $sincePrevious, datetime_lt: $sinceWindow }
+        limit: 1000
+        orderBy: [sum_visits_DESC]
+      ) {
+        sum { visits }
+        dimensions { requestPath }
       }
       thisWeek: rumPageloadEventsAdaptiveGroups(
         filter: { siteTag: $siteTag, datetime_geq: $sinceThisWeek, datetime_lt: $until }
@@ -383,6 +461,14 @@ const ANALYTICS_QUERY = `query ViaBiancaAnalytics(
         sum { visits }
         dimensions { requestPath }
       }
+      hourly: rumPageloadEventsAdaptiveGroups(
+        filter: { siteTag: $siteTag, datetime_geq: $sinceWindow, datetime_lt: $until }
+        limit: 1000
+        orderBy: [sum_visits_DESC]
+      ) {
+        sum { visits }
+        dimensions { datetimeHour requestPath }
+      }
     }
   }
 }`;
@@ -396,13 +482,15 @@ const GRAPHQL_ENDPOINT = 'https://api.cloudflare.com/client/v4/graphql';
 // expected must not silently become zeroes.
 interface RumRow {
   sum?: { visits?: unknown };
-  dimensions?: { requestPath?: unknown; refererHost?: unknown };
+  dimensions?: { requestPath?: unknown; refererHost?: unknown; datetimeHour?: unknown };
 }
 
 interface RumAccount {
   last28?: unknown;
+  previousWindow?: unknown;
   thisWeek?: unknown;
   priorWeek?: unknown;
+  hourly?: unknown;
 }
 
 function rowsOf(value: unknown): RumRow[] {
@@ -435,6 +523,97 @@ function totalVisits(rows: RumRow[]): number {
     total += visitsOf(row);
   }
   return total;
+}
+
+// The one upstream call, factored out so the scheduled snapshot sends exactly
+// the document Task 1 verified rather than a second one. Returns null on any
+// failure -- the caller decides whether that is a 502 (the panel) or a
+// skipped night (the snapshot).
+//
+// The rows go through isExcludedPath before they are summed, exactly as every
+// card does, which is why requestPath is in the document at all. An archive
+// that counted her own editing visits would sit permanently above the number
+// printed beside it.
+//
+// EVERY VARIABLE THE DOCUMENT DECLARES IS SENT, INCLUDING THE ONES THIS
+// CALLER THROWS AWAY. Sharing one document is what stops the archive and the
+// panel counting differently; the price is that a node added for the panel
+// adds a variable this sender must supply too. GraphQL coerces variables
+// before it runs anything, so ONE missing non-null variable is not a missing
+// node in the answer -- it is `data: null`, `errors[]`, and a nightly job
+// that returns early and reports success forever. That is exactly what
+// happened when `previousWindow`/`$sincePrevious` was added for the stat
+// cards and only handleAnalytics was updated.
+export async function totalVisitsFor(
+  env: AnalyticsQueryEnv,
+  since: string,
+  until: string,
+): Promise<number | null> {
+  let upstream: Response;
+  try {
+    upstream = await fetch(GRAPHQL_ENDPOINT, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${env.CLOUDFLARE_API_TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        query: ANALYTICS_QUERY,
+        variables: {
+          accountTag: env.CLOUDFLARE_ACCOUNT_ID,
+          siteTag: env.CF_WEB_ANALYTICS_SITE_TAG,
+          sinceWindow: since,
+          sinceThisWeek: since,
+          sincePriorWeek: since,
+          // `since` rather than an earlier moment, deliberately: it makes
+          // previousWindow's own filter (`datetime_geq: $sincePrevious,
+          // datetime_lt: $sinceWindow`) an EMPTY window, so the node this
+          // caller discards costs the smallest answer Cloudflare can give
+          // rather than a second day of rows nobody reads.
+          sincePrevious: since,
+          until,
+        },
+      }),
+      signal: AbortSignal.timeout(10_000),
+    });
+  } catch {
+    return null;
+  }
+  if (!upstream.ok) return null;
+  const parsed = (await upstream.json().catch(() => null)) as { data?: unknown; errors?: unknown[] } | null;
+  if (!parsed || (Array.isArray(parsed.errors) && parsed.errors.length > 0)) return null;
+  const accounts = (parsed.data as { viewer?: { accounts?: unknown } } | undefined)?.viewer?.accounts;
+  if (!Array.isArray(accounts) || accounts.length === 0) return null;
+  return totalVisits(rowsOf((accounts[0] as RumAccount).last28));
+}
+
+// day 0-6 with 0 = Sunday, hour 0-23, IN IST. A restaurant deciding when to
+// staff thinks in its own evenings; a chart in UTC would put Friday dinner in
+// two different cells and split the one pattern the card exists to show.
+//
+// datetimeHour comes back as an ISO timestamp truncated to the hour. Shifted
+// by a fixed +5:30 rather than through Intl, because Intl.DateTimeFormat in a
+// Worker is a per-call cost inside a loop over up to 1000 rows, and IST has
+// no daylight saving to get wrong.
+const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+
+export function hourCells(rows: RumRow[]): AnalyticsHourCell[] {
+  const totals = new Map<string, number>();
+  for (const row of rows) {
+    if (isExcludedPath(pathOf(row))) continue;
+    const raw = typeof row.dimensions?.datetimeHour === 'string' ? row.dimensions.datetimeHour : '';
+    const at = Date.parse(raw);
+    if (!Number.isFinite(at)) continue;
+    const ist = new Date(at + IST_OFFSET_MS);
+    // getUTCDay/getUTCHours on a Date ALREADY shifted by the offset -- not
+    // getDay/getHours, which would apply the host's own timezone a second
+    // time and give a different answer on every machine.
+    const key = `${String(ist.getUTCDay())}:${String(ist.getUTCHours())}`;
+    totals.set(key, (totals.get(key) ?? 0) + visitsOf(row));
+  }
+  return [...totals.entries()]
+    .map(([key, visits]) => {
+      const [day, hour] = key.split(':').map(Number);
+      return { day, hour, visits };
+    })
+    .sort((a, b) => a.day - b.day || a.hour - b.hour);
 }
 
 function rankPaths(rows: RumRow[]): AnalyticsPathRow[] {
@@ -495,7 +674,11 @@ function rankReferers(rows: RumRow[], selfHost: string): AnalyticsRefererBucket[
 // The handler.
 // ---------------------------------------------------------------------------
 
-const CACHE_KEY_PATH = '/__cache/analytics/v1';
+// The key carries BOTH the shape version and the range. The version retires
+// every entry written by the previous deploy the moment this one lands (see
+// PAYLOAD_SHAPE_VERSION's own ledger); the range is what stops four
+// different questions sharing one answer.
+const CACHE_KEY_PREFIX = `/__cache/analytics/${PAYLOAD_SHAPE_VERSION}`;
 const CACHE_TTL_SECONDS = 600;
 
 function jsonString(status: number, body: string): Response {
@@ -526,6 +709,90 @@ function startOfTodayUtc(now: number): number {
   return Math.floor(now / DAY_MS) * DAY_MS;
 }
 
+// The one place this route writes to the edge cache, so both return paths
+// store the SAME thing: a copy carrying `public, max-age=600` rather than the
+// `no-store` copy the browser gets. Two hand-rolled copies of this block is
+// how one of them ends up storing the wrong headers and the cache silently
+// stops working -- see this file's header for why that failure is invisible.
+async function putInCache(cache: Cache, key: Request, body: string): Promise<void> {
+  try {
+    await cache.put(
+      key,
+      new Response(body, {
+        headers: {
+          'Cache-Control': `public, max-age=${CACHE_TTL_SECONDS}`,
+          'Content-Type': 'application/json',
+        },
+      }),
+    );
+  } catch {
+    // A cache write that fails costs the next caller an upstream call. It
+    // must not cost this caller the answer she already has in hand.
+  }
+}
+
+// Everything a year can honestly answer, and nothing it cannot.
+//
+// byPath and byReferer are EMPTY rather than stale: the rollup holds monthly
+// totals, not a breakdown, and inventing one from the last 30 days under a
+// twelve-month heading would be a false number. The panel does NOT render its
+// usual "nothing to rank yet" copy for this -- the range control's task gives
+// those two cards a sentence that says the breakdown is not kept, because the
+// difference between "nothing was kept" and "nobody visited" is the
+// distinction this whole screen exists to make.
+async function yearPayload(env: AnalyticsEnv): Promise<AnalyticsPayload> {
+  const today = todayInKolkata();
+  const series = await monthlySeries(env.DB, firstMonthOfYearWindow(today)).catch(() => []);
+  const visits = series.reduce((total, point) => total + point.visits, 0);
+
+  let waCounts: Record<string, number> = {};
+  try {
+    waCounts = await readWaCounts(env.KV);
+  } catch {
+    waCounts = {};
+  }
+
+  return {
+    windowDays: RANGE_DAYS.year,
+    visits,
+    visitsAreEstimate: true,
+    byPath: [],
+    byReferer: [],
+    thisWeekVisits: 0,
+    priorWeekVisits: 0,
+    bookingTaps: {
+      total: sumWaCounts(waCounts, recentIstDates(today, RANGE_DAYS.year)),
+      days: RANGE_DAYS.year,
+      lowerBound: true,
+    },
+    range: 'year',
+    series: series.map((point) => ({ date: point.day, visits: point.visits, complete: point.complete })),
+    seriesGrain: 'month',
+    seriesSource: RUM_CAPABILITIES.dateDimension === null ? 'snapshot' : 'backfilled',
+    // The earliest month IN VIEW, which is the earliest month the archive
+    // holds for as long as the archive is shorter than twelve months -- and
+    // monthly rows are never pruned (analytics-store.ts's pruneAnalytics
+    // sweeps daily_visits and campaign_rate only), so from about a year after
+    // the first roll these two stop being the same thing and the caption's
+    // "when the record started" clause becomes false here in exactly the way
+    // it was false at day grain. Closing it properly needs a MIN(month) read
+    // this branch does not make today; it is recorded rather than assumed
+    // away, and trendCaption already takes the two dates separately so the
+    // fix is one query and one argument.
+    seriesStartsOn: series[0]?.day ?? null,
+    // A year cannot be an hour grid. The rollup holds one row per month, and
+    // an hour is not recoverable from it at any price.
+    hourly: null,
+    campaigns: await readCampaignRows(env.DB, istDateDaysAgo(today, RANGE_DAYS.year - 1)),
+    campaignsAreExact: true,
+    // No comparison at year grain: the period before the last twelve months is
+    // twelve months this archive does not have and cannot invent.
+    visitsPrevious: 0,
+    tapsPrevious: 0,
+    yearAvailable: series.length > 0,
+  };
+}
+
 export async function handleAnalytics(request: Request, env: AnalyticsEnv): Promise<Response> {
   // Same auth gate as every other admin route (worker/status.ts's
   // handleBuildStatus, worker/index.ts's handlePublish), and deliberately
@@ -542,13 +809,17 @@ export async function handleAnalytics(request: Request, env: AnalyticsEnv): Prom
   // Lazily, inside the handler -- see this file's header for why module
   // scope would break every test that imports this file.
   const cache = caches.default;
-  // NO query parameters are read, anywhere in this handler. The windows are
-  // fixed in this module. A caller-supplied range would be an unbounded
-  // cache-key space, and therefore an unbounded number of upstream calls,
-  // behind an endpoint whose entire load control is this single entry.
-  // `?days=90` therefore produces this same key, this same upstream call and
-  // this same body as the bare URL, and that is pinned by a test.
-  const cacheKey = new Request(new URL(CACHE_KEY_PATH, request.url).toString());
+  // ONE query parameter is read, and it can take four values. See
+  // src/shared/analytics-payload.ts's parseRange for why it is an enum and
+  // not a number: this endpoint's entire load control is the entry below, and
+  // a numeric parameter would make the key space unbounded.
+  //
+  // Unrecognised input is not an error -- `?range=90`, `?range=` and
+  // `?range=<anything>` all produce the 30-day key, the 30-day upstream call
+  // and the 30-day body, and that is pinned by a test.
+  const range = parseRange(new URL(request.url).searchParams.get('range'));
+  const windowDays = RANGE_DAYS[range];
+  const cacheKey = new Request(new URL(`${CACHE_KEY_PREFIX}/${range}`, request.url).toString());
 
   const cached = await cache.match(cacheKey);
   if (cached) {
@@ -556,6 +827,17 @@ export async function handleAnalytics(request: Request, env: AnalyticsEnv): Prom
     // `public, max-age=600` for the edge's benefit and that header must not
     // reach the browser, where this is per-session data behind a login.
     return jsonString(200, await cached.text());
+  }
+
+  // A year is OURS, entirely. Cloudflare holds about six months, so asking it
+  // for twelve would return six and label them twelve -- the exact class of
+  // quietly-wrong number this panel exists not to produce. This branch makes
+  // no upstream call at all, which also means it cannot answer 502 when
+  // Cloudflare is having a bad afternoon.
+  if (range === 'year') {
+    const yearBody = JSON.stringify(await yearPayload(env));
+    await putInCache(cache, cacheKey, yearBody);
+    return jsonString(200, yearBody);
   }
 
   const until = startOfTodayUtc(Date.now());
@@ -574,9 +856,13 @@ export async function handleAnalytics(request: Request, env: AnalyticsEnv): Prom
         variables: {
           accountTag: env.CLOUDFLARE_ACCOUNT_ID,
           siteTag: env.CF_WEB_ANALYTICS_SITE_TAG,
-          since28: iso(until - WINDOW_DAYS * DAY_MS),
+          sinceWindow: iso(until - windowDays * DAY_MS),
           sinceThisWeek: iso(until - WEEK_DAYS * DAY_MS),
           sincePriorWeek: iso(until - 2 * WEEK_DAYS * DAY_MS),
+          // The window immediately BEFORE this one, same length, ending where
+          // this one begins -- see `visitsPrevious` below for why this is a
+          // different question than thisWeek/priorWeek.
+          sincePrevious: iso(until - 2 * windowDays * DAY_MS),
           until: iso(until),
         },
       }),
@@ -651,8 +937,63 @@ export async function handleAnalytics(request: Request, env: AnalyticsEnv): Prom
     waCounts = {};
   }
 
+  // THE THREE WINDOWS UNDER ONE PILL, stated here because they are not the
+  // same window and a reader who assumes they are will draw the wrong
+  // conclusion from any one of them. Whole-branch review, finding 5.
+  //
+  //   visits, visitsPrevious, pages, referrers -- `until` above is midnight
+  //     UTC TODAY, so the window is `windowDays` UTC days ENDING YESTERDAY.
+  //     Cloudflare has no complete figure for today and asking for a partial
+  //     one would draw a column that shrinks as the day goes on.
+  //
+  //   bookingTaps -- `recentIstDates(today, windowDays)` counts back from
+  //     yesterday, so `windowDays` of the restaurant's OWN calendar days,
+  //     also ending yesterday. IST rather than UTC because the KV keys were
+  //     written in IST and re-keying them would change the meaning of every
+  //     date already stored (see recentIstDates' own comment). The two
+  //     windows are therefore offset by 5h30m at their edges, which against
+  //     thirty days is a fraction of a percent and is accepted.
+  //
+  //   campaigns -- `windowDays` IST days INCLUDING TODAY, and this is the one
+  //     that genuinely differs rather than merely being offset. These rows are
+  //     OURS: they exist the moment someone arrives, so there is no upstream
+  //     lag to wait out, and this is the one card she can check by hand --
+  //     paste a link, tap it, look. A window that stopped at yesterday would
+  //     answer that check with a zero.
+  //
+  // The pill cannot say all of that, so the CARD does: CAMPAIGN_CAVEAT
+  // (src/admin/manage/analytics.ts) tells her in as many words that today so
+  // far is in this number and not in the ones above it. Changing either half
+  // without the other puts a label back in front of her that disagrees with
+  // what it counts.
+  const today = todayInKolkata();
+  const sinceDay = istDateDaysAgo(today, windowDays - 1);
+  const campaigns = await readCampaignRows(env.DB, sinceDay);
+
+  // The trend chart ALWAYS reads from our own snapshots, never from Cloudflare
+  // directly, whichever way the schema verification went (see
+  // worker/analytics-schema.ts). That is what collapses the date-dimension
+  // branch from two implementations to one optional backfill step, so no
+  // later task can rewrite an earlier one either way.
+  //
+  // `day` becomes `date` here and nowhere else: analytics-store.ts holds ONE
+  // row shape for days and months alike, because a chart draws a run of
+  // points against an ordered axis and does not care what a point is called.
+  // `seriesGrain` below is what says which this one is.
+  //
+  // Each read degrades on its own. A missing archive costs the chart and
+  // leaves every Cloudflare-fed card standing, the same bargain
+  // readCampaignRows and readWaCounts already keep.
+  const series = (await dailySince(env.DB, sinceDay).catch(() => [])).map((point) => ({
+    date: point.day,
+    visits: point.visits,
+    complete: point.complete,
+  }));
+  const seriesStartsOn = await firstDailyDay(env.DB).catch(() => null);
+  const yearAvailable = (await monthlyCount(env.DB).catch(() => 0)) > 0;
+
   const payload: AnalyticsPayload = {
-    windowDays: WINDOW_DAYS,
+    windowDays,
     visits: totalVisits(last28),
     visitsAreEstimate: true,
     byPath: rankPaths(last28),
@@ -660,27 +1001,45 @@ export async function handleAnalytics(request: Request, env: AnalyticsEnv): Prom
     thisWeekVisits: totalVisits(rowsOf(account.thisWeek)),
     priorWeekVisits: totalVisits(rowsOf(account.priorWeek)),
     bookingTaps: {
-      total: sumWaCounts(waCounts, recentIstDates(todayInKolkata(), WINDOW_DAYS)),
-      days: WINDOW_DAYS,
+      total: sumWaCounts(waCounts, recentIstDates(today, windowDays)),
+      days: windowDays,
       lowerBound: true,
     },
+    range,
+    series,
+    seriesGrain: 'day',
+    // 'backfilled' only when the verification found a date dimension, which
+    // is the one thing that lets the nightly job's first run reach ninety
+    // days backwards. Set from RUM_CAPABILITIES so the chart's caption cannot
+    // claim a reach backwards that never happened.
+    seriesSource: RUM_CAPABILITIES.dateDimension === null ? 'snapshot' : 'backfilled',
+    seriesStartsOn,
+    // An array, because this dataset DOES have an hour dimension
+    // (worker/analytics-schema.ts). Empty means nobody arrived in any hour of
+    // the window; `null` -- which only the by-year branch above returns -- is
+    // the different sentence, "this range cannot answer that question".
+    hourly: hourCells(rowsOf(account.hourly)),
+    campaigns,
+    campaignsAreExact: true,
+    // NOT thisWeekVisits/priorWeekVisits. Those two are Card D's, they are a
+    // fixed seven days against the seven before, and they are correct for the
+    // sentence that card writes. Reusing them here would make the stat cards
+    // and Card D disagree at every range EXCEPT 7d -- she would read
+    // "18% more visits" beside "about the same as usual" on one screen, with
+    // nothing to tell her which was answering which question.
+    visitsPrevious: totalVisits(rowsOf(account.previousWindow)),
+    tapsPrevious: sumWaCounts(
+      waCounts,
+      // The window BEFORE this one: skip the current windowDays, then take
+      // the next windowDays back. recentIstDates already ends yesterday, so
+      // slicing is the whole of it.
+      recentIstDates(today, windowDays * 2).slice(windowDays),
+    ),
+    yearAvailable,
   };
 
   // Built ONCE as a string, then two Responses -- see this file's header.
   const body = JSON.stringify(payload);
-  try {
-    await cache.put(
-      cacheKey,
-      new Response(body, {
-        headers: {
-          'Cache-Control': `public, max-age=${CACHE_TTL_SECONDS}`,
-          'Content-Type': 'application/json',
-        },
-      }),
-    );
-  } catch {
-    // A cache write that fails costs the next caller an upstream call. It
-    // must not cost this caller the answer she already has in hand.
-  }
+  await putInCache(cache, cacheKey, body);
   return jsonString(200, body);
 }

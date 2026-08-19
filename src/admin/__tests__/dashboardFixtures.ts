@@ -8,7 +8,6 @@
 // exercise, which is the one property that makes the baseline worth having.
 import { vi } from 'vitest';
 import type {
-  Article,
   Copy,
   Dish,
   Drink,
@@ -46,13 +45,8 @@ export function dish(id: string, name: string): Dish {
 export function drink(id: string, name: string): Drink {
   return { id, name, description: `${name}, described.`, category: 'cocktail', image: null };
 }
-export function article(id: string, title: string): Article {
-  return { id, title, publication: 'Times', date: '2026-01-01', excerpt: 'An excerpt.', url: null, image: `/press/${id}.webp` };
-}
-
 export const DISHES = [dish('a', 'Dish A'), dish('b', 'Dish B')];
 export const DRINKS = [drink('x', 'Drink X'), drink('y', 'Drink Y')];
-export const PRESS = [article('p', 'Article P'), article('q', 'Article Q')];
 export const SECTIONS: Section[] = [
   { kind: 'bespoke', id: 'hero', enabled: true },
   { kind: 'bespoke', id: 'ourStory', enabled: true },
@@ -102,7 +96,6 @@ export function stubFetch(dishesResponse: Promise<Response> | Response = content
       if (url === '/api/wa') return WA_RESPONSE();
       if (url.includes('dishes.json')) return dishesResponse;
       if (url.includes('drinks.json')) return contentResponse(DRINKS, 'sha-drinks');
-      if (url.includes('press.json')) return contentResponse(PRESS, 'sha-press');
       if (url.includes('sections.json')) return contentResponse(SECTIONS, 'sha-sections');
       if (url.includes('site.json')) return contentResponse(SITE, 'sha-site');
       if (url.includes('galleries.json')) return contentResponse(GALLERIES, 'sha-galleries');

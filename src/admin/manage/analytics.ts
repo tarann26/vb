@@ -8,19 +8,29 @@
 import type { AnalyticsPayload } from '../../shared/analytics-payload';
 
 // ---------------------------------------------------------------------------
-// When counting started.
+// When counting started. TWO dates, because two different things started on
+// two different days and one card names each of them.
 //
-// The ONE real source for this date. It is the day the Cloudflare Web
-// Analytics beacon was hand-placed in index.html -- before that commit the
-// beacon was not on the page at all (auto-install never reached
-// Pages-served responses), so the dataset is genuinely empty before it, not
-// merely quiet.
+// TAPS have been counted since the day the Reserve a Table counter shipped.
+// That number is a KV total with no expiry and it has been accumulating,
+// honestly, since this date.
+export const TAP_COUNTING_STARTED_ON = '2026-08-07';
+
+// VISITS have been counted only since the Web Analytics token was unified.
+// Until then the beacon on the page and the token the Worker queries were
+// two DIFFERENT Cloudflare sites, both bound to a zone that has since been
+// deleted -- so the panel was reading a dataset the page never wrote to.
+// Repointing both at one new token reset the dataset this panel reads to
+// zero, and that reset was accepted rather than treated as a fault.
 //
-// It is never a hand-typed literal in any card's copy: every sentence that
-// names a date formats THIS constant. A date typed into a string is a date
-// that drifts from the day the beacon actually shipped, silently, the first
-// time anything here is reworded.
-export const COUNTING_STARTED_ON = '2026-08-07';
+// This constant was the whole of backlog item 1. ONE date was doing TWO
+// jobs, so the screen told her there was a week and a half of visit history
+// on a dataset that was hours old, and "not enough data yet" read as her
+// website being broken rather than as the panel being new. Note which
+// direction the bug ran: the old value was RIGHT about taps and WRONG about
+// visits, which is why setting the single constant to the new date would
+// have moved the defect rather than closed it.
+export const VISIT_COUNTING_STARTED_ON = '2026-08-18';
 
 const MONTHS = [
   'January',
@@ -40,22 +50,110 @@ const MONTHS = [
 // "7 August 2026". Written out rather than through `toLocaleDateString`,
 // which would render this differently depending on the machine's locale --
 // including as "8/7/2026", which in India reads as the 8th of July.
-export function formatCountingStartedOn(iso: string = COUNTING_STARTED_ON): string {
+//
+// No default argument, deliberately. A default is what let ONE date serve
+// two meanings for eleven days without anything on screen looking wrong:
+// every call site now has to say which thing it is dating, and tsc refuses a
+// call that does not.
+export function formatCountingStartedOn(iso: string): string {
   const [year, month, day] = iso.split('-').map(Number);
   if (!year || !month || !day || month < 1 || month > 12) return iso;
   return `${day} ${MONTHS[month - 1]} ${year}`;
 }
 
-// The four headings. Here rather than in the component because the skeleton
-// state has to show the REAL headings while it loads -- never a bare spinner
-// -- and because a test asserting "all four headings are on screen during
+// Every card's heading. Here rather than in the component because the
+// skeleton state has to show the REAL headings while it loads -- never a bare
+// spinner -- and because a test asserting "every heading is on screen during
 // the wait" should quote one list.
+//
+// ONE ENTRY PER CARD THAT EXISTS. Both the jsdom wait test and
+// e2e/dashboard-sections.spec.ts walk Object.values() and require each one to
+// be on screen, so a heading added ahead of its card is a red suite rather
+// than a quiet inconsistency -- which is the behaviour worth keeping.
 export const CARD_HEADINGS = {
   a: 'How many visits, and how many tapped Reserve a Table?',
   b: 'Which pages did people look at?',
   c: 'Where did people come from?',
   d: 'Busier or quieter than usual?',
+  // The hero graphic, and the only heading that is a plain noun -- it is the
+  // one thing on the screen a reader understands before reading a word of it.
+  trend: 'Visits over time',
+  // "Your own links", not "campaigns". She places the links; the word
+  // campaign is the industry's, not hers, and the card directly above this
+  // one already answers "where did people come from?" about somebody else's
+  // website. The two headings have to be tellable apart at a glance.
+  campaigns: 'Which of your own links brought people?',
+  // The ONE conditional card on this panel. `payload.hourly` is null whenever
+  // the question cannot be answered -- at year grain the archive holds one row
+  // per month and an hour is not recoverable from it -- and the card is then
+  // absent rather than empty. So this heading is on screen while the answer is
+  // still being fetched, and again once it arrives as anything but null; the
+  // sweeps that walk Object.values() here see it in both.
+  hours: 'When are people looking?',
 } as const;
+
+// The chart says where its line begins rather than beginning at an
+// unexplained zero, and it says whether any month in it is partial. Three
+// different things are true in three different states and the sentence is
+// different in each.
+//
+// TWO DATES, NOT ONE, AND THEY ARE DIFFERENT QUESTIONS. `chartStartsOn` is
+// the first point actually DRAWN, which the selected range decides.
+// `recordStartsOn` is the earliest bucket the archive HOLDS, which nothing on
+// the screen decides. They are equal only while the record is shorter than
+// the range -- and the archive's first night backfills ninety days against a
+// default range of thirty, so they stop being equal on day two and never
+// coincide again.
+//
+// Printing the record's start above a thirty-day chart is what this used to
+// do: "This chart begins on 22 May 2026, when the record started", over a
+// line beginning on 20 July. She cannot then tell a quiet thirty days from a
+// quiet ninety, which is the one thing this chart exists to show her. So the
+// sentence claims each date for what it actually is, and the second clause --
+// "when the record started" -- is printed ONLY when the record really does
+// start there.
+//
+// Both are 'YYYY-MM-DD' at day grain and 'YYYY-MM' at month grain, and
+// formatCountingStartedOn cannot read the second -- it needs a day number and
+// returns the raw string when there is not one, which would print "2026-06"
+// to a reader who has never seen an ISO date. So the shape decides the
+// formatter, exactly as it does in seriesLabel below.
+export function trendCaption(
+  grain: 'day' | 'month',
+  chartStartsOn: string | null,
+  recordStartsOn: string | null,
+  hasPartialMonth: boolean,
+): string {
+  if (chartStartsOn === null) {
+    return 'This chart fills in from today onwards. It cannot reach back before now.';
+  }
+  const say = (date: string): string => (grain === 'month' ? seriesLabel(date, true) : formatCountingStartedOn(date));
+  // A plain string comparison, which is what ISO dates are for. Anything the
+  // archive holds that is older than the first drawn point means the record
+  // reaches further back than the range does.
+  const reachesFurther = recordStartsOn !== null && recordStartsOn < chartStartsOn;
+  const opening = reachesFurther
+    ? `This chart begins on ${say(chartStartsOn)}. The record itself goes back to ${say(recordStartsOn)}.`
+    : `This chart begins on ${say(chartStartsOn)}, when the record started. It cannot reach back before that.`;
+  if (grain !== 'month' || !hasPartialMonth) return opening;
+  // The spec's explicit requirement: the first year of the by-year view IS a
+  // partial year, and the panel says so rather than drawing a misleading
+  // column. The month is DRAWN -- an omitted month is a gap she cannot see.
+  return `${opening} Months marked * are not complete.`;
+}
+
+// `date` is 'YYYY-MM' at month grain and 'YYYY-MM-DD' at day grain, and
+// formatCountingStartedOn would mangle the first. One function, two shapes,
+// so the label is built where the shape is known -- and the ASTERISK lives
+// here rather than in the component, because the rule "a partial month is
+// marked" is a copy decision and belongs beside the sentence that explains
+// it.
+export function seriesLabel(date: string, complete: boolean): string {
+  const [year, month, day] = date.split('-').map(Number);
+  const named = MONTHS[(month ?? 1) - 1] ?? date;
+  const label = day === undefined ? `${named} ${String(year)}` : `${String(day)} ${named}`;
+  return complete ? label : `${label}*`;
+}
 
 // ---------------------------------------------------------------------------
 // Card B: a path, as a page she would recognise.
@@ -195,5 +293,56 @@ export function ratioSentence(payload: AnalyticsPayload): string | null {
 export function noVisitsYetSentence(taps: number): string {
   return `We haven't started counting visits yet. ${count(taps)} ${
     taps === 1 ? 'person has' : 'people have'
-  } tapped Reserve a Table since ${formatCountingStartedOn()}.`;
+  } tapped Reserve a Table since ${formatCountingStartedOn(TAP_COUNTING_STARTED_ON)}.`;
 }
+
+// ---------------------------------------------------------------------------
+// Cards B and C at year grain.
+//
+// The yearly archive holds monthly TOTALS and nothing else -- no per-page
+// breakdown and no referrer breakdown, because a rollup row is one number per
+// month per metric and neither list can be reconstructed from it. So at that
+// range both cards have nothing to draw, and their usual
+// "Nothing to rank yet — this fills in once people start visiting" is FALSE
+// there: it says nobody visited, when what happened is that nobody kept the
+// breakdown. Telling those two apart is the distinction this whole panel
+// exists to make, so the year case gets its own sentence and names the way
+// back to the answer she wanted.
+export function archiveSentence(): string {
+  return 'Pages and links are not kept in the yearly archive — choose 90 days or less to see them.';
+}
+
+// ---------------------------------------------------------------------------
+// The campaign card: which of HER links brought people.
+
+// Shown while there is nothing to count, which is the state this card ships
+// in and the most useful thing on the screen that day. "Nothing yet" alone
+// would leave her with no way to discover what the card wants, and until she
+// has pasted a tagged link somewhere there is nothing in the world for the
+// endpoint to record. The empty state is therefore the deliverable, not a
+// placeholder.
+export function campaignHowTo(site: string): string {
+  return `Add ?utm_source= and one of these words to the end of your web address, then paste that instead of the plain one. For example: ${site}/?utm_source=instagram`;
+}
+
+// What this card cannot tell her, ON the card rather than assumed. Both
+// directions are named because both are real: the same person on a phone and
+// a laptop is two arrivals, and someone whose browser refuses the write is
+// none.
+//
+// AND WHICH DAYS IT COUNTED, which is the third thing and the one a whole-
+// branch review found (finding 5). Under one "Last 30 days" pill this card
+// counts a window that INCLUDES today while the visits and taps beside it stop
+// at yesterday -- Cloudflare's figures for today do not exist yet, and this
+// card's rows are our own and do. Both behaviours are right; the pill above
+// them cannot say so, so the card does. This is the one card she can check by
+// hand -- she pastes a link, taps it, and looks -- and today's arrivals had
+// better be in the number she is looking at.
+export const CAMPAIGN_CAVEAT =
+  'Counted once per person arriving, not once per page they read, and today so far is included — the visitor numbers above stop at yesterday. It cannot tell that the same person came back on a different phone, and it misses anyone whose browser blocks it.';
+
+// A tag is not a referrer, and this card sits directly below one that says
+// "Instagram" meaning something different. Without this line the two read as
+// a contradiction and she has no way to tell which to believe.
+export const CAMPAIGN_VS_REFERRER =
+  'This is not the same as the card above. That one says which website someone clicked from; this one says which of your own links they clicked.';

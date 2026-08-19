@@ -27,7 +27,6 @@ import type {
   Galleries,
   Dish,
   Drink,
-  Article,
   StoryContent,
   MenuFile,
   Copy,
@@ -38,8 +37,8 @@ import type {
   Post,
 } from '../content/types';
 
-// The twelve real files under src/content/, plus awards.json (D1-backed, not
-// a file on disk at all -- see its own entry below) -- thirteen in total, the
+// The eleven real files under src/content/, plus awards.json (D1-backed, not
+// a file on disk at all -- see its own entry below) -- twelve in total, the
 // same set validateContent (src/content/validate.ts) recognises and
 // commitFiles (worker/github.ts) allows; see worker/__tests__/github.test.ts's
 // "still accepts the real content file" block for that list's own authority.
@@ -52,7 +51,6 @@ export const CONTENT_FILES = [
   'galleries.json',
   'dishes.json',
   'drinks.json',
-  'press.json',
   'story.json',
   'menus.json',
   'copy.json',
@@ -122,7 +120,7 @@ export type ContentFileName = (typeof CONTENT_FILES)[number];
 // split to avoid.
 //
 // Typed as a TOTAL Record over ContentFileName, not a partial one or a
-// lookup with a fallback: an eleventh content file added to CONTENT_FILES
+// lookup with a fallback: a thirteenth content file added to CONTENT_FILES
 // above without a name for it fails `tsc -b` here, which is the whole
 // point. A fallback string would instead let that file reach her screen
 // unnamed, or named by its filename, exactly the thing this map exists to
@@ -132,7 +130,6 @@ export const CONTENT_FILE_LABELS: Record<ContentFileName, string> = {
   'galleries.json': 'Galleries',
   'dishes.json': 'Dishes',
   'drinks.json': 'Drinks',
-  'press.json': 'Press',
   'story.json': 'About',
   'menus.json': 'Menu PDFs',
   'copy.json': 'Words on the site',
@@ -151,7 +148,6 @@ export interface ContentTypeMap {
   'galleries.json': Galleries;
   'dishes.json': Dish[];
   'drinks.json': Drink[];
-  'press.json': Article[];
   'story.json': StoryContent;
   'menus.json': MenuFile[];
   'copy.json': Copy;

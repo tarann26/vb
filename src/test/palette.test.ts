@@ -24,6 +24,7 @@ const CREAM = colors.cream;
 const CREAM_ALT = colors['cream-alt'];
 const WASH = colors.wash;
 const WASH_WARM = colors['wash-warm'];
+const WASH_DEEP = colors['wash-deep'];
 const WHITE = '#FFFFFF';
 
 // Every hex the old palette used, lowercased for comparison. `6b8b59` is the
@@ -132,15 +133,16 @@ describe('the brand palette meets WCAG AA where it carries meaning', () => {
 
   it('keeps the focus ring visible against a white surface', () => {
     // Reads the actual outline colour out of src/index.css's
-    // `button:focus-visible, a:focus-visible` rule, not a copy of its value
-    // re-typed here -- otherwise this assertion can never fail on its
+    // `button:focus-visible, a:focus-visible, input:focus-visible,
+    // select:focus-visible, textarea:focus-visible` rule, not a copy of its
+    // value re-typed here -- otherwise this assertion can never fail on its
     // stated subject: swap that rule back to brand (1.45:1 on white, well
     // under the 3:1 this is checking for) and ACCENT here would still be
     // ACCENT, still >= 4.5 by the assertion two tests up, and this test
     // would stay green while the real page's focus ring failed 1.4.11.
     const css = readFileSync('src/index.css', 'utf8');
     const match = css.match(
-      /button:focus-visible,\s*a:focus-visible\s*\{\s*outline:\s*2px solid (#[0-9A-Fa-f]{6});/
+      /button:focus-visible,\s*a:focus-visible,\s*input:focus-visible,\s*select:focus-visible,\s*textarea:focus-visible\s*\{\s*outline:\s*2px solid (#[0-9A-Fa-f]{6});/
     );
     if (!match) throw new Error('focus-visible outline rule not found in src/index.css');
     const focusRingColor = match[1];
@@ -182,5 +184,31 @@ describe('the section washes are washes, and readable', () => {
     expect(contrastRatio(WASH, WHITE)).toBeGreaterThan(1.1);
     expect(contrastRatio(WASH_WARM, WHITE)).toBeGreaterThan(1.1);
     expect(WASH).not.toBe(WASH_WARM);
+  });
+});
+
+// `wash` sits 17.7 points below white and `wash-warm` sits 18.0 -- a pair
+// each correctly measured against white above, and still 1.02:1 against each
+// other, which is not a boundary. `wash-deep` exists so an adjacent pair on
+// the homepage can always be made to differ in LIGHTNESS, not only hue.
+// e2e/section-washes.spec.ts holds the identical two floors against the
+// rendered page; this describe holds them against the arithmetic alone.
+describe('the section washes', () => {
+  it('each reads as a band against white', () => {
+    for (const token of ['wash', 'wash-warm', 'wash-deep']) {
+      expect(meanPointsBelowWhite(colors[token])).toBeGreaterThanOrEqual(15);
+    }
+  });
+
+  it('the cool pair reads as a band against the OTHER one', () => {
+    // The whole of backlog item 9. Two tokens each correctly measured against
+    // white can still be indistinguishable from each other, and adjacent
+    // bands are what a reader actually sees.
+    const gap = Math.abs(meanPointsBelowWhite(WASH) - meanPointsBelowWhite(WASH_DEEP));
+    expect(gap).toBeGreaterThanOrEqual(8);
+  });
+
+  it('declares every wash token the components use', () => {
+    for (const token of ['wash', 'wash-warm', 'wash-deep']) expect(colors[token]).toMatch(/^#[0-9A-Fa-f]{6}$/);
   });
 });

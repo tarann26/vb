@@ -70,7 +70,7 @@ async function snapshotPanel(id: PanelId): Promise<HTMLElement> {
   return panel;
 }
 
-describe('the thirteen panels, as they render today', () => {
+describe('the twelve panels, as they render today', () => {
   (Object.keys(PANELS) as PanelId[]).forEach((id) => {
     it(`${PANELS[id].heading} (${id})`, async () => {
       expect(await snapshotPanel(id)).toMatchSnapshot();

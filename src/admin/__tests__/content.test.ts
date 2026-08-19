@@ -119,11 +119,27 @@ describe('fetchContent', () => {
   // panel did not exist yet. It does now, so posts.json is an ordinary
   // registered file and this derivation covers it with no carve-out. If you
   // are re-adding a filter here, something has gone backwards.
-  it('CONTENT_FILES lists exactly the real *.json files under src/content/, plus awards.json (D1-only, no file)', () => {
+  // Two named exceptions, and each is spelled out rather than allowed by a
+  // loose comparison, so a THIRD file drifting out of this list is still a
+  // red test:
+  //
+  //   awards.json is in CONTENT_FILES with no file behind it -- D1-backed
+  //   (worker/store.ts's D1_ONLY_PATHS), never a blob in this repository.
+  //
+  //   press.json is a file with no CONTENT_FILES entry, which is backlog item
+  //   17. The blog superseded it and the dashboard no longer edits it. The
+  //   file itself stays on disk because three components still read it
+  //   (NewsPress, BlogTeaser, BlogsPage) and all three are under the owner's
+  //   explicit never-delete constraint -- src/test/no-dead-backend.test.ts is
+  //   what holds them there. None of the three is routed, so nothing a
+  //   visitor can reach renders it either.
+  it('CONTENT_FILES lists exactly the real *.json files under src/content/, plus awards.json and minus press.json', () => {
     const real = gitLsFiles('src/content')
       .filter((f) => f.endsWith('.json'))
       .map((f) => f.slice('src/content/'.length));
-    expect([...CONTENT_FILES].sort()).toEqual([...real, 'awards.json'].sort());
+    expect(real).toContain('press.json');
+    const editable = real.filter((name) => name !== 'press.json');
+    expect([...CONTENT_FILES].sort()).toEqual([...editable, 'awards.json'].sort());
   });
 });
 

@@ -69,13 +69,52 @@ export default {
         // e2e/brand-contrast.spec.ts's sweep over every text node still
         // governs. src/test/palette.test.ts holds the floors these clear.
         //
-        // ONE CONSTRAINT THIS CREATES: the palest of Tailwind's mid greys
-        // measures 4.10:1 on the cool wash and 4.20:1 on the warm one, both
-        // under AA. That grey and these two washes are mutually exclusive
-        // from here on. Nothing on the homepage pairs them today; the sweep
-        // will say "unreadable" without saying why, so it is said here.
+        // THREE washes, and the third exists because two are not enough:
+        // `wash` sits 17.7 points below white and `wash-warm` sits 18.0, so
+        // any boundary between them is a hue change with no lightness change
+        // -- 1.02:1, which is not a boundary for a colour-blind reader and is
+        // barely one for anybody in daylight. `wash-deep` is the same cool
+        // family a full step darker, so an adjacent pair can always be made
+        // to differ by lightness rather than only by hue.
+        // src/test/palette.test.ts's adjacency check holds the 8-point floor
+        // between any two of these three; e2e/section-washes.spec.ts checks
+        // the same floor on the rendered page.
+        //
+        // THE ASSIGNMENT IS ABOUT THE SEQUENCE, not any one section, and a
+        // section inserted between two of these later breaks it silently
+        // unless this sequence is retraced. The rendering sequence comes from
+        // src/content/sections.json's own array (App.tsx's HomePage maps over
+        // `content.sections` in that sequence and looks each id up in
+        // SECTION_COMPONENTS -- the lookup map's own key sequence is NOT the
+        // page's, and reading it as though it were is the mistake this
+        // comment exists to keep from repeating). Each entry's background and
+        // its distance below white:
+        //
+        //   hero         white       0.0
+        //   atmosphere   wash       17.7
+        //   food         white       0.0
+        //   drinks       wash-warm  18.0
+        //   experiences  wash-deep  29.0
+        //   press        wash       17.7
+        //   awards       white       0.0
+        //   ourStory     wash-deep  29.0
+        //   visit        wash       17.7
+        //
+        // Every adjacent pair above differs by at least 11 points. Drinks and
+        // Experiences no longer share a token (backlog item 8); experiences
+        // sits between drinks and press, so it alone has to clear both of
+        // them, which is why it -- not atmosphere -- is the one moved to
+        // `wash-deep`. ourStory moves too, because its own two neighbours are
+        // awards (white) and visit (`wash`); moving ourStory alone clears
+        // both boundaries without touching visit. Atmosphere, drinks, press
+        // and visit all keep the token they already carried. No
+        // wash/wash-warm pair sits next to itself anywhere in the walk
+        // (backlog item 9).
+        //
+        // The gray-500-on-wash pairing is measured by e2e/brand-contrast.spec.ts, not merely warned about here.
         wash: '#E6EDF5',
         'wash-warm': '#F5EEE4',
+        'wash-deep': '#D6E1EF',
       },
     },
   },

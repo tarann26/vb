@@ -33,7 +33,6 @@ export type PanelId =
   | 'sections'
   | 'galleries'
   | 'story'
-  | 'press'
   | 'hours'
   | 'copy'
   // Phase 2, Task 11: the eleventh panel, and the first one whose file is
@@ -73,7 +72,6 @@ export const PANELS: Record<PanelId, PanelDefinition> = {
   sections: { id: 'sections', heading: 'What shows on the homepage', file: 'sections.json' },
   galleries: { id: 'galleries', heading: 'Galleries', file: 'galleries.json' },
   story: { id: 'story', heading: 'About', file: 'story.json' },
-  press: { id: 'press', heading: 'Press', file: 'press.json' },
   hours: { id: 'hours', heading: 'Opening hours', file: 'site.json' },
   copy: { id: 'copy', heading: 'Words on the site', file: 'copy.json' },
   awards: { id: 'awards', heading: 'Awards', file: 'awards.json' },
@@ -145,13 +143,13 @@ export const AREAS: AreaDefinition[] = [
     // the 390px home list, by total length", currently at its exact limit.
     // Lengthening any description means shortening another or re-measuring
     // with that spec and moving the bound in the same commit.
-    description: 'Photo galleries, your story, press and your blog',
+    description: 'Photo galleries, your story and your blog',
     // 'posts' last: it is the newest thing on this screen and the one she
     // will be looking for deliberately rather than stumbling into, and
     // panelIds[0] is the panel an area opens by itself on her first ever
     // visit (open-sections.ts's hasSeededArea/markAreaSeeded) -- which
     // should stay Galleries, the panel that was there before.
-    panelIds: ['galleries', 'story', 'press', 'posts'],
+    panelIds: ['galleries', 'story', 'posts'],
   },
   {
     slug: 'details',

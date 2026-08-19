@@ -177,29 +177,42 @@ describe('wrangler.toml Phase 2 bindings', () => {
 // all asserted a production state that was false, with nothing left in the
 // repo that could notice. `crons = []` is truthy, so the clearing PUT fires.
 //
-// Both halves matter and both are pinned below, because they fail
-// differently: the section going missing is the original defect returning,
-// and a non-empty list is a cron being registered again -- 720-744 Pages
-// builds a month against a 500-build cap, on a Worker with no `scheduled`
-// export to run.
+// The list is no longer empty: the nightly archive job (worker/rollup.ts) is
+// the first thing this Worker has ever had that genuinely needs a clock. The
+// hazard the paragraph above records is UNCHANGED by that, which is why it
+// stays: an absent section still clears nothing.
+//
+// Three halves, and each fails differently and silently:
+//   - the cadence being wrong or gone,
+//   - the section going missing, which is the original defect returning,
+//   - and the `scheduled` export going missing, which is 365 failed
+//     invocations a year against a script that cannot answer. That last one
+//     has never been pinned by anything in this repository until now.
 describe('wrangler.toml cron triggers', () => {
-  it('declares an explicit EMPTY crons list -- the only form that clears the live schedule', () => {
-    const toml = readFileSync('wrangler.toml', 'utf8');
-    const match = toml.match(/^\s*crons\s*=\s*\[([^\]]*)\]/m);
-    expect(match, 'wrangler.toml declares no `crons` at all -- see its own [triggers] comment').not.toBeNull();
-    const crons = match![1].split(',').map((c) => c.trim().replace(/^"|"$/g, '')).filter(Boolean);
-    expect(crons).toEqual([]);
-  });
-
-  // The section header itself, separately: `crons = []` sitting under some
-  // other table would parse as that table's key and register nothing, and
-  // the regex above cannot tell the difference.
-  it('declares that empty list under [triggers], not under some other table', () => {
+  it('declares exactly one cadence, under [triggers] and nowhere else', () => {
     const toml = readFileSync('wrangler.toml', 'utf8');
     const afterHeader = toml.split(/^\[triggers\]\s*$/m)[1];
     expect(afterHeader, 'wrangler.toml has no [triggers] table').toBeDefined();
     // Up to the next table header -- what TOML itself scopes to [triggers].
     const body = afterHeader.split(/^\[/m)[0];
-    expect(body).toMatch(/^\s*crons\s*=\s*\[\s*\]\s*$/m);
+    const match = body.match(/^\s*crons\s*=\s*\[([^\]]*)\]/m);
+    expect(match, 'no `crons` under [triggers]').not.toBeNull();
+    const crons = match![1].split(',').map((c) => c.trim().replace(/^"|"$/g, '')).filter(Boolean);
+    expect(crons).toEqual(['17 3 * * *']);
+  });
+
+  it('still declares the [triggers] section at all', () => {
+    // The original reason this test existed and it has NOT gone away: an
+    // absent section normalises to `crons: undefined`, wrangler issues no
+    // schedule PUT, and Cloudflare keeps whatever the deployed script already
+    // had -- forever, invisibly.
+    expect(readFileSync('wrangler.toml', 'utf8')).toMatch(/^\[triggers\]$/m);
+  });
+
+  // The half that has never been pinned, and the half whose absence is
+  // silent: a schedule with no handler is 365 failed invocations a year and
+  // nothing in this repository would have said so.
+  it('has a scheduled handler for that cadence to call', () => {
+    expect(readFileSync('worker/index.ts', 'utf8')).toMatch(/async scheduled\s*\(/);
   });
 });
