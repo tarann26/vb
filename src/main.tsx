@@ -2,6 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
 import ErrorBoundary from './components/ErrorBoundary.tsx';
+import { recordArrivalIfTagged } from './campaign';
 import './index.css';
 
 const root = document.getElementById('root')!;
@@ -44,3 +45,10 @@ createRoot(root).render(
     </ErrorBoundary>
   </StrictMode>
 );
+
+// AFTER the render call and at MODULE SCOPE, never in an effect. Module scope
+// runs exactly once per document however many times React mounts anything,
+// which is what makes StrictMode's double-mount irrelevant here rather than
+// merely survivable. After, because issuing a request must not sit in front
+// of a paint that has already been scheduled.
+recordArrivalIfTagged();
