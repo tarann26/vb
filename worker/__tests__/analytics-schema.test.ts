@@ -44,3 +44,25 @@ describe('the recorded schema verification', () => {
     expect(RUM_CAPABILITIES.dimensions.length).toBeGreaterThan(0);
   });
 });
+
+// Added after a review found the decision below had been silently deleted.
+//
+// The introspection reply lists `requestHost`, so NOT filtering on it is a
+// choice this project made rather than a limit Cloudflare imposed. Its price
+// is a number the owner reads: a dev-server load of a public page is counted
+// as an ordinary visit, and `isExcludedPath` cannot catch it because the path
+// is `/`. Replacing the old P0 block removed the only paragraph that said so,
+// leaving worker/analytics.ts with no mention of `requestHost` anywhere while
+// docs/analytics-schema-verification.md still described that paragraph as
+// present. Nothing reddened.
+//
+// So this asserts the WORD, in the file header, and nothing about how the
+// paragraph is phrased -- a rewrite must stay green, a deletion must not.
+describe('the accepted-residue decision is recorded where the query lives', () => {
+  it('names requestHost in the header of worker/analytics.ts', () => {
+    const source = readFileSync('worker/analytics.ts', 'utf8');
+    const header = source.split('\nimport ')[0];
+    expect(RUM_CAPABILITIES.dimensions).toContain('requestHost');
+    expect(header).toContain('requestHost');
+  });
+});
