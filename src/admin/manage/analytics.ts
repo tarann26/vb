@@ -6,6 +6,7 @@
 // should be shown raw or hidden. A function is the only honest place to put
 // a judgement, and it is the only shape a table test can reach.
 import type { AnalyticsPayload } from '../../shared/analytics-payload';
+import { CAMPAIGN_LABELS, KNOWN_CAMPAIGN_SOURCES, campaignLink } from '../../shared/campaign-sources';
 
 // ---------------------------------------------------------------------------
 // When counting started. TWO dates, because two different things started on
@@ -315,15 +316,73 @@ export function archiveSentence(): string {
 // ---------------------------------------------------------------------------
 // The campaign card: which of HER links brought people.
 
-// Shown while there is nothing to count, which is the state this card ships
-// in and the most useful thing on the screen that day. "Nothing yet" alone
-// would leave her with no way to discover what the card wants, and until she
-// has pasted a tagged link somewhere there is nothing in the world for the
-// endpoint to record. The empty state is therefore the deliverable, not a
-// placeholder.
-export function campaignHowTo(site: string): string {
-  return `Add ?utm_source= and one of these words to the end of your web address, then paste that instead of the plain one. For example: ${site}/?utm_source=instagram`;
+// The state this card ships in, and it is no longer where the teaching
+// happens: the links are on the card in every state, so the empty row only has
+// to say that nobody has used one yet and point at them.
+export const CAMPAIGN_EMPTY = 'Nothing yet — this fills in the first time somebody arrives through one of your links.';
+
+// THE LINKS THEMSELVES, FINISHED. This replaces a sentence that told her to
+// add `?utm_source=` and a word to the end of her own web address by hand --
+// which is a thing she must never have to do, and which every wrong keystroke
+// silently punished by counting the arrival as somebody else's link.
+//
+// One row per preset, and the row is the whole interaction: the finished link
+// and a button that copies it. No field to type into, no menu to choose from,
+// nothing to spell.
+export interface CampaignLinkRow {
+  source: string;
+  label: string;
+  url: string;
 }
+
+export function campaignLinkRows(origin: string): CampaignLinkRow[] {
+  return KNOWN_CAMPAIGN_SOURCES.map((source) => ({
+    source,
+    label: CAMPAIGN_LABELS[source] ?? source,
+    url: campaignLink(origin, source),
+  }));
+}
+
+// Above the rows. It names where a link goes rather than what a link IS --
+// she does not need to know what a query string is to use one of these.
+export const CAMPAIGN_LINK_HOWTO =
+  'Copy one of these and paste it wherever you are sharing it — your Instagram bio, a message, a printed menu. Whoever arrives through it is counted above.';
+
+// What the Copy button says AFTER it has actually happened, and what it says
+// when it has not. Two sentences, because a browser can refuse to copy -- an
+// older phone, a page that lost focus, a permission that was never granted --
+// and a button that says "Copied!" regardless is a button that quietly loses
+// her link. The second sentence names the way through by hand.
+export function copiedSentence(label: string): string {
+  return `Copied your ${label}.`;
+}
+
+export const COPY_REFUSED =
+  'Your browser would not let the button copy that. Select the link with your finger or mouse and copy it yourself.';
+
+// ---------------------------------------------------------------------------
+// The AI row, and the reason it will read nothing.
+//
+// TWO independent paths feed it and NEITHER is reliable. An assistant that
+// sends a real browser sets a referrer, which Cloudflare reports and
+// bucketReferer groups (worker/analytics.ts); an assistant that appends its own
+// utm_source lands in the campaign card instead (normalizeSource). Most
+// assistant answers do neither -- they quote the page and pass on nothing at
+// all -- and there is no third path that would catch those.
+//
+// THE ORDER OF MAGNITUDE, from Cloudflare's own published measurements of
+// crawl-to-refer ratios: roughly 8,800 pages crawled per referral for
+// Anthropic, 402:1 for OpenAI, 88:1 for Perplexity, with AI referrals a small
+// fraction of ordinary search either way. So a zero here is the EXPECTED
+// reading for a long time and is not a fault to go looking for. That is the
+// single most important thing this card can say about the number, which is why
+// the sentence says it in as many words rather than leaving her to infer it
+// from an empty row.
+//
+// Deliberately no figure on screen: a printed ratio would imply this panel
+// knows how much it is missing, and it does not. It knows the direction.
+export const AI_TRAFFIC_CAVEAT =
+  'Arrivals from ChatGPT and other AI assistants are only counted when they can be, and mostly they cannot be — an assistant usually answers from your page without passing anyone through a link we can see. Expect this to stay empty for a long time. Nothing here is not the same as nobody, and it is not a fault.';
 
 // What this card cannot tell her, ON the card rather than assumed. Both
 // directions are named because both are real: the same person on a phone and

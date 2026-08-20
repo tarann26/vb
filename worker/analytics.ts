@@ -222,6 +222,7 @@ import type {
 import { readWaCounts } from './wa';
 import { readCampaignRows } from './campaign';
 import { dailySince, firstDailyDay, monthlyCount, monthlySeries } from './analytics-store';
+import { isAiAssistantHost } from '../src/shared/ai-assistants';
 import { RUM_CAPABILITIES } from './analytics-schema';
 import type { PagesEnv } from './status';
 
@@ -285,6 +286,12 @@ export const REFERER_BUCKET_LABELS: Record<RefererBucketKind, string> = {
   direct: 'Typed it in or used a bookmark',
   instagram: 'Instagram',
   google: 'Google',
+  // ONE row for every assistant, not one per product. Nobody reading this
+  // screen cares which assistant it was, the individual counts will be zero or
+  // one for a long time (see AI_TRAFFIC_CAVEAT in
+  // src/admin/manage/analytics.ts), and a dozen rows each reading 0 is the
+  // "this is broken" shape the whole panel is written to avoid.
+  ai: 'AI assistants',
   other: 'Other links',
 };
 
@@ -339,6 +346,8 @@ function stripKnownSubdomain(host: string): string {
 //   t.co                  -> Other links (it is Twitter/X; no bucket exists)
 //   l.instagram.com       -> Instagram
 //   www.instagram.com     -> Instagram
+//   gemini.google.com     -> AI assistants, NOT Google -- see the ordering
+//                            note inside the function
 //   ''                    -> Typed it in or used a bookmark
 // The alternative -- a public-suffix list inside a Worker -- is a large
 // dependency for a four-row card.
@@ -346,6 +355,16 @@ export function bucketReferer(rawHost: string, selfHost: string): { kind: Refere
   const host = stripKnownSubdomain(rawHost.trim().toLowerCase());
   if (host === '') return { kind: 'direct', host: null };
   if (host === stripKnownSubdomain(selfHost.trim().toLowerCase())) return { kind: 'direct', host: null };
+  // BEFORE the two label matches below, and the ordering is the whole
+  // correctness of this line rather than a preference: `gemini.google.com` and
+  // `bard.google.com` both carry the label `google`, so tested after them they
+  // are counted as ordinary search and the AI row silently loses the two
+  // assistants most likely to be in it.
+  //
+  // isAiAssistantHost matches a whole host or a real subdomain of one and
+  // never a substring -- see src/shared/ai-assistants.ts, which also states
+  // exactly how good the evidence behind that list is.
+  if (isAiAssistantHost(host)) return { kind: 'ai', host: null };
   const labels = host.split('.');
   if (labels.includes('instagram')) return { kind: 'instagram', host: null };
   if (labels.includes('google')) return { kind: 'google', host: null };
@@ -635,6 +654,7 @@ function rankReferers(rows: RumRow[], selfHost: string): AnalyticsRefererBucket[
   let direct = 0;
   let instagram = 0;
   let google = 0;
+  let ai = 0;
   const others = new Map<string, number>();
 
   for (const row of rows) {
@@ -644,6 +664,10 @@ function rankReferers(rows: RumRow[], selfHost: string): AnalyticsRefererBucket[
     if (kind === 'direct') direct += visits;
     else if (kind === 'instagram') instagram += visits;
     else if (kind === 'google') google += visits;
+    // Every assistant into the same total, which is what makes this ONE row
+    // rather than a dozen: ChatGPT and Perplexity in the same window are two
+    // hosts and one number.
+    else if (kind === 'ai') ai += visits;
     else if (host) others.set(host, (others.get(host) ?? 0) + visits);
   }
 
@@ -652,6 +676,7 @@ function rankReferers(rows: RumRow[], selfHost: string): AnalyticsRefererBucket[
       ['direct', direct],
       ['instagram', instagram],
       ['google', google],
+      ['ai', ai],
     ] as [RefererBucketKind, number][]
   )
     // A bucket nobody arrived through is absent, not a zero row. Four rows

@@ -1086,11 +1086,51 @@ describe('dist/assets/ keeps admin code out of the entry chunk', () => {
 // DELIBERATELY LEFT AT 39500: a ceiling with more headroom than it needs costs
 // nothing, and lowering one is how a build goes red on the next unrelated
 // change.
+//
+// THE PRESET LINKS (this task): 39409 -> 39441 (+32), which breaches the 39500
+// ceiling above not at all -- but the ceiling moves anyway, for the reason the
+// paragraph below the arithmetic gives. Measured the same way every entry
+// above was: the parent commit built first and its stylesheet kept, the two
+// sheets parsed with postcss and compared RULE BY RULE, never by byte count
+// alone, and every added rule traced to the file that emits it.
+//
+//    32  `.break-all{word-break:break-all}` -- NumbersArea.tsx's campaign
+//        card, on the four copyable links only. A full link is
+//        `https://viabiancarestaurant.com/?utm_source=instagram`: 53
+//        characters with no space in them, which at 390px is wider than the
+//        card and cannot be reflowed at a word boundary because it has none.
+//        Without this the card pushes the whole page sideways, which
+//        e2e/numbers-visuals.spec.ts already refuses.
+//
+// Sum: 32, matching the whole-sheet delta exactly. Nothing else in this task
+// costs a rule: the Copy buttons are the Retry button's own class string minus
+// its margin, and the rows are built from `flex`, `flex-wrap`, `items-center`,
+// `gap-2`, `min-w-0`, `flex-1`, `space-y-2`, `mt-2`, `mt-3`, `text-xs`,
+// `text-ink` and `text-gray-600`, every one of which already had a rule in
+// this sheet.
+//
+// ONE LEAK WAS CAUGHT AND CLOSED INSIDE THIS TASK, which is the eighth on this
+// project and the reason the rule-level diff is done at all rather than the
+// byte count alone. The first draft of campaign-sources.ts's `campaignLink`
+// comment described a preset as "a bare lowercase word", and the ordinary
+// English word minted `.lowercase{text-transform:lowercase}` (+36) -- shipped
+// to every visitor for a sentence in a comment. 39441 + 36 = 39477 is still
+// under the old ceiling, so nothing about a byte count would have found it.
+// Reworded to "one plain word in small letters", rebuilt, and the diff is the
+// single rule above.
+//
+// THE CEILING IS RAISED, to 39600 -- 39441 rounded up to the next 100 (39500),
+// plus 100, which is this tier's own stated procedure and the same arithmetic
+// the 39500 entry above used. It is NOT raised because the build was red: it
+// was green at 39441. It is raised because leaving it at 39500 would put 59
+// bytes of headroom in front of the next task, and 59 bytes is one utility --
+// the last time this project ran a ceiling that tight, a breach stayed red for
+// eleven tasks.
 describe('dist/assets/ keeps the shared stylesheet under a byte ceiling', () => {
-  it.skipIf(!REQUIRED && !existsSync(DIST_ASSETS))('the entry CSS file stays under 39500 bytes', () => {
+  it.skipIf(!REQUIRED && !existsSync(DIST_ASSETS))('the entry CSS file stays under 39600 bytes', () => {
     const cssFiles = readdirSync(DIST_ASSETS).filter((n) => /^index-.*\.css$/.test(n));
     expect(cssFiles.length).toBeGreaterThan(0);
     const size = statSync(join(DIST_ASSETS, cssFiles[0])).size;
-    expect(size).toBeLessThan(39500);
+    expect(size).toBeLessThan(39600);
   });
 });

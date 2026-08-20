@@ -37,13 +37,18 @@
 // rather than each re-explaining the same thing.
 import React, { useEffect, useRef, useState } from 'react';
 import {
+  AI_TRAFFIC_CAVEAT,
   CAMPAIGN_CAVEAT,
+  CAMPAIGN_EMPTY,
+  CAMPAIGN_LINK_HOWTO,
   CAMPAIGN_VS_REFERRER,
   CARD_HEADINGS,
+  COPY_REFUSED,
   TAP_COUNTING_STARTED_ON,
   VISIT_COUNTING_STARTED_ON,
   archiveSentence,
-  campaignHowTo,
+  campaignLinkRows,
+  copiedSentence,
   formatCountingStartedOn,
   labelForPath,
   noVisitsYetSentence,
@@ -53,18 +58,17 @@ import {
   visitsSentence,
   weekSentence,
 } from '../manage/analytics';
-import type { PageNaming } from '../manage/analytics';
+import type { CampaignLinkRow, PageNaming } from '../manage/analytics';
 import TrendChart from '../manage/TrendChart';
 import HoursChart from '../manage/HoursChart';
 import BarList from '../manage/BarList';
 import StatCard from '../manage/StatCard';
 import RangeControl from '../manage/RangeControl';
 import { changeBetween, previousWindowIsCounted } from '../manage/comparison';
-import { KNOWN_CAMPAIGN_SOURCES } from '../../shared/campaign-sources';
 import { DEFAULT_RANGE, isAnalyticsPayload } from '../../shared/analytics-payload';
 import type { AnalyticsFailureReason, AnalyticsPayload, AnalyticsRange } from '../../shared/analytics-payload';
 import type { ContentRegistry } from '../publish';
-import type { Page } from '../../content/types';
+import type { Page, SiteContent } from '../../content/types';
 
 export interface NumbersAreaProps {
   active: boolean;
@@ -123,6 +127,28 @@ async function loadAnalytics(range: AnalyticsRange, fetchImpl?: typeof fetch): P
   } catch {
     return { kind: 'error', reason: 'unreachable' };
   }
+}
+
+// The address the copied links point at, from the site's OWN configuration
+// (site.json's `seo.url`) rather than from the address bar.
+//
+// This used to be `window.location.origin`, which was right for an EXAMPLE
+// sentence and is wrong for a link she is about to paste into her Instagram
+// bio. The dashboard is reachable on any host that serves it -- a Pages
+// preview deployment, a staging domain, a machine on her desk -- and a link
+// built from that host works for exactly as long as that deployment does. The
+// committed value is the restaurant's real address, is the same string
+// sitemap.xml and every canonical tag already use, and does not depend on
+// where she happened to open /edit.
+//
+// The fallback is the location, unchanged, for the window before site.json has
+// loaded (every area mounts at once, so it is short) and for a registry that
+// somehow has no entry: same origin as this dashboard is the closest true
+// answer available, and it is what the sentence this replaces always used.
+function siteOrigin(registry: ContentRegistry): string {
+  const data = registry.getEntries()['site.json']?.data as SiteContent | undefined;
+  const url = data?.seo?.url;
+  return typeof url === 'string' && url.trim() !== '' ? url.trim() : window.location.origin;
 }
 
 function pagesFromRegistry(registry: ContentRegistry): PageNaming[] {
@@ -194,13 +220,9 @@ const NumbersArea: React.FC<NumbersAreaProps> = ({ active, registry, fetchImpl }
   // reasoned about -- it is exactly what the e2e case for this screen
   // caught.
   const mountedRef = useRef(true);
-  // The web address she is looking at right now, so the example tagged link
-  // in the campaign card's empty state is one she can paste and one that
-  // cannot go stale. Read off the location rather than written down: this
-  // dashboard is served from the same origin as the public site, and a
-  // hard-coded domain would print the wrong example the day the site moves --
-  // the same self-configuring posture worker/index.ts's siteOriginOf takes.
-  const site = window.location.origin;
+  // The public address every copyable link is built on. See siteOrigin above
+  // for why it is the committed one and not the one in the address bar.
+  const site = siteOrigin(registry);
   useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -494,38 +516,129 @@ const CardC: React.FC<{ outcome: Outcome }> = ({ outcome }) => (
     <h3 className={CARD_TITLE}>{CARD_HEADINGS.c}</h3>
     {outcome.kind !== 'ok' ? (
       <Skeleton />
-    ) : outcome.payload.range === 'year' ? (
-      // Same reason as Card B: the rollup keeps monthly totals, and a
-      // referrer cannot be recovered from a total.
-      <p className="text-sm text-gray-600">{archiveSentence()}</p>
-    ) : outcome.payload.byReferer.length === 0 ? (
-      // "No referrers yet" used the exact word this copy exists to avoid.
-      <p className="text-sm text-gray-600">
-        Nothing yet — this will show whether people found you through Instagram, Google, or by typing your address in.
-      </p>
     ) : (
-      <BarList
-        ordered={false}
-        rows={outcome.payload.byReferer.map((bucket) => ({
-          key: `${bucket.kind}:${bucket.host ?? ''}`,
-          label: bucket.label,
-          sub: bucket.host ?? undefined,
-          value: bucket.visits,
-        }))}
-      />
+      <>
+        {outcome.payload.range === 'year' ? (
+          // Same reason as Card B: the rollup keeps monthly totals, and a
+          // referrer cannot be recovered from a total.
+          <p className="text-sm text-gray-600">{archiveSentence()}</p>
+        ) : outcome.payload.byReferer.length === 0 ? (
+          // "No referrers yet" used the exact word this copy exists to avoid.
+          <p className="text-sm text-gray-600">
+            Nothing yet — this will show whether people found you through Instagram, Google, or by typing your address
+            in.
+          </p>
+        ) : (
+          <BarList
+            ordered={false}
+            rows={outcome.payload.byReferer.map((bucket) => ({
+              key: `${bucket.kind}:${bucket.host ?? ''}`,
+              label: bucket.label,
+              sub: bucket.host ?? undefined,
+              value: bucket.visits,
+            }))}
+          />
+        )}
+        {/* On THIS card as well as the campaign card below, because both of
+            them can show an AI row and neither of them can count one
+            properly. A row that is absent says nothing at all on its own, so
+            the sentence is here whether or not the row is. */}
+        <p className="mt-2 text-xs text-gray-500">{AI_TRAFFIC_CAVEAT}</p>
+      </>
     )}
   </div>
 );
+
+// The Retry button's own string, minus its margin, so the Copy buttons cost
+// the stylesheet nothing: every utility in it already had a rule in the sheet
+// before this card existed.
+const COPY_BUTTON =
+  "rounded border border-brand px-3 py-1 font-['Montserrat'] text-xs uppercase tracking-wide text-accent transition hover:bg-brand hover:text-ink";
+
+// THE POINT OF THIS WHOLE CARD: four finished links and four Copy buttons.
+//
+// There is no field to type in, no menu to pick a source from and nothing to
+// spell, because the person using this has never typed a query parameter and
+// must never have to. She copies the row that matches where she is about to
+// paste it.
+//
+// WHAT HAPPENS WHEN THE CLIPBOARD REFUSES, which is a thing browsers really
+// do -- an insecure context has no `navigator.clipboard` at all, and
+// `writeText` rejects on a page that has lost focus or a permission that was
+// never granted:
+//
+//   * The link is TEXT on the page, selectable with a finger or a mouse, so
+//     there is always a way through without the button. It is not inside an
+//     input, not `select-none`, not clipped.
+//   * The message says what actually happened. A button that reports "Copied!"
+//     into a clipboard that refused it is how she pastes last week's link into
+//     her Instagram bio and never finds out.
+//
+// The whole attempt sits inside one try: a missing `navigator.clipboard`
+// throws where it is read rather than rejecting, and both failures mean the
+// same thing to her, so both land on the same sentence.
+const CampaignLinks: React.FC<{ site: string }> = ({ site }) => {
+  // ONE message for the list rather than a state per row: two rows cannot be
+  // copied at once, and four live regions on one card is four things a screen
+  // reader has to be told about for the sake of one event.
+  const [note, setNote] = useState('');
+
+  async function copy(row: CampaignLinkRow): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(row.url);
+      // AFTER the await resolves, never beside the call. Setting it first is
+      // exactly the claim this card must not make.
+      setNote(copiedSentence(row.label));
+    } catch {
+      setNote(COPY_REFUSED);
+    }
+  }
+
+  return (
+    <div className="mt-3" data-links="campaigns">
+      <p className="text-xs text-gray-600">{CAMPAIGN_LINK_HOWTO}</p>
+      <ul className="mt-2 space-y-2">
+        {campaignLinkRows(site).map((row) => (
+          <li key={row.source} className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-ink">{row.label}</span>
+            {/* `break-all`, because this is the one string on the panel that
+                cannot be reflowed at a space: at 390px a full link is wider
+                than the card, and a card that pushes the page sideways is
+                what e2e/numbers-visuals.spec.ts already refuses. */}
+            <code data-link={row.source} className="min-w-0 flex-1 break-all text-xs text-gray-600">
+              {row.url}
+            </code>
+            {/* `type="button"` for the reason the Retry button above states:
+                this renders inside the single <form> PublishBar submits, and a
+                bare <button> would be a second Publish trigger.
+                The accessible name names the ROW -- four buttons all called
+                "Copy" is one control repeated four times to anybody not
+                looking at the screen. */}
+            <button type="button" aria-label={`Copy your ${row.label}`} onClick={() => void copy(row)} className={COPY_BUTTON}>
+              Copy
+            </button>
+          </li>
+        ))}
+      </ul>
+      {/* Empty until something has actually happened, and a live region either
+          way so the answer reaches somebody who cannot see the row. */}
+      <p role="status" className="mt-2 text-xs text-gray-600">
+        {note}
+      </p>
+    </div>
+  );
+};
 
 // The one card on this panel fed by our OWN rows rather than by Cloudflare,
 // which is why its numbers are exact and say so nowhere -- exactness is the
 // absence of the word "about", not a claim to be made.
 //
-// Its empty state is the deliverable. Until she has pasted a tagged link
-// somewhere there is nothing to count, so what this card does on day one is
-// teach her the link format and name the words the write path recognises. A
-// wrong word is not an error anywhere: it is silently counted as "other", and
-// this list is the only thing that makes that discoverable.
+// The LINKS are the deliverable, and they are on the card in every state. The
+// version this replaces printed a sentence telling her to append
+// `?utm_source=` and one of six words to her own web address by hand, plus the
+// list of words it would accept -- so the card's usefulness rested on her
+// typing a URL correctly, and every typo was punished silently by counting the
+// arrival as somebody else's link. Nothing here asks her to type anything now.
 const CampaignCard: React.FC<{ outcome: Outcome; site: string }> = ({ outcome, site }) => (
   <div className={CARD} data-card="campaigns">
     <h3 className={CARD_TITLE}>{CARD_HEADINGS.campaigns}</h3>
@@ -534,12 +647,7 @@ const CampaignCard: React.FC<{ outcome: Outcome; site: string }> = ({ outcome, s
     ) : (
       <>
         {outcome.payload.campaigns.length === 0 ? (
-          <>
-            <p className="text-sm text-gray-600">{campaignHowTo(site)}</p>
-            <p className="mt-1 text-xs text-gray-600">
-              Words this site recognises: {KNOWN_CAMPAIGN_SOURCES.join(', ')}. Anything else is counted as one row.
-            </p>
-          </>
+          <p className="text-sm text-gray-600">{CAMPAIGN_EMPTY}</p>
         ) : (
           <BarList
             ordered={false}
@@ -554,10 +662,12 @@ const CampaignCard: React.FC<{ outcome: Outcome; site: string }> = ({ outcome, s
             }))}
           />
         )}
-        {/* Both sentences render in BOTH states, because the confusion they
-            prevent exists in both. */}
+        <CampaignLinks site={site} />
+        {/* All three sentences render in BOTH states, because the confusion
+            each one prevents exists in both. */}
         <p className="mt-2 text-xs text-gray-500">{CAMPAIGN_VS_REFERRER}</p>
         <p className="mt-1 text-xs text-gray-500">{CAMPAIGN_CAVEAT}</p>
+        <p className="mt-1 text-xs text-gray-500">{AI_TRAFFIC_CAVEAT}</p>
       </>
     )}
   </div>

@@ -224,6 +224,15 @@ async function activeName(page: Page): Promise<string> {
 // e2e/dashboard-sections.spec.ts:45's own helper, restated: measure and
 // hit-test in ONE evaluation so both read the same frame.
 async function hitTestSelf(locator: Locator): Promise<boolean> {
+  // Scroll it into view FIRST, exactly as e2e/edit-dashboard-link.spec.ts:32
+  // does. `document.elementFromPoint` answers only for coordinates inside the
+  // viewport and returns null for anything below the fold -- so without this
+  // the assertion reads "something is covering the image" when the truth is
+  // "the image is off-screen", which is a different claim and not the one
+  // this test makes. Measured while it was absent: the image's centre sat at
+  // y~694 in an 800px viewport with rect.y drifting 441-454 between runs, so
+  // roughly 110px of extra content above it was enough to flip the result.
+  await locator.scrollIntoViewIfNeeded();
   return locator.evaluate((el) => {
     const rect = el.getClientRects()[0] ?? el.getBoundingClientRect();
     const hit = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);

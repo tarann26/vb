@@ -11,7 +11,6 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import userEvent from '@testing-library/user-event';
 import NumbersArea from '../NumbersArea';
 import { CAMPAIGN_CAVEAT, CAMPAIGN_VS_REFERRER, CARD_HEADINGS, archiveSentence } from '../../manage/analytics';
-import { KNOWN_CAMPAIGN_SOURCES } from '../../../shared/campaign-sources';
 import { ZERO_DATA_PAYLOAD, isAnalyticsRange } from '../../../shared/analytics-payload';
 import type { AnalyticsPayload, AnalyticsRange } from '../../../shared/analytics-payload';
 import type { ContentEntries, ContentRegistry } from '../../publish';
@@ -309,34 +308,26 @@ describe('the campaign card', () => {
   const INSTAGRAM = [{ source: 'instagram', label: 'Instagram link', arrivals: 84 }];
 
   it('shows each source with its exact count, in her words', async () => {
-    renderNumbers(withCampaigns(INSTAGRAM));
+    const { container } = renderNumbers(withCampaigns(INSTAGRAM));
 
-    expect(await screen.findByText('Instagram link')).toBeInTheDocument();
-    expect(screen.getByText('84')).toBeInTheDocument();
+    // Read off the COUNTED row rather than off the screen. "Instagram link"
+    // is now on this card twice -- once as the row that was counted and once
+    // as the link she can copy -- and an unscoped query would match either,
+    // so it would keep passing with the count gone.
+    await screen.findByText(CARD_HEADINGS.campaigns);
+    const row = container.querySelector('[data-row="instagram"]') as HTMLElement;
+    expect(within(row).getByText('Instagram link')).toBeInTheDocument();
+    expect(within(row).getByText('84')).toBeInTheDocument();
     // The machine value never reaches the screen -- "instagram" beside a
     // referrer card that also says Instagram is the collision this avoids.
     expect(screen.queryByText('instagram')).toBeNull();
   });
 
-  it('teaches her how to make a tagged link when there is nothing to show yet', async () => {
+  it('says nobody has used one yet, without reading as broken', async () => {
     renderNumbers(withCampaigns([]));
-    expect(await screen.findByText(/utm_source=instagram/)).toBeInTheDocument();
-  });
-
-  it('lists the words the site actually recognises, so a wrong tag is discoverable', async () => {
-    // Without this list she uses ?utm_source=insta, every arrival lands in
-    // "other", and the card tells her Instagram brought nobody.
-    //
-    // Read off the ONE paragraph that carries the list, rather than searched
-    // for anywhere on screen: the how-to sentence above it also contains the
-    // word instagram, so an unscoped query would match two elements whether
-    // or not the list is there -- and would then start PASSING the moment the
-    // list was deleted. Exactly backwards.
-    renderNumbers(withCampaigns([]));
-    const words = await screen.findByText(/Words this site recognises/);
-    for (const source of KNOWN_CAMPAIGN_SOURCES) {
-      expect(words.textContent).toContain(source);
-    }
+    expect(
+      await screen.findByText('Nothing yet — this fills in the first time somebody arrives through one of your links.'),
+    ).toBeInTheDocument();
   });
 
   it('says a tag is not a referrer, in both states', async () => {
@@ -357,6 +348,182 @@ describe('the campaign card', () => {
   it('groups everything she has not named into one row', async () => {
     renderNumbers(withCampaigns([{ source: 'other', label: 'Someone else’s link', arrivals: 12 }]));
     expect(await screen.findByText('Someone else’s link')).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The link generator: four finished links and four Copy buttons, which is the
+// whole of what she does on this screen. Everything about WHERE the link
+// points and what the button may claim is here; whether the clipboard actually
+// received anything is a browser question and is asserted in
+// e2e/campaign-links.spec.ts.
+describe('the copyable links', () => {
+  // A DIFFERENT host from the one jsdom serves this page on, deliberately. A
+  // component that built the link out of `window.location.origin` -- which is
+  // what this card used to do for its example sentence -- reddens on every
+  // assertion below instead of matching by coincidence.
+  const CONFIGURED: ContentEntries = {
+    'site.json': { data: { seo: { url: 'https://example.test' } }, initial: {}, sha: 'sha-site' },
+  };
+
+  function renderLinks(entries: ContentEntries = CONFIGURED) {
+    return renderNumbers(okFetch(POPULATED) as unknown as typeof fetch, entries);
+  }
+
+  // Restores whatever was there before, because `navigator.clipboard` is
+  // absent in jsdom and a leaked stub would silently hand the next test a
+  // working clipboard it never asked for.
+  function stubClipboard(writeText: (text: string) => Promise<void>): () => void {
+    const original = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    return () => {
+      if (original) Object.defineProperty(navigator, 'clipboard', original);
+      else Reflect.deleteProperty(navigator as unknown as Record<string, unknown>, 'clipboard');
+    };
+  }
+
+  it('hands her four finished links, one per preset', async () => {
+    renderLinks();
+
+    for (const url of [
+      'https://example.test/?utm_source=general',
+      'https://example.test/?utm_source=instagram',
+      'https://example.test/?utm_source=zomato',
+      'https://example.test/?utm_source=swiggy',
+    ]) {
+      expect(await screen.findByText(url)).toBeInTheDocument();
+    }
+    // The AI bucket is storable but NOT a preset: she cannot place a link an
+    // assistant tags for her, and offering one would be a row that can only
+    // ever read zero.
+    expect(screen.queryByText('https://example.test/?utm_source=ai')).toBeNull();
+  });
+
+  it('asks her to type nothing at all', async () => {
+    renderLinks();
+    const card = (await screen.findByText(CARD_HEADINGS.campaigns)).closest('div') as HTMLElement;
+
+    // No field, no picker, no menu -- the three shapes this card was
+    // explicitly not allowed to grow. She presses Copy and pastes.
+    expect(within(card).queryByRole('textbox')).toBeNull();
+    expect(within(card).queryByRole('combobox')).toBeNull();
+    expect(within(card).queryByRole('listbox')).toBeNull();
+    // One button per link, each nameable on its own: four controls all called
+    // "Copy" is one control repeated four times to anybody not looking.
+    expect(within(card).getByRole('button', { name: 'Copy your Instagram link' })).toBeInTheDocument();
+    expect(within(card).getByRole('button', { name: 'Copy your Zomato link' })).toBeInTheDocument();
+  });
+
+  it('points at the address in the site file, never at the one in the address bar', async () => {
+    renderLinks();
+    const link = await screen.findByText('https://example.test/?utm_source=instagram');
+    expect(link.textContent).not.toContain(window.location.host);
+
+    // And with no site file loaded yet, the location is the fallback rather
+    // than a broken or empty link.
+    cleanup();
+    renderLinks({});
+    expect(await screen.findByText(`${window.location.origin}/?utm_source=instagram`)).toBeInTheDocument();
+  });
+
+  it('copies the row she pressed', async () => {
+    const writeText = vi.fn(async () => {});
+    const restore = stubClipboard(writeText);
+    try {
+      renderLinks();
+      fireEvent.click(await screen.findByRole('button', { name: 'Copy your Zomato link' }));
+
+      expect(await screen.findByText('Copied your Zomato link.')).toBeInTheDocument();
+      // The ZOMATO link, not the first row's. One handler shared by four rows
+      // that closed over the wrong one would still report success.
+      expect(writeText).toHaveBeenCalledWith('https://example.test/?utm_source=zomato');
+    } finally {
+      restore();
+    }
+  });
+
+  it('does not claim success when the clipboard refuses', async () => {
+    const restore = stubClipboard(async () => {
+      throw new Error('denied');
+    });
+    try {
+      renderLinks();
+      fireEvent.click(await screen.findByRole('button', { name: 'Copy your Instagram link' }));
+
+      expect(await screen.findByText(/would not let the button copy/)).toBeInTheDocument();
+      expect(screen.queryByText(/^Copied /)).toBeNull();
+      // The link is still on the page as text she can select by hand. That it
+      // is really selectable in a browser is e2e/campaign-links.spec.ts's
+      // claim; that it still EXISTS after a refusal is this one's.
+      expect(screen.getByText('https://example.test/?utm_source=instagram')).toBeInTheDocument();
+    } finally {
+      restore();
+    }
+  });
+
+  it('says the same thing when the browser has no clipboard at all', async () => {
+    // jsdom has none, which is the same situation as a page served over plain
+    // http on her phone: reading `navigator.clipboard.writeText` throws where
+    // it stands rather than rejecting, and both must reach the same sentence.
+    expect((navigator as { clipboard?: unknown }).clipboard).toBeUndefined();
+    renderLinks();
+    fireEvent.click(await screen.findByRole('button', { name: 'Copy your General link' }));
+
+    expect(await screen.findByText(/would not let the button copy/)).toBeInTheDocument();
+  });
+
+  it('claims nothing while the clipboard is still deciding', async () => {
+    // A permission prompt leaves `writeText` PENDING -- not resolved, not
+    // rejected -- for as long as it takes her to answer it. Nothing may appear
+    // on the card in that window. The sentence is a report of what happened,
+    // never an announcement of what was asked for, and the difference is
+    // invisible to every other test here: a note set before the await is
+    // overwritten by the catch a moment later, so a rejected clipboard ends up
+    // reading correctly either way.
+    const restore = stubClipboard(() => new Promise<void>(() => {}));
+    try {
+      renderLinks();
+      fireEvent.click(await screen.findByRole('button', { name: 'Copy your Instagram link' }));
+
+      expect(screen.getByRole('status').textContent).toBe('');
+    } finally {
+      restore();
+    }
+  });
+
+  it('says nothing before she has pressed anything', async () => {
+    renderLinks();
+    await screen.findByText('https://example.test/?utm_source=general');
+    expect(screen.getByRole('status').textContent).toBe('');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The AI row is the one number on this panel that will read nothing for
+// months, and the sentence beside it is what stops that reading as a fault.
+describe('what the AI row cannot say', () => {
+  it('says on BOTH cards that an empty row is not the same as nobody', async () => {
+    renderNumbers(okFetch(POPULATED) as unknown as typeof fetch);
+    await screen.findByText(CARD_HEADINGS.campaigns);
+
+    for (const heading of [CARD_HEADINGS.c, CARD_HEADINGS.campaigns]) {
+      const card = screen.getByText(heading).closest('div') as HTMLElement;
+      const said = within(card).getByText(/AI assistants/);
+      expect(said.textContent).toContain('Nothing here is not the same as nobody');
+      expect(said.textContent).toContain('Expect this to stay empty for a long time');
+    }
+  });
+
+  it('puts no figure on it, so it cannot read as a measurement', async () => {
+    renderNumbers(okFetch(POPULATED) as unknown as typeof fetch);
+    const card = (await screen.findByText(CARD_HEADINGS.campaigns)).closest('div') as HTMLElement;
+    const said = within(card).getByText(/AI assistants/);
+
+    // The ratios behind this sentence (8,800:1, 402:1, 88:1) are real and are
+    // written down in the source. None of them belongs on the screen: a
+    // printed ratio claims this panel knows how much it is missing, and it
+    // knows only the direction.
+    expect(said.textContent).not.toMatch(/\d/);
   });
 });
 
