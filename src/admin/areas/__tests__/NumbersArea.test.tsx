@@ -472,6 +472,25 @@ describe('the copyable links', () => {
     expect(await screen.findByText(/would not let the button copy/)).toBeInTheDocument();
   });
 
+  it('claims nothing while the clipboard is still deciding', async () => {
+    // A permission prompt leaves `writeText` PENDING -- not resolved, not
+    // rejected -- for as long as it takes her to answer it. Nothing may appear
+    // on the card in that window. The sentence is a report of what happened,
+    // never an announcement of what was asked for, and the difference is
+    // invisible to every other test here: a note set before the await is
+    // overwritten by the catch a moment later, so a rejected clipboard ends up
+    // reading correctly either way.
+    const restore = stubClipboard(() => new Promise<void>(() => {}));
+    try {
+      renderLinks();
+      fireEvent.click(await screen.findByRole('button', { name: 'Copy your Instagram link' }));
+
+      expect(screen.getByRole('status').textContent).toBe('');
+    } finally {
+      restore();
+    }
+  });
+
   it('says nothing before she has pressed anything', async () => {
     renderLinks();
     await screen.findByText('https://example.test/?utm_source=general');

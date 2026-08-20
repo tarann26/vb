@@ -95,19 +95,39 @@ test.describe('the copyable campaign links', () => {
     await expect(page.locator('[data-link="ai"]')).toHaveCount(0);
   });
 
-  test('a link stays inside its card on a phone', async ({ page }) => {
+  test('the link text stays out of the Copy button on a phone', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 900 });
     await openDashboard(page, '/edit/manage/numbers');
 
-    const link = await page.locator('[data-link="instagram"]').boundingBox();
-    const card = await page.locator('[data-card="campaigns"]').boundingBox();
-    expect(link, 'the link has no box').not.toBeNull();
-    expect(card, 'the card has no box').not.toBeNull();
+    // THE INK, measured with a Range over the text -- NOT the element's own
+    // bounding box, which is the measurement that made an earlier version of
+    // this test unable to fail. A link is one 53-character word with no space
+    // in it: ordinary wrapping cannot break it anywhere, so it simply runs out
+    // of the narrow flex item it is in and paints over whatever is beside it,
+    // while the BOX stays obediently at its laid-out width and every assertion
+    // about the box passes. Measured directly: 238px of text inside a 160px
+    // box, ending 79px past the button's left edge.
+    const measured = await page.evaluate(() => {
+      const link = document.querySelector('[data-link="instagram"]');
+      const button = document.querySelector('[data-link="instagram"] ~ button');
+      const card = document.querySelector('[data-card="campaigns"]');
+      if (!link || !button || !card) return null;
+      const range = document.createRange();
+      range.selectNodeContents(link);
+      const ink = range.getBoundingClientRect();
+      return {
+        inkRight: ink.right,
+        inkWidth: ink.width,
+        buttonLeft: button.getBoundingClientRect().left,
+        cardRight: card.getBoundingClientRect().right,
+      };
+    });
+    expect(measured, 'the row is not on the page').not.toBeNull();
 
-    // A link is one 53-character word with no space in it, so nothing about
-    // ordinary text wrapping saves this: without an explicit break rule it
-    // runs out of the card and takes the page's width with it.
-    expect(link!.x + link!.width).toBeLessThanOrEqual(card!.x + card!.width + 1);
-    expect(link!.height).toBeGreaterThan(0);
+    expect(measured!.inkWidth).toBeGreaterThan(0);
+    // Not over the button she is about to press.
+    expect(measured!.inkRight).toBeLessThanOrEqual(measured!.buttonLeft + 1);
+    // And not out of the card either way.
+    expect(measured!.inkRight).toBeLessThanOrEqual(measured!.cardRight + 1);
   });
 });
