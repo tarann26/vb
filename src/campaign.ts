@@ -30,8 +30,9 @@
 // drop the second.
 //
 // The bucket cannot do that job, which is what it used to be asked to do.
-// normalizeSource collapses everything outside the six named sources to the
-// single string `other`, so marking with the bucket made
+// normalizeSource collapses everything outside the four preset sources (and
+// the AI one nobody places) to the single string `other`, so marking with the
+// bucket made
 // `?utm_source=partner-a` and then `?utm_source=partner-b` in one tab ONE
 // arrival -- the exact case this comment claims is two. The mark is now the
 // tag itself (case and surrounding space folded, so one link is still one

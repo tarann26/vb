@@ -26,8 +26,9 @@
 CREATE TABLE IF NOT EXISTS campaign_arrivals (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
   -- One of src/shared/campaign-sources.ts's KNOWN_CAMPAIGN_SOURCES, or the
-  -- literal 'other'. Collapsed at the WRITE boundary, so this column's value
-  -- space is seven strings forever no matter what anyone puts in a URL.
+  -- literal 'ai', or the literal 'other'. Collapsed at the WRITE boundary, so
+  -- this column's value space is six strings forever no matter what anyone
+  -- puts in a URL.
   source     TEXT    NOT NULL,
   -- IST calendar date, YYYY-MM-DD, from todayInKolkata(). IST because the
   -- restaurant's day is what she is reading, and because wa:counts is already

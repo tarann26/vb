@@ -854,6 +854,30 @@ describe('the shaped payload', () => {
     ]);
   });
 
+  it('gathers every assistant into ONE row, and keeps Google’s out of Google', async () => {
+    respondWith(() =>
+      graphqlOk({
+        last28: [
+          { path: '/', referer: 'chatgpt.com', visits: 6 },
+          { path: '/', referer: 'perplexity.ai', visits: 4 },
+          { path: '/', referer: 'gemini.google.com', visits: 2 },
+          { path: '/', referer: 'www.google.com', visits: 30 },
+        ],
+      }),
+    );
+
+    const payload = await payloadOf(await handleAnalytics(await authed(), env));
+
+    // Three hosts, one row, twelve arrivals -- and Google's 30 is only its
+    // own. A row per product would be a dozen rows each reading 0 or 1, which
+    // is the "this screen is broken" shape the whole panel avoids; counting
+    // gemini as Google would hide the assistants inside search.
+    expect(payload.byReferer).toEqual([
+      { kind: 'google', label: 'Google', host: null, visits: 30 },
+      { kind: 'ai', label: 'AI assistants', host: null, visits: 12 },
+    ]);
+  });
+
   it('fills the busiest-times grid from the hourly node, not from the ranked list', async () => {
     // The wiring, which the pure hourCells tests below cannot see: reading
     // `account.last28` here instead of `account.hourly` would still produce a
@@ -1283,6 +1307,20 @@ describe('bucketReferer', () => {
     ['l.somesite.example', 'other', 'somesite.example'],
     ['somesite.example', 'other', 'somesite.example'],
     ['INSTAGRAM.COM', 'instagram', null],
+    ['chatgpt.com', 'ai', null],
+    ['perplexity.ai', 'ai', null],
+    ['claude.ai', 'ai', null],
+    ['chat.openai.com', 'ai', null],
+    ['copilot.microsoft.com', 'ai', null],
+    // THE ORDERING CASE, and the one this whole row can silently lose:
+    // `gemini.google.com` carries the label `google`, so an AI test placed
+    // after the label matches counts Google's own assistant as ordinary
+    // search -- with nothing on the screen to say so.
+    ['gemini.google.com', 'ai', null],
+    ['bard.google.com', 'ai', null],
+    // Anybody can register this. A substring match counts it as ChatGPT.
+    ['notchatgpt.com.evil.example', 'other', 'notchatgpt.com.evil.example'],
+    ['evilclaude.ai', 'other', 'evilclaude.ai'],
   ];
 
   for (const [host, kind, bucketHost] of CASES) {

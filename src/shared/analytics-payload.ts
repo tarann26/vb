@@ -101,7 +101,7 @@ export interface AnalyticsHourCell {
 }
 
 // EXACT, unlike everything else on this screen: these are rows we wrote
-// ourselves, not a sampled estimate. `source` is one of the seven the Worker
+// ourselves, not a sampled estimate. `source` is one of the six the Worker
 // will store; `label` is the words the card shows.
 export interface AnalyticsCampaignRow {
   source: string;
@@ -109,12 +109,19 @@ export interface AnalyticsCampaignRow {
   arrivals: number;
 }
 
-// Which of Card C's four buckets a referring host fell into. `kind` is the
+// Which of Card C's buckets a referring host fell into. `kind` is the
 // machine value the UI switches on; `label` is the words the spec fixes,
 // kept beside it so the Worker's bucketing and the screen's wording cannot
 // disagree about what a bucket IS. `host` is set only for `other`, where the
 // card shows the real hostname in smaller text under "Other links".
-export type RefererBucketKind = 'direct' | 'instagram' | 'google' | 'other';
+//
+// `ai` is the fifth and the newest. ADDING a member here does NOT spend a
+// PAYLOAD_SHAPE_VERSION: a body cached by the previous deploy carries only the
+// four older kinds, every one of which is still a member, so it still passes
+// isAnalyticsPayload and still renders its own label. A version bump exists to
+// retire bodies this code can no longer READ, and widening a union does not
+// produce one.
+export type RefererBucketKind = 'direct' | 'instagram' | 'google' | 'ai' | 'other';
 
 export interface AnalyticsRefererBucket {
   kind: RefererBucketKind;
