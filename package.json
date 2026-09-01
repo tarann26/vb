@@ -14,6 +14,7 @@
     "preview": "vite preview",
     "images": "node scripts/images.mjs",
     "images:inventory": "node scripts/image-inventory.mjs",
+    "migrate:images": "node scripts/migrate-images.mjs",
     "test:e2e": "playwright test",
     "test:csp": "npm run build --silent && node scripts/check-csp.mjs",
     "verify:deploy": "node scripts/verify-deploy.mjs",

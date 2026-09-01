@@ -1537,3 +1537,50 @@ exists to spend it here instead.
 
 The Worker is **not** deployed by this task. `env.R2` is bound in configuration
 and read by nothing until Task 4.
+
+### Re-measured 2026-09-01, before Phase 6 Task 4
+
+None of the three human steps above has been taken:
+
+    $ npx wrangler r2 bucket domain list via-bianca
+    There are no custom domains connected to this bucket.
+
+    $ curl https://img.viabiancarestaurant.com/probe.txt
+    curl: (6) Could not resolve host: img.viabiancarestaurant.com
+
+    $ curl -sSI https://viabiancarestaurant.com/ | tr ';' '\n' | grep -i img-src
+    img-src 'self' blob:
+
+So **Task 4 has not been run and cannot be**, and `image-manifest.json` does not
+exist. `scripts/migrate-images.mjs` is written, unit-tested and wired to
+`npm run migrate:images`; what it is missing is a hostname to read objects back
+from. Its read-back is the whole point of the task — it proves the host the
+content files are about to name answers the key with those exact bytes under
+that exact type — so it must not be stubbed, skipped or pointed at the bucket
+API to get a green run. An object the read-back never confirmed carries no
+`verifiedAt`, and `scripts/rewrite-image-refs.mjs` refuses to rewrite a
+reference to a target without one. That refusal is the only thing standing
+between a half-finished migration and a page of half-broken photographs.
+
+**The order to run them in, once a human has done step 1 above:**
+
+    npx wrangler r2 bucket domain list via-bianca     # status must read Active
+    # then step 2's HTTPS round trip, all four responses
+    npm run migrate:images                             # expect 0 failed, 95 verified
+    npm test -- --run                                  # the manifest tests come with Task 4's second half
+
+`95`, not the plan's `100`: `docs/image-inventory.json` lists 44 referenced
+derivatives (six derivatives in `public/` are referenced by nothing and are
+left alone, decision D9) and 51 originals. The two menu PDFs are held back for
+Task 19 and are migrated by `npm run migrate:images -- --menus`.
+
+One thing the migration does that the plan did not describe. Ten of the
+fifty-one archived originals carry a `.jpg` name over PNG data —
+`atmosphere/dining.jpg`, `atmosphere/outsideLOGO.jpg`, `food/margarita.jpg`,
+`food/tielle.jpg`, `food/tiramisu.jpg`, `food/Aglio e Pepperoncini.jpg`,
+`food/Spaghetti alla'Assassina.jpg`, `hero/brick.jpg`, `mocktails/bicerin.jpg`
+and `our_story/handmaking.jpg`. Typing those from the key's extension would
+store every one of them as `image/jpeg`. `detectImageType` reads the magic
+number instead, and only for originals: a derivative's bytes have already been
+proved a complete RIFF WEBP, and a menu PDF's extension is chosen here rather
+than by whoever handed the photograph over.
