@@ -1,0 +1,238 @@
+import { describe, it, expect } from 'vitest';
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import {
+  stays,
+  emptyReport,
+  rewriteJson,
+  rewriteJsonText,
+  rewriteSource,
+  plan,
+} from '../rewrite-image-refs.mjs';
+import { IMAGE_HOST } from '../../src/shared/image-host';
+
+const CONTENT_DIR = join('src', 'content');
+const CONTENT_FILES = readdirSync(CONTENT_DIR).filter((name) => name.endsWith('.json'));
+const CODE_FILES = [
+  'src/index.css',
+  'src/components/Hero.tsx',
+  'src/components/ChefGallery.tsx',
+  'src/components/SignatureMocktails.tsx',
+  'src/content/types.ts',
+];
+
+// A stand-in for image-manifest.json that marks EVERY key verified. The real
+// manifest does not exist yet -- Task 4's migration cannot run until the R2
+// custom domain is connected -- and a hand-written partial one would only test
+// the refusal, never the rewrite.
+const everythingVerified = {
+  objects: new Proxy({}, {
+    get: (_t, key) => (typeof key === 'string' ? { verifiedAt: '2026-09-01T00:00:00.000Z' } : undefined),
+    has: () => true,
+  }),
+};
+
+const nothingVerified = { objects: {} };
+
+function read(file) {
+  return readFileSync(file, 'utf-8');
+}
+
+describe('the host this script writes', () => {
+  // Two copies of one string. This is the only thing that stops them drifting:
+  // the script is plain node and cannot import the TypeScript module.
+  it('is the same host src/shared/image-host.ts defines', () => {
+    const report = emptyReport();
+    rewriteJson({ image: '/food/x.webp' }, everythingVerified, report);
+    expect(report.mapping.get('/food/x.webp')).toBe(`${IMAGE_HOST}/food/x.webp`);
+  });
+
+  it('percent-encodes a filename with a space, the way imageUrl does', () => {
+    const report = emptyReport();
+    rewriteJson({ image: '/food/boozy donna.webp' }, everythingVerified, report);
+    expect(report.mapping.get('/food/boozy donna.webp')).toBe(`${IMAGE_HOST}/food/boozy%20donna.webp`);
+  });
+});
+
+describe('what deliberately does not move', () => {
+  it('keeps the share card at the site root', () => {
+    expect(stays('/og-image.jpg')).toBe(true);
+  });
+
+  it('keeps both menu pdfs, which Task 19 moves with their upload path', () => {
+    expect(stays('/menus/food-menu.pdf')).toBe(true);
+    expect(stays('/menus/drinks-menu.pdf')).toBe(true);
+  });
+
+  it('keeps the favicons and the icons index.html names', () => {
+    expect(stays('/favicon-32.png')).toBe(true);
+    expect(stays('/apple-touch-icon.png')).toBe(true);
+    expect(stays('/icon-192.png')).toBe(true);
+  });
+
+  it('moves an ordinary photograph', () => {
+    expect(stays('/food/pizza1.webp')).toBe(false);
+  });
+
+  it('reports a kept path as skipped rather than silently passing over it', () => {
+    const report = emptyReport();
+    rewriteJson({ a: '/og-image.jpg', b: '/menus/food-menu.pdf' }, everythingVerified, report);
+    expect(report.skipped).toEqual(['/og-image.jpg', '/menus/food-menu.pdf']);
+    expect(report.changed).toEqual([]);
+  });
+});
+
+describe('the refusal', () => {
+  it('records a reference whose object is not in the manifest at all', () => {
+    const report = emptyReport();
+    rewriteJson({ image: '/food/x.webp' }, nothingVerified, report);
+    expect(report.missing).toEqual(['/food/x.webp']);
+    expect(report.changed).toEqual([]);
+  });
+
+  it('records a reference whose object is in the manifest but unverified', () => {
+    const report = emptyReport();
+    const manifest = { objects: { 'food/x.webp': { kind: 'derivative', reason: 'read-back HTTP 404' } } };
+    rewriteJson({ image: '/food/x.webp' }, manifest, report);
+    expect(report.missing).toEqual(['/food/x.webp']);
+  });
+
+  it('leaves an unverified reference exactly as it was', () => {
+    expect(rewriteJson({ image: '/food/x.webp' }, nothingVerified, emptyReport()))
+      .toEqual({ image: '/food/x.webp' });
+  });
+
+  // The whole safety argument. The CLI computes every file's new contents
+  // BEFORE it looks at report.missing, so a single unverified object stops all
+  // twelve files rather than nine of them.
+  it('plans every file without writing any of them', () => {
+    const report = emptyReport();
+    const pending = plan(read, nothingVerified, report, { contentFiles: CONTENT_FILES, codeFiles: CODE_FILES });
+    expect(report.missing.length).toBeGreaterThan(0);
+    expect(pending).toEqual([]);
+  });
+
+  it('refuses a plan() call that was never given the content half', () => {
+    expect(() => plan(read, everythingVerified, emptyReport(), { codeFiles: [] })).toThrow();
+  });
+});
+
+// Against the real tree, not a fixture. A fixture could only prove the regex
+// matches strings this file wrote.
+describe('the real content and code files', () => {
+  const report = emptyReport();
+  const pending = plan(read, everythingVerified, report, { contentFiles: CONTENT_FILES, codeFiles: CODE_FILES });
+  const written = new Map(pending.map(({ file, after }) => [file, after]));
+
+  it('rewrites the seventy-seven references the inventory counted', () => {
+    expect(report.changed).toHaveLength(77);
+  });
+
+  it('leaves exactly three distinct references alone', () => {
+    expect([...new Set(report.skipped)].sort()).toEqual([
+      '/menus/drinks-menu.pdf',
+      '/menus/food-menu.pdf',
+      '/og-image.jpg',
+    ]);
+  });
+
+  it('finds nothing unverified when every object is verified', () => {
+    expect(report.missing).toEqual([]);
+  });
+
+  it('touches every file that holds a reference and no others', () => {
+    expect([...written.keys()].sort()).toEqual([
+      'src/components/ChefGallery.tsx',
+      'src/components/Hero.tsx',
+      'src/components/SignatureMocktails.tsx',
+      join('src', 'content', 'dishes.json'),
+      join('src', 'content', 'drinks.json'),
+      join('src', 'content', 'experiences.json'),
+      join('src', 'content', 'galleries.json'),
+      join('src', 'content', 'pages.json'),
+      join('src', 'content', 'posts.json'),
+      join('src', 'content', 'press.json'),
+      join('src', 'content', 'story.json'),
+      'src/content/types.ts',
+      'src/index.css',
+    ].sort());
+  });
+
+  // The reason the JSON is edited as text. JSON.stringify(value, null, 2)
+  // reformats four of these files -- menus.json alone grows by 28 bytes -- and
+  // that whitespace would land in the same commit as a seventy-seven-reference
+  // rewrite and in the bytes the D1 floor is later compared against.
+  it.each(CONTENT_FILES)('%s changes only its reference strings, never its formatting', (name) => {
+    const file = join(CONTENT_DIR, name);
+    const before = read(file);
+    const after = written.get(file) ?? before;
+    const restored = after.split(`${IMAGE_HOST}/`).join('/');
+    expect(decodeURI(restored)).toBe(before);
+  });
+
+  it('leaves the four hand-formatted files hand-formatted', () => {
+    // Named, because these are the four JSON.stringify would have reflowed.
+    for (const name of ['dishes.json', 'menus.json', 'pages.json', 'site.json']) {
+      const file = join(CONTENT_DIR, name);
+      const after = written.get(file) ?? read(file);
+      expect(after, name).not.toBe(JSON.stringify(JSON.parse(after), null, 2) + '\n');
+    }
+  });
+
+  it('rewrites the whole-page texture in the stylesheet, not just the tsx', () => {
+    expect(written.get('src/index.css')).toContain(`url("${IMAGE_HOST}/hero/brick.webp")`);
+    expect(written.get('src/index.css')).not.toContain('url("/hero/brick.webp")');
+  });
+
+  it('leaves the mocktail pdf download link on this origin', () => {
+    expect(written.get('src/components/SignatureMocktails.tsx')).toContain('"/menus/food-menu.pdf"');
+  });
+
+  it('leaves no site-root photograph behind in any file it wrote', () => {
+    const CATEGORY = /["'`(](\/(?:food|hero|atmosphere|our_story|mocktails|press|experiences|team)\/[^"'`()\n]+)["'`)]/;
+    for (const [file, after] of written) {
+      expect(CATEGORY.test(after), `${file} still names ${CATEGORY.exec(after)?.[1]}`).toBe(false);
+    }
+  });
+});
+
+describe('rewriting a source file', () => {
+  it('handles a css url(), a jsx attribute and a doc comment with one expression', () => {
+    const report = emptyReport();
+    const out = rewriteSource(
+      'a { background-image: url("/hero/brick.webp"); }\n<img src="/food/x.webp" />\n// e.g. `/team/y.webp`\n',
+      everythingVerified,
+      report,
+    );
+    expect(out).toContain(`url("${IMAGE_HOST}/hero/brick.webp")`);
+    expect(out).toContain(`src="${IMAGE_HOST}/food/x.webp"`);
+    expect(out).toContain(`\`${IMAGE_HOST}/team/y.webp\``);
+    expect(report.changed).toHaveLength(3);
+  });
+
+  it('leaves an absolute url alone, so a second run is a no-op', () => {
+    const once = rewriteSource('<img src="/food/x.webp" />', everythingVerified, emptyReport());
+    expect(rewriteSource(once, everythingVerified, emptyReport())).toBe(once);
+  });
+});
+
+describe('rewriting json as text', () => {
+  it('replaces a whole string token, never a path inside a longer one', () => {
+    const text = '{\n  "a": "/food/x.webp",\n  "b": "/food/xx.webp"\n}\n';
+    const out = rewriteJsonText(text, everythingVerified, emptyReport());
+    expect(JSON.parse(out)).toEqual({ a: `${IMAGE_HOST}/food/x.webp`, b: `${IMAGE_HOST}/food/xx.webp` });
+  });
+
+  it('keeps compact hand formatting that JSON.stringify would reflow', () => {
+    const text = '[\n  { "id": "food", "src": "/food/x.webp" }\n]\n';
+    const out = rewriteJsonText(text, everythingVerified, emptyReport());
+    expect(out).toBe(`[\n  { "id": "food", "src": "${IMAGE_HOST}/food/x.webp" }\n]\n`);
+  });
+
+  it('refuses a file where the text edit and the structural walk disagree', () => {
+    // A path used as a KEY. The structural walk leaves keys alone; a blind
+    // text replacement would not, and the mismatch is what catches it.
+    const text = '{ "/food/x.webp": "/food/x.webp" }';
+    expect(() => rewriteJsonText(text, everythingVerified, emptyReport())).toThrow(/structural/);
+  });
+});
