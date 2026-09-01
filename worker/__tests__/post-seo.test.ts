@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   SITE_URL,
+  absoluteImageUrl,
   articleJsonLd,
   escapeHtmlAttribute,
   postMetadata,
@@ -41,6 +42,35 @@ describe('post metadata', () => {
 
   it('makes the open graph image absolute against the same host', () => {
     expect(postMetadata(POST).imageUrl).toBe('https://viabiancarestaurant.com/press/hotelier.webp');
+  });
+
+  // Every post image is a site-relative path today and an absolute URL on
+  // img.viabiancarestaurant.com after the 2026-08-21 migration, so this
+  // function has to survive both shapes at once -- there is no flag day.
+  it('leaves an absolute image url alone rather than prefixing the site onto it', () => {
+    expect(absoluteImageUrl('https://img.viabiancarestaurant.com/press/hotelier.webp', 'https://viabiancarestaurant.com'))
+      .toBe('https://img.viabiancarestaurant.com/press/hotelier.webp');
+  });
+
+  it('still resolves a site-relative path against the site', () => {
+    expect(absoluteImageUrl('/og-image.jpg', 'https://viabiancarestaurant.com'))
+      .toBe('https://viabiancarestaurant.com/og-image.jpg');
+  });
+
+  // The two above pass on a `siteUrl + image` implementation for the second
+  // case only. This one is what makes the first case's failure loud: a
+  // doubled scheme is a shape no valid URL has.
+  it('never emits a url with two schemes in it', () => {
+    for (const image of ['https://img.viabiancarestaurant.com/a.webp', '/b.jpg']) {
+      expect(absoluteImageUrl(image, 'https://viabiancarestaurant.com').match(/https:\/\//g)).toHaveLength(1);
+    }
+  });
+
+  // Five filenames in this library carry spaces. Concatenation left the space
+  // raw, which is a URL an unfurler has to guess at.
+  it('percent-encodes a filename with a space in it', () => {
+    expect(absoluteImageUrl('/food/boozy donna.webp', 'https://viabiancarestaurant.com'))
+      .toBe('https://viabiancarestaurant.com/food/boozy%20donna.webp');
   });
 
   it('escapes quotes and angle brackets for an attribute value', () => {

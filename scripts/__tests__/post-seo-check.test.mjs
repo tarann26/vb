@@ -36,6 +36,25 @@ describe('post SEO, checked against a raw response body', () => {
     expect(postSeoProblems(shell, EXPECTED)).toContain('title is not the post title');
   });
 
+  // The second copy of worker/post-seo.ts's absoluteImageUrl. After the
+  // 2026-08-21 migration a post's image is an absolute URL on the image host,
+  // and a `siteUrl + image` expectation would demand an og:image with two
+  // schemes in it -- so this gate would fail every deploy against a page that
+  // is completely correct.
+  it('accepts a post whose image is an absolute url on the image host', () => {
+    const hosted = { ...EXPECTED, image: 'https://img.viabiancarestaurant.com/press/hotelier.webp' };
+    const html = goodHtml().replace(
+      'https://vb.aionxxxi.uk/press/hotelier.webp',
+      'https://img.viabiancarestaurant.com/press/hotelier.webp',
+    );
+    expect(postSeoProblems(html, hosted)).toEqual([]);
+  });
+
+  it('still rejects a hosted image the page does not actually carry', () => {
+    const hosted = { ...EXPECTED, image: 'https://img.viabiancarestaurant.com/press/hotelier.webp' };
+    expect(postSeoProblems(goodHtml(), hosted)).toContain('og:image is not the post image');
+  });
+
   it('rejects the site-wide open graph image', () => {
     const shell = goodHtml().replace(/press\/hotelier\.webp/, 'og-image.jpg');
     expect(postSeoProblems(shell, EXPECTED)).toContain('og:image is not the post image');

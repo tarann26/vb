@@ -65,8 +65,22 @@ export function canonicalForSlug(slug: string, siteUrl: string = SITE_URL): stri
 // one for build-time content, and a runtime fallback would be dead code
 // standing in for the guard Task 3 must add at its own input boundary, not
 // for a branch this function should grow.
+//
+// `image` may be a site-relative path (/og-image.jpg, and every post's image
+// before the 2026-08-21 migration) or an absolute URL on the image host (every
+// post's image after it). `new URL(image, siteUrl)` handles both correctly: an
+// absolute input wins outright and a relative one is resolved against the site.
+// String concatenation handled only the first shape, and given the second it
+// emitted the site origin with a whole second scheme glued onto it -- a URL
+// that resolves nowhere, in every post's og:image and in the Article
+// structured data, discoverable only by fetching a deployed page or by a link
+// unfurler that does not report back.
+//
+// It also percent-encodes, which the concatenation did not. Five filenames in
+// this library carry spaces; a raw space in an og:image value is a URL a
+// crawler has to guess at.
 export function absoluteImageUrl(image: string, siteUrl: string = SITE_URL): string {
-  return `${siteUrl}${image}`;
+  return new URL(image, siteUrl).toString();
 }
 
 export function articleJsonLd(post: Post, siteUrl: string = SITE_URL): Record<string, unknown> {
