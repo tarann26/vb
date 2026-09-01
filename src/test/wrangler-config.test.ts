@@ -180,16 +180,86 @@ describe('wrangler.toml Phase 2 bindings', () => {
     expect(declared![1]).toBe(IMAGE_HOST);
   });
 
-  // Not a hardcoded 'https://vb.pages.dev': the assertion is that the shell
-  // origin is a pages.dev hostname, because THAT is the property that makes it
-  // unmatched by any Worker route. Pinning the exact string would fail the day
-  // the Pages project is renamed, for no reason connected to the risk.
-  it('fetches the shell from a pages.dev origin, which no Worker route matches', () => {
-    const wrangler = readFileSync('wrangler.toml', 'utf8');
-    const origin = wrangler.match(/PAGES_ORIGIN\s*=\s*"([^"]+)"/);
+  // THE SHELL ORIGIN IS PINNED TO AN EXACT STRING, and the version of this
+  // file that refused to pin it is why. It asserted only the SHAPE --
+  // /^https:\/\/[a-z0-9-]+\.pages\.dev$/ -- reasoning that "pinning the exact
+  // string would fail the day the Pages project is renamed, for no reason
+  // connected to the risk". The shape it accepted was `https://vb.pages.dev`,
+  // and `vb.pages.dev` is a live, unrelated third party's website. pages.dev
+  // is a SHARED suffix; a hostname on it is evidence of nothing at all except
+  // that Cloudflare Pages serves it, for somebody. The shape check was
+  // unfalsifiable for the only failure that matters here, which is the shell
+  // origin naming a host that is not this project.
+  //
+  // What the wrong value would have cost, once Task 12 widens `routes` to /*
+  // and site-page.ts fetches `${PAGES_ORIGIN}/index.html` on every page view:
+  // viabiancarestaurant.com serving a stranger's HTML from its own origin, and
+  // serving it WITHOUT the site's CSP, since that project's Pages deployment
+  // sets none. Foreign markup, on the zone that carries the admin session.
+  //
+  // The recorded value, measured from the account on 2026-09-01 rather than
+  // derived from the project name:
+  //
+  //   $ npx wrangler pages project list
+  //   vb | vb-c7r.pages.dev, vb.aionxxxi.uk, viabiancarestaurant.com
+  //
+  // The `-c7r` is Cloudflare's collision suffix, appended because `vb.pages.dev`
+  // was already taken. It cannot be computed from anything in this repository,
+  // which is exactly how the wrong string got written.
+  //
+  // The rename worry the old comment raised is real and is answered below by
+  // "keeps the recorded alias consistent with the recorded Pages project name"
+  // -- a rename reddens that test, which is a one-line correction, and is a
+  // trade this project will take every time over shipping a stranger's origin.
+  //
+  // scripts/verify-deploy.mjs checks the same thing against REALITY: it fetches
+  // this origin and fails unless the bytes coming back are this site's shell.
+  const PAGES_PRODUCTION_ALIAS = 'https://vb-c7r.pages.dev';
+
+  it("pins the shell origin to this Pages project's own production alias", () => {
+    const origin = readFileSync('wrangler.toml', 'utf8').match(/^PAGES_ORIGIN\s*=\s*"([^"]+)"/m);
     expect(origin).not.toBeNull();
-    expect(origin![1]).toMatch(/^https:\/\/[a-z0-9-]+\.pages\.dev$/);
-    expect(wrangler.match(/routes\s*=\s*\[([\s\S]*?)\]/)![1]).not.toContain('pages.dev');
+    expect(origin![1]).toBe(PAGES_PRODUCTION_ALIAS);
+  });
+
+  // The pin above only moves the question one file over: the constant itself
+  // could be edited to the wrong host, which is precisely what happened -- the
+  // plan carried `https://vb.pages.dev` in wrangler.toml AND in four later
+  // fixtures, so a single agreeing pair would have agreed on the stranger.
+  // These are the near misses that must stay rejected, named individually so
+  // no future edit can quietly reintroduce one.
+  it('refuses the neighbouring hostnames that are not this project', () => {
+    // Live, and somebody else's site. This exact string shipped once.
+    expect(PAGES_PRODUCTION_ALIAS).not.toBe('https://vb.pages.dev');
+    // `${PAGES_ORIGIN}/index.html` would become `...pages.dev//index.html`.
+    expect(PAGES_PRODUCTION_ALIAS).not.toBe('https://vb-c7r.pages.dev/');
+    expect(PAGES_PRODUCTION_ALIAS).not.toBe('http://vb-c7r.pages.dev');
+    // The request's own origin -- the recursion the whole var exists to avoid.
+    expect(PAGES_PRODUCTION_ALIAS).not.toBe('https://viabiancarestaurant.com');
+    // And it is a bare origin, so the join above produces exactly one slash.
+    expect(new URL(PAGES_PRODUCTION_ALIAS).pathname).toBe('/');
+    expect(PAGES_PRODUCTION_ALIAS.endsWith('/')).toBe(false);
+  });
+
+  // Cloudflare generates the subdomain from the project name, plus a short
+  // collision suffix when the bare name is taken. That relationship cannot
+  // decide WHICH pages.dev host is right -- it accepts `vb.pages.dev` too --
+  // so it is not the guard. What it catches is the drift the old comment was
+  // worried about: the project renamed and this alias left behind.
+  it('keeps the recorded alias consistent with the recorded Pages project name', () => {
+    const project = readFileSync('wrangler.toml', 'utf8').match(/^CLOUDFLARE_PAGES_PROJECT\s*=\s*"([^"]+)"/m);
+    expect(project).not.toBeNull();
+    expect(new URL(PAGES_PRODUCTION_ALIAS).host).toMatch(
+      new RegExp(`^${project![1]}(-[a-z0-9]+)?\\.pages\\.dev$`),
+    );
+  });
+
+  // The anti-recursion property itself. A route naming the shell origin turns
+  // every page view into a subrequest back into this Worker.
+  it('routes nothing on the origin the shell is fetched from', () => {
+    const routes = readFileSync('wrangler.toml', 'utf8').match(/routes\s*=\s*\[([\s\S]*?)\]/)![1];
+    expect(routes).not.toContain(new URL(PAGES_PRODUCTION_ALIAS).host);
+    expect(routes).not.toContain('pages.dev');
   });
 
   // The image host is served by R2's own custom domain, not by this Worker.

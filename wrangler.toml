@@ -107,7 +107,35 @@ CONTENT_STORE = "github"
 # Worker route, and Pages applies public/_headers to it exactly as it does to
 # the apex -- so the shell that comes back carries the same CSP the site's own
 # HTML needs.
-PAGES_ORIGIN = "https://vb.pages.dev"
+#
+# THE SUFFIX IS NOT OPTIONAL AND IT IS NOT DERIVABLE. The Pages project is
+# named `vb` (CLOUDFLARE_PAGES_PROJECT above), but its generated subdomain is
+# `vb-c7r.pages.dev`: `vb.pages.dev` was already taken when the project was
+# created, so Cloudflare appended a random suffix. `vb.pages.dev` therefore
+# resolves -- to A STRANGER'S WEBSITE. Measured 2026-09-01:
+#
+#   $ npx wrangler pages project list
+#   vb | vb-c7r.pages.dev, vb.aionxxxi.uk, viabiancarestaurant.com
+#   $ curl -s https://vb.pages.dev/       -> a Chinese link-directory page,
+#                                            and NO Content-Security-Policy
+#   $ curl -s https://vb-c7r.pages.dev/   -> <title>Via Bianca ...</title>,
+#                                            and this site's full CSP
+#
+# This var shipped as `https://vb.pages.dev` and was caught before anything
+# read it. Had Task 12 landed on it, every page view on
+# viabiancarestaurant.com would have served that third party's HTML from this
+# site's own origin, arriving without the CSP -- the site replaced, and
+# uncontrolled foreign markup injected into the zone that holds the admin
+# session cookie. docs/cloudflare-cutover.md section 17 had recorded the correct
+# hostname and the warning for weeks; the value here was derived from the
+# project name instead of read off the account. DERIVE NOTHING HERE. Read it
+# from `npx wrangler pages project list`.
+#
+# One more measured fact, for the subrequest Tasks 9 and 12 write: Pages
+# answers `GET /index.html` with a 308 to `/`. `fetch()` follows redirects by
+# default, so `${PAGES_ORIGIN}/index.html` lands on the shell -- but a
+# subrequest given `redirect: "manual"` would hand a visitor an empty 308.
+PAGES_ORIGIN = "https://vb-c7r.pages.dev"
 
 # Where photographs are served from. Duplicated deliberately rather than
 # imported: src/shared/image-host.ts is the one definition the code reads, and

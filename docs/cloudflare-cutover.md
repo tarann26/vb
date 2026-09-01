@@ -1400,6 +1400,36 @@ access still has to take** before any content reference is allowed to point at
 
   Bound, and read by nothing. `env.R2` has no caller until Task 4.
 - `wrangler.toml`'s `[vars]` gained `IMAGE_HOST` and `PAGES_ORIGIN`.
+
+  **`PAGES_ORIGIN` is `https://vb-c7r.pages.dev`, and it shipped wrong once.**
+  It went in as `https://vb.pages.dev`, derived from the Pages project's name
+  (`vb`) rather than read off the account — which is precisely the mistake
+  §17 above had been warning about in writing for weeks. Nothing read the var
+  yet, so nothing broke; had the `/*` route landed on it, every page view on
+  `viabiancarestaurant.com` would have fetched its SPA shell from an unrelated
+  third party's website and served that HTML from this site's own origin,
+  arriving with no Content-Security-Policy at all (that project sets none).
+
+  Three things now stand between this repository and a repeat, and the first
+  two are new because the guard that existed asserted only that the value
+  *looked like* a `pages.dev` hostname — which the stranger's host does:
+
+  1. `src/test/wrangler-config.test.ts` pins the exact alias, names
+     `vb.pages.dev` as a value that must stay rejected, and checks the alias
+     still matches the recorded project name (so a project rename reddens
+     rather than rots).
+  2. `npm run verify:deploy` fetches `${PAGES_ORIGIN}/index.html` after every
+     deploy and fails unless the bytes coming back are *this* site's shell —
+     right `<title>`, an `/assets/index-*.js` entry bundle, and a CSP header.
+     The logic is `scripts/shell-origin-check.mjs`, unit-tested against the
+     stranger's real response.
+  3. `wrangler.toml`'s own comment carries the measurement and the rule:
+     **derive nothing here.** `npx wrangler pages project list` is the source.
+
+  One more measured fact for whoever writes the subrequest: Pages answers
+  `GET /index.html` with a **308 to `/`**. `fetch()` follows redirects by
+  default, so the join works — but `redirect: 'manual'` would hand a visitor
+  an empty 308.
 - `public/_headers` widened `img-src` — and only `img-src` — to admit
   `https://img.viabiancarestaurant.com`.
 - `src/shared/image-host.ts` is the one place the hostname is spelled for code.

@@ -31,10 +31,12 @@ import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { postsDriftProblems } from './published-posts-check.mjs';
 import { postSeoProblems } from './post-seo-check.mjs';
+import { shellOriginProblems, SHELL_PATH } from './shell-origin-check.mjs';
 
 const SITE = process.env.VB_SITE ?? 'https://viabiancarestaurant.com';
 const ORIGIN = new URL(SITE).origin;
-const SITE_URL_FROM_CONTENT = JSON.parse(readFileSync('src/content/site.json', 'utf8')).seo.url;
+const SITE_SEO = JSON.parse(readFileSync('src/content/site.json', 'utf8')).seo;
+const SITE_URL_FROM_CONTENT = SITE_SEO.url;
 
 const EXPECTED_TYPE = { '.js': /javascript|ecmascript/i, '.css': /text\/css/i };
 
@@ -85,6 +87,41 @@ if (live !== headSha) {
   process.exit(1);
 }
 note('deploy is live');
+
+// ---------------------------------------------------------------------------
+// 1b. Is PAGES_ORIGIN this site, or is it somebody else's?
+//
+// wrangler.toml's PAGES_ORIGIN is where worker/post-page.ts (and, from Task
+// 12, worker/site-page.ts on EVERY page view) fetches the SPA shell. It is
+// deliberately not the request's own origin, because a /* route would make
+// that recurse -- so it is a hostname nothing else in this repository can
+// derive, and that is exactly how it went wrong: it shipped as
+// `https://vb.pages.dev`, computed from the Pages project's name, while the
+// project's real generated subdomain is `vb-c7r.pages.dev`. `vb.pages.dev`
+// resolves to an unrelated third party's website, with no CSP.
+//
+// The unit test pins the string; a pinned string is two copies of one belief,
+// and in the plan this came from both copies were wrong at once. This is the
+// copy that cannot be wrong together with them, because it asks the network.
+//
+// Deliberately NOT the browser this script already opens, and deliberately
+// not `get()`: this is the subrequest the WORKER makes, so it is made the way
+// the Worker makes it -- a plain fetch, following redirects (Pages answers
+// /index.html with a 308 to /), with no Origin header the Worker would not
+// send either.
+// ---------------------------------------------------------------------------
+note('\nthe shell origin the Worker fetches from:');
+{
+  const declared = readFileSync('wrangler.toml', 'utf8').match(/^PAGES_ORIGIN\s*=\s*"([^"]+)"/m)?.[1];
+  const res = declared ? await fetch(`${declared}${SHELL_PATH}`).catch(() => null) : null;
+  const observed = res
+    ? { status: res.status, csp: res.headers.get('content-security-policy'), html: await res.text().catch(() => '') }
+    : { status: 0, csp: null, html: '' };
+  const problems = shellOriginProblems(declared, observed, { title: SITE_SEO.title });
+  note(`  ${problems.length ? 'FAIL' : 'ok  '}  ${declared ?? '(unset)'}${SHELL_PATH}`);
+  for (const p of problems) note(`          ${p}`);
+  failures.push(...problems);
+}
 
 // ---------------------------------------------------------------------------
 // Then wait a little longer, and this is not politeness.

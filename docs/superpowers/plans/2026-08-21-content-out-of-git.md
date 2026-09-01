@@ -95,7 +95,7 @@ The condition, applied in one place:
 
 **D1 — The Worker route widens to `/*`, not to an enumerated list of pages.** An enumerated list (`/`, `/blogs`, `/catering`, …) is smaller and safer-looking, and it is wrong for one decisive reason: `pages.json` is dashboard-editable and moves to D1 at Task 15. After that she can add a page from the dashboard, instantly, and that page's URL would be answered by Pages' SPA catch-all with **no content island** — the SPA would fall back to the compiled bundle, not find the page, and render its own 404. That is precisely the "content is in D1 but something cannot read it" state this plan is arranged to make impossible. The cost is that every asset request also enters the Worker; Task 12 answers that with a passthrough that rewrites nothing.
 
-**D2 — The shell is fetched from the Pages project hostname, not from the site origin.** `worker/post-page.ts` today fetches `/index.html` on the request's own origin and its header comment names "`/index.html` matches neither route" as a load-bearing anti-loop property. Widening to `/*` destroys that property. So both `post-page.ts` and the new `site-page.ts` fetch `${env.PAGES_ORIGIN}/index.html`, a `pages.dev` hostname matched by no route. The shell is still fetched **live** on every request, which is Phase 5C's decision D2 unchanged and for its original reason: asset filenames carry the commit, so any cached copy of the shell points at URLs that 404 the moment Pages redeploys.
+**D2 — The shell is fetched from the Pages project hostname, not from the site origin.** `worker/post-page.ts` today fetches `/index.html` on the request's own origin and its header comment names "`/index.html` matches neither route" as a load-bearing anti-loop property. Widening to `/*` destroys that property. So both `post-page.ts` and the new `site-page.ts` fetch `${env.PAGES_ORIGIN}/index.html`, a `pages.dev` hostname matched by no route. **THAT HOSTNAME IS `https://vb-c7r.pages.dev`, NOT `https://vb.pages.dev`.** This plan originally spelled it `vb.pages.dev` in five places and Task 1 shipped that string; `vb.pages.dev` is a live, unrelated third party's website (the `-c7r` is Cloudflare's collision suffix, because the bare name was taken), and it serves no CSP. Under this decision that would have made every page view on viabiancarestaurant.com serve a stranger's HTML from this site's own origin, unpoliced. It is corrected throughout below; read it off `npx wrangler pages project list` and derive it from nothing. The shell is still fetched **live** on every request, which is Phase 5C's decision D2 unchanged and for its original reason: asset filenames carry the commit, so any cached copy of the shell points at URLs that 404 the moment Pages redeploys.
 
 **D3 — The rewritten HTML is never cached; the two pieces built from D1 are.** Caching the assembled page would cache the shell inside it and reintroduce exactly the staleness D2 exists to remove. So the Cache API holds only the **island string** and the **crawl string**, keyed on a stamp built from the twelve documents' D1 versions. A publish bumps a version, the stamp changes, the old key is never asked for again. **There is no purge call anywhere in this plan** — the same mechanism `worker/published.ts` already proves, and the reason the spec's "publishing must invalidate the edge cache" requirement is satisfied by construction rather than by an API token that can fail silently.
 
@@ -368,7 +368,13 @@ And in `[vars]`, add:
 # Worker route, and Pages applies public/_headers to it exactly as it does to
 # the apex -- so the shell that comes back carries the same CSP the site's own
 # HTML needs.
-PAGES_ORIGIN = "https://vb.pages.dev"
+#
+# THE SUFFIX IS NOT OPTIONAL AND IT IS NOT DERIVABLE. The project is named
+# `vb`, but its generated subdomain is `vb-c7r.pages.dev` -- `vb.pages.dev`
+# was already taken, and resolves to a STRANGER'S WEBSITE that serves no CSP.
+# Read it off `npx wrangler pages project list`. wrangler.toml carries the
+# full argument and the measurement.
+PAGES_ORIGIN = "https://vb-c7r.pages.dev"
 
 # Where photographs are served from. Duplicated deliberately rather than
 # imported: src/shared/image-host.ts is the one definition the code reads, and
@@ -460,16 +466,39 @@ and inside the per-route loop, after the existing probe:
     expect(declared![1]).toBe(IMAGE_HOST);
   });
 
-  // Not a hardcoded 'https://vb.pages.dev': the assertion is that the shell
-  // origin is a pages.dev hostname, because THAT is the property that makes it
-  // unmatched by any Worker route. Pinning the exact string would fail the day
-  // the Pages project is renamed, for no reason connected to the risk.
-  it('fetches the shell from a pages.dev origin, which no Worker route matches', () => {
-    const wrangler = readFileSync('wrangler.toml', 'utf8');
-    const origin = wrangler.match(/PAGES_ORIGIN\s*=\s*"([^"]+)"/);
+  // PIN THE EXACT STRING. This block originally asserted only the SHAPE
+  // (/^https:\/\/[a-z0-9-]+\.pages\.dev$/), reasoning that pinning "would fail
+  // the day the Pages project is renamed". The shape it accepted was
+  // `https://vb.pages.dev` -- a live, unrelated third party's site -- so it was
+  // unfalsifiable for the only failure that matters. pages.dev is a SHARED
+  // suffix; a hostname on it is evidence of nothing.
+  //
+  // The rename worry is answered by the third test below instead. See the
+  // shipped src/test/wrangler-config.test.ts for the full four tests and the
+  // measurement they record; scripts/shell-origin-check.mjs checks the same
+  // belief against the network from `npm run verify:deploy`.
+  const PAGES_PRODUCTION_ALIAS = 'https://vb-c7r.pages.dev';
+
+  it("pins the shell origin to this Pages project's own production alias", () => {
+    const origin = readFileSync('wrangler.toml', 'utf8').match(/^PAGES_ORIGIN\s*=\s*"([^"]+)"/m);
     expect(origin).not.toBeNull();
-    expect(origin![1]).toMatch(/^https:\/\/[a-z0-9-]+\.pages\.dev$/);
-    expect(wrangler.match(/routes\s*=\s*\[([\s\S]*?)\]/)![1]).not.toContain('pages.dev');
+    expect(origin![1]).toBe(PAGES_PRODUCTION_ALIAS);
+  });
+
+  it('refuses the neighbouring hostnames that are not this project', () => {
+    expect(PAGES_PRODUCTION_ALIAS).not.toBe('https://vb.pages.dev');
+    expect(PAGES_PRODUCTION_ALIAS.endsWith('/')).toBe(false);
+  });
+
+  it('keeps the recorded alias consistent with the recorded Pages project name', () => {
+    const project = readFileSync('wrangler.toml', 'utf8').match(/^CLOUDFLARE_PAGES_PROJECT\s*=\s*"([^"]+)"/m);
+    expect(new URL(PAGES_PRODUCTION_ALIAS).host).toMatch(new RegExp(`^${project![1]}(-[a-z0-9]+)?\\.pages\\.dev$`));
+  });
+
+  it('routes nothing on the origin the shell is fetched from', () => {
+    const routes = readFileSync('wrangler.toml', 'utf8').match(/routes\s*=\s*\[([\s\S]*?)\]/)![1];
+    expect(routes).not.toContain(new URL(PAGES_PRODUCTION_ALIAS).host);
+    expect(routes).not.toContain('pages.dev');
   });
 
   // The image host is served by R2's own custom domain, not by this Worker.
@@ -555,8 +584,11 @@ The live header must already list the image host **before Task 4 begins**. The W
 | move `https://img.viabiancarestaurant.com` from `img-src` to `default-src` in `public/_headers` | "the site's CSP admits the image host in img-src and in no other directive" | — |
 | remove the host from the CSP line entirely | same test | — |
 | change `IMAGE_HOST` in `wrangler.toml` to a different hostname | "names the same image host in wrangler.toml and in src/shared/image-host.ts" | — |
-| change `PAGES_ORIGIN` to `https://viabiancarestaurant.com` | "fetches the shell from a pages.dev origin…" | — |
-| add a `pages.dev` entry to `routes` | same test | — |
+| change `PAGES_ORIGIN` to `https://viabiancarestaurant.com` | "pins the shell origin to this Pages project's own production alias" | — |
+| change `PAGES_ORIGIN` to `https://vb.pages.dev` (the stranger's host this plan originally specified) | same test | If it stays green the assertion is a shape check again, and the whole reason this row exists is gone. |
+| change `PAGES_PRODUCTION_ALIAS` **and** `PAGES_ORIGIN` together to `https://vb.pages.dev` | "refuses the neighbouring hostnames that are not this project" | A pinned string is two copies of one belief; this row is what stops both copies being wrong at once, which is exactly what happened. |
+| add a `pages.dev` entry to `routes` | "routes nothing on the origin the shell is fetched from" | — |
+| point `PAGES_ORIGIN` at a host that answers 200 with no CSP | `npm run verify:deploy` reports "sends no Content-Security-Policy"; `scripts/__tests__/shell-origin-check.test.mjs` covers the same branch offline | — |
 | add `img.viabiancarestaurant.com/*` to `routes` | "routes nothing on the image host" | — |
 | delete the `[[r2_buckets]]` block | "binds the R2 bucket the photographs live in" | — |
 | change `bucket_name` to `via-bianca-assets` (the name that never existed) | same test | — |
@@ -3982,7 +4014,7 @@ import { BUNDLE_PATHS } from '../content-bundle';
 const SHELL = readFileSync('index.html', 'utf-8');
 const noCache = (): Cache =>
   ({ match: async () => undefined, put: async () => undefined, delete: async () => false }) as unknown as Cache;
-const envWith = (fake: FakeD1) => ({ DB: asD1(fake), PAGES_ORIGIN: 'https://vb.pages.dev' });
+const envWith = (fake: FakeD1) => ({ DB: asD1(fake), PAGES_ORIGIN: 'https://vb-c7r.pages.dev' });
 const shellResponse = (body = SHELL) =>
   new Response(body, {
     status: 200,
@@ -4062,7 +4094,7 @@ describe('the response', () => {
     const fetchImpl = vi.fn(async () => shellResponse());
     await handleSitePage(new Request('https://viabiancarestaurant.com/catering'), envWith(new FakeD1()),
       noCache(), fetchImpl as unknown as typeof fetch);
-    expect(fetchImpl.mock.calls[0][0]).toBe('https://vb.pages.dev/index.html');
+    expect(fetchImpl.mock.calls[0][0]).toBe('https://vb-c7r.pages.dev/index.html');
   });
 
   it('answers HEAD with the same status and headers and no body', async () => {
@@ -4827,7 +4859,7 @@ Cloudflare dashboard → Workers → `via-bianca-admin` → Metrics. Record requ
 | Mutation | Test that must redden | If it does not redden |
 |---|---|---|
 | revert `routes` to the two `/api/*` and `/blog/*` entries | "routes every path on the real zone to the Worker" | — |
-| add `{ pattern = "vb.pages.dev/*", zone_name = "pages.dev" }` | "routes nothing on the pages.dev origin the shell is fetched from" | — |
+| add `{ pattern = "vb-c7r.pages.dev/*", zone_name = "pages.dev" }` | "routes nothing on the pages.dev origin the shell is fetched from" | — |
 | in `servesPages`, drop the `/api/` check | `worker/__tests__/index.test.ts`'s security-header assertions on `/api/health` | If those tests do not assert the header set on an API response, add one: `expect(response.headers.get('content-security-policy')).toContain("default-src 'none'")`. Losing the header set on every API answer is the worst outcome available in this task. |
 | in `servesPages`, return true for POST | the same header assertions on `POST /api/publish` | — |
 | in `post-page.ts`, fetch the shell from `url.origin` again | `worker/__tests__/post-page.test.ts`'s pages-origin assertion | — |
@@ -5463,7 +5495,7 @@ describe('a page that exists only in D1', () => {
     fake.content.set('src/content/pages.json', { path: 'src/content/pages.json', body: pages, sha: 'x', version: 7, updated_at: 0 });
     const response = await handleSitePage(
       new Request('https://viabiancarestaurant.com/private-dining'),
-      { DB: asD1(fake), PAGES_ORIGIN: 'https://vb.pages.dev' },
+      { DB: asD1(fake), PAGES_ORIGIN: 'https://vb-c7r.pages.dev' },
       noCache(),
       (async () => new Response(SHELL, { status: 200, headers: { 'Content-Type': 'text/html' } })) as unknown as typeof fetch,
     );
