@@ -84,10 +84,23 @@ export function collectFromJson(value, file, found, pointer = '') {
 }
 
 export function collectFromCode(source, file, found) {
-  // A FRESH regex per call. CODE_ASSET_PATTERN carries /g, so a shared
-  // instance holds lastIndex between calls and skips the first match of every
-  // file after the first one -- a defect that loses exactly one reference per
-  // file and is invisible in a total.
+  // A FRESH regex per call, and the reason is narrower than it looks --
+  // measured, because the obvious version of it is false.
+  //
+  // `String.prototype.matchAll` matches against an INTERNAL CLONE and never
+  // writes lastIndex back, so simply sharing this /g instance across calls
+  // loses nothing. Checked directly: two calls in a row both return both of
+  // their matches and lastIndex reads 0 throughout. A mutation that shares
+  // the instance therefore does NOT redden the test below, and that is a
+  // property of matchAll rather than a weak assertion.
+  //
+  // What is NOT safe is sharing it with anything that uses RegExp#test or
+  // RegExp#exec. Those do advance lastIndex, matchAll then COPIES that offset
+  // into its clone, and the next file silently loses its first match -- one
+  // reference per file, invisible in a total. ASSET_PATH_PATTERN right beside
+  // this one is driven by RegExp#test, so that pairing is a plausible edit
+  // away rather than hypothetical, and it DOES redden the test below. A fresh
+  // instance cannot be reached by it at all.
   const pattern = new RegExp(CODE_ASSET_PATTERN.source, 'gi');
   let line = 1;
   let cursor = 0;
