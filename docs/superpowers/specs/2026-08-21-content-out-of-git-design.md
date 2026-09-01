@@ -166,3 +166,91 @@ mutating the code and watching it go red.
   render stale rather than empty.
 - **Undo across the new paths**: one publish, one restore, byte-identical
   content back.
+
+---
+
+## Operational risks, researched rather than assumed
+
+Added after the first draft. Each was verified against Cloudflare's own
+documentation, and each changes something.
+
+### R2's public URL is not usable in production
+
+`r2.dev` is **rate-limited and documented as development-only**. Cloudflare
+warns against even pointing a CNAME at it, calling that "an unsupported access
+path" with no guaranteed reliability or performance. It also gets no caching,
+no WAF and no bot management.
+
+**Decision: images are served from a custom domain, `img.viabiancarestaurant.com`,
+connected to the `via-bianca` bucket.** The zone is already on Cloudflare, so
+this costs nothing and takes one dashboard step. The `r2.dev` subdomain is then
+**disabled**, because leaving it on exposes the bucket through a path that
+bypasses whatever protections the custom domain has.
+
+Serving images through the Worker instead was considered and rejected: it would
+put every photograph through the same 100,000/day Workers Free budget that now
+also serves every page view.
+
+### D1 point-in-time recovery is SEVEN days on the free plan
+
+Time Travel is always on and needs no configuration, but the window is **7 days
+on free and 30 on paid**. Once content lives only in D1, that is the whole
+safety net for a corruption nobody notices immediately.
+
+**Decision: a weekly export of every content document back into the repository**,
+committed by a scheduled job. This is NOT the per-publish commit this migration
+exists to remove -- it is one commit a week whose only job is to make the
+content survive losing D1 entirely.
+
+That mitigation is what makes staying on the free plan reasonable. Without it,
+a mistake discovered on day eight would be unrecoverable. **The alternative is
+$5/month for Workers Paid, which widens the window to 30 days; that is the
+owner's call and the export should be built either way.**
+
+### The repository stops being the source of truth
+
+Today a fresh clone builds the current site. Afterwards it builds whatever the
+compiled-in floor happens to say, which may be months stale.
+
+**Decision: the floor files carry a header comment stating they are a fallback,
+not the live content, and naming where the live content actually is.** The
+weekly export keeps them from drifting far enough to matter.
+
+### Publishing must invalidate the edge cache
+
+The whole promise is that a publish is visible immediately. An edge cache that
+serves a stale render for its full TTL breaks exactly that, and it would look
+to her like the publish silently failed.
+
+**Decision: a publish purges the cache entries it affects, and the plan proves
+it by publishing and then reading the live page in a browser.** A test that
+only checks the cache key is not proof.
+
+### Deleting content orphans its images
+
+Removing a dish leaves its photograph in R2 with nothing pointing at it.
+
+**Decision: orphans are left in place.** At 56 images and a restaurant's rate of
+change this is a rounding error against a 10 GB allowance, and the alternative --
+deleting on content change -- is exactly how this project already deleted a
+photograph that was still in use. Reclaiming can be a deliberate, separate,
+manually-run sweep if it ever matters.
+
+### The migration itself must be atomic per image
+
+Uploading 56 images and rewriting 68 references is not one operation. A failure
+between them leaves the site pointing at files that are not there yet.
+
+**Decision: every image is uploaded and VERIFIED READABLE at its final URL
+before any content file is rewritten to point at it.** The rewrite is the last
+step, and it is reversible by a single commit because the content files are
+still in git at that moment.
+
+### Hotlinking
+
+A public bucket can be hotlinked by anyone. R2 egress is free, so this costs
+nothing directly.
+
+**Decision: accept it.** A hotlink protection rule can be added later if it ever
+matters; spending complexity on it now would be solving a problem the
+restaurant does not have.
