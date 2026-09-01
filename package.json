@@ -18,6 +18,7 @@
     "test:e2e": "playwright test",
     "test:csp": "npm run build --silent && node scripts/check-csp.mjs",
     "verify:deploy": "node scripts/verify-deploy.mjs",
+    "verify:images": "node scripts/verify-image-urls.mjs",
     "prepare": "git config core.hooksPath .githooks || true",
     "gate": "npm run images && npx tsc -b --noEmit && npx eslint . && npm test -- --run && npm run test:deploy && npm run build"
   },
