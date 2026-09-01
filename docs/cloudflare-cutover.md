@@ -1584,3 +1584,54 @@ store every one of them as `image/jpeg`. `detectImageType` reads the magic
 number instead, and only for originals: a derivative's bytes have already been
 proved a complete RIFF WEBP, and a menu PDF's extension is chosen here rather
 than by whoever handed the photograph over.
+
+### The rewrite exists and has not been run either
+
+`scripts/rewrite-image-refs.mjs` turns all 77 site-root references into
+absolute URLs on the image host. It reads `image-manifest.json` and refuses,
+writing nothing at all and exiting 1, if a single reference names an object
+without a `verifiedAt`. Since that manifest does not exist, the script exits on
+its first line — which is the correct behaviour and not a bug to work around.
+
+Proved offline, against the real twelve content files and the five code files
+with a manifest that verifies everything: **77 changed, 3 distinct references
+kept** (`/og-image.jpg` and the two menu PDFs), **0 missing, 13 files touched**,
+including `src/index.css`'s `body::before` texture, and no site-root photograph
+left in anything it wrote. `scripts/__tests__/rewrite-image-refs.test.mjs` is
+that proof and it runs on every push.
+
+**What is still owed before the references may move**, in order:
+
+1. The R2 custom domain, the HTTPS round trip, and the widened `img-src` live
+   on the wire — the three steps above.
+2. `npm run migrate:images`, 0 failed.
+3. The refusal, proved before it is trusted:
+
+       cp image-manifest.json /tmp/real-manifest.json
+       node -e "const m=JSON.parse(require('fs').readFileSync('image-manifest.json','utf8'));delete m.objects['food/pizza1.webp'].verifiedAt;require('fs').writeFileSync('image-manifest.json',JSON.stringify(m,null,2))"
+       node scripts/rewrite-image-refs.mjs; echo "exit=$?"
+       git status --porcelain src/content src/components src/index.css
+       cp /tmp/real-manifest.json image-manifest.json
+
+   `exit=1`, and `git status --porcelain` must print **nothing**. If it wrote
+   anything, the refusal is not a refusal and the whole safety argument is void.
+4. `node scripts/rewrite-image-refs.mjs` for real. Expect
+   `rewrite: 77 references, 4 deliberately left alone` (four occurrences, three
+   distinct paths).
+5. **Move the offline guardrail in the same commit.**
+   `src/content/__tests__/assets.test.ts` resolves every discovered path against
+   `publicFiles`. After the rewrite the content strings start with `https://`,
+   `ASSET_PATH_PATTERN` stops matching them, and the content half of that walk
+   silently becomes vacuous. Task 6 Step 5 of the plan carries the replacement
+   assertions, including the miss detector — *nothing still points at a migrated
+   category directory* — which is the one that catches a reference the rewrite
+   skipped. A missed reference RESOLVES, because `public/` still holds the file.
+6. Deploy, `npm run verify:images`, then **a human opens the live homepage,
+   `/blogs` and each of the six standalone pages and looks at them** with the
+   network panel open. The sweep cannot see `src/index.css`'s `body::before`
+   texture or the hero collage's geometry. Those are eyes.
+7. Write that commit's sha here, with: *`git revert <sha>` restores every
+   reference to its site-root path; `public/` still holds every file they name
+   and `npm run images` still rebuilds them from `assets-source/`, so the site
+   returns to serving its own photographs with no other change and no R2
+   involvement.*
