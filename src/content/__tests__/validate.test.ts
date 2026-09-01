@@ -587,9 +587,9 @@ describe('validateContent: experiences.json (Phase 3)', () => {
     expect(problems.some((p) => p.field === '[0].image' && /needs a photo/.test(p.message))).toBe(true);
   });
 
-  it('rejects an image not starting with /', () => {
+  it('rejects an image that is not on this site', () => {
     const problems = validateContent('experiences.json', [{ ...validExperience, image: 'javascript:alert(1)' }]);
-    expect(problems.some((p) => p.field === '[0].image' && /starting with \//.test(p.message))).toBe(true);
+    expect(problems.some((p) => p.field === '[0].image' && /not on another website/.test(p.message))).toBe(true);
   });
 
   it('rejects an absolute-URL link', () => {

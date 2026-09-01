@@ -38,7 +38,11 @@ import {
 // below, and markdown.ts's own header. This module is bundled into the
 // Worker, and markdown.ts imports nothing, holds no JSX and touches no DOM,
 // so the chain stays clean (worker/__tests__/bundle.test.ts).
-import { isSafeHref, isSiteRelativePath, rawLinkTargets } from './markdown';
+import { isSafeHref, rawLinkTargets } from './markdown';
+// The shapes a photograph reference may take, shared with the import-time
+// guards so this end and ./guards cannot come to disagree about where an
+// image may be loaded from.
+import { isSiteAssetReference } from './asset-reference';
 // The nesting cap, read from the one place it is declared so this end and
 // assertBlock cannot come to two different answers about how deep is too deep.
 import { MAX_LIST_DEPTH } from './types';
@@ -105,21 +109,21 @@ function isUnsafeExternalUrl(value: unknown): boolean {
   return typeof value !== 'string' || !/^https?:\/\/[^/]/.test(value.trim());
 }
 
-// An asset this site serves itself: every image, and the menu PDFs. All 59
-// of them are root-relative today and nothing about this site wants them
-// otherwise -- an absolute URL here would silently move an asset off-origin,
-// leaking every visitor's IP and referrer to whoever owns it, and would slip
-// past the guardrail that checks each of these files exists under public/.
+// An asset this site serves itself: every image, and the menu PDFs. Two
+// shapes are valid, not one -- a path on this site, and a URL on this site's
+// own image host. It was one shape until the 2026-08-21 migration moved the
+// photographs into R2; anything WIDER is still refused, because an asset on
+// a third party's host silently leaks every visitor's IP and referrer to
+// whoever owns it. See ./asset-reference for the whole argument and for the
+// parser behaviour behind both halves.
 //
-// The "is this really a path on this site" half is `isSiteRelativePath`
-// (./markdown), not three string tests written out again here. It used to be
-// those three tests, and they let `/` + `\` + `evil.example` through: a
-// single leading slash, no dot-dot, and a browser resolves it to a different
-// origin anyway. See that function for the parser behaviour, and
-// markdown.test.ts for the shapes.
-function isUnsafeAssetPath(value: unknown): boolean {
-  if (typeof value !== 'string') return true;
-  return !isSiteRelativePath(value);
+// This is the check FOURTEEN fields read -- dish.image, drink.image,
+// article.image, chef.portrait, every gallery src, menu.file, award.image, an
+// experience's image and a post's card image among them -- so widening it
+// here is what lets the owner publish a document the migration has rewritten.
+// Left alone, this endpoint refused every one of them.
+function isUnsafeAssetReference(value: unknown): boolean {
+  return !isSiteAssetReference(value);
 }
 
 // Stricter than `asRecord`, which maps anything that isn't a plain object
@@ -230,8 +234,8 @@ function validateDish(raw: unknown, index: number): ValidationProblem[] {
   }
   if (isBlank(dish.image)) {
     problems.push(problem(`[${index}].image`, `"${String(dish.name ?? 'this dish')}" needs an image`));
-  } else if (isUnsafeAssetPath(dish.image)) {
-    problems.push(problem(`[${index}].image`, `"${String(dish.name ?? 'this dish')}" needs an image on this site, starting with /`));
+  } else if (isUnsafeAssetReference(dish.image)) {
+    problems.push(problem(`[${index}].image`, `"${String(dish.name ?? 'this dish')}" needs an image on this site, not on another website`));
   }
   if (!Array.isArray(dish.tags)) {
     problems.push(problem(`[${index}].tags`, `"${String(dish.name ?? 'this dish')}" needs a tags list`));
@@ -271,8 +275,8 @@ function validateDrink(raw: unknown, index: number): ValidationProblem[] {
   }
   if (drink.image !== null && isBlank(drink.image)) {
     problems.push(problem(`[${index}].image`, `"${String(drink.name ?? 'this drink')}" needs an image, or null`));
-  } else if (drink.image !== null && isUnsafeAssetPath(drink.image)) {
-    problems.push(problem(`[${index}].image`, `"${String(drink.name ?? 'this drink')}" needs an image on this site, starting with /`));
+  } else if (drink.image !== null && isUnsafeAssetReference(drink.image)) {
+    problems.push(problem(`[${index}].image`, `"${String(drink.name ?? 'this drink')}" needs an image on this site, not on another website`));
   }
   try {
     assertDrinkCategory(drink, index);
@@ -305,8 +309,8 @@ function validateArticle(raw: unknown, index: number): ValidationProblem[] {
   }
   if (isBlank(article.image)) {
     problems.push(problem(`[${index}].image`, `"${String(article.title ?? 'this article')}" needs an image`));
-  } else if (isUnsafeAssetPath(article.image)) {
-    problems.push(problem(`[${index}].image`, `"${String(article.title ?? 'this article')}" needs an image on this site, starting with /`));
+  } else if (isUnsafeAssetReference(article.image)) {
+    problems.push(problem(`[${index}].image`, `"${String(article.title ?? 'this article')}" needs an image on this site, not on another website`));
   }
   if (isBlank(article.date) || Number.isNaN(new Date(article.date as string).getTime())) {
     problems.push(problem(`[${index}].date`, `"${String(article.title ?? 'this article')}" needs a real date`));
@@ -379,8 +383,8 @@ function validateStory(data: unknown): ValidationProblem[] {
   }
   if (isBlank(chef.portrait)) {
     problems.push(problem('chef.portrait', 'the About section needs a photo of you'));
-  } else if (isUnsafeAssetPath(chef.portrait)) {
-    problems.push(problem('chef.portrait', 'your photo needs to be one uploaded through this dashboard, starting with /'));
+  } else if (isUnsafeAssetReference(chef.portrait)) {
+    problems.push(problem('chef.portrait', 'your photo needs to be one uploaded through this dashboard'));
   }
   if (isBlank(chef.portraitAlt)) {
     problems.push(problem('chef.portraitAlt', 'your photo needs a short description, for people using a screen reader'));
@@ -499,8 +503,8 @@ function validateGalleryImages(raw: unknown, field: string, placeholderPattern: 
     const problems: ValidationProblem[] = [];
     if (isBlank(image.src)) {
       problems.push(problem(`${field}[${i}].src`, `${field}[${i}] needs an image source`));
-    } else if (isUnsafeAssetPath(image.src)) {
-      problems.push(problem(`${field}[${i}].src`, `${field}[${i}] needs an image on this site, starting with /`));
+    } else if (isUnsafeAssetReference(image.src)) {
+      problems.push(problem(`${field}[${i}].src`, `${field}[${i}] needs an image on this site, not on another website`));
     }
     if (isBlank(image.alt)) {
       problems.push(problem(`${field}[${i}].alt`, `${field}[${i}] needs alt text`));
@@ -607,9 +611,9 @@ export function collageTreeProblems(raw: unknown): ValidationProblem[] {
       const index = photoIndex++;
       if (isBlank(record.src)) {
         problems.push(problem(`heroCollage[${index}].src`, `collage photo ${index + 1} needs an image`));
-      } else if (isUnsafeAssetPath(record.src)) {
+      } else if (isUnsafeAssetReference(record.src)) {
         problems.push(
-          problem(`heroCollage[${index}].src`, `collage photo ${index + 1} needs an image on this site, starting with /`),
+          problem(`heroCollage[${index}].src`, `collage photo ${index + 1} needs an image on this site, not on another website`),
         );
       }
       if (typeof record.alt !== 'string') {
@@ -688,8 +692,8 @@ function validateMenus(data: unknown): ValidationProblem[] {
     if (isBlank(menu.label)) problems.push(problem(`[${i}].label`, `menu at position ${i} needs a label`));
     if (isBlank(menu.file)) {
       problems.push(problem(`[${i}].file`, `"${String(menu.label ?? 'this menu')}" needs a file`));
-    } else if (isUnsafeAssetPath(menu.file)) {
-      problems.push(problem(`[${i}].file`, `"${String(menu.label ?? 'this menu')}" needs a file on this site, starting with /`));
+    } else if (isUnsafeAssetReference(menu.file)) {
+      problems.push(problem(`[${i}].file`, `"${String(menu.label ?? 'this menu')}" needs a file on this site, not on another website`));
     }
     return problems;
   });
@@ -744,8 +748,8 @@ function validateTemplateContentFields(template: string, raw: unknown, path: str
         if (isBlank(item.description)) problems.push(problem(`${path}.items[${i}].description`, `item ${i + 1} needs a description`));
         if (isBlank(item.image)) {
           problems.push(problem(`${path}.items[${i}].image`, `item ${i + 1} needs an image`));
-        } else if (isUnsafeAssetPath(item.image)) {
-          problems.push(problem(`${path}.items[${i}].image`, `item ${i + 1} needs an image on this site, starting with /`));
+        } else if (isUnsafeAssetReference(item.image)) {
+          problems.push(problem(`${path}.items[${i}].image`, `item ${i + 1} needs an image on this site, not on another website`));
         }
       });
     }
@@ -760,8 +764,8 @@ function validateTemplateContentFields(template: string, raw: unknown, path: str
         const image = asRecord(raw);
         if (isBlank(image.src)) {
           problems.push(problem(`${path}.images[${i}].src`, `image ${i + 1} needs a source`));
-        } else if (isUnsafeAssetPath(image.src)) {
-          problems.push(problem(`${path}.images[${i}].src`, `image ${i + 1} needs an image on this site, starting with /`));
+        } else if (isUnsafeAssetReference(image.src)) {
+          problems.push(problem(`${path}.images[${i}].src`, `image ${i + 1} needs an image on this site, not on another website`));
         }
         if (isBlank(image.alt)) problems.push(problem(`${path}.images[${i}].alt`, `image ${i + 1} needs alt text`));
       });
@@ -1124,13 +1128,13 @@ function validateAward(raw: unknown, index: number, seenIds: Set<string>): Valid
   }
   // `image` is optional -- absent is fine (Award['image'] is `string |
   // undefined`, never `null`, unlike Drink['image']) -- but a PRESENT value
-  // must be a real, safe, on-site asset path, the same `isUnsafeAssetPath`
+  // must be a real, safe, on-site asset path, the same `isUnsafeAssetReference`
   // rule as every other image field in this file.
   if (award.image !== undefined) {
     if (isBlank(award.image)) {
       problems.push(problem(`[${index}].image`, `"${String(award.title ?? 'this award')}" needs a badge image, or leave it blank`));
-    } else if (isUnsafeAssetPath(award.image)) {
-      problems.push(problem(`[${index}].image`, `"${String(award.title ?? 'this award')}" needs a badge image on this site, starting with /`));
+    } else if (isUnsafeAssetReference(award.image)) {
+      problems.push(problem(`[${index}].image`, `"${String(award.title ?? 'this award')}" needs a badge image on this site, not on another website`));
     }
   }
   problems.push(...validateKnownKeys(award, AWARD_KEYS, `[${index}]`, String(award.title ?? 'this award')));
@@ -1170,11 +1174,11 @@ function validateExperience(raw: unknown, index: number, seenIds: Set<string>): 
     problems.push(problem(`[${index}].description`, `"${name}" needs a short description`));
   }
   // Required, unlike an award badge: a card with no photo is an empty
-  // rectangle. Same isUnsafeAssetPath rule as every other image field here.
+  // rectangle. Same isUnsafeAssetReference rule as every other image field here.
   if (isBlank(item.image)) {
     problems.push(problem(`[${index}].image`, `"${name}" needs a photo`));
-  } else if (isUnsafeAssetPath(item.image)) {
-    problems.push(problem(`[${index}].image`, `"${name}" needs a photo on this site, starting with /`));
+  } else if (isUnsafeAssetReference(item.image)) {
+    problems.push(problem(`[${index}].image`, `"${name}" needs a photo on this site, not on another website`));
   }
   if (typeof item.comingSoon !== 'boolean') {
     problems.push(problem(`[${index}].comingSoon`, `"${name}" needs to say whether it is coming soon`));
@@ -1349,8 +1353,8 @@ function validateBlock(raw: unknown, field: string, subject: string): Validation
     case 'image':
       if (isBlank(block.src)) {
         problems.push(problem(`${field}.src`, `an image block in ${subject} needs a photo`));
-      } else if (isUnsafeAssetPath(block.src)) {
-        problems.push(problem(`${field}.src`, `an image block in ${subject} needs a photo on this site, starting with /`));
+      } else if (isUnsafeAssetReference(block.src)) {
+        problems.push(problem(`${field}.src`, `an image block in ${subject} needs a photo on this site, not on another website`));
       }
       if (isBlank(block.alt)) {
         problems.push(
@@ -1380,11 +1384,11 @@ function validateBlock(raw: unknown, field: string, subject: string): Validation
           const image = asRecord(entry);
           if (isBlank(image.src)) {
             problems.push(problem(`${field}.images[${i}].src`, `a gallery photo in ${subject} needs a photo`));
-          } else if (isUnsafeAssetPath(image.src)) {
+          } else if (isUnsafeAssetReference(image.src)) {
             problems.push(
               problem(
                 `${field}.images[${i}].src`,
-                `a gallery photo in ${subject} needs a photo on this site, starting with /`,
+                `a gallery photo in ${subject} needs a photo on this site, not on another website`,
               ),
             );
           }
@@ -1475,8 +1479,8 @@ function validatePost(raw: unknown, index: number, seenIds: Set<string>, seenSlu
   if (isBlank(post.excerpt)) problems.push(problem(`[${index}].excerpt`, `${subject} needs a short summary for its card`));
   if (isBlank(post.image)) {
     problems.push(problem(`[${index}].image`, `${subject} needs a photo for its card`));
-  } else if (isUnsafeAssetPath(post.image)) {
-    problems.push(problem(`[${index}].image`, `${subject} needs a photo on this site, starting with /`));
+  } else if (isUnsafeAssetReference(post.image)) {
+    problems.push(problem(`[${index}].image`, `${subject} needs a photo on this site, not on another website`));
   }
   if (!POST_DATE_PATTERN.test(String(post.date ?? ''))) {
     problems.push(problem(`[${index}].date`, `${subject} needs a date like 2026-03-04`));
