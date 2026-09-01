@@ -406,6 +406,31 @@ describe('cloudflare hosting config', () => {
       it("falls back to 'self' for anything not named", () => {
         expect(directive('default-src')).toBe("default-src 'self'");
       });
+
+      // The whole reason this is Task 1. A content reference rewritten to the
+      // image host while this directive still reads `img-src 'self' blob:`
+      // would be refused by every browser, at a 200, with every photograph an
+      // icon.
+      //
+      // The second half -- and in no other directive -- is not tidiness. The
+      // rejected draft widened default-src, which grants script-src,
+      // connect-src and frame-src at the same stroke, so a mistakenly-public
+      // object could have become executing script rather than only a picture.
+      it("the site's CSP admits the image host in img-src and in no other directive", () => {
+        const security = headerBlocks().find((block) => blockPath(block) === SECURITY_BLOCK)!;
+        const csp = security.match(/Content-Security-Policy:\s*(.+)/)![1];
+        const directives = Object.fromEntries(
+          csp.split(';').map((part) => {
+            const tokens = part.trim().split(/\s+/);
+            return [tokens[0], tokens.slice(1)];
+          }),
+        ) as Record<string, string[]>;
+        expect(directives['img-src']).toContain('https://img.viabiancarestaurant.com');
+        for (const [name, values] of Object.entries(directives)) {
+          if (name === 'img-src') continue;
+          expect(values).not.toContain('https://img.viabiancarestaurant.com');
+        }
+      });
     });
 
     // Not a style note. `preload` is a submission into a list compiled into

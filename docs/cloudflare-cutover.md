@@ -1380,3 +1380,130 @@ every post URL renders exactly as it did before this phase, with site-wide
 metadata in the head and the article itself rendered by the SPA as always. The
 handler cannot run without a route, so the Worker code needs no revert and no
 second deploy. Nothing outside `/blog/*` moves at any point.
+
+---
+
+## 21. The photograph bucket: binding `via-bianca`, and the custom domain it is served from
+
+Phase 6, Task 1. This section records what was done in the repository, what was
+measured against the live account, and the two steps a **human with dashboard
+access still has to take** before any content reference is allowed to point at
+`img.viabiancarestaurant.com`.
+
+### What is already in the repository
+
+- `wrangler.toml` binds the bucket:
+
+      [[r2_buckets]]
+      binding = "R2"
+      bucket_name = "via-bianca"
+
+  Bound, and read by nothing. `env.R2` has no caller until Task 4.
+- `wrangler.toml`'s `[vars]` gained `IMAGE_HOST` and `PAGES_ORIGIN`.
+- `public/_headers` widened `img-src` — and only `img-src` — to admit
+  `https://img.viabiancarestaurant.com`.
+- `src/shared/image-host.ts` is the one place the hostname is spelled for code.
+  `src/test/wrangler-config.test.ts` asserts it and the `IMAGE_HOST` var are the
+  same string.
+
+### What was measured against the live account, 2026-09-01
+
+Run from an authenticated `npx wrangler` (4.119.0), all with `--remote`:
+
+    $ npx wrangler r2 bucket list
+    name:           via-bianca
+    creation_date:  2026-09-01T15:47:38.564Z
+
+    $ printf 'ok' > /tmp/vb-probe.txt
+    $ npx wrangler r2 object put via-bianca/__probe__.txt --file=/tmp/vb-probe.txt \
+        --content-type=text/plain --remote
+    Resource location: remote
+    Creating object "__probe__.txt" in bucket "via-bianca".
+    Upload complete.
+
+    $ npx wrangler r2 object get via-bianca/__probe__.txt --file=/tmp/vb-probe-back.txt --remote
+    Resource location: remote
+    Downloading "__probe__.txt" from "via-bianca".
+    Download complete.
+
+    $ diff /tmp/vb-probe.txt /tmp/vb-probe-back.txt && echo 'ROUND TRIP OK'
+    ROUND TRIP OK
+
+    $ npx wrangler r2 object delete via-bianca/__probe__.txt --remote
+    Resource location: remote
+    Deleting object "__probe__.txt" from bucket "via-bianca".
+    Delete complete.
+
+    $ npx wrangler r2 object get via-bianca/__probe__.txt --file=/tmp/x.txt --remote
+    ✘ [ERROR] The specified key does not exist.
+
+`Resource location: remote` on every line and a "does not exist" after the
+delete are the two answers that matter. Without them the whole exercise could
+have happened in the local miniflare simulation, which is the failure mode most
+easily mistaken for success. The bucket is empty again.
+
+    $ npx wrangler r2 bucket dev-url get via-bianca
+    Public access via the r2.dev URL is disabled.
+
+That is the state the task wants and it needed no change — `r2.dev` is off by
+default on a new bucket. Cloudflare documents `r2.dev` as development-only and
+rate-limited, warns against even pointing a CNAME at it, and gives it no edge
+caching, no WAF and no bot management. **It stays disabled.** If anybody ever
+turns it on to debug something, turn it back off in the same sitting.
+
+### STILL TO DO — a human with dashboard access, before Task 4
+
+    $ npx wrangler r2 bucket domain list via-bianca
+    There are no custom domains connected to this bucket.
+
+**Nothing serves `https://img.viabiancarestaurant.com/<key>` yet, and the
+hostname does not resolve.** Verified: `curl` returns
+`Could not resolve host: img.viabiancarestaurant.com`.
+
+1. **Connect the custom domain.** R2 → `via-bianca` → Settings → Public access →
+   Custom Domains → **Connect Domain**, enter `img.viabiancarestaurant.com`. The
+   zone is already on Cloudflare, so the DNS record and the certificate are
+   issued automatically. Wait for status **Active**.
+
+   This is a public-access change on the live zone and it makes every object in
+   the bucket world-readable at a predictable URL. It is a decision for the
+   account owner, which is why no script in this repository performs it.
+
+2. **Re-run the round trip, this time over HTTPS.** The wrangler half above
+   proves the API path; it does not prove the *served* path, which is the one a
+   visitor's browser uses.
+
+       printf 'ok' > /tmp/vb-probe.txt
+       npx wrangler r2 object put via-bianca/__probe__.txt --file=/tmp/vb-probe.txt \
+         --content-type=text/plain --remote
+       curl -sS -D - -o /tmp/vb-probe-back.txt https://img.viabiancarestaurant.com/__probe__.txt
+       diff /tmp/vb-probe.txt /tmp/vb-probe-back.txt && echo 'ROUND TRIP OK'
+       npx wrangler r2 object delete via-bianca/__probe__.txt --remote
+       curl -sS -o /dev/null -w '%{http_code}\n' https://img.viabiancarestaurant.com/__probe__.txt
+
+   The three answers that must all hold: `HTTP/2 200` with
+   `content-type: text/plain` on the read; `ROUND TRIP OK` on the diff; **404**
+   after the delete. A 404 on the *first* read means the domain is not Active
+   yet. A Cloudflare error page means public access is not on.
+
+   Paste all four responses back into this section when they hold.
+
+3. **Ship the widened `img-src` and check it on the wire.** `public/_headers`
+   reaches production through a Pages build, so the commit carrying it has to be
+   on `main` and deployed before any reference moves:
+
+       curl -sSI https://viabiancarestaurant.com/ | tr ';' '\n' | grep -i 'img-src'
+
+   The live header must already list `https://img.viabiancarestaurant.com`
+   **before Task 4 begins**.
+
+**Why the ordering is not negotiable.** `img-src 'self' blob:` forbids loading
+an image from any other host. A content reference rewritten to the bucket before
+that header ships would answer **200 from R2 and still be refused by the
+browser** — every photograph on the site becomes a broken-image icon, on every
+browser, with nothing in the network tab that looks like a failure. That is the
+single most expensive ordering mistake available in this migration, and Task 1
+exists to spend it here instead.
+
+The Worker is **not** deployed by this task. `env.R2` is bound in configuration
+and read by nothing until Task 4.

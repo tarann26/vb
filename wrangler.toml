@@ -96,6 +96,26 @@ CF_WEB_ANALYTICS_SITE_TAG = "de70f41296fe4d6486dbad51f983220f"
 # rollback, which is the whole reason the ContentStore indirection exists.
 CONTENT_STORE = "github"
 
+# Where the SPA shell is fetched from, and it is deliberately NOT the request's
+# own origin any more.
+#
+# worker/post-page.ts's header comment named "/index.html matches neither
+# route" as the load-bearing reason its shell subrequest cannot recurse into
+# this Worker. Task 12 widens `routes` to /*, which destroys that property
+# outright: every path on the zone, /index.html included, would match. This
+# hostname is the Pages project's own production alias, it is matched by no
+# Worker route, and Pages applies public/_headers to it exactly as it does to
+# the apex -- so the shell that comes back carries the same CSP the site's own
+# HTML needs.
+PAGES_ORIGIN = "https://vb.pages.dev"
+
+# Where photographs are served from. Duplicated deliberately rather than
+# imported: src/shared/image-host.ts is the one definition the code reads, and
+# this var exists so worker/upload.ts can build the URL it hands back without
+# the Worker and this file being able to disagree silently --
+# src/test/wrangler-config.test.ts asserts the two strings are identical.
+IMAGE_HOST = "https://img.viabiancarestaurant.com"
+
 [triggers]
 # 03:17 UTC, which is 08:47 in Kolkata -- after midnight UTC has closed
 # yesterday's window, and at a minute nobody else's cron is on.
@@ -151,22 +171,31 @@ binding = "DB"
 database_name = "via-bianca-content"
 database_id = "7ec61770-4fb1-4458-9c34-46b92bb9702c"
 
-# R2 is deliberately ABSENT from this file, not merely deferred by oversight.
-# `wrangler r2 bucket create via-bianca-assets` failed with code 10042,
-# "Please enable R2 through the Cloudflare Dashboard" -- that activation can
-# require billing details, and the standing authorization does not cover
-# adding a billable prerequisite without the owner's approval. Nothing in
-# Phase 2 reads env.R2 either way, so there is no unexercised binding sitting
-# here waiting on a bucket that does not exist.
+# R2, bound and in use from Task 4 onward. The bucket already existed and was
+# empty; `npx wrangler r2 bucket list` confirmed it, and Task 1 proved the
+# round trip -- one object written, read back, deleted, and the delete
+# confirmed with a not-found.
 #
-# The image derivative pipeline is the reason R2 was going to be bound at
-# all. The spec says it "runs on upload inside the Worker rather than at
-# build time"; it cannot: scripts/images.mjs loads sharp's native binding at
-# module scope and workerd cannot execute native code, and every Cloudflare
-# resizing product (Images, the /cdn-cgi/image/ transform endpoint) is
-# billable, which the standing authorization also forbids without the
-# owner's approval. Three options are owed a decision before Phase 3:
-# generate derivatives at build time and upload the results to R2; upload
-# originals and resize in the browser before the request; or buy Cloudflare
-# Images. R2's activation is now bundled into that same decision -- both
-# arrive together in Phase 3.
+# The activation this file's previous comment was waiting on has happened, and
+# the derivative question it left open is answered in the plan this binding
+# arrives with (docs/superpowers/plans/2026-08-21-content-out-of-git.md):
+# derivatives are NOT generated inside the Worker (workerd runs no native code,
+# so sharp is impossible there) and NOT bought from Cloudflare Images
+# (billable, ruled out by the owner). The fifty photographs that exist today
+# are copied out of the PRODUCTION CDN byte for byte with no re-encode at all,
+# and every upload after that is encoded by the browser before the request
+# leaves the page -- src/admin/derive.ts.
+#
+# Free tier, read against the live docs: 10 GB stored, 1,000,000 Class A
+# (write) and 10,000,000 Class B (read) operations a month, and egress is free
+# at any volume. The whole library is 224 MB (2.6 MB of served derivatives,
+# 201 MB of archived originals, 20 MB of menu PDFs). The expected bill is zero.
+#
+# THE BUCKET IS NOT SERVED BY THIS WORKER. It is served by an R2 custom domain,
+# img.viabiancarestaurant.com, and the `routes` list above is never widened to
+# cover that hostname -- src/test/wrangler-config.test.ts pins that. Putting
+# photographs through the Worker would spend the same 100,000-requests-a-day
+# free budget that every page view is about to start spending.
+[[r2_buckets]]
+binding = "R2"
+bucket_name = "via-bianca"

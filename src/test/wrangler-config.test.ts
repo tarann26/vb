@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { IMAGE_HOST } from '../shared/image-host';
 
 // Whole-branch review, Critical 1: the previous version of this file pinned
 // wrangler.toml's KV id, CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_PAGES_PROJECT
@@ -162,6 +163,39 @@ describe('wrangler.toml Phase 2 bindings', () => {
     const match = toml.match(/^CONTENT_STORE\s*=\s*"([^"]+)"/m);
     expect(match).not.toBeNull();
     expect(match![1]).toBe('github');
+  });
+
+  it('binds the R2 bucket the photographs live in', () => {
+    const wrangler = readFileSync('wrangler.toml', 'utf8');
+    expect(wrangler).toMatch(/\[\[r2_buckets\]\]/);
+    expect(wrangler).toMatch(/binding\s*=\s*"R2"/);
+    expect(wrangler).toMatch(/bucket_name\s*=\s*"via-bianca"/);
+  });
+
+  // The Worker builds the URL it hands back from IMAGE_HOST; the browser and
+  // every script read src/shared/image-host.ts. Two strings, one meaning.
+  it('names the same image host in wrangler.toml and in src/shared/image-host.ts', () => {
+    const declared = readFileSync('wrangler.toml', 'utf8').match(/IMAGE_HOST\s*=\s*"([^"]+)"/);
+    expect(declared).not.toBeNull();
+    expect(declared![1]).toBe(IMAGE_HOST);
+  });
+
+  // Not a hardcoded 'https://vb.pages.dev': the assertion is that the shell
+  // origin is a pages.dev hostname, because THAT is the property that makes it
+  // unmatched by any Worker route. Pinning the exact string would fail the day
+  // the Pages project is renamed, for no reason connected to the risk.
+  it('fetches the shell from a pages.dev origin, which no Worker route matches', () => {
+    const wrangler = readFileSync('wrangler.toml', 'utf8');
+    const origin = wrangler.match(/PAGES_ORIGIN\s*=\s*"([^"]+)"/);
+    expect(origin).not.toBeNull();
+    expect(origin![1]).toMatch(/^https:\/\/[a-z0-9-]+\.pages\.dev$/);
+    expect(wrangler.match(/routes\s*=\s*\[([\s\S]*?)\]/)![1]).not.toContain('pages.dev');
+  });
+
+  // The image host is served by R2's own custom domain, not by this Worker.
+  it('routes nothing on the image host', () => {
+    const routes = readFileSync('wrangler.toml', 'utf8').match(/routes\s*=\s*\[([\s\S]*?)\]/)![1];
+    expect(routes).not.toContain('img.viabiancarestaurant.com');
   });
 });
 

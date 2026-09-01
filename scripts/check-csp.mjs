@@ -123,6 +123,29 @@ try {
 }
 `;
 
+// A REAL image element pointed at the image host, loaded in the real browser
+// under the real policy. A string check on the header text would pass on a
+// policy that lists the host in the wrong directive; only an actual load tells
+// the two apart.
+//
+// If the network is unavailable the probe reports 'blocked-or-unreachable' and
+// is NOT counted as a violation on its own -- a CSP checker must fail on a
+// policy problem, never on someone's wifi. The assertion that governs is the
+// console violation list the existing listener already collects; this string
+// exists so a reader knows WHICH failure they are looking at.
+const IMAGE_PROBE_JS = `
+  (async () => {
+    const url = 'https://img.viabiancarestaurant.com/__csp_probe__.webp';
+    return await new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => resolve('loaded');
+      img.onerror = () => resolve('blocked-or-unreachable');
+      img.src = url + '?t=' + Date.now();
+      setTimeout(() => resolve('blocked-or-unreachable'), 8000);
+    });
+  })()
+`;
+
 function serve() {
   return createServer((req, res) => {
     const pathname = decodeURIComponent(new URL(req.url, 'http://x').pathname);
@@ -241,6 +264,16 @@ try {
         violations.push(`admin capability probe could not run: ${error.message.split('\n')[0]}`);
       }
     }
+
+    const imageProbe = await page.evaluate(IMAGE_PROBE_JS);
+    if (imageProbe !== 'loaded') console.log(`      image host probe on ${route}: ${imageProbe}`);
+    // Re-read the violation list. It was drained above, immediately after the
+    // navigation, so a refusal caused by the probe that runs AFTER that read
+    // would otherwise be collected by the listener and never looked at -- the
+    // probe would be decoration and this whole check would be unable to fail.
+    // De-duplicated by the Set below, so re-reading costs nothing.
+    violations.push(...(await page.evaluate(() => window.__cspViolations ?? [])));
+
     if (violations.length) failures.push({ route, violations: [...new Set(violations)] });
     console.log(`${violations.length ? 'FAIL' : ' ok '}  ${route}${rendered ? '' : '  (empty root)'}`);
     await page.close();
