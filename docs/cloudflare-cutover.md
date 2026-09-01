@@ -1600,6 +1600,85 @@ including `src/index.css`'s `body::before` texture, and no site-root photograph
 left in anything it wrote. `scripts/__tests__/rewrite-image-refs.test.mjs` is
 that proof and it runs on every push.
 
+### The guards that would have refused the whole rewrite, widened at `7c2f3dc`
+
+Running the rewrite over the real tree and then running the suite is how this
+was found, and the result was worse than a red test. `assertPosts` runs at
+module scope in `src/content/index.ts`, `vite.config.ts` imports that module,
+and the build stops before it emits anything:
+
+    $ node scripts/rewrite-image-refs.mjs        # driven with an all-verified manifest
+    rewrite: 77 references, 4 deliberately left alone
+    wrote 13 files
+
+    $ npm test -- --run
+    Test Files  54 failed | 141 passed (195)
+
+    $ npm run build
+    error during build:
+    Error: content/posts.json: "bw-hotelier-regional-flair" needs a photo on this site, starting with /
+
+Four boundaries each held their own copy of the rule that a photograph
+reference starts with a slash, and every one of them refused what the rewrite
+writes:
+
+| Where | What it costs |
+|---|---|
+| `src/content/guards.ts` `assertPosts` | the card image, at import time. `npm run build` exits 1, so nothing deploys at all. |
+| `src/content/guards.ts` `assertBlockAssetPath` | every block `src`, run on the LIVE D1 read by `src/components/blog/posts-api.ts`. |
+| `src/content/validate.ts` `isUnsafeAssetPath` | the Worker's write gate, fourteen fields wide. `POST /api/publish` refuses every document the owner edits, and **Task 7's D1 rewrite goes through that endpoint**, so it cannot run either. |
+| `src/components/story-api.ts` | the browser's read of the About section. It answers a value it dislikes with `null`, which means "keep the compiled-in copy", so the section silently shows the last build's story. |
+
+`src/content/asset-reference.ts` is one answer for all four now: a path on this
+site, or a whole URL on this site's own image host, and nothing wider. The
+origin is compared through the URL parser rather than by prefix, so a userinfo
+field, a host that merely starts the same way, and plain `http` are all
+refused. It is inert until something names the image host, which is why it
+shipped on its own ahead of the rewrite rather than inside it.
+
+Re-measured after that commit: the same rewrite leaves **3 test files red
+instead of 54**, and `npm run build` finishes.
+
+**The plan is wrong at its line 6363**, which says `validateMenus` checks
+`file` with `isUnsafeAssetPath`, "which Task 6 already widened". No task in the
+plan widens it, Task 6 as delivered did not, and §21 did not mention it. It is
+widened now, at `7c2f3dc`, and `src/content/__tests__/asset-reference.test.ts`
+runs all nine committed documents through the write gate, `assertPosts` and the
+browser's own read with every reference moved onto the image host.
+
+### What the commit in step 4 has to contain
+
+Measured by running the rewrite and the whole suite at `7fac6e6`. Three files
+hold a recorded value that the rewrite legitimately changes, and every one of
+them has to move in the same commit or the branch is red:
+
+| File | What moves | How |
+|---|---|---|
+| `src/content/__tests__/assets.test.ts` | 69 of its 124 tests | Task 6 Step 5 of the plan carries the replacement assertions. See step 5 below. |
+| `src/test/homepage-bytes.test.tsx` | one number, **48325 → 50169 (+1844)** | The file's own rule is to state both numbers and what accounts for the difference. The accounting: 52 references rendered into the homepage, each gaining the 35-byte host prefix (1820), plus 12 spaces that become `%20` (+2 each, 24). Measured, not derived: the page renders 52 image-host URLs and its `%20` count goes from 4 to 16. |
+| `src/admin/__tests__/panel-snapshots.test.tsx` | 3 of 12 snapshots (Galleries, About, Experiences) | `npm test -- --run src/admin/__tests__/panel-snapshots.test.tsx -u`, then read the diff: the only changes may be photograph URLs. |
+
+Four other files carried the same trap and were fixed at `7fac6e6` instead, so
+they need nothing in step 4: `scripts/__tests__/rewrite-image-refs.test.mjs`
+(five tests, including both of the ones watching the stylesheet),
+`worker/__tests__/snapshot.test.ts`, `src/admin/__tests__/EditMode.test.tsx`
+and the shared undo they read, `src/test/siteRootForm.ts`.
+
+**The CSS ceiling moves by 35 bytes, and the plan predicts zero.** Task 6's own
+note says to rebuild against 39441 and that "if it moved, the cause is a
+comment, not the URL". Measured post-rewrite: **39441 → 39476**, and the cause
+IS the URL. `src/index.css`'s `body::before` texture is a `url()` literal that
+Vite copies into the stylesheet verbatim, so the 35-character host prefix lands
+in the built CSS. That is under the 39600 ceiling in
+`src/test/bundle.post-build.test.ts`, so **no raise is needed**. If the number
+comes back higher than 39476, the extra is a comment and is worth finding.
+
+**One hazard that is not a test.** `scripts/sync-story-fallback.mjs` writes the
+LIVE D1 body into `src/content/story.json`. Between step 4 and Task 7 the D1
+row still holds the site-root path, so running that script in that window
+silently undoes story.json's half of the rewrite. Do not run it until Task 7
+has rewritten the row.
+
 **What is still owed before the references may move**, in order:
 
 1. The R2 custom domain, the HTTPS round trip, and the widened `img-src` live
@@ -1617,8 +1696,9 @@ that proof and it runs on every push.
    anything, the refusal is not a refusal and the whole safety argument is void.
 4. `node scripts/rewrite-image-refs.mjs` for real. Expect
    `rewrite: 77 references, 4 deliberately left alone` (four occurrences, three
-   distinct paths).
-5. **Move the offline guardrail in the same commit.**
+   distinct paths) and `wrote 13 files`.
+5. **Move all three recorded values in the same commit**, from the table above.
+   The largest is the offline guardrail:
    `src/content/__tests__/assets.test.ts` resolves every discovered path against
    `publicFiles`. After the rewrite the content strings start with `https://`,
    `ASSET_PATH_PATTERN` stops matching them, and the content half of that walk
@@ -1626,6 +1706,10 @@ that proof and it runs on every push.
    assertions, including the miss detector — *nothing still points at a migrated
    category directory* — which is the one that catches a reference the rewrite
    skipped. A missed reference RESOLVES, because `public/` still holds the file.
+   Then `npx tsc -b --noEmit && npm test -- --run && npx eslint . && npm run build`.
+   Expect a green suite and 39476 bytes of entry CSS. Anything else red is a
+   real finding, because everything predictable about this commit is in the
+   table above.
 6. Deploy, `npm run verify:images`, then **a human opens the live homepage,
    `/blogs` and each of the six standalone pages and looks at them** with the
    network panel open. The sweep cannot see `src/index.css`'s `body::before`
