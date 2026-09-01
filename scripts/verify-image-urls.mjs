@@ -120,5 +120,13 @@ if (import.meta.filename === process.argv[1]) {
   const problems = await sweep(references, origin);
   for (const { url, why } of problems) console.error(`  BROKEN  ${url}  -- ${why}`);
   console.log(`\n${references.length - problems.length}/${references.length} distinct image references resolve on ${site}`);
+  // A run that reports 0/0 is a green run that proved nothing, and both halves
+  // of the union being empty at once is the only way it happens. Printed above
+  // as two separate counts so it is visible, and failed here so it is not
+  // merely visible.
+  if (references.length === 0) {
+    console.error('  BROKEN  the sweep found no references at all -- it swept nothing and passed');
+    process.exitCode = 1;
+  }
   if (problems.length > 0) process.exitCode = 1;
 }
