@@ -10,10 +10,28 @@ import {
   plan,
   CODE_FILES,
 } from '../rewrite-image-refs.mjs';
+// The census tool, imported rather than re-implemented here. These two
+// collectors are what produced docs/image-inventory.json, by walking the tree
+// from a different script with its own tests, so counting with them and
+// comparing against plan()'s report is two implementations disagreeing when
+// one of them is wrong -- not a number this file wrote being read back.
+import { collectFromCode, collectFromJson } from '../image-inventory.mjs';
 import { IMAGE_HOST } from '../../src/shared/image-host';
+// A rewritten file read back in the spelling it had before the migration.
+//
+// This is what lets every expectation over the real tree below hold in BOTH
+// states, before a human has run this script and after. That is a
+// requirement rather than a nicety: docs/cloudflare-cutover.md §21 has a
+// human run the rewrite and commit its output, and a test file describing
+// only the tree it was written against is red in exactly that commit.
+// Measured before this existed, by feeding one pass's output back into
+// plan(): five named tests here failed, both of the ones watching the
+// stylesheet among them.
+import { siteRootForm } from '../../src/test/siteRootForm';
 
 const CONTENT_DIR = join('src', 'content');
 const CONTENT_FILES = readdirSync(CONTENT_DIR).filter((name) => name.endsWith('.json'));
+const ALL_FILES = [...CONTENT_FILES.map((name) => join(CONTENT_DIR, name)), ...CODE_FILES];
 // A stand-in for image-manifest.json that marks EVERY key verified. The real
 // manifest does not exist yet -- Task 4's migration cannot run until the R2
 // custom domain is connected -- and a hand-written partial one would only test
@@ -29,6 +47,16 @@ const nothingVerified = { objects: {} };
 
 function read(file) {
   return readFileSync(file, 'utf-8');
+}
+
+// The tree as it stood BEFORE the migration, whichever state it is really in:
+// a file whose references have already moved is handed back in its old
+// spelling, a file whose references have not is handed back untouched. The
+// refusal has nothing to refuse once every reference has moved, so the one
+// test that must see a photograph on this origin reads through this instead
+// of off the disk.
+function readPreMigration(file) {
+  return siteRootForm(readFileSync(file, 'utf-8'));
 }
 
 // The list of code files is the one input this test cannot restate without
@@ -121,7 +149,7 @@ describe('the refusal', () => {
   // twelve files rather than nine of them.
   it('plans every file without writing any of them', () => {
     const report = emptyReport();
-    const pending = plan(read, nothingVerified, report, { contentFiles: CONTENT_FILES, codeFiles: CODE_FILES });
+    const pending = plan(readPreMigration, nothingVerified, report, { contentFiles: CONTENT_FILES, codeFiles: CODE_FILES });
     expect(report.missing.length).toBeGreaterThan(0);
     expect(pending).toEqual([]);
   });
@@ -138,8 +166,52 @@ describe('the real content and code files', () => {
   const pending = plan(read, everythingVerified, report, { contentFiles: CONTENT_FILES, codeFiles: CODE_FILES });
   const written = new Map(pending.map(({ file, after }) => [file, after]));
 
-  it('rewrites the seventy-seven references the inventory counted', () => {
-    expect(report.changed).toHaveLength(77);
+  // What a file holds once the rewrite has been applied to it: plan()'s text
+  // where it moved something, the file's own text where it did not. Before a
+  // human runs the script that is thirteen new texts; after, it is the tree
+  // exactly as committed. Every question below is asked of THIS rather than of
+  // `written`, which is what makes the answers the same on both sides of that
+  // commit.
+  const rewritten = (file) => written.get(file) ?? read(file);
+
+  // Every reference in one file, counted by the inventory's own collectors.
+  function census(file, text) {
+    const found = [];
+    if (file.endsWith('.json')) collectFromJson(JSON.parse(text), file, found);
+    else collectFromCode(text, file, found);
+    return found.map((entry) => entry.path);
+  }
+
+  // Read off docs/image-inventory.json rather than typed here, and that
+  // artefact was produced by walking the tree from a different script. Four of
+  // its eighty-five references are the D1 rows Task 7 rewrites through the
+  // publish endpoint, which this script never touches.
+  const inventory = JSON.parse(readFileSync(join('docs', 'image-inventory.json'), 'utf-8'))
+    .references.filter((reference) => !reference.file.startsWith('d1:'));
+  const inventoryFiles = [...new Set(inventory.map((reference) => reference.file))].sort();
+
+  // Counted over the pre-migration spelling, so the number means the same
+  // thing whether or not the rewrite has run.
+  const references = ALL_FILES.flatMap((file) => census(file, siteRootForm(rewritten(file))));
+  // Counted over the tree as it is on disk right now: what is left to move.
+  const stillOnThisOrigin = ALL_FILES
+    .flatMap((file) => census(file, read(file)))
+    .filter((path) => !stays(path));
+
+  it('accounts for every committed reference the inventory counted', () => {
+    expect(references).toHaveLength(inventory.length);
+  });
+
+  it('moves seventy-seven of them and leaves four where they are', () => {
+    expect(references.filter((path) => !stays(path))).toHaveLength(77);
+    expect(references.filter(stays)).toHaveLength(4);
+  });
+
+  // plan()'s own report against the census, which two different scripts
+  // produced. Before the rewrite has run both sides are the same seventy-seven
+  // paths; after it, both are empty.
+  it('rewrites every reference still on this origin, and nothing else', () => {
+    expect([...report.changed].sort()).toEqual([...stillOnThisOrigin].sort());
   });
 
   it('leaves exactly three distinct references alone', () => {
@@ -154,57 +226,61 @@ describe('the real content and code files', () => {
     expect(report.missing).toEqual([]);
   });
 
-  it('touches every file that holds a reference and no others', () => {
-    expect([...written.keys()].sort()).toEqual([
-      'src/components/ChefGallery.tsx',
-      'src/components/Hero.tsx',
-      'src/components/SignatureMocktails.tsx',
-      join('src', 'content', 'dishes.json'),
-      join('src', 'content', 'drinks.json'),
-      join('src', 'content', 'experiences.json'),
-      join('src', 'content', 'galleries.json'),
-      join('src', 'content', 'pages.json'),
-      join('src', 'content', 'posts.json'),
-      join('src', 'content', 'press.json'),
-      join('src', 'content', 'story.json'),
-      'src/content/types.ts',
-      'src/index.css',
-    ].sort());
+  // The file list, which is the one thing this test cannot restate without
+  // making itself vacuous -- dropping src/index.css from the module's list
+  // once left all thirty-seven assertions here green. Both halves are pinned:
+  // the files that hold a reference at all, against the inventory, and the
+  // files this run actually wrote, against what is left to move.
+  it('reads every file the inventory found a reference in', () => {
+    const holding = ALL_FILES.filter((file) => census(file, siteRootForm(rewritten(file))).length > 0);
+    expect(holding.sort()).toEqual(inventoryFiles);
+  });
+
+  it('writes exactly the files that still hold a reference on this origin', () => {
+    const owed = ALL_FILES.filter((file) => census(file, read(file)).some((path) => !stays(path)));
+    expect([...written.keys()].sort()).toEqual(owed.sort());
   });
 
   // The reason the JSON is edited as text. JSON.stringify(value, null, 2)
   // reformats four of these files -- menus.json alone grows by 28 bytes -- and
   // that whitespace would land in the same commit as a seventy-seven-reference
   // rewrite and in the bytes the D1 floor is later compared against.
+  //
+  // The file on disk is the independent side of this comparison. Rewriting
+  // `before` and then undoing only the URL substitutions has to give `before`
+  // back exactly; a writer that reflowed the JSON would survive the undo and
+  // fail here.
   it.each(CONTENT_FILES)('%s changes only its reference strings, never its formatting', (name) => {
     const file = join(CONTENT_DIR, name);
-    const before = read(file);
-    const after = written.get(file) ?? before;
-    const restored = after.split(`${IMAGE_HOST}/`).join('/');
-    expect(decodeURI(restored)).toBe(before);
+    const before = siteRootForm(rewritten(file));
+    const after = rewriteJsonText(before, everythingVerified, emptyReport());
+    expect(siteRootForm(after)).toBe(before);
   });
 
   it('leaves the four hand-formatted files hand-formatted', () => {
     // Named, because these are the four JSON.stringify would have reflowed.
     for (const name of ['dishes.json', 'menus.json', 'pages.json', 'site.json']) {
-      const file = join(CONTENT_DIR, name);
-      const after = written.get(file) ?? read(file);
+      const after = rewritten(join(CONTENT_DIR, name));
       expect(after, name).not.toBe(JSON.stringify(JSON.parse(after), null, 2) + '\n');
     }
   });
 
   it('rewrites the whole-page texture in the stylesheet, not just the tsx', () => {
-    expect(written.get('src/index.css')).toContain(`url("${IMAGE_HOST}/hero/brick.webp")`);
-    expect(written.get('src/index.css')).not.toContain('url("/hero/brick.webp")');
+    expect(rewritten('src/index.css')).toContain(`url("${IMAGE_HOST}/hero/brick.webp")`);
+    expect(rewritten('src/index.css')).not.toContain('url("/hero/brick.webp")');
   });
 
   it('leaves the mocktail pdf download link on this origin', () => {
-    expect(written.get('src/components/SignatureMocktails.tsx')).toContain('"/menus/food-menu.pdf"');
+    expect(rewritten('src/components/SignatureMocktails.tsx')).toContain('"/menus/food-menu.pdf"');
   });
 
-  it('leaves no site-root photograph behind in any file it wrote', () => {
+  // THE MISS DETECTOR. Asked of every file this script reads rather than only
+  // of the ones it wrote, because a file it failed to write is exactly the
+  // case worth catching, and after the rewrite has run it writes none of them.
+  it('leaves no photograph on this origin in any file it reads', () => {
     const CATEGORY = /["'`(](\/(?:food|hero|atmosphere|our_story|mocktails|press|experiences|team)\/[^"'`()\n]+)["'`)]/;
-    for (const [file, after] of written) {
+    for (const file of ALL_FILES) {
+      const after = rewritten(file);
       expect(CATEGORY.test(after), `${file} still names ${CATEGORY.exec(after)?.[1]}`).toBe(false);
     }
   });

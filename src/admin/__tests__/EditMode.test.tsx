@@ -27,6 +27,7 @@ import type { Copy, Dish, Drink, Experience, Galleries, MenuFile, Post, Section,
 // identical exclusion for the identical reason).
 import galleriesJson from '../../content/galleries.json';
 import { collagePhotos, findCollagePhoto } from '../../content/collage';
+import { siteRootForm } from '../../test/siteRootForm';
 import storyJson from '../../content/story.json';
 import menusJson from '../../content/menus.json';
 import copyJson from '../../content/copy.json';
@@ -1549,8 +1550,16 @@ describe('Plan 5 Task 4, Step 2: staged photos are keyed on an identity the stag
     // The collage half is addressed by the photo's own ID, not by a position:
     // a swap moves a photo to a different box and takes its id with it, which
     // is exactly what makes this name survive one.
-    expect(GALLERIES.atmosphere[0].src).toBe('/atmosphere/dining.webp');
-    expect(findCollagePhoto(GALLERIES.heroCollage!, COLLAGE_DINING_ID)?.src).toBe('/atmosphere/dining.webp');
+    //
+    // Read through `siteRootForm` (src/test/siteRootForm.ts) because these two
+    // pin WHICH photograph, never which spelling of it, and the 2026-08-21
+    // migration rewrites both onto the image host in one commit. A different
+    // photograph, or the right one on a host this site does not own, still
+    // fails here.
+    expect(siteRootForm(GALLERIES.atmosphere[0].src)).toBe('/atmosphere/dining.webp');
+    expect(siteRootForm(findCollagePhoto(GALLERIES.heroCollage!, COLLAGE_DINING_ID)?.src ?? '')).toBe(
+      '/atmosphere/dining.webp',
+    );
   });
 
   // Minor review finding: an earlier version of this test rendered
