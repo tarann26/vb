@@ -71,6 +71,21 @@ describe('halvingSteps', () => {
   it('terminates rather than looping on a target of one', () => {
     expect(halvingSteps(4032, 1).length).toBeLessThan(20);
   });
+
+  // The length bound above is too loose to tell a correct loop from the
+  // obvious wrong one: `width > toWidth` also terminates for a target of 1,
+  // it just stops at 1 and pushes a second 1, so both sequences are well
+  // under twenty and that test passes either way. Measured, not assumed.
+  //
+  // A repeated width is a drawImage that scales an image to the size it
+  // already is, so no-repeats is both the real defect and the thing that
+  // separates the two.
+  it('never draws the same width twice', () => {
+    for (const [from, to] of [[4032, 1], [4032, 1000], [3000, 500], [1200, 1000], [800, 1000]]) {
+      const steps = halvingSteps(from, to);
+      expect(new Set(steps).size).toBe(steps.length);
+    }
+  });
 });
 
 describe('quality', () => {

@@ -95,6 +95,26 @@ settles is the bandwidth question, which was the one being asked.
    not copied** — same key, so no content file moves and no cache entry needs
    purging beyond that key's own policy.
 
+## Two claims in the plan that the mutation runs disproved
+
+Recorded here rather than dropped, because both were written as reasons.
+
+1. **`halvingSteps` at a target of 1 does not hang under `width > toWidth`.**
+   The plan's comment said that guard "never terminates for a target of 1,
+   because Math.round(1/2) is 1 forever". Run: it terminates at 1 and pushes a
+   redundant second 1 — a final no-op pass, not a hang. Width 1 *is* a fixpoint
+   of the halving, so a guard satisfiable at width 1 (a target of 0) really
+   would loop forever, and `targetSize` never returns 0. The test that separates
+   the two is now "never draws the same width twice", because both sequences
+   are short and the old length bound passed either way.
+2. **The e2e byte assertion does not prove the downscale happened.** With the
+   halving loop replaced by one full-width pass, the output is 60,072 B against
+   a 317,143 B source — a 5.3x reduction, comfortably inside
+   `bytes < originalBytes / 3`. What actually reddened was
+   `expect(result.width).toBe(1000)`. The byte check stays for the failure it
+   can see (an encode that returned the original blob) and the spec now says
+   which assertion carries which claim.
+
 ## STILL OWED: the run on the owner's device
 
 The plan's Step 8, and it is not something any Chromium spec can answer.

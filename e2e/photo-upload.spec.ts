@@ -38,11 +38,20 @@ test('a real browser produces a real webp, at the capped width, much smaller', a
 
   expect(result.encoder).toBe('webp');
   expect(result.type).toBe('image/webp');
+  // THESE TWO ARE WHAT PROVE THE DOWNSCALE, and the byte check below is not.
+  // Measured: with the halving loop replaced by a single full-width pass, the
+  // output is 60,072 B against a 317,143 B source -- a 5.3x reduction, which
+  // sails past the byte assertion below. The width and height are what went
+  // red (3000 instead of 1000). The plan's mutation table predicted the
+  // opposite and the prediction is wrong.
   expect(result.width).toBe(1000);
   expect(result.height).toBe(667);
-  // A 3000px JPEG down to a 1000px WebP is a >3x reduction on any real
-  // encoder. A number close to the original means the resize did not happen
-  // and the encode simply re-wrapped the same pixels.
+  // Still worth asserting, for the failure it CAN see: an encode that returned
+  // the original blob, or one that re-wrapped the same pixels without
+  // compressing them. Left at a third rather than tightened to the 12.9x this
+  // browser actually achieves -- that ratio is a property of one Chromium
+  // build, and pinning it turns a browser upgrade into a red suite for no
+  // reason connected to this code.
   expect(result.bytes).toBeLessThan(result.originalBytes / 3);
 });
 
