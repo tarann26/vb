@@ -18,7 +18,7 @@ import sharp from 'sharp';
 // (docs/cloudflare-cutover.md's "Build command"), so nothing here newly
 // couples an unrelated deploy-time check to sharp succeeding.
 import { build, encodeDerivative } from '../images.mjs';
-import { IMAGE_EXT, outputPathFor } from '../paths.mjs';
+import { IMAGE_EXT, outputPathFor, maxWidthFor } from '../paths.mjs';
 
 // A widened IMAGE_EXT that lets listSources() discover a file is one claim;
 // this proves sharp can genuinely decode a source written in each of those
@@ -54,7 +54,7 @@ describe('encodeDerivative on each newly-widened extension', () => {
     await synthetic[method]().toFile(sourcePath);
 
     const outputPath = join(dir, `sample-${method}-out.webp`);
-    await encodeDerivative(sourcePath).toFile(outputPath);
+    await encodeDerivative(sourcePath, maxWidthFor(sourcePath)).toFile(outputPath);
 
     const meta = await sharp(outputPath).metadata();
     expect(meta.format).toBe('webp');

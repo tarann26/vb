@@ -44,10 +44,19 @@ export async function listSources() {
 // these two ever described the pipeline separately, changing the generator
 // would leave the freshness check re-encoding by the old recipe and
 // reporting every derivative as stale.
-export function encodeDerivative(sourcePath) {
+//
+// NOW TAKING ITS WIDTH AS AN ARGUMENT rather than deriving it from the source
+// path. scripts/rederive.mjs (Task 20) is the escape hatch behind the browser
+// encoder: it pulls an original out of R2, runs it through THIS function, and
+// puts the result back under the same key. It works from an R2 key rather
+// than from a path under assets-source/, so maxWidthFor -- which is keyed on
+// that path -- is not something it can call for itself. One recipe, three
+// callers, no copy; a copied recipe is how an escape hatch drifts away from
+// the pipeline it exists to restore.
+export function encodeDerivative(sourcePath, maxWidth) {
   return sharp(sourcePath)
     .rotate()
-    .resize({ width: maxWidthFor(sourcePath), withoutEnlargement: true })
+    .resize({ width: maxWidth, withoutEnlargement: true })
     .webp({ quality: QUALITY });
 }
 
@@ -124,7 +133,7 @@ export async function build({ log = () => {} } = {}) {
     const out = outputPathFor(src);
     try {
       await mkdir(out.slice(0, out.length - basename(out).length), { recursive: true });
-      await encodeDerivative(src).toFile(out);
+      await encodeDerivative(src, maxWidthFor(src)).toFile(out);
       const { size } = await stat(out);
       total += size;
       log(`${src} -> ${out} (${(size / 1024).toFixed(0)}KB @ ${maxWidthFor(src)}px)`);
