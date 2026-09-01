@@ -54,7 +54,12 @@ const CONTENT_DIR = join('src', 'content');
 // equal by scripts/__tests__/rewrite-image-refs.test.mjs, which imports both.
 const HOST = 'https://img.viabiancarestaurant.com';
 
-const CODE_FILES = [
+// Exported so its own test can pin it against docs/image-inventory.json's
+// census rather than against a second copy of this list. A list restated in
+// the test is a list nothing checks: dropping the stylesheet from here left
+// the whole suite green until that pin existed, and the stylesheet carries the
+// body::before texture, which is the single most visible image on the site.
+export const CODE_FILES = [
   'src/index.css',
   'src/components/Hero.tsx',
   'src/components/ChefGallery.tsx',
