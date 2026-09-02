@@ -63,12 +63,27 @@ describe('fetchStory', () => {
   // comes from a database and a shape check that only looks at TYPES would
   // pass a URL straight into a homepage <img src>.
   it.each(['https://evil.example/x.webp', '//evil.example/x.webp', 'team/x.webp'])(
-    'returns null for a portrait that is not a site-relative path: %s',
+    'returns null for a portrait that is not a reference this site may load: %s',
     async (portrait) => {
       const fetchImpl = vi.fn(async () => jsonResponse(200, { ...LIVE, chef: { ...LIVE.chef, portrait } }));
       expect(await fetchStory(fetchImpl as unknown as typeof fetch)).toBeNull();
     },
   );
+
+  // The other half of the same rule, and the reason this check is imported
+  // now instead of written out by hand here. The 2026-08-21 migration moves
+  // this portrait under the image prefix; the hand-written copy tested the
+  // path against a fixed list of directories, so the moment story.json's
+  // portrait moved this function would have answered a perfectly good
+  // document with null -- and null means "the compiled-in copy stands", so
+  // the About section would have gone on showing the last build's story while
+  // the database said something else. See src/content/asset-reference.ts.
+  it('returns the document for a portrait under the image prefix, which is where the migration puts it', async () => {
+    const portrait = '/images/team/kamalika-anand.webp';
+    const body = { ...LIVE, chef: { ...LIVE.chef, portrait } };
+    const fetchImpl = vi.fn(async () => jsonResponse(200, body));
+    expect(await fetchStory(fetchImpl as unknown as typeof fetch)).toEqual(body);
+  });
 
   it('accepts an extra key it does not know about, rather than rejecting the whole document', () => {
     expect(isStoryContent({ ...LIVE, somethingNew: true })).toBe(true);

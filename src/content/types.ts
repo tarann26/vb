@@ -184,10 +184,15 @@ export interface Galleries {
 // (see that interface) and the opposite of Award['image'], where an award
 // with no badge is simply an ordinary award.
 //
-// `portrait` is a site-relative derivative path ('/team/kamalika-anand.webp'),
-// never an absolute URL: validateStory refuses anything else. The committed
-// story.json is ONE OF THREE places (with src/content/press.json and
-// src/components/ChefGallery.tsx) that keep this path inside
+// `portrait` names the derivative for the chef's photograph
+// ('/team/kamalika-anand.webp'), and it is one of the seventy-seven
+// references the 2026-08-21 migration rewrites onto the image host. Either
+// spelling is valid and NOTHING WIDER IS: validateStory, assertPosts and the
+// browser's own runtime read all ask src/content/asset-reference.ts the same
+// question, which admits a path on this site or a URL on this site's image
+// host and refuses every other host. The committed story.json is ONE OF
+// THREE places (with src/content/press.json and
+// src/components/ChefGallery.tsx) that keep this reference inside
 // src/content/__tests__/assets.test.ts's walk even after Phase 4 moves this
 // document's live copy to D1 (see that task's own reasoning) -- not the
 // only one, but the one this field's own value has to stay correct

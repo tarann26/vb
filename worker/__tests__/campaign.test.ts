@@ -65,9 +65,17 @@ describe('POST /api/campaign', () => {
   // The case a hardcoded origin literal passes and a derived one fails. This
   // site is served from a preview host as well as its own domain, and the
   // last hardcoded-origin defect here pinned a counter at zero for weeks.
+  //
+  // The host below is THIS project's generated Pages subdomain, read off
+  // `npx wrangler pages project list`. It used to read `vb.pages.dev`, which
+  // is a live, unrelated third party's website -- inert here, since the
+  // handler compares the request's Origin against its own URL and never
+  // fetches anything, but the same wrong belief written into wrangler.toml's
+  // PAGES_ORIGIN would have served that stranger's HTML on every page view.
+  // See src/test/wrangler-config.test.ts.
   it('accepts a same-origin request on the preview host too', async () => {
     const { fake, env: e } = env();
-    const response = await handleCampaignArrival(post({ source: 'instagram' }, {}, 'https://vb.pages.dev'), e);
+    const response = await handleCampaignArrival(post({ source: 'instagram' }, {}, 'https://vb-c7r.pages.dev'), e);
     expect(response.status).toBe(204);
     expect(fake.campaignArrivals).toHaveLength(1);
   });
@@ -250,6 +258,7 @@ describe('POST /api/campaign, through the Worker entry point', () => {
       CLOUDFLARE_API_TOKEN: 'campaign-test-cf-token-not-real',
       CF_WEB_ANALYTICS_SITE_TAG: '29e1ba52fba74885a5fc44875a48a078',
       DB: asD1(fake),
+      R2: {} as unknown as R2Bucket,
     };
   }
 

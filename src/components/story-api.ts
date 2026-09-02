@@ -14,18 +14,23 @@
 // refuses an off-site path at the write boundary, but this body arrives
 // from a database at runtime with no build-time guard in front of it, and a
 // type-only check would put an attacker-supplied URL straight into a
-// homepage <img src>. Same posture as validate.ts's isUnsafeAssetPath,
-// re-implemented here rather than imported: src/content/validate.ts is the
-// Worker's module and does not export it.
+// homepage <img src>.
+//
+// IMPORTED NOW, NOT RE-IMPLEMENTED. This was three string tests written out
+// by hand, because the answer it wanted lived in src/content/validate.ts,
+// which is the Worker's module and does not export it. The cost of the copy
+// came due at the 2026-08-21 migration: the copy answered a narrower question
+// than the four boundaries agreed on, so the moment story.json's portrait
+// moved this function returned null for a perfectly good document, and
+// null here means "the compiled-in copy stands" -- the About section would
+// have gone on showing whatever shipped with the last build while the
+// database said something else, silently, with every test green.
+// src/content/asset-reference.ts is the one answer now, and it holds no JSX
+// and touches no DOM, so it costs this bundle two tiny modules.
+import { isSiteAssetReference } from '../content/asset-reference';
 import type { StoryContent } from '../content/types';
 
 export const STORY_ENDPOINT = '/api/published?path=story.json';
-
-function isSiteRelativeAssetPath(value: unknown): value is string {
-  if (typeof value !== 'string') return false;
-  const trimmed = value.trim();
-  return trimmed.startsWith('/') && !trimmed.startsWith('//') && !trimmed.includes('..');
-}
 
 function isNonBlankString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
@@ -42,7 +47,7 @@ export function isStoryContent(value: unknown): value is StoryContent {
   return (
     isNonBlankString(name) &&
     isNonBlankString(role) &&
-    isSiteRelativeAssetPath(portrait) &&
+    isSiteAssetReference(portrait) &&
     isNonBlankString(portraitAlt)
   );
 }

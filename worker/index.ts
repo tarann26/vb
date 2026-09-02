@@ -47,6 +47,7 @@ import { storeFor, partitionByStore } from './store';
 import { D1ConflictError, D1Store } from './d1';
 import { handlePublished } from './published';
 import { handlePostPage, slugFromPath } from './post-page';
+import { handleImage, servesImageBytes, type ImagesEnv } from './images';
 import { handleCampaignArrival } from './campaign';
 import { runDailyRollup } from './rollup';
 
@@ -56,7 +57,7 @@ import { runDailyRollup } from './rollup';
 // via PagesEnv (worker/status.ts); CF_WEB_ANALYTICS_SITE_TAG comes in via
 // WebAnalyticsEnv (worker/analytics.ts) -- each module owns the shape of the
 // vars it actually reads, so there's one definition, not two that could drift.
-export interface Env extends GitHubEnv, PagesEnv, WebAnalyticsEnv {
+export interface Env extends GitHubEnv, PagesEnv, WebAnalyticsEnv, ImagesEnv {
   KV: KVNamespace;
   ADMIN_PASSWORD_HASH: string;
   TOKEN_SECRET: string;
@@ -492,7 +493,14 @@ function withSecurityHeaders(response: Response, request: Request): Response {
   const pathname = new URL(request.url).pathname;
   const headers = new Headers(response.headers);
   for (const [name, value] of Object.entries(SECURITY_HEADERS)) {
-    if (name === 'Cache-Control' && CACHEABLE_PATHS.has(pathname)) continue;
+    // Two exemptions, and they are exempt for opposite reasons.
+    // CACHEABLE_PATHS is a list of exact pathnames whose freshness is managed
+    // by a versioned cache key. `servesImageBytes` is a whole prefix, and the
+    // thing it protects is a budget rather than a mechanism: forcing
+    // `no-store` onto a photograph would make every browser re-ask for every
+    // picture on every page view, and each of those re-asks is one of the
+    // 100,000 requests a day this Worker gets. See worker/images.ts.
+    if (name === 'Cache-Control' && (CACHEABLE_PATHS.has(pathname) || servesImageBytes(request))) continue;
     headers.set(name, value);
   }
   return new Response(response.body, {
@@ -1494,6 +1502,16 @@ async function route(request: Request, env: Env): Promise<Response> {
   // servesSiteHtml, not a second copy of the same condition, so the set of
   // requests this handler answers and the set exempted from SECURITY_HEADERS
   // are the same set by construction rather than by agreement.
+  // The photographs, read straight out of R2. Placed after every /api/*
+  // branch for the same reason the post-page branch below is -- so it can
+  // never shadow one -- and answered by the same predicate that exempts these
+  // responses from the no-store header, so the set of requests that reach
+  // this handler and the set allowed to carry a Cache-Control are the same
+  // set by construction rather than by agreement.
+  if (servesImageBytes(request)) {
+    return handleImage(request, env);
+  }
+
   if (servesSiteHtml(request)) {
     return handlePostPage(request, env);
   }

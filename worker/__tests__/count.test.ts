@@ -87,6 +87,8 @@ async function buildEnv(kv = new FakeKV()): Promise<Env> {
     // Phase 2. Unused by any test in this file -- required only for `env`
     // to satisfy `Env`.
     DB: {} as unknown as D1Database,
+    // Likewise: the photograph bucket, unread here, required by `Env`.
+    R2: {} as unknown as R2Bucket,
   };
 }
 

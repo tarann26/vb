@@ -15,7 +15,12 @@ import {
 // inline parser cannot come to three different conclusions about the same
 // string; ./markdown imports nothing at all, so this adds no dependency to
 // anything that already imports this file.
-import { isSafeHref, isSiteRelativePath } from './markdown';
+import { isSafeHref } from './markdown';
+// The shapes a photograph reference may take, as ONE answer shared with
+// validate.ts's write gate and with the browser's runtime read -- see that
+// module's header for why there are two of them since the 2026-08-21
+// migration, and why nothing wider than the image host is allowed.
+import { isSiteAssetReference } from './asset-reference';
 // The one VALUE this module takes from ./types, which is otherwise a
 // type-only file. The nesting cap has to be the same number at both ends and
 // in the editor, so it is imported rather than restated -- and it is declared
@@ -792,11 +797,11 @@ export function assertPosts(raw: unknown): Post[] {
       throw new Error(`content/posts.json: "${id}" needs an image`);
     }
     // The same question validatePost asks of this field, asked here too --
-    // and asked through isSiteRelativePath (./markdown) rather than a pattern
-    // of its own, so the two boundaries cannot come to disagree about what a
-    // path on this site is. They disagreed once, and the shape they
-    // disagreed about was '/' followed by a backslash, which a browser
-    // fetches from somebody else's host.
+    // and asked through isSiteAssetReference (./asset-reference) rather than
+    // a pattern of its own, so the two boundaries cannot come to disagree
+    // about what this site may load a photograph from. They disagreed once,
+    // and the shape they disagreed about was a slash followed by a backslash,
+    // which a browser fetches from somebody else's host.
     //
     // This guard runs at IMPORT time, which is what makes it worth having
     // rather than leaving to the write boundary: a bad value reaching
@@ -804,8 +809,8 @@ export function assertPosts(raw: unknown): Post[] {
     // authored today, or by scripts/sync-posts-fallback.mjs writing a
     // database row into the file -- breaks `tsc -b` and blocks every later
     // deploy, including the one that would fix it.
-    if (!isSiteRelativePath(image)) {
-      throw new Error(`content/posts.json: "${id}" needs a photo on this site, starting with /`);
+    if (!isSiteAssetReference(image)) {
+      throw new Error(`content/posts.json: "${id}" needs a photo on this site, not on another website`);
     }
     if (!Array.isArray(blocks)) throw new Error(`content/posts.json: "${id}" needs a list of blocks`);
 
@@ -849,15 +854,15 @@ function assertBlockTextList(value: unknown, key: string, context: string): void
   }
 }
 
-// An <img src> on a live page. `isSiteRelativePath` (./markdown) is the same
-// answer validate.ts's isUnsafeAssetPath reads, so the two ends cannot
-// disagree about what a path on this site is -- which matters here because
-// the shape they used to disagree with was `/` followed by a backslash, and
-// a browser fetches that from somebody else's host.
+// An <img src> on a live page. `isSiteAssetReference` (./asset-reference) is
+// the same answer validate.ts's isUnsafeAssetReference reads, so the two ends
+// cannot disagree about where a photograph may come from -- which matters
+// here because the shape they used to disagree about was a slash followed by
+// a backslash, and a browser fetches that from somebody else's host.
 function assertBlockAssetPath(value: unknown, key: string, context: string): void {
   assertBlockText(value, key, context);
-  if (!isSiteRelativePath(value as string)) {
-    throw new Error(`content/posts.json: block ${context} "${key}" must be a photo on this site, starting with /`);
+  if (!isSiteAssetReference(value)) {
+    throw new Error(`content/posts.json: block ${context} "${key}" must be a photo on this site, not on another website`);
   }
 }
 

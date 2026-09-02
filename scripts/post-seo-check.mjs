@@ -27,7 +27,20 @@ function decodeEntities(value) {
 export function postSeoProblems(html, expected) {
   const problems = [];
   const canonical = `${expected.siteUrl}/blog/${expected.slug}`;
-  const imageUrl = `${expected.siteUrl}${expected.image}`;
+  // The SECOND copy of worker/post-seo.ts's absoluteImageUrl, and it had the
+  // same defect. `${siteUrl}${image}` is only correct while every post image
+  // is a site-relative path; once a post's image is an absolute URL on the
+  // image host, concatenation produces the site origin with a whole second
+  // scheme glued onto it. The page under test would be perfectly correct and
+  // this check would report `og:image is not the post image` on every deploy,
+  // which is worse than a missing check -- it is a check nobody can act on.
+  //
+  // Duplicated rather than imported: this module imports nothing on purpose
+  // (see the header), because `npm run verify:deploy` is plain `node` and a
+  // single import needing `tsx` would stop the whole gate running. The two
+  // copies are kept honest by scripts/__tests__/post-seo-check.test.mjs, which
+  // asserts the same absolute-input case worker/__tests__/post-seo.test.ts does.
+  const imageUrl = new URL(expected.image, expected.siteUrl).toString();
 
   const title = html.match(/<title>([\s\S]*?)<\/title>/);
   if (!title || decodeEntities(title[1]) !== expected.title) {

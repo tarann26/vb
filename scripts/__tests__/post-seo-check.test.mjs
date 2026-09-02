@@ -36,6 +36,26 @@ describe('post SEO, checked against a raw response body', () => {
     expect(postSeoProblems(shell, EXPECTED)).toContain('title is not the post title');
   });
 
+  // The second copy of worker/post-seo.ts's absoluteImageUrl. After the
+  // 2026-08-21 migration a post's image is `/images/<key>` -- still a path on
+  // this site, so it is still resolved against siteUrl, and the og:image the
+  // page carries has the prefix in it. An expectation built from the old path
+  // would demand an og:image the page does not have, and this gate would fail
+  // every deploy against a page that is completely correct.
+  it('accepts a post whose image moved under the image prefix', () => {
+    const moved = { ...EXPECTED, image: '/images/press/hotelier.webp' };
+    const html = goodHtml().replace(
+      'https://vb.aionxxxi.uk/press/hotelier.webp',
+      'https://vb.aionxxxi.uk/images/press/hotelier.webp',
+    );
+    expect(postSeoProblems(html, moved)).toEqual([]);
+  });
+
+  it('still rejects a moved image the page does not actually carry', () => {
+    const moved = { ...EXPECTED, image: '/images/press/hotelier.webp' };
+    expect(postSeoProblems(goodHtml(), moved)).toContain('og:image is not the post image');
+  });
+
   it('rejects the site-wide open graph image', () => {
     const shell = goodHtml().replace(/press\/hotelier\.webp/, 'og-image.jpg');
     expect(postSeoProblems(shell, EXPECTED)).toContain('og:image is not the post image');

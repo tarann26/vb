@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   SITE_URL,
+  absoluteImageUrl,
   articleJsonLd,
   escapeHtmlAttribute,
   postMetadata,
@@ -41,6 +42,40 @@ describe('post metadata', () => {
 
   it('makes the open graph image absolute against the same host', () => {
     expect(postMetadata(POST).imageUrl).toBe('https://viabiancarestaurant.com/press/hotelier.webp');
+  });
+
+  // Every post image is a path on this site: /press/hotelier.webp today,
+  // /images/press/hotelier.webp after the 2026-08-21 migration moves it into
+  // the bucket. Both shapes at once, because there is no flag day -- a D1 row
+  // written before the rewrite and one written after both reach this function.
+  it('resolves a migrated photograph against the site, prefix and all', () => {
+    expect(absoluteImageUrl('/images/press/hotelier.webp', 'https://viabiancarestaurant.com'))
+      .toBe('https://viabiancarestaurant.com/images/press/hotelier.webp');
+  });
+
+  it('still resolves a path that never moved against the site', () => {
+    expect(absoluteImageUrl('/og-image.jpg', 'https://viabiancarestaurant.com'))
+      .toBe('https://viabiancarestaurant.com/og-image.jpg');
+  });
+
+  // A whole absolute URL wins outright, which is `new URL`'s own behaviour
+  // and not this function's choice. Kept because a `siteUrl + image`
+  // implementation passes every case above and fails this one by emitting a
+  // doubled scheme -- a shape no valid URL has, and one that shipped once.
+  // Nothing in content may name another host any more
+  // (src/content/asset-reference.ts refuses it), so this is a property of the
+  // function rather than a shape the site expects to see.
+  it('never emits a url with two schemes in it', () => {
+    for (const image of ['https://img.viabiancarestaurant.com/a.webp', '/images/b.jpg', '/c.jpg']) {
+      expect(absoluteImageUrl(image, 'https://viabiancarestaurant.com').match(/https:\/\//g)).toHaveLength(1);
+    }
+  });
+
+  // Five filenames in this library carry spaces. Concatenation left the space
+  // raw, which is a URL an unfurler has to guess at.
+  it('percent-encodes a filename with a space in it', () => {
+    expect(absoluteImageUrl('/food/boozy donna.webp', 'https://viabiancarestaurant.com'))
+      .toBe('https://viabiancarestaurant.com/food/boozy%20donna.webp');
   });
 
   it('escapes quotes and angle brackets for an attribute value', () => {

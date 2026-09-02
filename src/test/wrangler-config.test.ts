@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { IMAGE_BASE } from '../shared/image-host';
 
 // Whole-branch review, Critical 1: the previous version of this file pinned
 // wrangler.toml's KV id, CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_PAGES_PROJECT
@@ -162,6 +163,145 @@ describe('wrangler.toml Phase 2 bindings', () => {
     const match = toml.match(/^CONTENT_STORE\s*=\s*"([^"]+)"/m);
     expect(match).not.toBeNull();
     expect(match![1]).toBe('github');
+  });
+
+  it('binds the R2 bucket the photographs live in', () => {
+    const wrangler = readFileSync('wrangler.toml', 'utf8');
+    expect(wrangler).toMatch(/\[\[r2_buckets\]\]/);
+    expect(wrangler).toMatch(/binding\s*=\s*"R2"/);
+    expect(wrangler).toMatch(/bucket_name\s*=\s*"via-bianca"/);
+  });
+
+  // The Worker builds the reference it hands back from IMAGE_BASE; the
+  // browser and every script read src/shared/image-host.ts. Two strings, one
+  // meaning.
+  it('names the same image prefix in wrangler.toml and in src/shared/image-host.ts', () => {
+    const declared = readFileSync('wrangler.toml', 'utf8').match(/^IMAGE_BASE\s*=\s*"([^"]+)"/m);
+    expect(declared).not.toBeNull();
+    expect(declared![1]).toBe(IMAGE_BASE);
+  });
+
+  // THE SHELL ORIGIN IS PINNED TO AN EXACT STRING, and the version of this
+  // file that refused to pin it is why. It asserted only the SHAPE --
+  // /^https:\/\/[a-z0-9-]+\.pages\.dev$/ -- reasoning that "pinning the exact
+  // string would fail the day the Pages project is renamed, for no reason
+  // connected to the risk". The shape it accepted was `https://vb.pages.dev`,
+  // and `vb.pages.dev` is a live, unrelated third party's website. pages.dev
+  // is a SHARED suffix; a hostname on it is evidence of nothing at all except
+  // that Cloudflare Pages serves it, for somebody. The shape check was
+  // unfalsifiable for the only failure that matters here, which is the shell
+  // origin naming a host that is not this project.
+  //
+  // What the wrong value would have cost, once Task 12 widens `routes` to /*
+  // and site-page.ts fetches `${PAGES_ORIGIN}/index.html` on every page view:
+  // viabiancarestaurant.com serving a stranger's HTML from its own origin, and
+  // serving it WITHOUT the site's CSP, since that project's Pages deployment
+  // sets none. Foreign markup, on the zone that carries the admin session.
+  //
+  // The recorded value, measured from the account on 2026-09-01 rather than
+  // derived from the project name:
+  //
+  //   $ npx wrangler pages project list
+  //   vb | vb-c7r.pages.dev, vb.aionxxxi.uk, viabiancarestaurant.com
+  //
+  // The `-c7r` is Cloudflare's collision suffix, appended because `vb.pages.dev`
+  // was already taken. It cannot be computed from anything in this repository,
+  // which is exactly how the wrong string got written.
+  //
+  // The rename worry the old comment raised is real and is answered below by
+  // "keeps the recorded alias consistent with the recorded Pages project name"
+  // -- a rename reddens that test, which is a one-line correction, and is a
+  // trade this project will take every time over shipping a stranger's origin.
+  //
+  // scripts/verify-deploy.mjs checks the same thing against REALITY: it fetches
+  // this origin and fails unless the bytes coming back are this site's shell.
+  const PAGES_PRODUCTION_ALIAS = 'https://vb-c7r.pages.dev';
+
+  it("pins the shell origin to this Pages project's own production alias", () => {
+    const origin = readFileSync('wrangler.toml', 'utf8').match(/^PAGES_ORIGIN\s*=\s*"([^"]+)"/m);
+    expect(origin).not.toBeNull();
+    expect(origin![1]).toBe(PAGES_PRODUCTION_ALIAS);
+  });
+
+  // The pin above only moves the question one file over: the constant itself
+  // could be edited to the wrong host, which is precisely what happened -- the
+  // plan carried `https://vb.pages.dev` in wrangler.toml AND in four later
+  // fixtures, so a single agreeing pair would have agreed on the stranger.
+  // These are the near misses that must stay rejected, named individually so
+  // no future edit can quietly reintroduce one.
+  it('refuses the neighbouring hostnames that are not this project', () => {
+    // Live, and somebody else's site. This exact string shipped once.
+    expect(PAGES_PRODUCTION_ALIAS).not.toBe('https://vb.pages.dev');
+    // `${PAGES_ORIGIN}/index.html` would become `...pages.dev//index.html`.
+    expect(PAGES_PRODUCTION_ALIAS).not.toBe('https://vb-c7r.pages.dev/');
+    expect(PAGES_PRODUCTION_ALIAS).not.toBe('http://vb-c7r.pages.dev');
+    // The request's own origin -- the recursion the whole var exists to avoid.
+    expect(PAGES_PRODUCTION_ALIAS).not.toBe('https://viabiancarestaurant.com');
+    // And it is a bare origin, so the join above produces exactly one slash.
+    expect(new URL(PAGES_PRODUCTION_ALIAS).pathname).toBe('/');
+    expect(PAGES_PRODUCTION_ALIAS.endsWith('/')).toBe(false);
+  });
+
+  // Cloudflare generates the subdomain from the project name, plus a short
+  // collision suffix when the bare name is taken. That relationship cannot
+  // decide WHICH pages.dev host is right -- it accepts `vb.pages.dev` too --
+  // so it is not the guard. What it catches is the drift the old comment was
+  // worried about: the project renamed and this alias left behind.
+  it('keeps the recorded alias consistent with the recorded Pages project name', () => {
+    const project = readFileSync('wrangler.toml', 'utf8').match(/^CLOUDFLARE_PAGES_PROJECT\s*=\s*"([^"]+)"/m);
+    expect(project).not.toBeNull();
+    expect(new URL(PAGES_PRODUCTION_ALIAS).host).toMatch(
+      new RegExp(`^${project![1]}(-[a-z0-9]+)?\\.pages\\.dev$`),
+    );
+  });
+
+  // The anti-recursion property itself. A route naming the shell origin turns
+  // every page view into a subrequest back into this Worker.
+  it('routes nothing on the origin the shell is fetched from', () => {
+    const routes = readFileSync('wrangler.toml', 'utf8').match(/routes\s*=\s*\[([\s\S]*?)\]/)![1];
+    expect(routes).not.toContain(new URL(PAGES_PRODUCTION_ALIAS).host);
+    expect(routes).not.toContain('pages.dev');
+  });
+
+  // This is the reversal, and the previous version of this test is worth
+  // stating because it asserted the opposite: "the image host is served by
+  // R2's own custom domain, not by this Worker", and it pinned that `routes`
+  // never named img.viabiancarestaurant.com. The owner chose the main domain,
+  // so the photographs come through this Worker and the prefix must be routed
+  // to it.
+  //
+  // Both halves are here. Without the first, a deploy that never added the
+  // route leaves every `/images/<key>` falling through to Pages' SPA
+  // catch-all, which answers index.html at 200 -- a broken-image icon in a
+  // browser and a success to anything reading status codes. Without the
+  // second, the retired subdomain could quietly reappear in the list and
+  // nothing would say so.
+  it('routes the image prefix to this Worker, on the zone that holds it', () => {
+    const routes = readFileSync('wrangler.toml', 'utf8').match(/routes\s*=\s*\[([\s\S]*?)\]/)![1];
+    const patterns = [...routes.matchAll(/pattern\s*=\s*"([^"]+)"/g)].map((m) => m[1]);
+    const image = patterns.filter((pattern) => pattern.slice(pattern.indexOf('/')) === `${IMAGE_BASE}/*`);
+    expect(image.length, `no ${IMAGE_BASE}/* route -- photographs fall through to Pages`).toBe(1);
+    expect(routes).not.toContain('img.viabiancarestaurant.com');
+  });
+
+  // The route pattern and the references the site emits are two spellings of
+  // one prefix. A pattern of `/img/*` against an IMAGE_BASE of `/images` is a
+  // whole-site outage that reads perfectly in both files on its own, and
+  // Cloudflare route patterns have no syntax this could be derived from.
+  it('covers exactly the prefix every reference is built from', () => {
+    const routes = readFileSync('wrangler.toml', 'utf8').match(/routes\s*=\s*\[([\s\S]*?)\]/)![1];
+    const patterns = [...routes.matchAll(/pattern\s*=\s*"([^"]+)"/g)].map((m) => m[1]);
+    const covers = (path: string) =>
+      patterns.some((pattern) => {
+        const route = pattern.slice(pattern.indexOf('/'));
+        return route.endsWith('*') ? path.startsWith(route.slice(0, -1)) : path === route;
+      });
+    expect(covers(`${IMAGE_BASE}/food/pizza1.webp`)).toBe(true);
+    expect(covers(`${IMAGE_BASE}/mocktails/signor%20bianca.webp`)).toBe(true);
+    // The prefix and nothing above it: bare `/images` is not a photograph,
+    // and the homepage itself must stay on Pages.
+    expect(covers('/')).toBe(false);
+    expect(covers('/index.html')).toBe(false);
   });
 });
 

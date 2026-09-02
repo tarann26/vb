@@ -31,10 +31,12 @@ import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { postsDriftProblems } from './published-posts-check.mjs';
 import { postSeoProblems } from './post-seo-check.mjs';
+import { shellOriginProblems, SHELL_PATH } from './shell-origin-check.mjs';
 
 const SITE = process.env.VB_SITE ?? 'https://viabiancarestaurant.com';
 const ORIGIN = new URL(SITE).origin;
-const SITE_URL_FROM_CONTENT = JSON.parse(readFileSync('src/content/site.json', 'utf8')).seo.url;
+const SITE_SEO = JSON.parse(readFileSync('src/content/site.json', 'utf8')).seo;
+const SITE_URL_FROM_CONTENT = SITE_SEO.url;
 
 const EXPECTED_TYPE = { '.js': /javascript|ecmascript/i, '.css': /text\/css/i };
 
@@ -61,6 +63,17 @@ async function get(path) {
   return res;
 }
 
+// The same Origin-carrying fetch `get` uses, but taking an ABSOLUTE url --
+// image references point at a different hostname now and `get` prefixes SITE.
+// The Origin header stays on both, because the poisoned-cache variant this
+// script exists to detect is keyed on it.
+//
+// It also does NOT drain the body, which `get` does: a caller that needs to
+// read the response is why this exists at all.
+function absoluteGet(url, init = {}) {
+  return fetch(url, { ...init, headers: { Origin: ORIGIN, ...(init.headers ?? {}) } });
+}
+
 // ---------------------------------------------------------------------------
 // 1. Is the commit under test actually the one being served?
 //
@@ -85,6 +98,41 @@ if (live !== headSha) {
   process.exit(1);
 }
 note('deploy is live');
+
+// ---------------------------------------------------------------------------
+// 1b. Is PAGES_ORIGIN this site, or is it somebody else's?
+//
+// wrangler.toml's PAGES_ORIGIN is where worker/post-page.ts (and, from Task
+// 12, worker/site-page.ts on EVERY page view) fetches the SPA shell. It is
+// deliberately not the request's own origin, because a /* route would make
+// that recurse -- so it is a hostname nothing else in this repository can
+// derive, and that is exactly how it went wrong: it shipped as
+// `https://vb.pages.dev`, computed from the Pages project's name, while the
+// project's real generated subdomain is `vb-c7r.pages.dev`. `vb.pages.dev`
+// resolves to an unrelated third party's website, with no CSP.
+//
+// The unit test pins the string; a pinned string is two copies of one belief,
+// and in the plan this came from both copies were wrong at once. This is the
+// copy that cannot be wrong together with them, because it asks the network.
+//
+// Deliberately NOT the browser this script already opens, and deliberately
+// not `get()`: this is the subrequest the WORKER makes, so it is made the way
+// the Worker makes it -- a plain fetch, following redirects (Pages answers
+// /index.html with a 308 to /), with no Origin header the Worker would not
+// send either.
+// ---------------------------------------------------------------------------
+note('\nthe shell origin the Worker fetches from:');
+{
+  const declared = readFileSync('wrangler.toml', 'utf8').match(/^PAGES_ORIGIN\s*=\s*"([^"]+)"/m)?.[1];
+  const res = declared ? await fetch(`${declared}${SHELL_PATH}`).catch(() => null) : null;
+  const observed = res
+    ? { status: res.status, csp: res.headers.get('content-security-policy'), html: await res.text().catch(() => '') }
+    : { status: 0, csp: null, html: '' };
+  const problems = shellOriginProblems(declared, observed, { title: SITE_SEO.title });
+  note(`  ${problems.length ? 'FAIL' : 'ok  '}  ${declared ?? '(unset)'}${SHELL_PATH}`);
+  for (const p of problems) note(`          ${p}`);
+  failures.push(...problems);
+}
 
 // ---------------------------------------------------------------------------
 // Then wait a little longer, and this is not politeness.
@@ -280,6 +328,43 @@ if (!publishedPosts.ok) {
   for (const f of drift) note(`  FAIL  ${f}`);
   failures.push(...drift);
   if (drift.length === 0) note('  ok    every committed post is live');
+}
+
+// ---------------------------------------------------------------------------
+// 2e. Does every image a visitor's browser will ask for actually answer?
+//
+// Every image reference on the live site, fetched. Placed AFTER the build-info
+// poll and the settle wait, so it runs against a deployment that has finished
+// propagating -- an image sweep during propagation would report failures that
+// are really just a deploy in flight, and this script has twice caused the
+// outage it exists to catch by fetching too early.
+//
+// The union of the live content island (every document whose live copy is a D1
+// row, which this repository does not hold) and the committed src/content JSON
+// (every document still backed by GitHub). Either half alone goes silently
+// vacuous the moment a document crosses between the two. See
+// scripts/verify-image-urls.mjs.
+//
+// The homepage is fetched here rather than through `get`, deliberately: `get`
+// drains the body to release the connection, and the island is IN the body.
+// ---------------------------------------------------------------------------
+note('\nevery image reference on the live site:');
+{
+  const { islandFrom, referencesIn, committedReferences, sweep } = await import('./verify-image-urls.mjs');
+  const homepage = await absoluteGet(`${SITE}/`, { cache: 'no-store' });
+  const island = homepage.ok ? islandFrom(await homepage.text().catch(() => '')) : null;
+  const fromIsland = island ? referencesIn(island) : [];
+  const fromRepo = committedReferences();
+  const references = [...new Set([...fromIsland, ...fromRepo])];
+  const problems = await sweep(references, ORIGIN, absoluteGet);
+  note(island ? `  island: ${fromIsland.length} references` : '  no content island on the live page (expected before Task 12)');
+  note(`  committed: ${fromRepo.length} references`);
+  note(`  ${references.length - problems.length}/${references.length} distinct image references resolve`);
+  for (const { url, why } of problems) note(`  FAIL  ${url}  -- ${why}`);
+  for (const { url, why } of problems) failures.push(`image ${url}: ${why}`);
+  // A sweep of nothing is a green run that proved nothing, and both halves
+  // being empty at once is the only way that happens.
+  if (references.length === 0) failures.push('the image sweep found no references at all -- it swept nothing and passed');
 }
 
 // ---------------------------------------------------------------------------

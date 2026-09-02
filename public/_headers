@@ -47,6 +47,25 @@
 # is a submission into a list compiled into browsers, it is slow and awkward
 # to undo, and this is still running on a throwaway test host. `max-age` and
 # `includeSubDomains` are reversible; preload effectively is not.
+#
+# img-src is back to `'self' blob:`, and the exemption it briefly carried is
+# gone rather than merely unused. It read
+# `'self' blob: https://img.viabiancarestaurant.com` while photographs were
+# going to be served from an R2 custom domain. The owner chose the main domain
+# instead: `viabiancarestaurant.com/images/*` is a Worker route that reads the
+# object out of the bucket (worker/images.ts), so a photograph is same-origin
+# and 'self' already admits it. A standing exemption for a host nothing serves
+# from is a permanent widening bought for nothing.
+#
+# NOTHING HAD TO SHIP IN ORDER, WHICH IS THE POINT OF THE CHANGE. The previous
+# arrangement had a strict sequence: this line first, references second, or
+# every photograph on the site becomes a broken-image icon at once, at a 200,
+# with nothing in the network tab that looks like a failure. Same-origin
+# references need no directive to be widened before they may be used, so that
+# ordering hazard does not exist any more.
+#
+# 'self' also covers src/index.css's body::before texture, which is a CSS
+# background-image rather than an <img>: img-src governs both.
 /*
   X-Content-Type-Options: nosniff
   X-Frame-Options: DENY

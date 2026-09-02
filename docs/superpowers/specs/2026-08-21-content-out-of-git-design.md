@@ -166,3 +166,140 @@ mutating the code and watching it go red.
   render stale rather than empty.
 - **Undo across the new paths**: one publish, one restore, byte-identical
   content back.
+
+---
+
+## Operational risks, researched rather than assumed
+
+Added after the first draft. Each was verified against Cloudflare's own
+documentation, and each changes something.
+
+### R2's public URL is not usable in production
+
+`r2.dev` is **rate-limited and documented as development-only**. Cloudflare
+warns against even pointing a CNAME at it, calling that "an unsupported access
+path" with no guaranteed reliability or performance. It also gets no caching,
+no WAF and no bot management. That has not changed, and the `r2.dev` subdomain
+stays **disabled** either way: leaving it on exposes the bucket through a path
+that bypasses whatever protections the served path has.
+
+**Superseded decision, kept for the reasoning it carries:** images were to be
+served from a custom domain, `img.viabiancarestaurant.com`, connected to the
+`via-bianca` bucket. Serving them through the Worker was considered and
+rejected then, because it would put every photograph through the same
+100,000/day Workers Free budget that also serves every page view.
+
+**Decision as it stands: images are served from the main domain, through the
+Worker.** `viabiancarestaurant.com/images/*` is a Worker route; `worker/images.ts`
+reads the object out of the R2 binding and returns it. Taken 2026-09-02, by the
+owner, before anything had migrated -- which is the cheapest moment such a
+decision can be changed, since not one of the seventy-seven references had
+moved.
+
+**Why the owner chose it.** The subdomain needed a DNS record and a
+public-access change made by hand in the Cloudflare dashboard, on the live zone,
+by someone who does not administer this site confidently and for whom every
+dashboard step is a step that can go wrong unobserved. The main domain needs
+neither: the route is a line in `wrangler.toml` that ships with a deploy, and it
+is reversible by the same deploy. It also removes a whole class of problem
+rather than solving it -- a second origin means a second certificate story, a
+second thing to remember when the domain moves, and a `Content-Security-Policy`
+that has to name it. `public/_headers` is back to `img-src 'self' blob:`, and
+the ordering hazard that the widening created (a reference rewritten before the
+header shipped is every photograph on the site broken at once, at a 200) does
+not exist for a same-origin reference.
+
+**The cost the superseded decision was right about, and what pays it.** A Worker
+route is invoked for every matching request that reaches Cloudflare -- the CDN
+cache does not answer in a Worker's place, which is why the Cache API exists --
+and photographs are the highest-volume request type on any site. Nothing in the
+handler can make an arriving request free. What makes it free is the request not
+arriving, and that is bought with `Cache-Control`:
+
+- A key named after its own hash (`worker/upload.ts`'s content-addressed shape)
+  gets `public, max-age=31536000, immutable`. The browser fetches it once, ever.
+- A legacy human-named key can be re-uploaded under the same name, and nothing
+  in this system purges R2 or the edge, so it gets `public, max-age=86400` --
+  long enough that the edge answers nearly every request, short enough that a
+  correction appears without a purge mechanism that does not exist.
+
+`scripts/migrate-images.mjs` already worked that split out and writes it into
+each object's R2 metadata; `src/shared/image-host.ts`'s `cacheControlForKey` is
+the serve-time copy, and the two are pinned equal by a test. Without those
+headers a returning visitor clicking through four pages spends forty-odd
+invocations, and the site's own traffic exhausts the daily budget -- at which
+point the Worker stops answering `/api/*` too, so a publish and a login die
+alongside the pictures. The headers are not decoration; they are the thing that
+makes this decision affordable.
+
+**What it changed in the code.** `IMAGE_HOST` became `IMAGE_BASE`, a site-root
+prefix (`/images`) rather than a hostname, so a reference resolves against
+whichever host served the page -- the apex, the Pages production alias, a
+preview deployment, `vite dev` on a laptop. `src/content/asset-reference.ts`
+lost the second reference shape it had grown: `/images/<key>` is a path on this
+site, so the four boundaries that had to be widened for a foreign origin need no
+widening at all.
+
+### D1 point-in-time recovery is SEVEN days on the free plan
+
+Time Travel is always on and needs no configuration, but the window is **7 days
+on free and 30 on paid**. Once content lives only in D1, that is the whole
+safety net for a corruption nobody notices immediately.
+
+**Decision: a weekly export of every content document back into the repository**,
+committed by a scheduled job. This is NOT the per-publish commit this migration
+exists to remove -- it is one commit a week whose only job is to make the
+content survive losing D1 entirely.
+
+That mitigation is what makes staying on the free plan reasonable. Without it,
+a mistake discovered on day eight would be unrecoverable. **The alternative is
+$5/month for Workers Paid, which widens the window to 30 days; that is the
+owner's call and the export should be built either way.**
+
+### The repository stops being the source of truth
+
+Today a fresh clone builds the current site. Afterwards it builds whatever the
+compiled-in floor happens to say, which may be months stale.
+
+**Decision: the floor files carry a header comment stating they are a fallback,
+not the live content, and naming where the live content actually is.** The
+weekly export keeps them from drifting far enough to matter.
+
+### Publishing must invalidate the edge cache
+
+The whole promise is that a publish is visible immediately. An edge cache that
+serves a stale render for its full TTL breaks exactly that, and it would look
+to her like the publish silently failed.
+
+**Decision: a publish purges the cache entries it affects, and the plan proves
+it by publishing and then reading the live page in a browser.** A test that
+only checks the cache key is not proof.
+
+### Deleting content orphans its images
+
+Removing a dish leaves its photograph in R2 with nothing pointing at it.
+
+**Decision: orphans are left in place.** At 56 images and a restaurant's rate of
+change this is a rounding error against a 10 GB allowance, and the alternative --
+deleting on content change -- is exactly how this project already deleted a
+photograph that was still in use. Reclaiming can be a deliberate, separate,
+manually-run sweep if it ever matters.
+
+### The migration itself must be atomic per image
+
+Uploading 56 images and rewriting 68 references is not one operation. A failure
+between them leaves the site pointing at files that are not there yet.
+
+**Decision: every image is uploaded and VERIFIED READABLE at its final URL
+before any content file is rewritten to point at it.** The rewrite is the last
+step, and it is reversible by a single commit because the content files are
+still in git at that moment.
+
+### Hotlinking
+
+A public bucket can be hotlinked by anyone. R2 egress is free, so this costs
+nothing directly.
+
+**Decision: accept it.** A hotlink protection rule can be added later if it ever
+matters; spending complexity on it now would be solving a problem the
+restaurant does not have.

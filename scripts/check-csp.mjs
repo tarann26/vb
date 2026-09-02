@@ -123,6 +123,28 @@ try {
 }
 `;
 
+// THE IMAGE-HOST PROBE IS GONE, and the reason it existed is worth keeping.
+//
+// While photographs were going to be served from img.viabiancarestaurant.com,
+// this file loaded a REAL image element pointed at that host on every route,
+// because a string check on the header text passes on a policy that lists a
+// host in the wrong directive and only an actual load tells the two apart.
+//
+// The owner chose the main domain instead. `img-src` is back to
+// `'self' blob:`, there is no foreign host to admit, and every route this
+// script visits already loads several same-origin photographs -- the hero
+// backdrop, the whole-page texture, the galleries -- so a policy that stopped
+// admitting them produces real violations on a real page load and the
+// listener below catches them. A dedicated probe would have been a second,
+// weaker copy of what the page already does.
+//
+// It was NOT replaced with a probe that a foreign host is refused, which was
+// the tempting move. Such a probe succeeds by producing a violation, and this
+// script's whole contract is that a violation is a failure; making one
+// expected would mean teaching the collector to subtract it, and a checker
+// that ignores a class of violation is exactly the shape that later ignores a
+// real one.
+
 function serve() {
   return createServer((req, res) => {
     const pathname = decodeURIComponent(new URL(req.url, 'http://x').pathname);
@@ -241,6 +263,14 @@ try {
         violations.push(`admin capability probe could not run: ${error.message.split('\n')[0]}`);
       }
     }
+
+    // Re-read the violation list. It was drained above, immediately after the
+    // navigation, so a refusal caused by the /edit capability probe -- which
+    // runs AFTER that read -- would otherwise be collected by the listener and
+    // never looked at, and that probe would be decoration.
+    // De-duplicated by the Set below, so re-reading costs nothing.
+    violations.push(...(await page.evaluate(() => window.__cspViolations ?? [])));
+
     if (violations.length) failures.push({ route, violations: [...new Set(violations)] });
     console.log(`${violations.length ? 'FAIL' : ' ok '}  ${route}${rendered ? '' : '  (empty root)'}`);
     await page.close();

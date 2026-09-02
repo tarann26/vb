@@ -1478,6 +1478,7 @@ describe('the route, reached through the router', () => {
       GITHUB_REPO: 'vb',
       GITHUB_BRANCH: 'main',
       GITHUB_TOKEN: 'analytics-test-github-token-not-real',
+      R2: {} as unknown as R2Bucket,
     };
   }
 

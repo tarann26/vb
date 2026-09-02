@@ -1,0 +1,912 @@
+{
+  "builtAt": "2026-09-01T17:29:30.012Z",
+  "origin": "https://viabiancarestaurant.com",
+  "references": [
+    {
+      "file": "src/content/dishes.json",
+      "pointer": "[0].image",
+      "path": "/food/Aglio e Pepperoncini.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/content/dishes.json",
+      "pointer": "[1].image",
+      "path": "/food/americana.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/content/dishes.json",
+      "pointer": "[2].image",
+      "path": "/food/arrosticini.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/content/dishes.json",
+      "pointer": "[3].image",
+      "path": "/food/bonet piemontese.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/content/dishes.json",
+      "pointer": "[4].image",
+      "path": "/food/boozy donna.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/content/dishes.json",
+      "pointer": "[5].image",
+      "path": "/food/idk1.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/content/dishes.json",
+      "pointer": "[6].image",
+      "path": "/food/idk2.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/content/dishes.json",
+      "pointer": "[7].image",
+      "path": "/food/margarita.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/content/dishes.json",
+      "pointer": "[8].image",
+      "path": "/food/pistaAffo.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/content/dishes.json",
+      "pointer": "[9].image",
+      "path": "/food/pizza1.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/content/dishes.json",
+      "pointer": "[10].image",
+      "path": "/food/pizza2.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/content/dishes.json",
+      "pointer": "[11].image",
+      "path": "/food/pollo alla cacciatora.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/content/dishes.json",
+      "pointer": "[12].image",
+      "path": "/food/Spaghetti alla'Assassina.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/content/dishes.json",
+      "pointer": "[13].image",
+      "path": "/food/tielle.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/content/dishes.json",
+      "pointer": "[14].image",
+      "path": "/food/tiramisu.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/content/drinks.json",
+      "pointer": "[2].image",
+      "path": "/mocktails/piccante.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/content/experiences.json",
+      "pointer": "[0].image",
+      "path": "/atmosphere/table.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/content/experiences.json",
+      "pointer": "[1].image",
+      "path": "/atmosphere/dining.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/content/experiences.json",
+      "pointer": "[2].image",
+      "path": "/experiences/pamphlet.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/content/experiences.json",
+      "pointer": "[3].image",
+      "path": "/atmosphere/ambience.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/content/experiences.json",
+      "pointer": "[4].image",
+      "path": "/food/tiramisu.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/content/experiences.json",
+      "pointer": "[5].image",
+      "path": "/experiences/retail.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/content/galleries.json",
+      "pointer": "atmosphere[0].src",
+      "path": "/atmosphere/dining.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/content/galleries.json",
+      "pointer": "atmosphere[1].src",
+      "path": "/atmosphere/outsideLOGO.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/content/galleries.json",
+      "pointer": "atmosphere[2].src",
+      "path": "/atmosphere/ambience.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/content/galleries.json",
+      "pointer": "atmosphere[3].src",
+      "path": "/atmosphere/ceiling decor.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/content/galleries.json",
+      "pointer": "atmosphere[4].src",
+      "path": "/atmosphere/front mirror.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/content/galleries.json",
+      "pointer": "atmosphere[5].src",
+      "path": "/atmosphere/painting board.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/content/galleries.json",
+      "pointer": "atmosphere[6].src",
+      "path": "/atmosphere/room.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/content/galleries.json",
+      "pointer": "atmosphere[7].src",
+      "path": "/atmosphere/table.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/content/galleries.json",
+      "pointer": "ourStory[0].src",
+      "path": "/our_story/cut.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/content/galleries.json",
+      "pointer": "ourStory[1].src",
+      "path": "/our_story/dinner.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/content/galleries.json",
+      "pointer": "ourStory[2].src",
+      "path": "/our_story/handmaking.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/content/galleries.json",
+      "pointer": "ourStory[3].src",
+      "path": "/our_story/oven.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/content/galleries.json",
+      "pointer": "ourStory[4].src",
+      "path": "/our_story/shape.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/content/galleries.json",
+      "pointer": "ourStory[5].src",
+      "path": "/our_story/stuff.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/content/galleries.json",
+      "pointer": "heroCollage.children[0].src",
+      "path": "/atmosphere/ambience.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/content/galleries.json",
+      "pointer": "heroCollage.children[1].children[0].src",
+      "path": "/atmosphere/front mirror.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/content/galleries.json",
+      "pointer": "heroCollage.children[1].children[1].src",
+      "path": "/our_story/stuff.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/content/galleries.json",
+      "pointer": "heroCollage.children[2].children[0].children[0].src",
+      "path": "/atmosphere/ceiling decor.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/content/galleries.json",
+      "pointer": "heroCollage.children[2].children[0].children[1].src",
+      "path": "/our_story/oven.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/content/galleries.json",
+      "pointer": "heroCollage.children[2].children[0].children[2].src",
+      "path": "/hero/scene.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/content/galleries.json",
+      "pointer": "heroCollage.children[2].children[1].children[0].children[0].src",
+      "path": "/hero/building.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/content/galleries.json",
+      "pointer": "heroCollage.children[2].children[1].children[0].children[1].src",
+      "path": "/atmosphere/room.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/content/galleries.json",
+      "pointer": "heroCollage.children[2].children[1].children[1].src",
+      "path": "/hero/bus.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/content/galleries.json",
+      "pointer": "heroCollage.children[2].children[2].src",
+      "path": "/our_story/cut.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/content/galleries.json",
+      "pointer": "heroCollage.children[2].children[3].src",
+      "path": "/atmosphere/dining.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/content/menus.json",
+      "pointer": "[0].file",
+      "path": "/menus/food-menu.pdf",
+      "source": "committed"
+    },
+    {
+      "file": "src/content/menus.json",
+      "pointer": "[1].file",
+      "path": "/menus/drinks-menu.pdf",
+      "source": "committed"
+    },
+    {
+      "file": "src/content/pages.json",
+      "pointer": "[0].sections[1].content.images[0].src",
+      "path": "/atmosphere/table.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/content/pages.json",
+      "pointer": "[0].sections[1].content.images[1].src",
+      "path": "/food/pizza1.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/content/pages.json",
+      "pointer": "[0].sections[1].content.images[2].src",
+      "path": "/food/arrosticini.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/content/pages.json",
+      "pointer": "[0].sections[1].content.images[3].src",
+      "path": "/our_story/dinner.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/content/pages.json",
+      "pointer": "[2].sections[0].content.images[0].src",
+      "path": "/experiences/pamphlet.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/content/posts.json",
+      "pointer": "[0].image",
+      "path": "/press/hotelier.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/content/posts.json",
+      "pointer": "[1].image",
+      "path": "/press/royale.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/content/posts.json",
+      "pointer": "[2].image",
+      "path": "/press/restaurantindia.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/content/press.json",
+      "pointer": "[0].image",
+      "path": "/press/hotelier.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/content/press.json",
+      "pointer": "[1].image",
+      "path": "/press/royale.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/content/press.json",
+      "pointer": "[2].image",
+      "path": "/press/restaurantindia.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/content/press.json",
+      "pointer": "[3].image",
+      "path": "/food/Aglio e Pepperoncini.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/content/press.json",
+      "pointer": "[4].image",
+      "path": "/mocktails/bicerin.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/content/press.json",
+      "pointer": "[5].image",
+      "path": "/food/tielle.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/content/press.json",
+      "pointer": "[6].image",
+      "path": "/food/tiramisu.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/content/press.json",
+      "pointer": "[7].image",
+      "path": "/food/margarita.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/content/press.json",
+      "pointer": "[8].image",
+      "path": "/food/Spaghetti alla'Assassina.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/content/press.json",
+      "pointer": "[9].image",
+      "path": "/team/kamalika-anand.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/content/press.json",
+      "pointer": "[10].image",
+      "path": "/food/margarita.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/content/press.json",
+      "pointer": "[11].image",
+      "path": "/mocktails/bicerin.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/content/site.json",
+      "pointer": "seo.ogImage",
+      "path": "/og-image.jpg",
+      "source": "committed"
+    },
+    {
+      "file": "src/content/story.json",
+      "pointer": "chef.portrait",
+      "path": "/team/kamalika-anand.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/index.css",
+      "pointer": "line 196",
+      "path": "/hero/brick.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/components/Hero.tsx",
+      "pointer": "line 128",
+      "path": "/hero/brick.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/components/ChefGallery.tsx",
+      "pointer": "line 13",
+      "path": "/team/kamalika-anand.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/components/SignatureMocktails.tsx",
+      "pointer": "line 14",
+      "path": "/mocktails/bicerin.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/components/SignatureMocktails.tsx",
+      "pointer": "line 19",
+      "path": "/mocktails/blood orange espresso tonic.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/components/SignatureMocktails.tsx",
+      "pointer": "line 24",
+      "path": "/mocktails/piccante.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/components/SignatureMocktails.tsx",
+      "pointer": "line 29",
+      "path": "/mocktails/signor bianca.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/components/SignatureMocktails.tsx",
+      "pointer": "line 34",
+      "path": "/mocktails/viola and sambuco.webp",
+      "source": "committed"
+    },
+    {
+      "file": "src/components/SignatureMocktails.tsx",
+      "pointer": "line 90",
+      "path": "/menus/food-menu.pdf",
+      "source": "committed"
+    },
+    {
+      "file": "src/content/types.ts",
+      "pointer": "line 187",
+      "path": "/team/kamalika-anand.webp",
+      "source": "committed"
+    },
+    {
+      "file": "d1:story.json",
+      "pointer": "chef.portrait",
+      "path": "/team/kamalika-anand.webp",
+      "source": "d1"
+    },
+    {
+      "file": "d1:posts.json",
+      "pointer": "[0].image",
+      "path": "/press/hotelier.webp",
+      "source": "d1"
+    },
+    {
+      "file": "d1:posts.json",
+      "pointer": "[1].image",
+      "path": "/press/royale.webp",
+      "source": "d1"
+    },
+    {
+      "file": "d1:posts.json",
+      "pointer": "[2].image",
+      "path": "/press/restaurantindia.webp",
+      "source": "d1"
+    }
+  ],
+  "counts": {
+    "content": 71,
+    "code": 10,
+    "d1": 4,
+    "distinct": 47
+  },
+  "objects": [
+    {
+      "key": "atmosphere/ambience.webp",
+      "kind": "derivative"
+    },
+    {
+      "key": "atmosphere/ceiling decor.webp",
+      "kind": "derivative"
+    },
+    {
+      "key": "atmosphere/dining.webp",
+      "kind": "derivative"
+    },
+    {
+      "key": "atmosphere/front mirror.webp",
+      "kind": "derivative"
+    },
+    {
+      "key": "atmosphere/outsideLOGO.webp",
+      "kind": "derivative"
+    },
+    {
+      "key": "atmosphere/painting board.webp",
+      "kind": "derivative"
+    },
+    {
+      "key": "atmosphere/room.webp",
+      "kind": "derivative"
+    },
+    {
+      "key": "atmosphere/table.webp",
+      "kind": "derivative"
+    },
+    {
+      "key": "experiences/pamphlet.webp",
+      "kind": "derivative"
+    },
+    {
+      "key": "experiences/retail.webp",
+      "kind": "derivative"
+    },
+    {
+      "key": "food/Aglio e Pepperoncini.webp",
+      "kind": "derivative"
+    },
+    {
+      "key": "food/americana.webp",
+      "kind": "derivative"
+    },
+    {
+      "key": "food/arrosticini.webp",
+      "kind": "derivative"
+    },
+    {
+      "key": "food/bonet piemontese.webp",
+      "kind": "derivative"
+    },
+    {
+      "key": "food/boozy donna.webp",
+      "kind": "derivative"
+    },
+    {
+      "key": "food/idk1.webp",
+      "kind": "derivative"
+    },
+    {
+      "key": "food/idk2.webp",
+      "kind": "derivative"
+    },
+    {
+      "key": "food/margarita.webp",
+      "kind": "derivative"
+    },
+    {
+      "key": "food/pistaAffo.webp",
+      "kind": "derivative"
+    },
+    {
+      "key": "food/pizza1.webp",
+      "kind": "derivative"
+    },
+    {
+      "key": "food/pizza2.webp",
+      "kind": "derivative"
+    },
+    {
+      "key": "food/pollo alla cacciatora.webp",
+      "kind": "derivative"
+    },
+    {
+      "key": "food/Spaghetti alla'Assassina.webp",
+      "kind": "derivative"
+    },
+    {
+      "key": "food/tielle.webp",
+      "kind": "derivative"
+    },
+    {
+      "key": "food/tiramisu.webp",
+      "kind": "derivative"
+    },
+    {
+      "key": "hero/brick.webp",
+      "kind": "derivative"
+    },
+    {
+      "key": "hero/building.webp",
+      "kind": "derivative"
+    },
+    {
+      "key": "hero/bus.webp",
+      "kind": "derivative"
+    },
+    {
+      "key": "hero/scene.webp",
+      "kind": "derivative"
+    },
+    {
+      "key": "menus/drinks-menu.pdf",
+      "kind": "menu"
+    },
+    {
+      "key": "menus/food-menu.pdf",
+      "kind": "menu"
+    },
+    {
+      "key": "mocktails/bicerin.webp",
+      "kind": "derivative"
+    },
+    {
+      "key": "mocktails/blood orange espresso tonic.webp",
+      "kind": "derivative"
+    },
+    {
+      "key": "mocktails/piccante.webp",
+      "kind": "derivative"
+    },
+    {
+      "key": "mocktails/signor bianca.webp",
+      "kind": "derivative"
+    },
+    {
+      "key": "mocktails/viola and sambuco.webp",
+      "kind": "derivative"
+    },
+    {
+      "key": "our_story/cut.webp",
+      "kind": "derivative"
+    },
+    {
+      "key": "our_story/dinner.webp",
+      "kind": "derivative"
+    },
+    {
+      "key": "our_story/handmaking.webp",
+      "kind": "derivative"
+    },
+    {
+      "key": "our_story/oven.webp",
+      "kind": "derivative"
+    },
+    {
+      "key": "our_story/shape.webp",
+      "kind": "derivative"
+    },
+    {
+      "key": "our_story/stuff.webp",
+      "kind": "derivative"
+    },
+    {
+      "key": "press/hotelier.webp",
+      "kind": "derivative"
+    },
+    {
+      "key": "press/restaurantindia.webp",
+      "kind": "derivative"
+    },
+    {
+      "key": "press/royale.webp",
+      "kind": "derivative"
+    },
+    {
+      "key": "source/atmosphere/ambience.JPG",
+      "kind": "original"
+    },
+    {
+      "key": "source/atmosphere/ceiling decor.png",
+      "kind": "original"
+    },
+    {
+      "key": "source/atmosphere/dining.jpg",
+      "kind": "original"
+    },
+    {
+      "key": "source/atmosphere/front mirror.png",
+      "kind": "original"
+    },
+    {
+      "key": "source/atmosphere/outsideLOGO.jpg",
+      "kind": "original"
+    },
+    {
+      "key": "source/atmosphere/painting board.JPG",
+      "kind": "original"
+    },
+    {
+      "key": "source/atmosphere/room.png",
+      "kind": "original"
+    },
+    {
+      "key": "source/atmosphere/table.png",
+      "kind": "original"
+    },
+    {
+      "key": "source/experiences/pamphlet.jpg",
+      "kind": "original"
+    },
+    {
+      "key": "source/experiences/retail.png",
+      "kind": "original"
+    },
+    {
+      "key": "source/food/Aglio e Pepperoncini.jpg",
+      "kind": "original"
+    },
+    {
+      "key": "source/food/americana.png",
+      "kind": "original"
+    },
+    {
+      "key": "source/food/arrosticini.JPG",
+      "kind": "original"
+    },
+    {
+      "key": "source/food/bonet piemontese.JPG",
+      "kind": "original"
+    },
+    {
+      "key": "source/food/boozy donna.JPG",
+      "kind": "original"
+    },
+    {
+      "key": "source/food/idk1.JPG",
+      "kind": "original"
+    },
+    {
+      "key": "source/food/idk2.JPG",
+      "kind": "original"
+    },
+    {
+      "key": "source/food/margarita.jpg",
+      "kind": "original"
+    },
+    {
+      "key": "source/food/pistaAffo.jpg",
+      "kind": "original"
+    },
+    {
+      "key": "source/food/pizza1.JPG",
+      "kind": "original"
+    },
+    {
+      "key": "source/food/pizza2.JPG",
+      "kind": "original"
+    },
+    {
+      "key": "source/food/pollo alla cacciatora.JPG",
+      "kind": "original"
+    },
+    {
+      "key": "source/food/Spaghetti alla'Assassina.jpg",
+      "kind": "original"
+    },
+    {
+      "key": "source/food/tielle.jpg",
+      "kind": "original"
+    },
+    {
+      "key": "source/food/tiramisu.jpg",
+      "kind": "original"
+    },
+    {
+      "key": "source/hero/brick.jpg",
+      "kind": "original"
+    },
+    {
+      "key": "source/hero/building.png",
+      "kind": "original"
+    },
+    {
+      "key": "source/hero/bus.jpeg",
+      "kind": "original"
+    },
+    {
+      "key": "source/hero/farfalle.png",
+      "kind": "original"
+    },
+    {
+      "key": "source/hero/farfalle1.png",
+      "kind": "original"
+    },
+    {
+      "key": "source/hero/farfalle2.png",
+      "kind": "original"
+    },
+    {
+      "key": "source/hero/farfalle3.png",
+      "kind": "original"
+    },
+    {
+      "key": "source/hero/farfalle4.png",
+      "kind": "original"
+    },
+    {
+      "key": "source/hero/postcard.png",
+      "kind": "original"
+    },
+    {
+      "key": "source/hero/scene.png",
+      "kind": "original"
+    },
+    {
+      "key": "source/Menu - Expanded.pdf",
+      "kind": "original"
+    },
+    {
+      "key": "source/mocktails/bicerin.jpg",
+      "kind": "original"
+    },
+    {
+      "key": "source/mocktails/blood orange espresso tonic.JPG",
+      "kind": "original"
+    },
+    {
+      "key": "source/mocktails/piccante.JPG",
+      "kind": "original"
+    },
+    {
+      "key": "source/mocktails/signor bianca.png",
+      "kind": "original"
+    },
+    {
+      "key": "source/mocktails/viola and sambuco.png",
+      "kind": "original"
+    },
+    {
+      "key": "source/our_story/cut.JPG",
+      "kind": "original"
+    },
+    {
+      "key": "source/our_story/dinner.JPG",
+      "kind": "original"
+    },
+    {
+      "key": "source/our_story/handmaking.jpg",
+      "kind": "original"
+    },
+    {
+      "key": "source/our_story/oven.JPG",
+      "kind": "original"
+    },
+    {
+      "key": "source/our_story/shape.JPG",
+      "kind": "original"
+    },
+    {
+      "key": "source/our_story/stuff.JPG",
+      "kind": "original"
+    },
+    {
+      "key": "source/press/hotelier.png",
+      "kind": "original"
+    },
+    {
+      "key": "source/press/restaurantindia.png",
+      "kind": "original"
+    },
+    {
+      "key": "source/press/royale.png",
+      "kind": "original"
+    },
+    {
+      "key": "source/team/kamalika-anand.jpg",
+      "kind": "original"
+    },
+    {
+      "key": "team/kamalika-anand.webp",
+      "kind": "derivative"
+    }
+  ]
+}
