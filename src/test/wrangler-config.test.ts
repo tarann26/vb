@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { IMAGE_HOST } from '../shared/image-host';
+import { IMAGE_BASE } from '../shared/image-host';
 
 // Whole-branch review, Critical 1: the previous version of this file pinned
 // wrangler.toml's KV id, CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_PAGES_PROJECT
@@ -172,12 +172,13 @@ describe('wrangler.toml Phase 2 bindings', () => {
     expect(wrangler).toMatch(/bucket_name\s*=\s*"via-bianca"/);
   });
 
-  // The Worker builds the URL it hands back from IMAGE_HOST; the browser and
-  // every script read src/shared/image-host.ts. Two strings, one meaning.
-  it('names the same image host in wrangler.toml and in src/shared/image-host.ts', () => {
-    const declared = readFileSync('wrangler.toml', 'utf8').match(/IMAGE_HOST\s*=\s*"([^"]+)"/);
+  // The Worker builds the reference it hands back from IMAGE_BASE; the
+  // browser and every script read src/shared/image-host.ts. Two strings, one
+  // meaning.
+  it('names the same image prefix in wrangler.toml and in src/shared/image-host.ts', () => {
+    const declared = readFileSync('wrangler.toml', 'utf8').match(/^IMAGE_BASE\s*=\s*"([^"]+)"/m);
     expect(declared).not.toBeNull();
-    expect(declared![1]).toBe(IMAGE_HOST);
+    expect(declared![1]).toBe(IMAGE_BASE);
   });
 
   // THE SHELL ORIGIN IS PINNED TO AN EXACT STRING, and the version of this
@@ -262,10 +263,45 @@ describe('wrangler.toml Phase 2 bindings', () => {
     expect(routes).not.toContain('pages.dev');
   });
 
-  // The image host is served by R2's own custom domain, not by this Worker.
-  it('routes nothing on the image host', () => {
+  // This is the reversal, and the previous version of this test is worth
+  // stating because it asserted the opposite: "the image host is served by
+  // R2's own custom domain, not by this Worker", and it pinned that `routes`
+  // never named img.viabiancarestaurant.com. The owner chose the main domain,
+  // so the photographs come through this Worker and the prefix must be routed
+  // to it.
+  //
+  // Both halves are here. Without the first, a deploy that never added the
+  // route leaves every `/images/<key>` falling through to Pages' SPA
+  // catch-all, which answers index.html at 200 -- a broken-image icon in a
+  // browser and a success to anything reading status codes. Without the
+  // second, the retired subdomain could quietly reappear in the list and
+  // nothing would say so.
+  it('routes the image prefix to this Worker, on the zone that holds it', () => {
     const routes = readFileSync('wrangler.toml', 'utf8').match(/routes\s*=\s*\[([\s\S]*?)\]/)![1];
+    const patterns = [...routes.matchAll(/pattern\s*=\s*"([^"]+)"/g)].map((m) => m[1]);
+    const image = patterns.filter((pattern) => pattern.slice(pattern.indexOf('/')) === `${IMAGE_BASE}/*`);
+    expect(image.length, `no ${IMAGE_BASE}/* route -- photographs fall through to Pages`).toBe(1);
     expect(routes).not.toContain('img.viabiancarestaurant.com');
+  });
+
+  // The route pattern and the references the site emits are two spellings of
+  // one prefix. A pattern of `/img/*` against an IMAGE_BASE of `/images` is a
+  // whole-site outage that reads perfectly in both files on its own, and
+  // Cloudflare route patterns have no syntax this could be derived from.
+  it('covers exactly the prefix every reference is built from', () => {
+    const routes = readFileSync('wrangler.toml', 'utf8').match(/routes\s*=\s*\[([\s\S]*?)\]/)![1];
+    const patterns = [...routes.matchAll(/pattern\s*=\s*"([^"]+)"/g)].map((m) => m[1]);
+    const covers = (path: string) =>
+      patterns.some((pattern) => {
+        const route = pattern.slice(pattern.indexOf('/'));
+        return route.endsWith('*') ? path.startsWith(route.slice(0, -1)) : path === route;
+      });
+    expect(covers(`${IMAGE_BASE}/food/pizza1.webp`)).toBe(true);
+    expect(covers(`${IMAGE_BASE}/mocktails/signor%20bianca.webp`)).toBe(true);
+    // The prefix and nothing above it: bare `/images` is not a photograph,
+    // and the homepage itself must stay on Pages.
+    expect(covers('/')).toBe(false);
+    expect(covers('/index.html')).toBe(false);
   });
 });
 

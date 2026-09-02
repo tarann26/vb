@@ -66,15 +66,21 @@ export function canonicalForSlug(slug: string, siteUrl: string = SITE_URL): stri
 // standing in for the guard Task 3 must add at its own input boundary, not
 // for a branch this function should grow.
 //
-// `image` may be a site-relative path (/og-image.jpg, and every post's image
-// before the 2026-08-21 migration) or an absolute URL on the image host (every
-// post's image after it). `new URL(image, siteUrl)` handles both correctly: an
-// absolute input wins outright and a relative one is resolved against the site.
-// String concatenation handled only the first shape, and given the second it
-// emitted the site origin with a whole second scheme glued onto it -- a URL
-// that resolves nowhere, in every post's og:image and in the Article
-// structured data, discoverable only by fetching a deployed page or by a link
-// unfurler that does not report back.
+// `image` is a path on this site -- /og-image.jpg, /press/hotelier.webp
+// before the 2026-08-21 migration, /images/press/hotelier.webp after it, now
+// that photographs are served from this origin rather than from an R2 custom
+// domain. `new URL(image, siteUrl)` resolves any of them against the site,
+// and would still handle a whole absolute URL correctly if one ever reached
+// here: an absolute input wins outright.
+//
+// That last property is not decoration, and it is why this is not string
+// concatenation. While the migration was going to move photographs onto
+// img.viabiancarestaurant.com, concatenation emitted the site origin with a
+// whole second scheme glued onto it -- a URL that resolves nowhere, in every
+// post's og:image and in the Article structured data, discoverable only by
+// fetching a deployed page or by a link unfurler that does not report back.
+// The destination changed; a function that cannot produce that shape at all
+// is still the one worth having.
 //
 // It also percent-encodes, which the concatenation did not. Five filenames in
 // this library carry spaces; a raw space in an og:image value is a URL a

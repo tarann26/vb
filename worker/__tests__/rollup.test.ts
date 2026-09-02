@@ -342,6 +342,7 @@ describe("the nightly rollup, reached through the Worker's scheduled export", ()
       CLOUDFLARE_API_TOKEN: 'rollup-test-cf-token-not-real',
       CF_WEB_ANALYTICS_SITE_TAG: 'rollup-test-site-tag',
       DB: asD1(fake),
+      R2: {} as unknown as R2Bucket,
     };
   }
 

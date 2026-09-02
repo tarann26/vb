@@ -41,9 +41,26 @@ compatibility_date = "2026-01-01"
 # route naming a zone absent from the account makes every future
 # `npx wrangler deploy` fail. This is a route removal, not a host drop --
 # the site has served canonically from viabiancarestaurant.com for a while.
+#
+# THE PHOTOGRAPHS ARE THE THIRD ENTRY, and they were never meant to be. The
+# design spec chose an R2 custom domain, img.viabiancarestaurant.com, precisely
+# to keep them off this Worker's 100,000-requests-a-day budget. The owner chose
+# the main domain instead: no second DNS record to create, no public-access
+# switch to flip on the live zone, and no host to widen the site's own CSP for.
+# worker/images.ts pays the budget back with one header -- an immutable
+# year-long Cache-Control on a content-addressed key means a browser fetches
+# each photograph once and never asks again. Read that file before touching
+# either half of this.
+#
+# ALL THREE ENTRIES ARE HERE BECAUSE ALL THREE MUST BE. `wrangler deploy`
+# replaces the deployed route list with exactly this array; an entry left out
+# is a live route deleted, silently, by a deploy that reports success. Adding
+# /images/* by editing one line and forgetting the other two would take
+# /api/login down again.
 routes = [
   { pattern = "viabiancarestaurant.com/api/*", zone_name = "viabiancarestaurant.com" },
   { pattern = "viabiancarestaurant.com/blog/*", zone_name = "viabiancarestaurant.com" },
+  { pattern = "viabiancarestaurant.com/images/*", zone_name = "viabiancarestaurant.com" },
 ]
 
 [vars]
@@ -137,12 +154,18 @@ CONTENT_STORE = "github"
 # subrequest given `redirect: "manual"` would hand a visitor an empty 308.
 PAGES_ORIGIN = "https://vb-c7r.pages.dev"
 
-# Where photographs are served from. Duplicated deliberately rather than
-# imported: src/shared/image-host.ts is the one definition the code reads, and
-# this var exists so worker/upload.ts can build the URL it hands back without
-# the Worker and this file being able to disagree silently --
-# src/test/wrangler-config.test.ts asserts the two strings are identical.
-IMAGE_HOST = "https://img.viabiancarestaurant.com"
+# Where photographs are served from, and it is a PATH now, not a hostname:
+# `/images/<key>` on whatever host served the page. It was
+# https://img.viabiancarestaurant.com, an R2 custom domain, until the owner
+# chose the main domain instead.
+#
+# Duplicated deliberately rather than imported: src/shared/image-host.ts is the
+# one definition the code reads, and this var exists so a Worker module can
+# build the reference it hands back without the Worker and this file being able
+# to disagree silently -- src/test/wrangler-config.test.ts asserts the two
+# strings are identical, and asserts the route pattern above covers exactly
+# this prefix.
+IMAGE_BASE = "/images"
 
 [triggers]
 # 03:17 UTC, which is 08:47 in Kolkata -- after midnight UTC has closed
@@ -219,11 +242,15 @@ database_id = "7ec61770-4fb1-4458-9c34-46b92bb9702c"
 # at any volume. The whole library is 224 MB (2.6 MB of served derivatives,
 # 201 MB of archived originals, 20 MB of menu PDFs). The expected bill is zero.
 #
-# THE BUCKET IS NOT SERVED BY THIS WORKER. It is served by an R2 custom domain,
-# img.viabiancarestaurant.com, and the `routes` list above is never widened to
-# cover that hostname -- src/test/wrangler-config.test.ts pins that. Putting
-# photographs through the Worker would spend the same 100,000-requests-a-day
-# free budget that every page view is about to start spending.
+# THE BUCKET IS SERVED BY THIS WORKER, which reverses what this comment used
+# to say. It was to be reached at img.viabiancarestaurant.com, an R2 custom
+# domain, on the reasoning that photographs through the Worker would spend the
+# same 100,000-requests-a-day budget every page view is about to start
+# spending. That reasoning is sound and it is answered rather than ignored:
+# the owner chose the main domain, `routes` above carries
+# viabiancarestaurant.com/images/*, worker/images.ts reads this binding, and
+# the browser cache is what keeps the request count down -- see that file.
+# The bucket's own r2.dev public access stays switched off either way.
 [[r2_buckets]]
 binding = "R2"
 bucket_name = "via-bianca"

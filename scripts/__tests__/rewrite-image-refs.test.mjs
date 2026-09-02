@@ -16,7 +16,7 @@ import {
 // comparing against plan()'s report is two implementations disagreeing when
 // one of them is wrong -- not a number this file wrote being read back.
 import { collectFromCode, collectFromJson } from '../image-inventory.mjs';
-import { IMAGE_HOST } from '../../src/shared/image-host';
+import { IMAGE_BASE } from '../../src/shared/image-host';
 // A rewritten file read back in the spelling it had before the migration.
 //
 // This is what lets every expectation over the real tree below hold in BOTH
@@ -80,19 +80,19 @@ describe('the code files it rewrites', () => {
   });
 });
 
-describe('the host this script writes', () => {
+describe('the prefix this script writes', () => {
   // Two copies of one string. This is the only thing that stops them drifting:
   // the script is plain node and cannot import the TypeScript module.
-  it('is the same host src/shared/image-host.ts defines', () => {
+  it('is the same prefix src/shared/image-host.ts defines', () => {
     const report = emptyReport();
     rewriteJson({ image: '/food/x.webp' }, everythingVerified, report);
-    expect(report.mapping.get('/food/x.webp')).toBe(`${IMAGE_HOST}/food/x.webp`);
+    expect(report.mapping.get('/food/x.webp')).toBe(`${IMAGE_BASE}/food/x.webp`);
   });
 
   it('percent-encodes a filename with a space, the way imageUrl does', () => {
     const report = emptyReport();
     rewriteJson({ image: '/food/boozy donna.webp' }, everythingVerified, report);
-    expect(report.mapping.get('/food/boozy donna.webp')).toBe(`${IMAGE_HOST}/food/boozy%20donna.webp`);
+    expect(report.mapping.get('/food/boozy donna.webp')).toBe(`${IMAGE_BASE}/food/boozy%20donna.webp`);
   });
 });
 
@@ -110,6 +110,10 @@ describe('what deliberately does not move', () => {
     expect(stays('/favicon-32.png')).toBe(true);
     expect(stays('/apple-touch-icon.png')).toBe(true);
     expect(stays('/icon-192.png')).toBe(true);
+  });
+
+  it('keeps a reference that has already been moved, which is what makes a re-run safe', () => {
+    expect(stays(`${IMAGE_BASE}/food/pizza1.webp`)).toBe(true);
   });
 
   it('moves an ordinary photograph', () => {
@@ -266,7 +270,7 @@ describe('the real content and code files', () => {
   });
 
   it('rewrites the whole-page texture in the stylesheet, not just the tsx', () => {
-    expect(rewritten('src/index.css')).toContain(`url("${IMAGE_HOST}/hero/brick.webp")`);
+    expect(rewritten('src/index.css')).toContain(`url("${IMAGE_BASE}/hero/brick.webp")`);
     expect(rewritten('src/index.css')).not.toContain('url("/hero/brick.webp")');
   });
 
@@ -294,9 +298,9 @@ describe('rewriting a source file', () => {
       everythingVerified,
       report,
     );
-    expect(out).toContain(`url("${IMAGE_HOST}/hero/brick.webp")`);
-    expect(out).toContain(`src="${IMAGE_HOST}/food/x.webp"`);
-    expect(out).toContain(`\`${IMAGE_HOST}/team/y.webp\``);
+    expect(out).toContain(`url("${IMAGE_BASE}/hero/brick.webp")`);
+    expect(out).toContain(`src="${IMAGE_BASE}/food/x.webp"`);
+    expect(out).toContain(`\`${IMAGE_BASE}/team/y.webp\``);
     expect(report.changed).toHaveLength(3);
   });
 
@@ -307,12 +311,26 @@ describe('rewriting a source file', () => {
   // will write one day.
   it('rewrites an unquoted css url() too', () => {
     const out = rewriteSource('a { background-image: url(/hero/brick.webp); }', everythingVerified, emptyReport());
-    expect(out).toBe(`a { background-image: url(${IMAGE_HOST}/hero/brick.webp); }`);
+    expect(out).toBe(`a { background-image: url(${IMAGE_BASE}/hero/brick.webp); }`);
   });
 
-  it('leaves an absolute url alone, so a second run is a no-op', () => {
+  // The destination is a path now rather than a whole https URL, so an
+  // already-rewritten reference is no longer invisible to this script's own
+  // pattern -- `stays()` is what makes it a no-op instead, and this is run
+  // against the everything-verified manifest precisely so nothing but
+  // `stays()` can be what stops it.
+  it('leaves an already-rewritten reference alone, so a second run is a no-op', () => {
     const once = rewriteSource('<img src="/food/x.webp" />', everythingVerified, emptyReport());
+    expect(once).toContain(`${IMAGE_BASE}/food/x.webp`);
     expect(rewriteSource(once, everythingVerified, emptyReport())).toBe(once);
+  });
+
+  it('does not double the prefix on a reference that already carries it', () => {
+    const report = emptyReport();
+    const out = rewriteJson({ image: `${IMAGE_BASE}/food/x.webp` }, everythingVerified, report);
+    expect(out).toEqual({ image: `${IMAGE_BASE}/food/x.webp` });
+    expect(report.skipped).toContain(`${IMAGE_BASE}/food/x.webp`);
+    expect(report.changed).toEqual([]);
   });
 });
 
@@ -320,13 +338,13 @@ describe('rewriting json as text', () => {
   it('replaces a whole string token, never a path inside a longer one', () => {
     const text = '{\n  "a": "/food/x.webp",\n  "b": "/food/xx.webp"\n}\n';
     const out = rewriteJsonText(text, everythingVerified, emptyReport());
-    expect(JSON.parse(out)).toEqual({ a: `${IMAGE_HOST}/food/x.webp`, b: `${IMAGE_HOST}/food/xx.webp` });
+    expect(JSON.parse(out)).toEqual({ a: `${IMAGE_BASE}/food/x.webp`, b: `${IMAGE_BASE}/food/xx.webp` });
   });
 
   it('keeps compact hand formatting that JSON.stringify would reflow', () => {
     const text = '[\n  { "id": "food", "src": "/food/x.webp" }\n]\n';
     const out = rewriteJsonText(text, everythingVerified, emptyReport());
-    expect(out).toBe(`[\n  { "id": "food", "src": "${IMAGE_HOST}/food/x.webp" }\n]\n`);
+    expect(out).toBe(`[\n  { "id": "food", "src": "${IMAGE_BASE}/food/x.webp" }\n]\n`);
   });
 
   it('refuses a file where the text edit and the structural walk disagree', () => {

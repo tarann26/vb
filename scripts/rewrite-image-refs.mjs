@@ -52,7 +52,13 @@ const CONTENT_DIR = join('src', 'content');
 // Duplicated from src/shared/image-host.ts rather than imported: this script
 // is plain `node`, and that module is TypeScript. The two strings are pinned
 // equal by scripts/__tests__/rewrite-image-refs.test.mjs, which imports both.
-const HOST = 'https://img.viabiancarestaurant.com';
+//
+// A PREFIX, NOT A HOST, since the owner chose to serve photographs from the
+// main domain rather than from img.viabiancarestaurant.com. That changes what
+// this script produces -- `/images/food/x.webp` instead of a whole https URL
+// -- and it changes nothing else about it: the same references move, the same
+// manifest gates them, the same refusal-before-writing applies.
+const BASE = '/images';
 
 // Exported so its own test can pin it against docs/image-inventory.json's
 // census rather than against a second copy of this list. A list restated in
@@ -68,7 +74,24 @@ export const CODE_FILES = [
 ];
 
 const KEEP = new Set(['/og-image.jpg']);
-const KEEP_PREFIX = ['/menus/', '/favicon', '/apple-touch-icon', '/icon-'];
+// `BASE + '/'` is in this list, and it is what makes a second run a no-op.
+//
+// While the destination was a whole https URL, that property came free:
+// ASSET_PATH_PATTERN only matches a path starting with a slash, so an
+// already-rewritten reference was invisible to this script. The destination is
+// a path now, and `/images/food/x.webp` matches that pattern perfectly well --
+// so without this line a second run would produce `/images/images/food/x.webp`
+// wherever the manifest happened to say yes.
+//
+// The real manifest says no (there is no `images/food/x.webp` key in it), so a
+// re-run would be REFUSED rather than doubled -- which is loud, and survivable,
+// and still not the property worth having. `stays()` is where "this reference
+// is already where it belongs" is decided, and this is that decision.
+//
+// Nothing pre-migration lives under this prefix: public/ has no `images`
+// directory, and docs/image-inventory.json's census is the list of what
+// actually exists.
+const KEEP_PREFIX = [BASE + '/', '/menus/', '/favicon', '/apple-touch-icon', '/icon-'];
 
 // `pdf` is in the pattern even though no PDF moves, and that is the point: a
 // path this pattern does not match is a path `stays()` never sees, so the two
@@ -93,13 +116,14 @@ function target(path, manifest, report) {
   if (!entry || !entry.verifiedAt) { report.missing.push(path); return null; }
   report.changed.push(path);
   // encodeURI, not the raw key, and the same rule src/shared/image-host.ts's
-  // imageUrl applies. Five filenames carry spaces and one an apostrophe. As a
-  // site-root path in an img src the browser encodes those itself; as an
-  // absolute URL in JSON or in a CSS url() they have to arrive already
-  // encoded, or the request goes to a different key than R2 holds.
-  const url = HOST + '/' + encodeURI(key);
-  report.mapping.set(path, url);
-  return url;
+  // imageUrl applies. Five filenames carry spaces and one an apostrophe. In a
+  // CSS url() or a JSON string those have to arrive already encoded, or the
+  // request goes to a different key than R2 holds -- and worker/images.ts
+  // decodes the pathname it receives with the matching decodeURI, so the two
+  // ends agree by construction rather than by luck.
+  const moved = BASE + '/' + encodeURI(key);
+  report.mapping.set(path, moved);
+  return moved;
 }
 
 export function rewriteJson(value, manifest, report) {

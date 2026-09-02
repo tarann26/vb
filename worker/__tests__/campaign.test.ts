@@ -258,6 +258,7 @@ describe('POST /api/campaign, through the Worker entry point', () => {
       CLOUDFLARE_API_TOKEN: 'campaign-test-cf-token-not-real',
       CF_WEB_ANALYTICS_SITE_TAG: '29e1ba52fba74885a5fc44875a48a078',
       DB: asD1(fake),
+      R2: {} as unknown as R2Bucket,
     };
   }
 

@@ -21,17 +21,32 @@
 // correct-looking header, and a correctly-typed response can still be
 // truncated with its header intact.
 //
-// NOT RUN YET, AND THE REASON IS RECORDED IN docs/cloudflare-cutover.md §21.
-// The read-back below fetches every object back from
-// img.viabiancarestaurant.com, and that hostname does not resolve: the R2
-// custom domain has not been connected. Connecting it is a public-access
-// change on the live zone that makes every object in the bucket world-readable
-// at a predictable URL, which is the account owner's decision and is why no
-// script here performs it. Measured 2026-09-01: `wrangler r2 bucket domain
-// list via-bianca` reports no custom domains, and curl reports "Could not
-// resolve host". Until that changes, this script has nothing to read back
-// from and MUST NOT be run with the read-back stubbed out -- an unverified
-// object is exactly what scripts/rewrite-image-refs.mjs refuses to point at.
+// NOT RUN YET, AND THE REASON CHANGED WITH THE DESTINATION.
+//
+// It used to be that the read-back fetched every object from
+// img.viabiancarestaurant.com and that hostname did not resolve, because
+// connecting an R2 custom domain is a public-access change on the live zone
+// that only the account owner can make. She chose the main domain instead, so
+// there is no subdomain to connect and no DNS record to wait for.
+//
+// What has to exist first is now a DEPLOY. `viabiancarestaurant.com/images/*`
+// is a Worker route (wrangler.toml) answered by worker/images.ts, and neither
+// the route nor the handler is live until somebody runs `npx wrangler deploy`.
+// Until then this script's read-back gets Pages' SPA catch-all -- index.html,
+// at a 200, as text/html -- which every object would fail on both the digest
+// and the content-type check. That is the correct failure and it must not be
+// worked around: an unverified object is exactly what
+// scripts/rewrite-image-refs.mjs refuses to point at, and a read-back stubbed
+// out is a migration that proved nothing.
+//
+// The check that says the route is live, before spending fifty uploads on
+// finding out it is not:
+//
+//   curl -sSI https://viabiancarestaurant.com/images/__nothing__.webp
+//
+// A 404 with `content-type: text/plain` is the Worker answering. A 200 with
+// `content-type: text/html` is Pages answering, which means the route is not
+// deployed and this script will fail every object.
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createHash, randomUUID } from 'node:crypto';
@@ -42,8 +57,14 @@ import { join } from 'node:path';
 const run = promisify(execFile);
 
 export const BUCKET = 'via-bianca';
-export const IMAGE_ORIGIN = 'https://img.viabiancarestaurant.com';
 export const SITE_ORIGIN = 'https://viabiancarestaurant.com';
+// Where a migrated object is read back FROM: the same origin the site is
+// served from, under the prefix worker/images.ts answers. The path half is
+// duplicated from src/shared/image-host.ts's IMAGE_BASE rather than imported,
+// for the reason scripts/rewrite-image-refs.mjs already carries -- this is
+// plain node and that module is TypeScript -- and the two are pinned equal by
+// scripts/__tests__/migrate-images.test.mjs.
+export const IMAGE_BASE_URL = SITE_ORIGIN + '/images';
 
 const RIFF = [0x52, 0x49, 0x46, 0x46];
 const WEBP = [0x57, 0x45, 0x42, 0x50];
@@ -184,11 +205,13 @@ export async function migrate(objects, deps) {
       const digest = await sha256Hex(bytes);
       await put(object.key, bytes, { contentType, cacheControl });
 
-      // The read-back is from img.viabiancarestaurant.com, NOT from the bucket
-      // API. What is being proven is not "the PUT returned 200" -- it is "the
-      // hostname the content files are about to point at answers this key with
-      // these exact bytes, under this exact type". Those are different claims
-      // and only the second one is the one that matters.
+      // The read-back is over HTTPS through the Worker route, NOT from the
+      // bucket API. What is being proven is not "the PUT returned 200" -- it
+      // is "the URL the content files are about to point at answers this key
+      // with these exact bytes, under this exact type". Those are different
+      // claims and only the second one is the one that matters. It is also
+      // what makes a Worker that was never deployed, or deployed without the
+      // route, impossible to mistake for a successful migration.
       const served = await readBack(object.key);
       const servedDigest = await sha256Hex(served.bytes);
       if (servedDigest !== digest) {
@@ -236,7 +259,11 @@ export function manifestFrom({ done, failed }, now = new Date()) {
   for (const entry of failed) {
     objects[entry.key] = { kind: entry.kind, reason: entry.reason, failedAt: now.toISOString() };
   }
-  return { host: IMAGE_ORIGIN, generatedAt: now.toISOString(), objects };
+  // `servedFrom`, not `host`: what the references are about to name is a URL
+  // prefix on this site's own origin, and calling it a host is how the
+  // previous destination survives in somebody's head after the code stopped
+  // agreeing.
+  return { servedFrom: IMAGE_BASE_URL, generatedAt: now.toISOString(), objects };
 }
 
 // wrangler r2 object put, one child process per object. Slower than the S3 API
@@ -258,7 +285,7 @@ async function putViaWrangler(key, bytes, { contentType, cacheControl }) {
 }
 
 async function readBackOverHttps(key) {
-  const response = await fetch(`${IMAGE_ORIGIN}/${encodeURI(key)}?v=${Date.now()}`, { cache: 'no-store' });
+  const response = await fetch(`${IMAGE_BASE_URL}/${encodeURI(key)}?v=${Date.now()}`, { cache: 'no-store' });
   if (!response.ok) throw new Error(`read-back HTTP ${response.status}`);
   return {
     bytes: new Uint8Array(await response.arrayBuffer()),

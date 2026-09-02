@@ -91,6 +91,10 @@ async function buildEnv() {
     // Phase 2. Unused by any test in this file -- nothing here reads env.DB
     // yet -- but required for `env` to satisfy `Env`.
     DB: {} as unknown as D1Database,
+    // The photograph bucket. The router's own /images branch is covered by
+    // worker/__tests__/images.test.ts against a real fake; nothing in THIS
+    // file reaches it, so this exists only to satisfy `Env`.
+    R2: {} as unknown as R2Bucket,
   };
 }
 

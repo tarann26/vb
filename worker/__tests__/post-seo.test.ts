@@ -44,24 +44,29 @@ describe('post metadata', () => {
     expect(postMetadata(POST).imageUrl).toBe('https://viabiancarestaurant.com/press/hotelier.webp');
   });
 
-  // Every post image is a site-relative path today and an absolute URL on
-  // img.viabiancarestaurant.com after the 2026-08-21 migration, so this
-  // function has to survive both shapes at once -- there is no flag day.
-  it('leaves an absolute image url alone rather than prefixing the site onto it', () => {
-    expect(absoluteImageUrl('https://img.viabiancarestaurant.com/press/hotelier.webp', 'https://viabiancarestaurant.com'))
-      .toBe('https://img.viabiancarestaurant.com/press/hotelier.webp');
+  // Every post image is a path on this site: /press/hotelier.webp today,
+  // /images/press/hotelier.webp after the 2026-08-21 migration moves it into
+  // the bucket. Both shapes at once, because there is no flag day -- a D1 row
+  // written before the rewrite and one written after both reach this function.
+  it('resolves a migrated photograph against the site, prefix and all', () => {
+    expect(absoluteImageUrl('/images/press/hotelier.webp', 'https://viabiancarestaurant.com'))
+      .toBe('https://viabiancarestaurant.com/images/press/hotelier.webp');
   });
 
-  it('still resolves a site-relative path against the site', () => {
+  it('still resolves a path that never moved against the site', () => {
     expect(absoluteImageUrl('/og-image.jpg', 'https://viabiancarestaurant.com'))
       .toBe('https://viabiancarestaurant.com/og-image.jpg');
   });
 
-  // The two above pass on a `siteUrl + image` implementation for the second
-  // case only. This one is what makes the first case's failure loud: a
-  // doubled scheme is a shape no valid URL has.
+  // A whole absolute URL wins outright, which is `new URL`'s own behaviour
+  // and not this function's choice. Kept because a `siteUrl + image`
+  // implementation passes every case above and fails this one by emitting a
+  // doubled scheme -- a shape no valid URL has, and one that shipped once.
+  // Nothing in content may name another host any more
+  // (src/content/asset-reference.ts refuses it), so this is a property of the
+  // function rather than a shape the site expects to see.
   it('never emits a url with two schemes in it', () => {
-    for (const image of ['https://img.viabiancarestaurant.com/a.webp', '/b.jpg']) {
+    for (const image of ['https://img.viabiancarestaurant.com/a.webp', '/images/b.jpg', '/c.jpg']) {
       expect(absoluteImageUrl(image, 'https://viabiancarestaurant.com').match(/https:\/\//g)).toHaveLength(1);
     }
   });

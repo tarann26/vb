@@ -48,33 +48,31 @@
 # to undo, and this is still running on a throwaway test host. `max-age` and
 # `includeSubDomains` are reversible; preload effectively is not.
 #
-# img-src gained https://img.viabiancarestaurant.com when photographs moved to
-# R2. That host is a custom domain on this same zone, in front of the
-# via-bianca bucket, and it serves nothing but image and PDF bytes.
+# img-src is back to `'self' blob:`, and the exemption it briefly carried is
+# gone rather than merely unused. It read
+# `'self' blob: https://img.viabiancarestaurant.com` while photographs were
+# going to be served from an R2 custom domain. The owner chose the main domain
+# instead: `viabiancarestaurant.com/images/*` is a Worker route that reads the
+# object out of the bucket (worker/images.ts), so a photograph is same-origin
+# and 'self' already admits it. A standing exemption for a host nothing serves
+# from is a permanent widening bought for nothing.
 #
-# ONE DIRECTIVE, and the narrowness is the point. The bucket host is not added
-# to default-src, script-src, connect-src or frame-src, so a compromised or
-# mistakenly-public object cannot become executing script, a fetch target or a
-# framed document -- it can only ever be painted as a picture. An earlier draft
-# widened default-src instead, which would have granted all four at once for a
-# change that needed one.
+# NOTHING HAD TO SHIP IN ORDER, WHICH IS THE POINT OF THE CHANGE. The previous
+# arrangement had a strict sequence: this line first, references second, or
+# every photograph on the site becomes a broken-image icon at once, at a 200,
+# with nothing in the network tab that looks like a failure. Same-origin
+# references need no directive to be widened before they may be used, so that
+# ordering hazard does not exist any more.
 #
-# It also covers src/index.css's body::before texture, which is a CSS
+# 'self' also covers src/index.css's body::before texture, which is a CSS
 # background-image rather than an <img>: img-src governs both.
-#
-# THIS LINE HAS TO SHIP BEFORE ANY REFERENCE POINTS AT THAT HOST. A reference
-# rewritten first would 200 from R2 and still be refused by the browser, so
-# every photograph on the site would be a broken-image icon at once, on every
-# browser, with nothing in the network tab that looks like a failure.
-# scripts/check-csp.mjs probes a real image load from this host on every route
-# for exactly that reason.
 /*
   X-Content-Type-Options: nosniff
   X-Frame-Options: DENY
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: geolocation=(), camera=(), microphone=(), payment=(), usb=(), magnetometer=(), gyroscope=(), accelerometer=()
   Strict-Transport-Security: max-age=31536000; includeSubDomains
-  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-eval' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' blob: https://img.viabiancarestaurant.com; connect-src 'self' https://cloudflareinsights.com; frame-src https://www.google.com; worker-src blob:; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; object-src 'none'
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-eval' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' blob:; connect-src 'self' https://cloudflareinsights.com; frame-src https://www.google.com; worker-src blob:; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; object-src 'none'
 
 # ---------------------------------------------------------------------------
 # Why the CSP above is ONE policy and not two, and why it carries

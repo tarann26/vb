@@ -10,7 +10,13 @@ import {
   localPathFor,
   manifestFrom,
   migrate,
+  IMAGE_BASE_URL,
+  SITE_ORIGIN,
 } from '../migrate-images.mjs';
+// The claim this script's own comment makes about its duplicated prefix. It
+// is plain node and cannot import a TypeScript module at runtime the way it
+// imports this one, so a test is the only link between the two.
+import { IMAGE_BASE } from '../../src/shared/image-host';
 
 function webp(payload = 4) {
   const bytes = new Uint8Array(12 + payload);
@@ -221,11 +227,41 @@ describe('the read-back', () => {
   });
 });
 
+describe('where a migrated object is read back from', () => {
+  it('is this site\'s own origin, under the prefix the Worker route covers', () => {
+    expect(IMAGE_BASE_URL).toBe(SITE_ORIGIN + IMAGE_BASE);
+  });
+
+  // The distinction the whole read-back rests on. Derivatives are downloaded
+  // from their CURRENT location -- the site root, served by Pages off disk --
+  // and read back from their NEW one. Same origin, different path; if the two
+  // ever collapsed into one URL the read-back would be checking the file it
+  // just downloaded rather than the object it just uploaded, and every object
+  // would verify whether or not R2 held anything at all.
+  it('is not the path a derivative is downloaded from', () => {
+    const key = 'food/pizza1.webp';
+    expect(`${IMAGE_BASE_URL}/${key}`).not.toBe(`${SITE_ORIGIN}/${key}`);
+  });
+});
+
 describe('the manifest a run writes', () => {
   const now = new Date('2026-09-01T12:00:00.000Z');
 
-  it('names the host the read-back was made against', () => {
-    expect(manifestFrom({ done: [], failed: [] }, now).host).toBe('https://img.viabiancarestaurant.com');
+  // Spelled out, not built from IMAGE_BASE_URL: a manifest that recorded
+  // whatever the constant happened to say would agree with itself on the day
+  // somebody pointed the read-back at the wrong place, and this row is the
+  // only durable record of WHERE those fifty objects were proved to answer.
+  it('names the url prefix the read-back was made against', () => {
+    expect(manifestFrom({ done: [], failed: [] }, now).servedFrom)
+      .toBe('https://viabiancarestaurant.com/images');
+  });
+
+  // The destination this migration was designed for and no longer uses. A
+  // manifest naming it would mean the read-back went to a hostname that does
+  // not resolve, which cannot verify anything.
+  it('does not name the retired image subdomain', () => {
+    expect(manifestFrom({ done: [], failed: [] }, now).servedFrom)
+      .not.toContain('img.viabiancarestaurant.com');
   });
 
   it('gives a verified object a verifiedAt and keeps its digest', () => {

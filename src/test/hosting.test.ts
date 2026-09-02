@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync, existsSync } from 'node:fs';
 import { site } from '../content';
+import { IMAGE_BASE } from '../shared/image-host';
 
 
 // `_headers` allows `#` comments, and this file has substantial ones. Every
@@ -202,6 +203,39 @@ describe('cloudflare hosting config', () => {
       const route = routes.find((r) => r.pattern === `${host}/blog/*`);
       expect(route, `no /blog/* route for hostname "${host}" -- posts there get no per-post metadata`).toBeDefined();
     }
+  });
+
+  // The photographs. Same shape as the two assertions above and the same
+  // failure if it is missing -- with no route, `/images/<key>` falls through
+  // to the SPA catch-all in public/_redirects, which answers index.html at
+  // 200. Every photograph on the site becomes an HTML document wearing a
+  // .webp name: a broken-image icon in a browser, a 200 to anything that
+  // only reads status codes.
+  //
+  // Derived from IMAGE_BASE rather than spelled `/images/*` here, because the
+  // pattern and the references the site emits have to cover the same prefix
+  // and there is one definition of it.
+  it('routes the image prefix to the Worker on every served hostname', () => {
+    const routes = parseRoutes(readFileSync('wrangler.toml', 'utf8'));
+    for (const host of SERVED_HOSTNAMES) {
+      const route = routes.find((r) => r.pattern === `${host}${IMAGE_BASE}/*`);
+      expect(route, `no ${IMAGE_BASE}/* route for hostname "${host}" -- photographs fall through to the SPA catch-all`).toBeDefined();
+    }
+  });
+
+  // `wrangler deploy` REPLACES the deployed route list with exactly this
+  // array, so an entry dropped while adding another is a live route deleted
+  // by a deploy that reports success -- which is how /api/login on
+  // viabiancarestaurant.com went back to a 405 once already. The three tests
+  // above each check their own pattern is present and would all stay green
+  // on a file that had lost a hostname's entry for a DIFFERENT pattern; this
+  // one pins the count, so a replacement rather than an addition reddens.
+  it('declares one route per served hostname per pattern, and no more', () => {
+    const routes = parseRoutes(readFileSync('wrangler.toml', 'utf8'));
+    const patterns = ['/api/*', '/blog/*', `${IMAGE_BASE}/*`];
+    expect(routes.map((r) => r.pattern).sort()).toEqual(
+      SERVED_HOSTNAMES.flatMap((host) => patterns.map((p) => `${host}${p}`)).sort(),
+    );
   });
 
   // Phase 5C, decision D7. /edit suppresses its own SEO output on purpose
@@ -407,28 +441,45 @@ describe('cloudflare hosting config', () => {
         expect(directive('default-src')).toBe("default-src 'self'");
       });
 
-      // The whole reason this is Task 1. A content reference rewritten to the
-      // image host while this directive still reads `img-src 'self' blob:`
-      // would be refused by every browser, at a 200, with every photograph an
-      // icon.
+      // Task 1 widened img-src to admit an R2 custom domain,
+      // img.viabiancarestaurant.com, and this test used to pin that the
+      // widening existed. The owner chose the main domain instead:
+      // `viabiancarestaurant.com/images/*` is a Worker route reading the
+      // bucket (worker/images.ts), so every photograph is same-origin and
+      // 'self' already admits it.
       //
-      // The second half -- and in no other directive -- is not tidiness. The
-      // rejected draft widened default-src, which grants script-src,
-      // connect-src and frame-src at the same stroke, so a mistakenly-public
-      // object could have become executing script rather than only a picture.
-      it("the site's CSP admits the image host in img-src and in no other directive", () => {
+      // So the assertion INVERTED rather than being deleted, and the
+      // difference matters. A deleted test says nothing about a directive
+      // that quietly keeps a host it no longer needs; this one says the
+      // exemption is gone from the whole policy, in every directive, which is
+      // the property the change actually bought. The old test's second half
+      // -- that the host appeared in img-src and nowhere else -- is subsumed:
+      // it may now appear nowhere at all.
+      //
+      // Pinned as a literal string rather than read from
+      // src/shared/image-host.ts, deliberately. Building the needle out of the
+      // constant would make the two agree by construction and pass on the day
+      // the constant moved back to naming a host.
+      const RETIRED_IMAGE_HOST = 'https://img.viabiancarestaurant.com';
+
+      function securityDirectives(): Record<string, string[]> {
         const security = headerBlocks().find((block) => blockPath(block) === SECURITY_BLOCK)!;
         const csp = security.match(/Content-Security-Policy:\s*(.+)/)![1];
-        const directives = Object.fromEntries(
+        return Object.fromEntries(
           csp.split(';').map((part) => {
             const tokens = part.trim().split(/\s+/);
             return [tokens[0], tokens.slice(1)];
           }),
         ) as Record<string, string[]>;
-        expect(directives['img-src']).toContain('https://img.viabiancarestaurant.com');
-        for (const [name, values] of Object.entries(directives)) {
-          if (name === 'img-src') continue;
-          expect(values).not.toContain('https://img.viabiancarestaurant.com');
+      }
+
+      it('admits same-origin photographs and blob previews, and nothing else', () => {
+        expect(securityDirectives()['img-src']).toEqual(["'self'", 'blob:']);
+      });
+
+      it('carries no exemption for the image host it no longer serves from', () => {
+        for (const [name, values] of Object.entries(securityDirectives())) {
+          expect(values, `${name} still admits the retired image host`).not.toContain(RETIRED_IMAGE_HOST);
         }
       });
     });

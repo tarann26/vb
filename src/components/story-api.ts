@@ -19,9 +19,9 @@
 // IMPORTED NOW, NOT RE-IMPLEMENTED. This was three string tests written out
 // by hand, because the answer it wanted lived in src/content/validate.ts,
 // which is the Worker's module and does not export it. The cost of the copy
-// came due at the 2026-08-21 migration: the copy accepts a leading slash and
-// nothing else, so the moment story.json's portrait became a URL on the
-// image host this function returned null for a perfectly good document, and
+// came due at the 2026-08-21 migration: the copy answered a narrower question
+// than the four boundaries agreed on, so the moment story.json's portrait
+// moved this function returned null for a perfectly good document, and
 // null here means "the compiled-in copy stands" -- the About section would
 // have gone on showing whatever shipped with the last build while the
 // database said something else, silently, with every test green.

@@ -72,13 +72,14 @@ describe('fetchStory', () => {
 
   // The other half of the same rule, and the reason this check is imported
   // now instead of written out by hand here. The 2026-08-21 migration moves
-  // this portrait onto the image host; the hand-written copy accepted a
-  // leading slash and nothing else, so it would have answered a perfectly
-  // good document with null -- and null means "the compiled-in copy stands",
-  // so the About section would have gone on showing the last build's story
-  // while the database said something else. See src/content/asset-reference.ts.
-  it('returns the document for a portrait on the image host, which is where the migration puts it', async () => {
-    const portrait = 'https://img.viabiancarestaurant.com/team/kamalika-anand.webp';
+  // this portrait under the image prefix; the hand-written copy tested the
+  // path against a fixed list of directories, so the moment story.json's
+  // portrait moved this function would have answered a perfectly good
+  // document with null -- and null means "the compiled-in copy stands", so
+  // the About section would have gone on showing the last build's story while
+  // the database said something else. See src/content/asset-reference.ts.
+  it('returns the document for a portrait under the image prefix, which is where the migration puts it', async () => {
+    const portrait = '/images/team/kamalika-anand.webp';
     const body = { ...LIVE, chef: { ...LIVE.chef, portrait } };
     const fetchImpl = vi.fn(async () => jsonResponse(200, body));
     expect(await fetchStory(fetchImpl as unknown as typeof fetch)).toEqual(body);
