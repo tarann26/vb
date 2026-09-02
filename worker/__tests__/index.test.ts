@@ -143,6 +143,88 @@ describe('worker entry point', () => {
     }
   });
 
+  // ---------------------------------------------------------------------------
+  // The photograph route, reached through the real entry point.
+  //
+  // worker/__tests__/images.test.ts calls handleImage directly, which proves
+  // nothing about either half of the wiring -- and both halves fail silently.
+  // Delete the router branch and every photograph on the site 404s while that
+  // file stays green. Delete `servesImageBytes` from withSecurityHeaders'
+  // Cache-Control exemption and the branch still answers, still with the right
+  // bytes, still with the right type -- but every response now says `no-store`,
+  // so every browser re-asks for every picture on every page view, and each of
+  // those is one of the 100,000 requests a day this Worker gets. Nothing looks
+  // wrong anywhere; the site simply starts spending its budget on photographs.
+  // ---------------------------------------------------------------------------
+  describe('the image route, reached through the router', () => {
+    // The smallest thing that behaves like an R2 object for this route: one
+    // key present, everything else absent.
+    function withBucket(key: string): typeof env {
+      return {
+        ...env,
+        R2: {
+          get: async (asked: string) =>
+            asked === key
+              ? {
+                  body: new Response(new Uint8Array([1, 2, 3])).body,
+                  httpEtag: '"abc"',
+                  writeHttpMetadata: (headers: Headers) => headers.set('Content-Type', 'image/webp'),
+                }
+              : null,
+        } as unknown as R2Bucket,
+      };
+    }
+
+    it('is routed, and answers the bytes rather than the router 404', async () => {
+      const response = await worker.fetch(
+        new Request('https://viabiancadelhi.com/images/food/pizza1.webp'),
+        withBucket('food/pizza1.webp'),
+      );
+      expect(response.status).toBe(200);
+      expect(response.headers.get('Content-Type')).toBe('image/webp');
+    });
+
+    it('keeps its Cache-Control instead of the no-store every other route gets', async () => {
+      const response = await worker.fetch(
+        new Request('https://viabiancadelhi.com/images/food/pizza1.webp'),
+        withBucket('food/pizza1.webp'),
+      );
+      expect(response.headers.get('Cache-Control')).toBe('public, max-age=86400');
+    });
+
+    it('keeps the year-long one too, so the exemption is not per-value', async () => {
+      const response = await worker.fetch(
+        new Request('https://viabiancadelhi.com/images/food/a1b2c3d4e5f6.webp'),
+        withBucket('food/a1b2c3d4e5f6.webp'),
+      );
+      expect(response.headers.get('Cache-Control')).toBe('public, max-age=31536000, immutable');
+    });
+
+    // The exemption is for the photographs and nothing else. A route that
+    // answered no-store before this branch existed must still say no-store.
+    it('leaves every other route on no-store', async () => {
+      const response = await worker.fetch(new Request('https://viabiancadelhi.com/anything'), env);
+      expect(response.headers.get('Cache-Control')).toBe('no-store');
+    });
+
+    it('still carries the security headers a byte stream wants', async () => {
+      const response = await worker.fetch(
+        new Request('https://viabiancadelhi.com/images/food/pizza1.webp'),
+        withBucket('food/pizza1.webp'),
+      );
+      expect(response.headers.get('X-Content-Type-Options')).toBe('nosniff');
+    });
+
+    it('404s a key the bucket does not hold, rather than answering an empty 200', async () => {
+      const response = await worker.fetch(
+        new Request('https://viabiancadelhi.com/images/food/gone.webp'),
+        withBucket('food/pizza1.webp'),
+      );
+      expect(response.status).toBe(404);
+      expect(response.headers.get('Cache-Control')).toBe('no-store');
+    });
+  });
+
   // GET /api/login is deliberately not a route -- only POST is handled --
   // so it still falls through to the same 404 as any other unhandled path.
   it('returns 404 for GET /api/login -- only POST is a route', async () => {

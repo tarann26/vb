@@ -193,9 +193,14 @@ describe('how long a browser is told it may keep a photograph', () => {
     expect(named.headers.get('Cache-Control')).toBe('public, max-age=86400');
   });
 
-  it('says nothing about caching on a miss, which must not be held at all', async () => {
+  // The prefix is exempt from worker/index.ts's blanket no-store, so a miss
+  // has to say it itself or it says nothing -- and RFC 9110 lets a cache store
+  // a 404 heuristically when nothing says otherwise. A 404 held after the
+  // object lands is a photograph that stays missing with its bytes in the
+  // bucket, which is exactly the window this migration runs in.
+  it('refuses caching on a miss, rather than leaving it to a heuristic', async () => {
     const response = await handleImage(get('/images/food/gone.webp'), envWith(bucketWith()));
-    expect(response.headers.get('Cache-Control')).toBeNull();
+    expect(response.headers.get('Cache-Control')).toBe('no-store');
   });
 });
 

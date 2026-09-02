@@ -75,10 +75,19 @@ export function servesImageBytes(request: Request): boolean {
   return new URL(request.url).pathname.startsWith(IMAGE_BASE + '/');
 }
 
+// `no-store` on the miss, spelled out here rather than left to
+// worker/index.ts's header set. That set skips Cache-Control for anything
+// under this prefix -- the exemption that lets a photograph carry a year -- so
+// without this line a 404 leaves the Worker with NO Cache-Control at all, and
+// RFC 9110 lists 404 among the statuses a cache may store HEURISTICALLY when
+// nothing says otherwise. During the migration that is a live hazard: a
+// reference requested in the window before its object lands would get a 404
+// that the edge then holds after the object arrives, and the photograph stays
+// missing with the bytes sitting in the bucket.
 function notFound(): Response {
   return new Response('Not found', {
     status: 404,
-    headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+    headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' },
   });
 }
 
