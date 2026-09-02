@@ -179,17 +179,66 @@ documentation, and each changes something.
 `r2.dev` is **rate-limited and documented as development-only**. Cloudflare
 warns against even pointing a CNAME at it, calling that "an unsupported access
 path" with no guaranteed reliability or performance. It also gets no caching,
-no WAF and no bot management.
+no WAF and no bot management. That has not changed, and the `r2.dev` subdomain
+stays **disabled** either way: leaving it on exposes the bucket through a path
+that bypasses whatever protections the served path has.
 
-**Decision: images are served from a custom domain, `img.viabiancarestaurant.com`,
-connected to the `via-bianca` bucket.** The zone is already on Cloudflare, so
-this costs nothing and takes one dashboard step. The `r2.dev` subdomain is then
-**disabled**, because leaving it on exposes the bucket through a path that
-bypasses whatever protections the custom domain has.
+**Superseded decision, kept for the reasoning it carries:** images were to be
+served from a custom domain, `img.viabiancarestaurant.com`, connected to the
+`via-bianca` bucket. Serving them through the Worker was considered and
+rejected then, because it would put every photograph through the same
+100,000/day Workers Free budget that also serves every page view.
 
-Serving images through the Worker instead was considered and rejected: it would
-put every photograph through the same 100,000/day Workers Free budget that now
-also serves every page view.
+**Decision as it stands: images are served from the main domain, through the
+Worker.** `viabiancarestaurant.com/images/*` is a Worker route; `worker/images.ts`
+reads the object out of the R2 binding and returns it. Taken 2026-09-02, by the
+owner, before anything had migrated -- which is the cheapest moment such a
+decision can be changed, since not one of the seventy-seven references had
+moved.
+
+**Why the owner chose it.** The subdomain needed a DNS record and a
+public-access change made by hand in the Cloudflare dashboard, on the live zone,
+by someone who does not administer this site confidently and for whom every
+dashboard step is a step that can go wrong unobserved. The main domain needs
+neither: the route is a line in `wrangler.toml` that ships with a deploy, and it
+is reversible by the same deploy. It also removes a whole class of problem
+rather than solving it -- a second origin means a second certificate story, a
+second thing to remember when the domain moves, and a `Content-Security-Policy`
+that has to name it. `public/_headers` is back to `img-src 'self' blob:`, and
+the ordering hazard that the widening created (a reference rewritten before the
+header shipped is every photograph on the site broken at once, at a 200) does
+not exist for a same-origin reference.
+
+**The cost the superseded decision was right about, and what pays it.** A Worker
+route is invoked for every matching request that reaches Cloudflare -- the CDN
+cache does not answer in a Worker's place, which is why the Cache API exists --
+and photographs are the highest-volume request type on any site. Nothing in the
+handler can make an arriving request free. What makes it free is the request not
+arriving, and that is bought with `Cache-Control`:
+
+- A key named after its own hash (`worker/upload.ts`'s content-addressed shape)
+  gets `public, max-age=31536000, immutable`. The browser fetches it once, ever.
+- A legacy human-named key can be re-uploaded under the same name, and nothing
+  in this system purges R2 or the edge, so it gets `public, max-age=86400` --
+  long enough that the edge answers nearly every request, short enough that a
+  correction appears without a purge mechanism that does not exist.
+
+`scripts/migrate-images.mjs` already worked that split out and writes it into
+each object's R2 metadata; `src/shared/image-host.ts`'s `cacheControlForKey` is
+the serve-time copy, and the two are pinned equal by a test. Without those
+headers a returning visitor clicking through four pages spends forty-odd
+invocations, and the site's own traffic exhausts the daily budget -- at which
+point the Worker stops answering `/api/*` too, so a publish and a login die
+alongside the pictures. The headers are not decoration; they are the thing that
+makes this decision affordable.
+
+**What it changed in the code.** `IMAGE_HOST` became `IMAGE_BASE`, a site-root
+prefix (`/images`) rather than a hostname, so a reference resolves against
+whichever host served the page -- the apex, the Pages production alias, a
+preview deployment, `vite dev` on a laptop. `src/content/asset-reference.ts`
+lost the second reference shape it had grown: `/images/<key>` is a path on this
+site, so the four boundaries that had to be widened for a foreign origin need no
+widening at all.
 
 ### D1 point-in-time recovery is SEVEN days on the free plan
 

@@ -2,6 +2,21 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **AMENDMENT, 2026-09-02 — the photographs are served from the main domain, not from a subdomain.**
+>
+> This plan was written around `img.viabiancarestaurant.com`, an R2 custom domain. The owner chose the main domain instead: **`viabiancarestaurant.com/images/*` is a Worker route** answered by `worker/images.ts`, which reads the object out of the R2 binding. Taken before anything had migrated — not one of the seventy-seven references had moved — which is the cheapest moment such a decision can be changed. The full reasoning is in the design spec's "R2's public URL is not usable in production", which now records this decision instead of the one it superseded.
+>
+> **What every reader of this plan has to carry:**
+>
+> - `IMAGE_HOST` is now `IMAGE_BASE`, and its value is the site-root prefix `/images`, not a hostname. A rewritten reference is `/images/food/pizza1.webp`.
+> - **Task 1's Step 5 is void.** There is no `img-src` to widen: `public/_headers` stays `img-src 'self' blob:`, because a same-origin photograph needs no exemption. The ordering hazard that step existed to spend is gone with it — nothing has to ship before the references may move.
+> - **Task 1's custom-domain and HTTPS-round-trip steps are void.** No DNS record, no public-access change on the live zone. What Task 4 waits on instead is a **deploy**: the `/images/*` route and `worker/images.ts` must be live, or the migration's read-back gets Pages' SPA catch-all (`index.html`, 200, `text/html`) and fails every object. `docs/cloudflare-cutover.md` §21 carries the check.
+> - **`wrangler.toml`'s `routes` array must list all three patterns** — `/api/*`, `/blog/*`, `/images/*` — because `wrangler deploy` replaces the deployed list with exactly what the file declares.
+> - **Task 6's Step 5 needs rewriting before it is run.** Its premise was that rewritten content strings "start with `https://`" so `ASSET_PATH_PATTERN` stops matching and the walk goes vacuous. The opposite is now true: `/images/food/x.webp` still matches, so `src/content/__tests__/assets.test.ts` goes **red**, demanding those files exist under `public/`. The guardrail change it needs is an exclusion for the image prefix (checked against R2 by `npm run verify:images`, which sweeps the live site) rather than a second accepted shape — and whatever replaces it must not be able to go vacuous.
+> - **The recorded byte counts in Task 6 and in the runbook are stale.** They were measured against a 35-character host prefix; the prefix is 7 characters now. Re-measure; do not carry the old numbers forward.
+>
+> Everything else in this plan — the ordering, the manifest, the refusal, the four boundaries, the D1 work — is unaffected.
+
 **Goal:** Make Publish instant and stop redeploying the whole website to change a dish description — without ever creating a moment in which a photograph or a paragraph exists in one place and cannot be read from another.
 
 **Architecture:** Ordered by **read-before-write, strictly.** Nothing that *stores* content changes until the thing that *reads* it is live in production and proven there.
@@ -150,11 +165,11 @@ The condition, applied in one place:
 
 | File | Change |
 |---|---|
-| `wrangler.toml` | `[[r2_buckets]]`, `PAGES_ORIGIN`, `IMAGE_HOST`, the widened `routes` list, `CONTENT_STORE = "d1"`. |
-| `public/_headers` | `img-src` admits the image host. |
-| `scripts/check-csp.mjs` | Probes a real image load from the image host. |
+| `wrangler.toml` | `[[r2_buckets]]`, `PAGES_ORIGIN`, `IMAGE_BASE`, the widened `routes` list (all three patterns, `/images/*` among them), `CONTENT_STORE = "d1"`. |
+| `public/_headers` | ~~`img-src` admits the image host.~~ **Unchanged** — see the amendment: a same-origin photograph needs no exemption. |
+| `scripts/check-csp.mjs` | ~~Probes a real image load from the image host.~~ **The probe is removed** — every route it visits already loads same-origin photographs, so a dedicated probe would be a weaker copy of what the page does. |
 | `scripts/images.mjs` | `encodeDerivative` exported and taking its width, so `rederive.mjs` imports it. |
-| `worker/index.ts` | `servesPages`, the `/*` branch, `Env` grows `R2`/`PAGES_ORIGIN`/`IMAGE_HOST`, `handlePublish` step 5's stale read fixed, `GET /api/build-status` removed. |
+| `worker/index.ts` | `servesPages`, the `/*` branch, the `/images/*` branch and its `Cache-Control` exemption, `Env` grows `R2`/`PAGES_ORIGIN`, `handlePublish` step 5's stale read fixed, `GET /api/build-status` removed. |
 | `worker/post-page.ts` | Fetches the shell from `PAGES_ORIGIN`. |
 | `worker/post-seo.ts` | `absoluteImageUrl` fixed for absolute inputs; `SITE_SEO_URL` read from the floor. |
 | `worker/store.ts` | `D1_ONLY_PATHS` grows in four batches. |
@@ -164,7 +179,7 @@ The condition, applied in one place:
 | `worker/published.ts` | One comment recording the cache-hit cost of a D1 failure. No behaviour change. |
 | `src/main.tsx` | Wraps the app in `ContentProvider` with the live bundle. |
 | `src/index.css`, `src/components/Hero.tsx`, `ChefGallery.tsx`, `SignatureMocktails.tsx`, `src/content/types.ts` | The nine hardcoded references. |
-| `src/content/__tests__/assets.test.ts` | The guardrail moves from "resolves under `public/`" to "resolves under `public/` **or** is a well-formed image-host URL", plus a straggler detector. |
+| `src/content/__tests__/assets.test.ts` | The guardrail moves from "resolves under `public/`" to "resolves under `public/` **or** sits under the image prefix, where `npm run verify:images` is what checks it against the live bucket", plus a straggler detector. See the amendment: the shape it must handle is a path, not a URL. |
 | `src/admin/upload-photo.ts`, `publish.ts`, `staged.ts`, `undo.ts`, `PublishBar.tsx` | No photo bytes in a publish; no build poll; the copy that says "2-3 minutes". |
 | `scripts/verify-deploy.mjs` | The live image sweep, the crawler menu check, the route list read from the island, a production asset pass. |
 | `package.json` | `images:inventory`, `migrate:images`, `verify:images`, `seed:content`, `export:content`, `rederive`. |
@@ -181,7 +196,7 @@ The condition, applied in one place:
 
 | # | Task | Reads | Writes | Site state if it fails |
 |---|---|---|---|---|
-| 1 | Bind `via-bianca`, stand up the image host, prove a round trip, widen `img-src` | one probe object | one probe object, deleted | unchanged |
+| 1 | Bind `via-bianca`, prove a round trip, route `/images/*` to the Worker | one probe object | one probe object, deleted | unchanged |
 | 2 | The inventory, including the four D1-only references | live `/api/published` | `docs/image-inventory.json` | unchanged |
 | 3 | **The derivative answer, settled and measured** | `assets-source/` | `docs/image-derivation.md` | unchanged; nothing calls the encoder |
 | 4 | Copy the live bytes into R2, digest-verified over HTTPS | production CDN | R2 | unchanged; nothing points at R2 |
@@ -2424,11 +2439,13 @@ node scripts/rewrite-image-refs.mjs
 
 Expected: **`rewrite: 77 references, 3 deliberately left alone`** — `/og-image.jpg` from `site.json`, and the two `/menus/*.pdf` from `menus.json`. If the number is not 77, stop: Task 2's inventory said 68 + 9 and a different number here means something changed under the plan.
 
-Then eyeball the diff of the five code files. `src/index.css:196` must read `background-image: url("https://img.viabiancarestaurant.com/hero/brick.webp");` and the three spaced mocktail filenames must carry `%20`.
+Then eyeball the diff of the five code files. `src/index.css:196` must read `background-image: url("/images/hero/brick.webp");` and the three spaced mocktail filenames must carry `%20`.
 
 - [ ] **Step 5: Move the offline guardrail in the same commit**
 
-`src/content/__tests__/assets.test.ts` resolves every discovered path against `publicFiles`. After Step 4 the content strings start with `https://`, `ASSET_PATH_PATTERN` no longer matches them, and **the content half of that walk silently becomes vacuous** — the exact failure this repository's own comments describe as a guardrail reducing to nothing.
+`src/content/__tests__/assets.test.ts` resolves every discovered path against `publicFiles`.
+
+**This step's premise no longer holds — see the amendment at the top of this plan.** It was written for a destination that was a whole `https://` URL: `ASSET_PATH_PATTERN` would stop matching, and **the content half of that walk would silently become vacuous**, the exact failure this repository's own comments describe as a guardrail reducing to nothing. The destination is `/images/<key>` now, which that pattern still matches — so the walk does not go vacuous, it goes **red**, demanding a file under `public/` for every photograph that just moved into R2. The replacement guardrail has to exclude the image prefix from the `publicFiles` resolution and hand it to `npm run verify:images` (which sweeps the live site) instead, and it must not be able to go vacuous either way. The code below is the old shape and is kept only for what it says about the straggler detector.
 
 ```ts
 import { verifiedKeys } from '../../test/imageManifest';

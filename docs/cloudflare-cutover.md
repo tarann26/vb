@@ -1383,12 +1383,28 @@ second deploy. Nothing outside `/blog/*` moves at any point.
 
 ---
 
-## 21. The photograph bucket: binding `via-bianca`, and the custom domain it is served from
+## 21. The photograph bucket: binding `via-bianca`, and the path it is served from
 
 Phase 6, Task 1. This section records what was done in the repository, what was
-measured against the live account, and the two steps a **human with dashboard
-access still has to take** before any content reference is allowed to point at
-`img.viabiancarestaurant.com`.
+measured against the live account, and what still has to happen before any
+content reference is allowed to point into the bucket.
+
+> **AMENDED 2026-09-02 — the destination changed, and it changed the shape of
+> this whole section.** The photographs were to be served from
+> `img.viabiancarestaurant.com`, an R2 custom domain. **The owner chose the main
+> domain instead:** `viabiancarestaurant.com/images/*` is a Worker route,
+> answered by `worker/images.ts`, which reads the object out of the R2 binding.
+>
+> What that removes: the DNS record, the public-access change on the live zone,
+> the second certificate story, and the `img-src` widening — a same-origin
+> photograph needs no CSP exemption, so `public/_headers` stays
+> `img-src 'self' blob:` and **nothing has to ship before the references may
+> move.** The two "human with dashboard access" steps below are void.
+>
+> What it adds: a **deploy** is now the precondition. The route and the handler
+> live in this repository and are inert until `npx wrangler deploy` runs.
+> Superseded passages below are struck through or marked rather than deleted,
+> because the measurements in them are still the record of what was true.
 
 ### What is already in the repository
 
@@ -1399,7 +1415,21 @@ access still has to take** before any content reference is allowed to point at
       bucket_name = "via-bianca"
 
   Bound, and read by nothing. `env.R2` has no caller until Task 4.
-- `wrangler.toml`'s `[vars]` gained `IMAGE_HOST` and `PAGES_ORIGIN`.
+- `wrangler.toml`'s `[vars]` gained `IMAGE_BASE` (was `IMAGE_HOST`) and
+  `PAGES_ORIGIN`. `IMAGE_BASE` is `/images` — a site-root prefix, not a
+  hostname — so a reference resolves against whichever host served the page.
+- `wrangler.toml`'s `routes` array carries **three** patterns:
+  `viabiancarestaurant.com/api/*`, `/blog/*` and `/images/*`. All three, always:
+  `wrangler deploy` replaces the deployed route list with exactly what the file
+  declares, and an entry left out is a live route deleted by a deploy that
+  reports success. That is how `/api/login` went back to a 405 once.
+- `worker/images.ts` answers `GET`/`HEAD` under that prefix. A miss is a 404
+  with a body, never an empty 200 and never a 500. `Cache-Control` is a year and
+  `immutable` for a content-addressed key and a day for a re-uploadable legacy
+  name — `src/shared/image-host.ts`'s `cacheControlForKey`, pinned equal to
+  `scripts/migrate-images.mjs`'s copy by a test. Those headers are what keeps
+  photographs off the Worker's 100,000-requests-a-day budget; read that file's
+  own comment before changing one.
 
   **`PAGES_ORIGIN` is `https://vb-c7r.pages.dev`, and it shipped wrong once.**
   It went in as `https://vb.pages.dev`, derived from the Pages project's name
@@ -1430,11 +1460,13 @@ access still has to take** before any content reference is allowed to point at
   `GET /index.html` with a **308 to `/`**. `fetch()` follows redirects by
   default, so the join works — but `redirect: 'manual'` would hand a visitor
   an empty 308.
-- `public/_headers` widened `img-src` — and only `img-src` — to admit
-  `https://img.viabiancarestaurant.com`.
-- `src/shared/image-host.ts` is the one place the hostname is spelled for code.
-  `src/test/wrangler-config.test.ts` asserts it and the `IMAGE_HOST` var are the
-  same string.
+- ~~`public/_headers` widened `img-src` — and only `img-src` — to admit
+  `https://img.viabiancarestaurant.com`.~~ **Reverted.** The directive is back
+  to `img-src 'self' blob:`; `src/test/hosting.test.ts` now pins that the
+  retired host appears in no directive at all.
+- `src/shared/image-host.ts` is the one place the prefix is spelled for code.
+  `src/test/wrangler-config.test.ts` asserts it and the `IMAGE_BASE` var are the
+  same string, and that the `/images/*` route pattern covers exactly it.
 
 ### What was measured against the live account, 2026-09-01
 
@@ -1481,66 +1513,62 @@ rate-limited, warns against even pointing a CNAME at it, and gives it no edge
 caching, no WAF and no bot management. **It stays disabled.** If anybody ever
 turns it on to debug something, turn it back off in the same sitting.
 
-### STILL TO DO — a human with dashboard access, before Task 4
+### STILL TO DO — one deploy, before Task 4
 
-    $ npx wrangler r2 bucket domain list via-bianca
-    There are no custom domains connected to this bucket.
+**The two dashboard steps this section used to carry are void.** They were:
+connect `img.viabiancarestaurant.com` as an R2 custom domain, and ship a widened
+`img-src`. Neither is needed now, and neither should be done — connecting that
+subdomain would make every object in the bucket world-readable at a second,
+unrouted URL that nothing in this repository points at or protects.
 
-**Nothing serves `https://img.viabiancarestaurant.com/<key>` yet, and the
-hostname does not resolve.** Verified: `curl` returns
-`Could not resolve host: img.viabiancarestaurant.com`.
+What replaces them is a single step, and it is one a developer takes rather than
+one the owner takes in a dashboard:
 
-1. **Connect the custom domain.** R2 → `via-bianca` → Settings → Public access →
-   Custom Domains → **Connect Domain**, enter `img.viabiancarestaurant.com`. The
-   zone is already on Cloudflare, so the DNS record and the certificate are
-   issued automatically. Wait for status **Active**.
+1. **Deploy the Worker, so `/images/*` is answered.** The route and
+   `worker/images.ts` are in this repository and are inert until:
 
-   This is a public-access change on the live zone and it makes every object in
-   the bucket world-readable at a predictable URL. It is a decision for the
-   account owner, which is why no script in this repository performs it.
+       npx wrangler deploy
 
-2. **Re-run the round trip, this time over HTTPS.** The wrangler half above
-   proves the API path; it does not prove the *served* path, which is the one a
-   visitor's browser uses.
+   Check the whole `routes` list in `wrangler.toml` before running it. `wrangler
+   deploy` REPLACES the deployed route list with exactly what the file declares;
+   all three patterns must be present or a live route is deleted silently.
+
+2. **Prove the served path, which is the one a visitor's browser uses.** The
+   wrangler round trip recorded above proves the API path and says nothing about
+   this one.
 
        printf 'ok' > /tmp/vb-probe.txt
        npx wrangler r2 object put via-bianca/__probe__.txt --file=/tmp/vb-probe.txt \
          --content-type=text/plain --remote
-       curl -sS -D - -o /tmp/vb-probe-back.txt https://img.viabiancarestaurant.com/__probe__.txt
+       curl -sS -D - -o /tmp/vb-probe-back.txt https://viabiancarestaurant.com/images/__probe__.txt
        diff /tmp/vb-probe.txt /tmp/vb-probe-back.txt && echo 'ROUND TRIP OK'
        npx wrangler r2 object delete via-bianca/__probe__.txt --remote
-       curl -sS -o /dev/null -w '%{http_code}\n' https://img.viabiancarestaurant.com/__probe__.txt
+       curl -sS -o /dev/null -w '%{http_code}\n' https://viabiancarestaurant.com/images/__probe__.txt
 
-   The three answers that must all hold: `HTTP/2 200` with
-   `content-type: text/plain` on the read; `ROUND TRIP OK` on the diff; **404**
-   after the delete. A 404 on the *first* read means the domain is not Active
-   yet. A Cloudflare error page means public access is not on.
+   The answers that must all hold: `HTTP/2 200` with
+   `content-type: text/plain` and a `cache-control` header on the read;
+   `ROUND TRIP OK` on the diff; **404** after the delete.
+
+   **Read the content type on a failure, not just the status.** A `200` with
+   `content-type: text/html` means the route is NOT deployed and Pages' SPA
+   catch-all answered — the single most likely failure here, and the one that
+   looks like success to anything reading status codes alone. `curl -sSI
+   https://viabiancarestaurant.com/images/__nothing__.webp` is the one-line
+   version: `404` and `text/plain` is the Worker; `200` and `text/html` is
+   Pages.
 
    Paste all four responses back into this section when they hold.
 
-3. **Ship the widened `img-src` and check it on the wire.** `public/_headers`
-   reaches production through a Pages build, so the commit carrying it has to be
-   on `main` and deployed before any reference moves:
-
-       curl -sSI https://viabiancarestaurant.com/ | tr ';' '\n' | grep -i 'img-src'
-
-   The live header must already list `https://img.viabiancarestaurant.com`
-   **before Task 4 begins**.
-
-**Why the ordering is not negotiable.** `img-src 'self' blob:` forbids loading
-an image from any other host. A content reference rewritten to the bucket before
-that header ships would answer **200 from R2 and still be refused by the
-browser** — every photograph on the site becomes a broken-image icon, on every
-browser, with nothing in the network tab that looks like a failure. That is the
-single most expensive ordering mistake available in this migration, and Task 1
-exists to spend it here instead.
-
-The Worker is **not** deployed by this task. `env.R2` is bound in configuration
-and read by nothing until Task 4.
+**There is no longer an ordering hazard to spend.** The old third step existed
+because `img-src 'self' blob:` forbids loading an image from any other host, so
+a reference rewritten before the widened header shipped would answer 200 from R2
+and still be refused by every browser — every photograph a broken-image icon,
+with nothing in the network tab that looks like a failure. A same-origin
+reference needs no directive widened, so that sequence does not exist. What
+remains is a plain precondition: the route has to be deployed before the
+migration's read-back can confirm anything.
 
 ### Re-measured 2026-09-01, before Phase 6 Task 4
-
-None of the three human steps above has been taken:
 
     $ npx wrangler r2 bucket domain list via-bianca
     There are no custom domains connected to this bucket.
@@ -1551,10 +1579,16 @@ None of the three human steps above has been taken:
     $ curl -sSI https://viabiancarestaurant.com/ | tr ';' '\n' | grep -i img-src
     img-src 'self' blob:
 
-So **Task 4 has not been run and cannot be**, and `image-manifest.json` does not
-exist. `scripts/migrate-images.mjs` is written, unit-tested and wired to
-`npm run migrate:images`; what it is missing is a hostname to read objects back
-from. Its read-back is the whole point of the task — it proves the host the
+**Read those three through the amendment.** As of 2026-09-02 the first two are
+the intended and permanent state — there is no custom domain and there will not
+be one — and the third is correct rather than pending: `img-src 'self' blob:` is
+the policy this site keeps.
+
+So **Task 4 has not been run and cannot be** until the Worker carrying the
+`/images/*` route is deployed, and `image-manifest.json` does not exist.
+`scripts/migrate-images.mjs` is written, unit-tested and wired to
+`npm run migrate:images`; what it is missing is a deployed route to read objects
+back through. Its read-back is the whole point of the task — it proves the host the
 content files are about to name answers the key with those exact bytes under
 that exact type — so it must not be stubbed, skipped or pointed at the bucket
 API to get a green run. An object the read-back never confirmed carries no
@@ -1587,8 +1621,10 @@ than by whoever handed the photograph over.
 
 ### The rewrite exists and has not been run either
 
-`scripts/rewrite-image-refs.mjs` turns all 77 site-root references into
-absolute URLs on the image host. It reads `image-manifest.json` and refuses,
+`scripts/rewrite-image-refs.mjs` moves all 77 site-root references under the
+image prefix — `/food/pizza1.webp` becomes `/images/food/pizza1.webp`. (It
+produced absolute URLs on `img.viabiancarestaurant.com` until 2026-09-02; see
+the amendment.) It reads `image-manifest.json` and refuses,
 writing nothing at all and exiting 1, if a single reference names an object
 without a `verifiedAt`. Since that manifest does not exist, the script exits on
 its first line — which is the correct behaviour and not a bug to work around.
@@ -1655,7 +1691,7 @@ them has to move in the same commit or the branch is red:
 | File | What moves | How |
 |---|---|---|
 | `src/content/__tests__/assets.test.ts` | 69 of its 124 tests | Task 6 Step 5 of the plan carries the replacement assertions. See step 5 below. |
-| `src/test/homepage-bytes.test.tsx` | one number, **48325 → 50169 (+1844)** | The file's own rule is to state both numbers and what accounts for the difference. The accounting: 52 references rendered into the homepage, each gaining the 35-byte host prefix (1820), plus 12 spaces that become `%20` (+2 each, 24). Measured, not derived: the page renders 52 image-host URLs and its `%20` count goes from 4 to 16. |
+| `src/test/homepage-bytes.test.tsx` | one number — **re-measure it** | The recorded figure was **48325 → 50169 (+1844)**, measured against a 35-byte host prefix (`https://img.viabiancarestaurant.com`). The prefix is 7 bytes now (`/images`), so that number is stale. Derived, NOT measured, from the same measured counts: 52 rendered references × 7 = 364, plus 12 spaces that become `%20` (+2 each, 24) = **+388, so 48325 → 48713**. Take the number the test actually prints; this arithmetic is here to tell you whether it is plausible, not to be pasted in. |
 | `src/admin/__tests__/panel-snapshots.test.tsx` | 3 of 12 snapshots (Galleries, About, Experiences) | `npm test -- --run src/admin/__tests__/panel-snapshots.test.tsx -u`, then read the diff: the only changes may be photograph URLs. |
 
 Four other files carried the same trap and were fixed at `7fac6e6` instead, so
@@ -1664,14 +1700,17 @@ they need nothing in step 4: `scripts/__tests__/rewrite-image-refs.test.mjs`
 `worker/__tests__/snapshot.test.ts`, `src/admin/__tests__/EditMode.test.tsx`
 and the shared undo they read, `src/test/siteRootForm.ts`.
 
-**The CSS ceiling moves by 35 bytes, and the plan predicts zero.** Task 6's own
-note says to rebuild against 39441 and that "if it moved, the cause is a
-comment, not the URL". Measured post-rewrite: **39441 → 39476**, and the cause
-IS the URL. `src/index.css`'s `body::before` texture is a `url()` literal that
-Vite copies into the stylesheet verbatim, so the 35-character host prefix lands
-in the built CSS. That is under the 39600 ceiling in
+**The CSS ceiling moves, and the plan predicts zero.** Task 6's own note says to
+rebuild against 39441 and that "if it moved, the cause is a comment, not the
+URL". That is wrong: `src/index.css`'s `body::before` texture is a `url()`
+literal Vite copies into the stylesheet verbatim, so the prefix lands in the
+built CSS and the cause IS the URL. Measured post-rewrite against the 35-byte
+host prefix: **39441 → 39476**. With the 7-byte prefix the same reasoning gives
+**39441 → 39448** — derived, not measured, because the rewrite has not been run
+since the destination changed. Either way it is under the 39600 ceiling in
 `src/test/bundle.post-build.test.ts`, so **no raise is needed**. If the number
-comes back higher than 39476, the extra is a comment and is worth finding.
+comes back higher than the derived one, the extra is a comment and is worth
+finding.
 
 **One hazard that is not a test.** `scripts/sync-story-fallback.mjs` writes the
 LIVE D1 body into `src/content/story.json`. Between step 4 and Task 7 the D1
@@ -1681,8 +1720,10 @@ has rewritten the row.
 
 **What is still owed before the references may move**, in order:
 
-1. The R2 custom domain, the HTTPS round trip, and the widened `img-src` live
-   on the wire — the three steps above.
+1. `npx wrangler deploy`, with all three route patterns in `wrangler.toml`, and
+   the HTTPS round trip through `/images/` answering — the two steps above.
+   (This used to read "the R2 custom domain, the HTTPS round trip, and the
+   widened `img-src`". None of those three is wanted now; see the amendment.)
 2. `npm run migrate:images`, 0 failed.
 3. The refusal, proved before it is trusted:
 
