@@ -3,6 +3,8 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative, basename } from 'node:path';
 import { site } from '../index';
 import { publicFiles as onDisk } from '../../test/publicFiles';
+import { verifiedKeys } from '../../test/imageManifest';
+import { IMAGE_BASE, imageUrl, keyFromImageUrl } from '../../shared/image-host';
 
 const CONTENT_DIR = join(process.cwd(), 'src', 'content');
 const SRC_DIR = join(process.cwd(), 'src');
@@ -147,7 +149,7 @@ describe('content assets', () => {
   // would leave the whole code scan vacuous while the suite stayed green --
   // which is the exact failure mode the scan was added to close.
   it('discovers the paths hardcoded outside src/content too', () => {
-    expect(paths).toContain('/hero/brick.webp'); // Hero.tsx and src/index.css
+    expect(paths).toContain(imageUrl('hero/brick.webp')); // Hero.tsx and src/index.css
     expect(paths).toContain('/favicon-32.png'); // index.html (the placeholder SVG it replaced is gone)
     // Reached from three places now: src/content/press.json's chef-interview
     // article, src/content/story.json's chef byline (Phase 4), and the
@@ -155,7 +157,7 @@ describe('content assets', () => {
     // one that matters most, because Phase 4 moves that document's LIVE copy
     // to D1 -- where this walk cannot see it -- and the committed file is
     // what keeps the portrait inside this guarantee.
-    expect(paths).toContain('/team/kamalika-anand.webp');
+    expect(paths).toContain(imageUrl('team/kamalika-anand.webp'));
     expect(paths).toContain('/menus/food-menu.pdf'); // parked SignatureMocktails.tsx
   });
 
@@ -171,10 +173,66 @@ describe('content assets', () => {
   it("story.json's own chef.portrait still points at the real chef photo", () => {
     const storyPath = join(CONTENT_DIR, 'story.json');
     const story = JSON.parse(readFileSync(storyPath, 'utf-8')) as { chef: { portrait: string } };
-    expect(story.chef.portrait).toBe('/team/kamalika-anand.webp');
+    expect(story.chef.portrait).toBe(imageUrl('team/kamalika-anand.webp'));
   });
 
-  it.each(paths)('%s exists in public/ with exact case', (path) => {
+  // ------------------------------------------------------------------------
+  // WHERE A REFERENCE IS OWED ITS PROOF, since the 2026-08-21 migration.
+  // ------------------------------------------------------------------------
+  // Until that migration every path here was answered by one thing: a file
+  // under public/ with that name in that case. Forty-four photographs are R2
+  // objects now, served through the Worker at src/shared/image-host.ts's
+  // prefix, and public/ cannot answer for them. Three references stayed --
+  // the share card and both menu PDFs -- and public/ is still the only thing
+  // that answers for those.
+  //
+  // So the list is PARTITIONED rather than filtered. Filtering the migrated
+  // paths out is the vacuous version of this file: seventy-seven of the
+  // eighty-one references would stop being checked by anything at all, and
+  // the suite would stay green while a content file named a photograph that
+  // was never uploaded. The partition is total by construction -- every path
+  // lands in exactly one of these two lists -- and both halves are asserted
+  // non-empty below, so neither branch can quietly stop running.
+  //
+  // Split on the PREFIX, not on whether keyFromImageUrl returns a key. Those
+  // are different questions: a path under the prefix that the Worker's own
+  // parser refuses (a traversal, a malformed escape) is a broken image
+  // reference and has to fail as one, not be handed to the public/ check
+  // where it would fail for the wrong reason or throw.
+  const imageRefs = paths.filter((path) => path.startsWith(`${IMAGE_BASE}/`));
+  const publicRefs = paths.filter((path) => !path.startsWith(`${IMAGE_BASE}/`));
+
+  it('has references of both kinds, so neither check below is running on nothing', () => {
+    expect(imageRefs.length).toBeGreaterThan(0);
+    expect(publicRefs.length).toBeGreaterThan(0);
+  });
+
+  // A floor, not an exact count: the owner uploads photographs through the
+  // dashboard and every upload grows this set. Without it, a truncated or
+  // half-written manifest would make every assertion below pass trivially --
+  // an empty `verifiedKeys` cannot contain a key, so it would fail loudly;
+  // but a manifest holding only the `source/` originals would leave
+  // verifiedKeys empty AND is exactly the shape a partial migration writes.
+  // Forty-four is what the migration that moved these references produced.
+  it('reads a manifest that still describes every migrated photograph', () => {
+    expect(verifiedKeys.size).toBeGreaterThanOrEqual(44);
+  });
+
+  // The replacement for the public/ existence check, and a stricter one. A
+  // name in publicFiles is a directory entry `npm run images` happened to
+  // write. A key in verifiedKeys is a key whose bytes scripts/migrate-
+  // images.mjs fetched BACK from the production image host over HTTPS and
+  // matched against a recorded SHA-256 and payload length. The class of bug
+  // the old check caught -- a content file naming a photograph that does not
+  // exist -- is caught here, against a source of truth that had to be read
+  // to be written.
+  it.each(imageRefs)('%s names a verified object in image-manifest.json', (path) => {
+    const key = keyFromImageUrl(path);
+    expect(key, `${path} is not a well-formed reference to the image host`).not.toBeNull();
+    expect(verifiedKeys.has(key as string)).toBe(true);
+  });
+
+  it.each(publicRefs)('%s exists in public/ with exact case', (path) => {
     expect(onDisk.has(decodeURIComponent(path))).toBe(true);
   });
 

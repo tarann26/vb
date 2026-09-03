@@ -218,12 +218,45 @@ describe('the real content and code files', () => {
     expect([...report.changed].sort()).toEqual([...stillOnThisOrigin].sort());
   });
 
-  it('leaves exactly three distinct references alone', () => {
-    expect([...new Set(report.skipped)].sort()).toEqual([
+  // TWO NUMBERS, AND THEY WERE BEING CONFLATED. The title this test used to
+  // carry -- "leaves exactly three distinct references alone" -- named three
+  // and then asserted over a de-duplicated set, so it could not distinguish
+  // "three references were skipped" from "four references were skipped, two
+  // of them the same path". The run reports FOUR: /menus/food-menu.pdf is
+  // named twice, once in src/content/menus.json and once in the parked
+  // src/components/SignatureMocktails.tsx. Both numbers are asserted below,
+  // separately, so neither can drift behind the other.
+  //
+  // `report.skipped` also holds a SECOND, unrelated category once the rewrite
+  // has run: every already-migrated reference, skipped because `stays()`
+  // recognises the prefix and that is what makes a re-run a no-op. Lumping
+  // those in would make this assertion mean "four before the migration,
+  // eighty-one after" -- a number that changes with the number of
+  // photographs, which is not the invariant. Partitioned on the prefix, both
+  // halves say the same thing on both sides of the migration commit: four
+  // references, three distinct paths, deliberately left on this origin.
+  const alreadyMoved = report.skipped.filter((path) => path.startsWith(`${IMAGE_BASE}/`));
+  const keptOnThisOrigin = report.skipped.filter((path) => !path.startsWith(`${IMAGE_BASE}/`));
+
+  it('leaves four references, spelling three distinct paths, on this origin', () => {
+    expect(keptOnThisOrigin).toHaveLength(4);
+    expect([...new Set(keptOnThisOrigin)].sort()).toEqual([
       '/menus/drinks-menu.pdf',
       '/menus/food-menu.pdf',
       '/og-image.jpg',
     ]);
+  });
+
+  // The other half of that partition, pinned so the split above cannot become
+  // a way of quietly discarding skips. Before the migration this is empty and
+  // `changed` holds the seventy-seven; after it, `changed` is empty and this
+  // holds them. Either way the two together account for every one.
+  it('accounts for every reference it did not change, in one category or the other', () => {
+    expect(alreadyMoved.length + report.changed.length).toBe(77);
+    // And nothing that was supposed to stay is sitting in the moved half:
+    // strip the prefix back off and `stays()` must still say no. A migration
+    // that had swept up the share card or a menu PDF would land here.
+    expect(alreadyMoved.every((path) => !stays(decodeURI(path.slice(IMAGE_BASE.length))))).toBe(true);
   });
 
   it('finds nothing unverified when every object is verified', () => {
