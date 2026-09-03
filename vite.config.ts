@@ -4,6 +4,7 @@ import react from '@vitejs/plugin-react';
 import path from "path";
 import { execFileSync } from 'node:child_process';
 import buildInfo from './plugins/build-info';
+import devImages from './plugins/dev-images';
 import sitemap from './plugins/sitemap';
 import { pages, posts, site } from './src/content';
 
@@ -40,6 +41,12 @@ export default defineConfig(() => ({
     // Phase 5, Task 8: `posts` too, for every committed post's own
     // /blog/<slug> entry.
     sitemap(site.seo.url, pages, posts),
+    // Dev/preview-only (see plugins/dev-images.ts): serves the site-root
+    // image prefix out of public/, which is what the Cloudflare Worker does
+    // out of R2 in production. Without it every photograph on the site is a
+    // `200 text/html` from the SPA catch-all on a developer's machine. Its
+    // own `apply: 'serve'` is what scopes it away from `vite build`.
+    devImages(),
   ].filter(Boolean),
   // ---------------------------------------------------------------------------
   // Asset filenames carry the COMMIT as well as the content hash.

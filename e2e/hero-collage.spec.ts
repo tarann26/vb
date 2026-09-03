@@ -165,8 +165,8 @@ for (const viewport of VIEWPORTS) {
     // four other photos. `right-middle-column` is the surviving 1:1 split
     // with the same property this test needs: two photos whose intrinsic
     // sizes differ substantially along the split's own axis. It is a COLUMN
-    // split, so that axis is height, not width -- /hero/building.webp is
-    // 500x548 natively and /atmosphere/room.webp is 1000x1088, exactly a 2:1
+    // split, so that axis is height, not width -- hero/building.webp is
+    // 500x548 natively and atmosphere/room.webp is 1000x1088, exactly a 2:1
     // difference in intrinsic HEIGHT, which is what would leak into the
     // layout the moment a flex item's base size comes from its content
     // instead of from zero.
@@ -182,7 +182,10 @@ for (const viewport of VIEWPORTS) {
           if (!el) throw new Error(`no box around ${src}`);
           return { height: el.getBoundingClientRect().height, natural: img.naturalHeight };
         };
-        return { tall: box('/atmosphere/room.webp'), short: box('/hero/building.webp') };
+        // The migrated spelling, which is what the rendered `src` carries
+        // since the photographs moved to the image host. These are matched
+        // as exact attribute values, so the prefix is not optional here.
+        return { tall: box('/images/atmosphere/room.webp'), short: box('/images/hero/building.webp') };
       });
 
       // The precondition, asserted rather than assumed: if these two photos
