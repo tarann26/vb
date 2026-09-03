@@ -11,27 +11,27 @@ const SignatureMocktails: React.FC = () => {
     {
       name: "Bicerin",
       flavor: "Espresso, chocolate & cream",
-      image: "/mocktails/bicerin.webp"
+      image: "/images/mocktails/bicerin.webp"
     },
     {
       name: "Espresso Tonic",
       flavor: "Espresso, blood orange & ginger ale",
-      image: "/mocktails/blood orange espresso tonic.webp"
+      image: "/images/mocktails/blood%20orange%20espresso%20tonic.webp"
     },
     {
       name: "Piccante",
       flavor: "Pineapple, birds eye chili & salt",
-      image: "/mocktails/piccante.webp"
+      image: "/images/mocktails/piccante.webp"
     },
     {
       name: "Signor Bianca",
       flavor: "Dragonfruit, coconut water & honey",
-      image: "/mocktails/signor bianca.webp"
+      image: "/images/mocktails/signor%20bianca.webp"
     },
     {
       name: "Viola and Sambuco",
       flavor: "Blueberries, basil leaves, lavender & ginger ale and Elderflower, cucumber & black tea",
-      image: "/mocktails/viola and sambuco.webp"
+      image: "/images/mocktails/viola%20and%20sambuco.webp"
     }
   ];
 

@@ -185,7 +185,7 @@ export interface Galleries {
 // with no badge is simply an ordinary award.
 //
 // `portrait` names the derivative for the chef's photograph
-// ('/team/kamalika-anand.webp'), and it is one of the seventy-seven
+// ('/images/team/kamalika-anand.webp'), and it is one of the seventy-seven
 // references the 2026-08-21 migration rewrites onto the image host. Either
 // spelling is valid and NOTHING WIDER IS: validateStory, assertPosts and the
 // browser's own runtime read all ask src/content/asset-reference.ts the same

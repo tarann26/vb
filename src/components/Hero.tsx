@@ -125,7 +125,7 @@ const Hero: React.FC = () => {
         that cannot exist. See the edit mode plan's own corrected coverage
         rule for the same call. */}
     <img
-      src="/hero/brick.webp"
+      src="/images/hero/brick.webp"
       alt=""
       className="absolute inset-0 -z-20 w-full h-full object-cover opacity-20"
     />

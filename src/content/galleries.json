@@ -1,61 +1,61 @@
 {
   "atmosphere": [
     {
-      "src": "/atmosphere/dining.webp",
+      "src": "/images/atmosphere/dining.webp",
       "alt": "The dining room laid for service"
     },
     {
-      "src": "/atmosphere/outsideLOGO.webp",
+      "src": "/images/atmosphere/outsideLOGO.webp",
       "alt": "Via Bianca's signage on N-Block Market"
     },
     {
-      "src": "/atmosphere/ambience.webp",
+      "src": "/images/atmosphere/ambience.webp",
       "alt": "Warm evening light across the restaurant"
     },
     {
-      "src": "/atmosphere/ceiling decor.webp",
+      "src": "/images/atmosphere/ceiling%20decor.webp",
       "alt": "Hand-painted ceiling detail"
     },
     {
-      "src": "/atmosphere/front mirror.webp",
+      "src": "/images/atmosphere/front%20mirror.webp",
       "alt": "The antique mirror by the entrance"
     },
     {
-      "src": "/atmosphere/painting board.webp",
+      "src": "/images/atmosphere/painting%20board.webp",
       "alt": "Painted board on the dining room wall"
     },
     {
-      "src": "/atmosphere/room.webp",
+      "src": "/images/atmosphere/room.webp",
       "alt": "The main room seen from the doorway"
     },
     {
-      "src": "/atmosphere/table.webp",
+      "src": "/images/atmosphere/table.webp",
       "alt": "A set table with linen and glassware"
     }
   ],
   "ourStory": [
     {
-      "src": "/our_story/cut.webp",
+      "src": "/images/our_story/cut.webp",
       "alt": "Cutting fresh pasta by hand"
     },
     {
-      "src": "/our_story/dinner.webp",
+      "src": "/images/our_story/dinner.webp",
       "alt": "A finished plate at the pass"
     },
     {
-      "src": "/our_story/handmaking.webp",
+      "src": "/images/our_story/handmaking.webp",
       "alt": "Working dough by hand"
     },
     {
-      "src": "/our_story/oven.webp",
+      "src": "/images/our_story/oven.webp",
       "alt": "The wood-fired oven at full heat"
     },
     {
-      "src": "/our_story/shape.webp",
+      "src": "/images/our_story/shape.webp",
       "alt": "Shaping pasta in the pastificio"
     },
     {
-      "src": "/our_story/stuff.webp",
+      "src": "/images/our_story/stuff.webp",
       "alt": "Filling fresh pasta"
     }
   ],
@@ -67,7 +67,7 @@
       {
         "kind": "photo",
         "id": "photo-1",
-        "src": "/atmosphere/ambience.webp",
+        "src": "/images/atmosphere/ambience.webp",
         "alt": ""
       },
       {
@@ -78,13 +78,13 @@
           {
             "kind": "photo",
             "id": "photo-2",
-            "src": "/atmosphere/front mirror.webp",
+            "src": "/images/atmosphere/front%20mirror.webp",
             "alt": ""
           },
           {
             "kind": "photo",
             "id": "photo-3",
-            "src": "/our_story/stuff.webp",
+            "src": "/images/our_story/stuff.webp",
             "alt": ""
           }
         ],
@@ -106,19 +106,19 @@
               {
                 "kind": "photo",
                 "id": "photo-6",
-                "src": "/atmosphere/ceiling decor.webp",
+                "src": "/images/atmosphere/ceiling%20decor.webp",
                 "alt": ""
               },
               {
                 "kind": "photo",
                 "id": "photo-7",
-                "src": "/our_story/oven.webp",
+                "src": "/images/our_story/oven.webp",
                 "alt": ""
               },
               {
                 "kind": "photo",
                 "id": "photo-8",
-                "src": "/hero/scene.webp",
+                "src": "/images/hero/scene.webp",
                 "alt": ""
               }
             ],
@@ -141,13 +141,13 @@
                   {
                     "kind": "photo",
                     "id": "photo-10",
-                    "src": "/hero/building.webp",
+                    "src": "/images/hero/building.webp",
                     "alt": ""
                   },
                   {
                     "kind": "photo",
                     "id": "photo-11",
-                    "src": "/atmosphere/room.webp",
+                    "src": "/images/atmosphere/room.webp",
                     "alt": ""
                   }
                 ],
@@ -159,7 +159,7 @@
               {
                 "kind": "photo",
                 "id": "photo-12",
-                "src": "/hero/bus.webp",
+                "src": "/images/hero/bus.webp",
                 "alt": ""
               }
             ],
@@ -171,13 +171,13 @@
           {
             "kind": "photo",
             "id": "photo-13",
-            "src": "/our_story/cut.webp",
+            "src": "/images/our_story/cut.webp",
             "alt": ""
           },
           {
             "kind": "photo",
             "id": "photo-15",
-            "src": "/atmosphere/dining.webp",
+            "src": "/images/atmosphere/dining.webp",
             "alt": ""
           }
         ],
