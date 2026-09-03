@@ -52,13 +52,14 @@ export function publicFileForImagePath(pathname: string, publicDir: string): str
   const key = keyFromImageUrl(pathname);
   if (key === null) return null;
 
+  // ONE PLACE REFUSES A TRAVERSAL, and it is the same place the Worker's
+  // does: `keyFromImageUrl` above rejects any key containing `..`, which is
+  // why a key reaching here cannot address anything outside publicDir. A
+  // second containment test was written here and then removed -- nothing
+  // could make it fail, worker/images.ts does not carry one either, and a
+  // check the two halves do not share is a divergence between them rather
+  // than a hardening of one.
   const file = path.join(publicDir, key);
-  // `keyFromImageUrl` already refuses `..`, so this is the belt to that
-  // brace rather than the only check -- but a path escaping the served
-  // directory is the one mistake here that would matter, and it costs one
-  // comparison to make it impossible rather than merely unreachable.
-  const root = path.resolve(publicDir);
-  if (path.resolve(file) !== root && !path.resolve(file).startsWith(root + path.sep)) return null;
 
   // A directory is not a photograph. Without this, `/images/food` resolves to
   // a real path and the rewrite below hands Vite a directory to serve.
