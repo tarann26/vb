@@ -1,0 +1,766 @@
+{
+  "servedFrom": "https://viabiancarestaurant.com/images",
+  "generatedAt": "2026-09-03T16:17:22.117Z",
+  "objects": {
+    "atmosphere/ambience.webp": {
+      "bytes": 67510,
+      "sha256": "318af9b579e495a8f9a43a4107f890154911441aedda1f2b78f67cec46e5755e",
+      "contentType": "image/webp",
+      "cacheControl": "public, max-age=86400",
+      "kind": "derivative",
+      "verifiedAt": "2026-09-03T16:12:29.575Z"
+    },
+    "atmosphere/ceiling decor.webp": {
+      "bytes": 92898,
+      "sha256": "c7ad29b55cfd837d15e408ed5c9ea3e0248f282ed71079166c1a959a1e327555",
+      "contentType": "image/webp",
+      "cacheControl": "public, max-age=86400",
+      "kind": "derivative",
+      "verifiedAt": "2026-09-03T16:12:33.280Z"
+    },
+    "atmosphere/dining.webp": {
+      "bytes": 58836,
+      "sha256": "f0596ad978040335a4db6e05e589daa0c5c2371828db6e952e1533a295de2891",
+      "contentType": "image/webp",
+      "cacheControl": "public, max-age=86400",
+      "kind": "derivative",
+      "verifiedAt": "2026-09-03T16:12:35.923Z"
+    },
+    "atmosphere/front mirror.webp": {
+      "bytes": 169074,
+      "sha256": "e721a2253f4a3ea56a06627a97195e8c05329a0a1f73f19117d0af82f7d1462a",
+      "contentType": "image/webp",
+      "cacheControl": "public, max-age=86400",
+      "kind": "derivative",
+      "verifiedAt": "2026-09-03T16:12:38.760Z"
+    },
+    "atmosphere/outsideLOGO.webp": {
+      "bytes": 35270,
+      "sha256": "c88b7ea3e28d8d10e37af93e56676e0abd21c1a267274d4cdf9a34a476e937c3",
+      "contentType": "image/webp",
+      "cacheControl": "public, max-age=86400",
+      "kind": "derivative",
+      "verifiedAt": "2026-09-03T16:12:41.540Z"
+    },
+    "atmosphere/painting board.webp": {
+      "bytes": 80564,
+      "sha256": "17319645bc04d7ed21bf8cd18926c4f84a2d4917ba045cf22ff96b4a88be6aa2",
+      "contentType": "image/webp",
+      "cacheControl": "public, max-age=86400",
+      "kind": "derivative",
+      "verifiedAt": "2026-09-03T16:12:44.226Z"
+    },
+    "atmosphere/room.webp": {
+      "bytes": 62038,
+      "sha256": "a5907725be04a8989d6183a71b3e251cbf3d59db1129c514e2b70729bb4fdc62",
+      "contentType": "image/webp",
+      "cacheControl": "public, max-age=86400",
+      "kind": "derivative",
+      "verifiedAt": "2026-09-03T16:12:47.089Z"
+    },
+    "atmosphere/table.webp": {
+      "bytes": 66568,
+      "sha256": "907d915d3575debb9c2c8a2f250e06b2d1be09b7f47792829684be7e00b429f6",
+      "contentType": "image/webp",
+      "cacheControl": "public, max-age=86400",
+      "kind": "derivative",
+      "verifiedAt": "2026-09-03T16:12:49.697Z"
+    },
+    "experiences/pamphlet.webp": {
+      "bytes": 93830,
+      "sha256": "1972cc37ae6088dd78003d44fd6f48f39c6c9b85a990644aa3f4d4e2f953a636",
+      "contentType": "image/webp",
+      "cacheControl": "public, max-age=86400",
+      "kind": "derivative",
+      "verifiedAt": "2026-09-03T16:12:52.468Z"
+    },
+    "experiences/retail.webp": {
+      "bytes": 45168,
+      "sha256": "2be531e687ef6a8d610046aab7ad07abe716455735fa906873e5634dc5125894",
+      "contentType": "image/webp",
+      "cacheControl": "public, max-age=86400",
+      "kind": "derivative",
+      "verifiedAt": "2026-09-03T16:12:55.343Z"
+    },
+    "food/Aglio e Pepperoncini.webp": {
+      "bytes": 19014,
+      "sha256": "3bcf407dc18f4bfeee2176ecb60b2898d81b5e7ea812d42cf16ee5b542ad849e",
+      "contentType": "image/webp",
+      "cacheControl": "public, max-age=86400",
+      "kind": "derivative",
+      "verifiedAt": "2026-09-03T16:12:58.366Z"
+    },
+    "food/americana.webp": {
+      "bytes": 17066,
+      "sha256": "cb49d2825e9ed846a85fd7d75be40e42bb6986070dec75b6772a393a3be4f4d4",
+      "contentType": "image/webp",
+      "cacheControl": "public, max-age=86400",
+      "kind": "derivative",
+      "verifiedAt": "2026-09-03T16:13:01.344Z"
+    },
+    "food/arrosticini.webp": {
+      "bytes": 48058,
+      "sha256": "94dcefa161ea39d3bc7d847e889629453cde432ec850d4a02a30482baeb2f8df",
+      "contentType": "image/webp",
+      "cacheControl": "public, max-age=86400",
+      "kind": "derivative",
+      "verifiedAt": "2026-09-03T16:13:04.182Z"
+    },
+    "food/bonet piemontese.webp": {
+      "bytes": 23948,
+      "sha256": "81e83e808b75ac9652197a9384bd528a3bc02ea0b9355a851d5d06bccf129bb9",
+      "contentType": "image/webp",
+      "cacheControl": "public, max-age=86400",
+      "kind": "derivative",
+      "verifiedAt": "2026-09-03T16:13:06.663Z"
+    },
+    "food/boozy donna.webp": {
+      "bytes": 33490,
+      "sha256": "f58363c1e0c1e2516bd462d7f079b3fb35cbf767999d3becb627cc9cb1ec2289",
+      "contentType": "image/webp",
+      "cacheControl": "public, max-age=86400",
+      "kind": "derivative",
+      "verifiedAt": "2026-09-03T16:13:09.443Z"
+    },
+    "food/idk1.webp": {
+      "bytes": 32266,
+      "sha256": "4a1b011018b67017c4bb4a30e7c30105e67507ea2da152641b4fdf6b50000c0e",
+      "contentType": "image/webp",
+      "cacheControl": "public, max-age=86400",
+      "kind": "derivative",
+      "verifiedAt": "2026-09-03T16:13:11.940Z"
+    },
+    "food/idk2.webp": {
+      "bytes": 49274,
+      "sha256": "1fa55a5d57b5c2c7a145526bd1ab10ece560835c756dd20ce3749bf60823f948",
+      "contentType": "image/webp",
+      "cacheControl": "public, max-age=86400",
+      "kind": "derivative",
+      "verifiedAt": "2026-09-03T16:13:14.685Z"
+    },
+    "food/margarita.webp": {
+      "bytes": 23888,
+      "sha256": "387117600b127ba32320433f6c9ba7cab2146b65e3ebae8972aad205fdce9d21",
+      "contentType": "image/webp",
+      "cacheControl": "public, max-age=86400",
+      "kind": "derivative",
+      "verifiedAt": "2026-09-03T16:13:17.382Z"
+    },
+    "food/pistaAffo.webp": {
+      "bytes": 31652,
+      "sha256": "db7ad25625e036efd511887087cdab24c5b4c5a264d21d4c4707535928d92c2d",
+      "contentType": "image/webp",
+      "cacheControl": "public, max-age=86400",
+      "kind": "derivative",
+      "verifiedAt": "2026-09-03T16:13:19.893Z"
+    },
+    "food/pizza1.webp": {
+      "bytes": 69878,
+      "sha256": "bafe0f639db4fe017ba410e23028653340ebeac1c9de0b2f0a683cbcb4c4523f",
+      "contentType": "image/webp",
+      "cacheControl": "public, max-age=86400",
+      "kind": "derivative",
+      "verifiedAt": "2026-09-03T16:13:22.657Z"
+    },
+    "food/pizza2.webp": {
+      "bytes": 118598,
+      "sha256": "ca544ecb0d2307796f4ffadcdb2e1221cdea15a2b9e80b52ba6d81ba71e8b2ad",
+      "contentType": "image/webp",
+      "cacheControl": "public, max-age=86400",
+      "kind": "derivative",
+      "verifiedAt": "2026-09-03T16:13:25.422Z"
+    },
+    "food/pollo alla cacciatora.webp": {
+      "bytes": 38716,
+      "sha256": "418b6326ffe23575d766ca75c586b25aada6efb528a98540fa1c67fcaf1197dc",
+      "contentType": "image/webp",
+      "cacheControl": "public, max-age=86400",
+      "kind": "derivative",
+      "verifiedAt": "2026-09-03T16:13:28.077Z"
+    },
+    "food/Spaghetti alla'Assassina.webp": {
+      "bytes": 21412,
+      "sha256": "d77ea1f0f40073dbbd5691a17efcac464839e5cee6aeab3696991216a700da16",
+      "contentType": "image/webp",
+      "cacheControl": "public, max-age=86400",
+      "kind": "derivative",
+      "verifiedAt": "2026-09-03T16:13:30.871Z"
+    },
+    "food/tielle.webp": {
+      "bytes": 30774,
+      "sha256": "0c50b93b2451c3b371135c60f410388f9eaddbe0a5f22374ddd0f733dd865b2b",
+      "contentType": "image/webp",
+      "cacheControl": "public, max-age=86400",
+      "kind": "derivative",
+      "verifiedAt": "2026-09-03T16:13:33.356Z"
+    },
+    "food/tiramisu.webp": {
+      "bytes": 50402,
+      "sha256": "28db22b8668b0942d9b24fde8bf02177f3634574643aa3e5e41b63d12651ea67",
+      "contentType": "image/webp",
+      "cacheControl": "public, max-age=86400",
+      "kind": "derivative",
+      "verifiedAt": "2026-09-03T16:13:35.932Z"
+    },
+    "hero/brick.webp": {
+      "bytes": 40934,
+      "sha256": "76aad98beebe43dbabf147c6c7fe0e7d450c679bed97d86d7f8f176c3dfd2554",
+      "contentType": "image/webp",
+      "cacheControl": "public, max-age=86400",
+      "kind": "derivative",
+      "verifiedAt": "2026-09-03T16:13:38.858Z"
+    },
+    "hero/building.webp": {
+      "bytes": 60176,
+      "sha256": "6eaffaa2460ac5de5bb356c21c89b248add1f4216093704e86f7987e7da7f918",
+      "contentType": "image/webp",
+      "cacheControl": "public, max-age=86400",
+      "kind": "derivative",
+      "verifiedAt": "2026-09-03T16:13:41.425Z"
+    },
+    "hero/bus.webp": {
+      "bytes": 58574,
+      "sha256": "0ca1d43ff6e1b15efb8c35180aea7d7b8bb190aa3960247dc500281692280a87",
+      "contentType": "image/webp",
+      "cacheControl": "public, max-age=86400",
+      "kind": "derivative",
+      "verifiedAt": "2026-09-03T16:13:44.179Z"
+    },
+    "hero/scene.webp": {
+      "bytes": 109726,
+      "sha256": "77bd75f9638e0fef248a7eff34cffb18263d33ced347847f97b89b5b4a0deb07",
+      "contentType": "image/webp",
+      "cacheControl": "public, max-age=86400",
+      "kind": "derivative",
+      "verifiedAt": "2026-09-03T16:13:47.079Z"
+    },
+    "mocktails/bicerin.webp": {
+      "bytes": 25404,
+      "sha256": "efb2cfc3fd150c398ec7cf011da96791491a175cc143651e3b75ff341be5993d",
+      "contentType": "image/webp",
+      "cacheControl": "public, max-age=86400",
+      "kind": "derivative",
+      "verifiedAt": "2026-09-03T16:13:50.232Z"
+    },
+    "mocktails/blood orange espresso tonic.webp": {
+      "bytes": 45694,
+      "sha256": "b359d4bd24126bbb15b667c1d96868f121bfac907208b504310e4ff52b13c41d",
+      "contentType": "image/webp",
+      "cacheControl": "public, max-age=86400",
+      "kind": "derivative",
+      "verifiedAt": "2026-09-03T16:13:53.095Z"
+    },
+    "mocktails/piccante.webp": {
+      "bytes": 27046,
+      "sha256": "97df6aa7603066d1ccf52671ca3980a14afd8872de78ded16a5dd04f37bcd3ad",
+      "contentType": "image/webp",
+      "cacheControl": "public, max-age=86400",
+      "kind": "derivative",
+      "verifiedAt": "2026-09-03T16:13:55.810Z"
+    },
+    "mocktails/signor bianca.webp": {
+      "bytes": 36904,
+      "sha256": "f95add92659781cb8627f316687aed98f337c4f494172c835d5e10815ec732ef",
+      "contentType": "image/webp",
+      "cacheControl": "public, max-age=86400",
+      "kind": "derivative",
+      "verifiedAt": "2026-09-03T16:13:58.476Z"
+    },
+    "mocktails/viola and sambuco.webp": {
+      "bytes": 92346,
+      "sha256": "a2aa9036f63c25698d4f577cd9368cab22ddf94efd4284278ae745a6d6eb5586",
+      "contentType": "image/webp",
+      "cacheControl": "public, max-age=86400",
+      "kind": "derivative",
+      "verifiedAt": "2026-09-03T16:14:01.161Z"
+    },
+    "our_story/cut.webp": {
+      "bytes": 74130,
+      "sha256": "6c4e2c5281962a5a5f27ff776eba744b8f1a5fd1e9e36a5ed42a910c91524bc1",
+      "contentType": "image/webp",
+      "cacheControl": "public, max-age=86400",
+      "kind": "derivative",
+      "verifiedAt": "2026-09-03T16:14:03.960Z"
+    },
+    "our_story/dinner.webp": {
+      "bytes": 60494,
+      "sha256": "34a5e6303b1b01446fd9d2bebf18ba5851ea9511bfbf7bea3a9576c95162d4c3",
+      "contentType": "image/webp",
+      "cacheControl": "public, max-age=86400",
+      "kind": "derivative",
+      "verifiedAt": "2026-09-03T16:14:06.516Z"
+    },
+    "our_story/handmaking.webp": {
+      "bytes": 37492,
+      "sha256": "5595c0f6319f1b072c20ff73b08742ca680fa55e0d79a00507a09f5011ad74df",
+      "contentType": "image/webp",
+      "cacheControl": "public, max-age=86400",
+      "kind": "derivative",
+      "verifiedAt": "2026-09-03T16:14:09.015Z"
+    },
+    "our_story/oven.webp": {
+      "bytes": 31896,
+      "sha256": "6f61b6584034f6029c70d59f85e7e8cf3180107499ab1fbd0f928cff13443ea7",
+      "contentType": "image/webp",
+      "cacheControl": "public, max-age=86400",
+      "kind": "derivative",
+      "verifiedAt": "2026-09-03T16:14:11.600Z"
+    },
+    "our_story/shape.webp": {
+      "bytes": 57282,
+      "sha256": "408438ad0360ecf9cd69d606b419cbd231b26474aec763cebf7b9a6a49330544",
+      "contentType": "image/webp",
+      "cacheControl": "public, max-age=86400",
+      "kind": "derivative",
+      "verifiedAt": "2026-09-03T16:14:14.987Z"
+    },
+    "our_story/stuff.webp": {
+      "bytes": 44280,
+      "sha256": "701309f1bf6d9c8c74b355f56a95f62f1d20ba4057f16423053cb2fb8d5d1c53",
+      "contentType": "image/webp",
+      "cacheControl": "public, max-age=86400",
+      "kind": "derivative",
+      "verifiedAt": "2026-09-03T16:14:17.626Z"
+    },
+    "press/hotelier.webp": {
+      "bytes": 25586,
+      "sha256": "551cd8637336fc66873634636ebc22120de60befab7d766d88e1da08de906d44",
+      "contentType": "image/webp",
+      "cacheControl": "public, max-age=86400",
+      "kind": "derivative",
+      "verifiedAt": "2026-09-03T16:14:20.235Z"
+    },
+    "press/restaurantindia.webp": {
+      "bytes": 79316,
+      "sha256": "3902351292b7e81aeb67127b751b78dd852b17eef798462aeae05a5db8f906a3",
+      "contentType": "image/webp",
+      "cacheControl": "public, max-age=86400",
+      "kind": "derivative",
+      "verifiedAt": "2026-09-03T16:14:22.907Z"
+    },
+    "press/royale.webp": {
+      "bytes": 140086,
+      "sha256": "b18bafc70e82b20b8c353237440f5ccdbf39590f57d541d617627763c185dbe1",
+      "contentType": "image/webp",
+      "cacheControl": "public, max-age=86400",
+      "kind": "derivative",
+      "verifiedAt": "2026-09-03T16:14:25.477Z"
+    },
+    "source/atmosphere/ambience.JPG": {
+      "bytes": 8848211,
+      "sha256": "b6ef493332587c52b627792fdb60355c835a01b3bbe9bc81a00fb11fe2926bef",
+      "contentType": "image/jpeg",
+      "cacheControl": "public, max-age=86400",
+      "kind": "original",
+      "verifiedAt": "2026-09-03T16:14:29.432Z"
+    },
+    "source/atmosphere/ceiling decor.png": {
+      "bytes": 3119508,
+      "sha256": "6b58373410db515bd2c83cdfd9d49ac07d9c4d5404f0fd45ce1e83590df39eb5",
+      "contentType": "image/png",
+      "cacheControl": "public, max-age=86400",
+      "kind": "original",
+      "verifiedAt": "2026-09-03T16:14:32.372Z"
+    },
+    "source/atmosphere/dining.jpg": {
+      "bytes": 838136,
+      "sha256": "54fc64fc8e77526c8d12bc0b58f437a2d328fa528cbcb21ab8af10ff6a2f6121",
+      "contentType": "image/png",
+      "cacheControl": "public, max-age=86400",
+      "kind": "original",
+      "verifiedAt": "2026-09-03T16:14:34.926Z"
+    },
+    "source/atmosphere/front mirror.png": {
+      "bytes": 3357507,
+      "sha256": "3237c6ff6e9ec16aacf436d6905344c59b91fc5bab6d40d5135e342a3ff09776",
+      "contentType": "image/png",
+      "cacheControl": "public, max-age=86400",
+      "kind": "original",
+      "verifiedAt": "2026-09-03T16:14:38.519Z"
+    },
+    "source/atmosphere/outsideLOGO.jpg": {
+      "bytes": 529347,
+      "sha256": "01d48e3f8b1cd2bf747e513899997306dd660f475e4e61afc82ffa559418470b",
+      "contentType": "image/png",
+      "cacheControl": "public, max-age=86400",
+      "kind": "original",
+      "verifiedAt": "2026-09-03T16:14:41.084Z"
+    },
+    "source/atmosphere/painting board.JPG": {
+      "bytes": 8822783,
+      "sha256": "2258f8355d01b17578c056585e88c4a83a49e26058bab5c61390256b8960000b",
+      "contentType": "image/jpeg",
+      "cacheControl": "public, max-age=86400",
+      "kind": "original",
+      "verifiedAt": "2026-09-03T16:14:44.777Z"
+    },
+    "source/atmosphere/room.png": {
+      "bytes": 2299274,
+      "sha256": "a913cea975c5085cfe49b59a00bf2cd49d018772a9798cf61dcb4416c1d480f3",
+      "contentType": "image/png",
+      "cacheControl": "public, max-age=86400",
+      "kind": "original",
+      "verifiedAt": "2026-09-03T16:14:48.290Z"
+    },
+    "source/atmosphere/table.png": {
+      "bytes": 3290382,
+      "sha256": "1c7ed93c46da508776fcad0aeb563c5ffd0acefab78c0108e8a41dddfd07e401",
+      "contentType": "image/png",
+      "cacheControl": "public, max-age=86400",
+      "kind": "original",
+      "verifiedAt": "2026-09-03T16:14:51.516Z"
+    },
+    "source/experiences/pamphlet.jpg": {
+      "bytes": 204572,
+      "sha256": "eff070e8cd223648f8473c7fa54076c3339b24e557245c3e91ef7811ba10ff27",
+      "contentType": "image/jpeg",
+      "cacheControl": "public, max-age=86400",
+      "kind": "original",
+      "verifiedAt": "2026-09-03T16:14:54.198Z"
+    },
+    "source/experiences/retail.png": {
+      "bytes": 1968588,
+      "sha256": "ad9299589111ab5c6163c038764713158fb2658975009855de628de5fee6ae97",
+      "contentType": "image/png",
+      "cacheControl": "public, max-age=86400",
+      "kind": "original",
+      "verifiedAt": "2026-09-03T16:14:57.486Z"
+    },
+    "source/food/Aglio e Pepperoncini.jpg": {
+      "bytes": 462505,
+      "sha256": "0d3cd18d82b9a7b62aeefcc736df6378073fe6744905abc2dd222a4f14a00765",
+      "contentType": "image/png",
+      "cacheControl": "public, max-age=86400",
+      "kind": "original",
+      "verifiedAt": "2026-09-03T16:15:02.066Z"
+    },
+    "source/food/americana.png": {
+      "bytes": 392687,
+      "sha256": "8fd6b1b75a866920f76fa4b83b903b46670494c4cf112bf4076c61743727ad7d",
+      "contentType": "image/png",
+      "cacheControl": "public, max-age=86400",
+      "kind": "original",
+      "verifiedAt": "2026-09-03T16:15:04.771Z"
+    },
+    "source/food/arrosticini.JPG": {
+      "bytes": 9648689,
+      "sha256": "f1ddeb6fd425427fc32e83d53a06cfca92a1dd12ca5a9a5865f441e8aac5656d",
+      "contentType": "image/jpeg",
+      "cacheControl": "public, max-age=86400",
+      "kind": "original",
+      "verifiedAt": "2026-09-03T16:15:09.199Z"
+    },
+    "source/food/bonet piemontese.JPG": {
+      "bytes": 9665813,
+      "sha256": "f86edf28ca92f52bbcd32d0f1ab76908a0d1ce3d3b7b5955627c0effba754f9c",
+      "contentType": "image/jpeg",
+      "cacheControl": "public, max-age=86400",
+      "kind": "original",
+      "verifiedAt": "2026-09-03T16:15:13.686Z"
+    },
+    "source/food/boozy donna.JPG": {
+      "bytes": 8626202,
+      "sha256": "a9e298844bb0ffe64bcd76fb0737368a3a018e5cf8eb38c0de1042a2034ef8aa",
+      "contentType": "image/jpeg",
+      "cacheControl": "public, max-age=86400",
+      "kind": "original",
+      "verifiedAt": "2026-09-03T16:15:17.491Z"
+    },
+    "source/food/idk1.JPG": {
+      "bytes": 10369164,
+      "sha256": "e8f75b13cd0d413da97296d9f50c5188b75f221835c9b25607571d166abc20a2",
+      "contentType": "image/jpeg",
+      "cacheControl": "public, max-age=86400",
+      "kind": "original",
+      "verifiedAt": "2026-09-03T16:15:22.396Z"
+    },
+    "source/food/idk2.JPG": {
+      "bytes": 9771694,
+      "sha256": "d3806c8c804f4fe5621d3e7f95249e4ecead7a3ce91ed92f724d0c099170adcf",
+      "contentType": "image/jpeg",
+      "cacheControl": "public, max-age=86400",
+      "kind": "original",
+      "verifiedAt": "2026-09-03T16:15:26.146Z"
+    },
+    "source/food/margarita.jpg": {
+      "bytes": 484763,
+      "sha256": "afea6450626060e96d8233c3747a990120db8011bf379d4ff7474fc1717c02a9",
+      "contentType": "image/png",
+      "cacheControl": "public, max-age=86400",
+      "kind": "original",
+      "verifiedAt": "2026-09-03T16:15:28.759Z"
+    },
+    "source/food/pistaAffo.jpg": {
+      "bytes": 828667,
+      "sha256": "c2c6b702d0575f573a6f29007d60eb460e210b645f2ddc9677f958dfe78be683",
+      "contentType": "image/jpeg",
+      "cacheControl": "public, max-age=86400",
+      "kind": "original",
+      "verifiedAt": "2026-09-03T16:15:31.360Z"
+    },
+    "source/food/pizza1.JPG": {
+      "bytes": 12841664,
+      "sha256": "57da9e4d3efccb44d4bea511fe09f85c2ed40b25dc55f578f5455edde8c0a0f2",
+      "contentType": "image/jpeg",
+      "cacheControl": "public, max-age=86400",
+      "kind": "original",
+      "verifiedAt": "2026-09-03T16:15:35.770Z"
+    },
+    "source/food/pizza2.JPG": {
+      "bytes": 11572245,
+      "sha256": "594fa9f7e1da5f6c7c87bb1cda8090a603e393179b68a3443f485df5384b230b",
+      "contentType": "image/jpeg",
+      "cacheControl": "public, max-age=86400",
+      "kind": "original",
+      "verifiedAt": "2026-09-03T16:15:41.061Z"
+    },
+    "source/food/pollo alla cacciatora.JPG": {
+      "bytes": 8978081,
+      "sha256": "bfd57ac17cf86615e87ab8fd128edaa2d9bd72a06ceaaf1f420b7e2d93579866",
+      "contentType": "image/jpeg",
+      "cacheControl": "public, max-age=86400",
+      "kind": "original",
+      "verifiedAt": "2026-09-03T16:15:45.453Z"
+    },
+    "source/food/Spaghetti alla'Assassina.jpg": {
+      "bytes": 446439,
+      "sha256": "a77658ddf7197ed13f18648cdf1fee172d3572c4b9d44f1eebcff76a76af6f4c",
+      "contentType": "image/png",
+      "cacheControl": "public, max-age=86400",
+      "kind": "original",
+      "verifiedAt": "2026-09-03T16:15:48.122Z"
+    },
+    "source/food/tielle.jpg": {
+      "bytes": 662514,
+      "sha256": "3627ce79cc817cbab44e1ec8b20b14f815cc215b92a6351365452b71d18b6588",
+      "contentType": "image/png",
+      "cacheControl": "public, max-age=86400",
+      "kind": "original",
+      "verifiedAt": "2026-09-03T16:15:50.823Z"
+    },
+    "source/food/tiramisu.jpg": {
+      "bytes": 649431,
+      "sha256": "20783676f5f2153efdb691d8646482252695acbef4a137b4a76c1ba5f009db2a",
+      "contentType": "image/png",
+      "cacheControl": "public, max-age=86400",
+      "kind": "original",
+      "verifiedAt": "2026-09-03T16:15:53.597Z"
+    },
+    "source/hero/brick.jpg": {
+      "bytes": 2202233,
+      "sha256": "07fefb8c3102bd61f0abf6f1cf35573fb9ea306ffbe290d6b53575be091bf7a9",
+      "contentType": "image/png",
+      "cacheControl": "public, max-age=86400",
+      "kind": "original",
+      "verifiedAt": "2026-09-03T16:15:56.396Z"
+    },
+    "source/hero/building.png": {
+      "bytes": 3199865,
+      "sha256": "090ab953b074388fb18459a3650602b4f5ab2b5c9010db58f9c1b23c928f6131",
+      "contentType": "image/png",
+      "cacheControl": "public, max-age=86400",
+      "kind": "original",
+      "verifiedAt": "2026-09-03T16:15:59.636Z"
+    },
+    "source/hero/bus.jpeg": {
+      "bytes": 375465,
+      "sha256": "3407b2962affd8de788a7fe8106d8e96159cffbb4e73c2ce66b1e8a45647e3a9",
+      "contentType": "image/jpeg",
+      "cacheControl": "public, max-age=86400",
+      "kind": "original",
+      "verifiedAt": "2026-09-03T16:16:02.077Z"
+    },
+    "source/hero/farfalle.png": {
+      "bytes": 55137,
+      "sha256": "7f2f5a8b1ff2244248f709f75eebe19b165c2cf4d3c73d80a07c592179787d94",
+      "contentType": "image/png",
+      "cacheControl": "public, max-age=86400",
+      "kind": "original",
+      "verifiedAt": "2026-09-03T16:16:05.014Z"
+    },
+    "source/hero/farfalle1.png": {
+      "bytes": 152058,
+      "sha256": "5ecb58be8fcd85af17802cbc75d8c2f184e061e41743d859bf26b0b5555f4373",
+      "contentType": "image/png",
+      "cacheControl": "public, max-age=86400",
+      "kind": "original",
+      "verifiedAt": "2026-09-03T16:16:07.777Z"
+    },
+    "source/hero/farfalle2.png": {
+      "bytes": 149896,
+      "sha256": "130c45b7953e237fda5764b725c0e58b34e3ffd310e3e8af244a5aa92b02253c",
+      "contentType": "image/png",
+      "cacheControl": "public, max-age=86400",
+      "kind": "original",
+      "verifiedAt": "2026-09-03T16:16:10.350Z"
+    },
+    "source/hero/farfalle3.png": {
+      "bytes": 141904,
+      "sha256": "3cfa76800741a62b66fbcfd3898555726ff3a1d01ca8d1e4e22f3e194c118367",
+      "contentType": "image/png",
+      "cacheControl": "public, max-age=86400",
+      "kind": "original",
+      "verifiedAt": "2026-09-03T16:16:13.157Z"
+    },
+    "source/hero/farfalle4.png": {
+      "bytes": 135165,
+      "sha256": "486583be9d0b56c620bc819d0ccee63d1cb329b56606d33023ddfd0ced9a0822",
+      "contentType": "image/png",
+      "cacheControl": "public, max-age=86400",
+      "kind": "original",
+      "verifiedAt": "2026-09-03T16:16:15.538Z"
+    },
+    "source/hero/postcard.png": {
+      "bytes": 2102863,
+      "sha256": "2ffc879ab3e475cf64edc1d4e91ebf39c4a55c291f1b21b3b6bbab6f7d6177f2",
+      "contentType": "image/png",
+      "cacheControl": "public, max-age=86400",
+      "kind": "original",
+      "verifiedAt": "2026-09-03T16:16:18.303Z"
+    },
+    "source/hero/scene.png": {
+      "bytes": 4341482,
+      "sha256": "bf357829c50ceb7b5c42f9bb7943a8992174c71c38fe266175307420b20250d9",
+      "contentType": "image/png",
+      "cacheControl": "public, max-age=86400",
+      "kind": "original",
+      "verifiedAt": "2026-09-03T16:16:21.487Z"
+    },
+    "source/Menu - Expanded.pdf": {
+      "bytes": 6831745,
+      "sha256": "c2f137800be9ad5870bb32a83d1cdb38921f7830845567d0655117022c79bea3",
+      "contentType": "application/pdf",
+      "cacheControl": "public, max-age=86400",
+      "kind": "original",
+      "verifiedAt": "2026-09-03T16:16:25.416Z"
+    },
+    "source/mocktails/bicerin.jpg": {
+      "bytes": 458860,
+      "sha256": "cc0911d0d3170e63d13bce9e6c04ee6e120cdf59e5167a6c574b149af6037896",
+      "contentType": "image/png",
+      "cacheControl": "public, max-age=86400",
+      "kind": "original",
+      "verifiedAt": "2026-09-03T16:16:27.923Z"
+    },
+    "source/mocktails/blood orange espresso tonic.JPG": {
+      "bytes": 9697076,
+      "sha256": "b5f789fd360e72a359d65c39222c727df6673e6c1a4a4a17076225f8a2cb75a3",
+      "contentType": "image/jpeg",
+      "cacheControl": "public, max-age=86400",
+      "kind": "original",
+      "verifiedAt": "2026-09-03T16:16:31.958Z"
+    },
+    "source/mocktails/piccante.JPG": {
+      "bytes": 10411393,
+      "sha256": "608135cea4525604f8ea664c0d587e6edb59d1ab26234ea9062363f59ad3bd90",
+      "contentType": "image/jpeg",
+      "cacheControl": "public, max-age=86400",
+      "kind": "original",
+      "verifiedAt": "2026-09-03T16:16:36.574Z"
+    },
+    "source/mocktails/signor bianca.png": {
+      "bytes": 711939,
+      "sha256": "7de238dfc4f5460a322bb6082268479a37e7631cde897b3d784d4851a5c99c6b",
+      "contentType": "image/png",
+      "cacheControl": "public, max-age=86400",
+      "kind": "original",
+      "verifiedAt": "2026-09-03T16:16:39.267Z"
+    },
+    "source/mocktails/viola and sambuco.png": {
+      "bytes": 3538808,
+      "sha256": "e598cd06124d5488e99a0977ab9f711bdc115f6c4a27b0b856476c3e6f1ece48",
+      "contentType": "image/png",
+      "cacheControl": "public, max-age=86400",
+      "kind": "original",
+      "verifiedAt": "2026-09-03T16:16:42.595Z"
+    },
+    "source/our_story/cut.JPG": {
+      "bytes": 10764774,
+      "sha256": "0a6b1457c0a7df325a5090d5617ffe4ac991a4da340804973fee1dbe452a7e64",
+      "contentType": "image/jpeg",
+      "cacheControl": "public, max-age=86400",
+      "kind": "original",
+      "verifiedAt": "2026-09-03T16:16:49.348Z"
+    },
+    "source/our_story/dinner.JPG": {
+      "bytes": 906066,
+      "sha256": "3b79d6deea461c136cfdf339ec934a80ec6fd1fed4668318fefe6dc258ac5243",
+      "contentType": "image/jpeg",
+      "cacheControl": "public, max-age=86400",
+      "kind": "original",
+      "verifiedAt": "2026-09-03T16:16:52.483Z"
+    },
+    "source/our_story/handmaking.jpg": {
+      "bytes": 824999,
+      "sha256": "ea43b961f8f4699fa493e07c131d22153b92b21520d81b1796890aa7a8078ad1",
+      "contentType": "image/png",
+      "cacheControl": "public, max-age=86400",
+      "kind": "original",
+      "verifiedAt": "2026-09-03T16:16:55.395Z"
+    },
+    "source/our_story/oven.JPG": {
+      "bytes": 9774205,
+      "sha256": "d369bb48e33ac24cc29379d1a7133167d75eca8b0a2e71b1e58135fdbeb0f158",
+      "contentType": "image/jpeg",
+      "cacheControl": "public, max-age=86400",
+      "kind": "original",
+      "verifiedAt": "2026-09-03T16:16:59.413Z"
+    },
+    "source/our_story/shape.JPG": {
+      "bytes": 10702742,
+      "sha256": "b7568c04dcf98d6939ea7c9754e9c5785fadb0dbb22947d3f025510147cdeab3",
+      "contentType": "image/jpeg",
+      "cacheControl": "public, max-age=86400",
+      "kind": "original",
+      "verifiedAt": "2026-09-03T16:17:03.516Z"
+    },
+    "source/our_story/stuff.JPG": {
+      "bytes": 10023824,
+      "sha256": "737ad58480f342ac3bb25f1c82dcf5c349ebe5723c96a2cca0ad165ff256b008",
+      "contentType": "image/jpeg",
+      "cacheControl": "public, max-age=86400",
+      "kind": "original",
+      "verifiedAt": "2026-09-03T16:17:07.320Z"
+    },
+    "source/press/hotelier.png": {
+      "bytes": 1172866,
+      "sha256": "38ac87a310dfa61cb79c741d5752171c34693314381ec7a24fbf3ee7833ecac6",
+      "contentType": "image/png",
+      "cacheControl": "public, max-age=86400",
+      "kind": "original",
+      "verifiedAt": "2026-09-03T16:17:09.778Z"
+    },
+    "source/press/restaurantindia.png": {
+      "bytes": 999783,
+      "sha256": "19566e8a7b739621c66c6ebdfb3b310c1e6c623ff8e17b2315ab1cbf3475c966",
+      "contentType": "image/png",
+      "cacheControl": "public, max-age=86400",
+      "kind": "original",
+      "verifiedAt": "2026-09-03T16:17:12.663Z"
+    },
+    "source/press/royale.png": {
+      "bytes": 1764480,
+      "sha256": "e75c956a8e65c6f3cf785739cb95046bc9d4d48bf157f55c560dd01db050aa51",
+      "contentType": "image/png",
+      "cacheControl": "public, max-age=86400",
+      "kind": "original",
+      "verifiedAt": "2026-09-03T16:17:16.156Z"
+    },
+    "source/team/kamalika-anand.jpg": {
+      "bytes": 375676,
+      "sha256": "9257e8ae09bd67b12d1fb725c8d5d2164d53c3d61e4d767f2fcffeba924d1204",
+      "contentType": "image/jpeg",
+      "cacheControl": "public, max-age=86400",
+      "kind": "original",
+      "verifiedAt": "2026-09-03T16:17:18.994Z"
+    },
+    "team/kamalika-anand.webp": {
+      "bytes": 114266,
+      "sha256": "83719c97894abf05f04f9f0e8eca28769cb3fc27c4eef17c13656a3d995db554",
+      "contentType": "image/webp",
+      "cacheControl": "public, max-age=86400",
+      "kind": "derivative",
+      "verifiedAt": "2026-09-03T16:17:22.116Z"
+    }
+  }
+}

@@ -63,7 +63,7 @@ exports[`the twelve panels, as they render today > About (story) 1`] = `
           <img
             alt=""
             class="mb-2 h-24 w-24 rounded-full border border-gray-300 object-cover"
-            src="/team/kamalika-anand.webp"
+            src="/images/team/kamalika-anand.webp"
           />
           <input
             accept="image/*"
@@ -689,7 +689,7 @@ exports[`the twelve panels, as they render today > Experiences (experiences) 1`]
                 class="h-12 w-12 shrink-0 rounded border border-brand/40 object-cover"
                 data-thumbnail="row"
                 loading="lazy"
-                src="/atmosphere/table.webp"
+                src="/images/atmosphere/table.webp"
               />
               <span
                 class="min-w-0 flex-1 truncate"
@@ -728,7 +728,7 @@ exports[`the twelve panels, as they render today > Experiences (experiences) 1`]
                 class="h-12 w-12 shrink-0 rounded border border-brand/40 object-cover"
                 data-thumbnail="row"
                 loading="lazy"
-                src="/atmosphere/dining.webp"
+                src="/images/atmosphere/dining.webp"
               />
               <span
                 class="min-w-0 flex-1 truncate"
@@ -774,7 +774,7 @@ exports[`the twelve panels, as they render today > Experiences (experiences) 1`]
                 class="h-12 w-12 shrink-0 rounded border border-brand/40 object-cover"
                 data-thumbnail="row"
                 loading="lazy"
-                src="/experiences/pamphlet.webp"
+                src="/images/experiences/pamphlet.webp"
               />
               <span
                 class="min-w-0 flex-1 truncate"
@@ -820,7 +820,7 @@ exports[`the twelve panels, as they render today > Experiences (experiences) 1`]
                 class="h-12 w-12 shrink-0 rounded border border-brand/40 object-cover"
                 data-thumbnail="row"
                 loading="lazy"
-                src="/atmosphere/ambience.webp"
+                src="/images/atmosphere/ambience.webp"
               />
               <span
                 class="min-w-0 flex-1 truncate"
@@ -866,7 +866,7 @@ exports[`the twelve panels, as they render today > Experiences (experiences) 1`]
                 class="h-12 w-12 shrink-0 rounded border border-brand/40 object-cover"
                 data-thumbnail="row"
                 loading="lazy"
-                src="/food/tiramisu.webp"
+                src="/images/food/tiramisu.webp"
               />
               <span
                 class="min-w-0 flex-1 truncate"
@@ -912,7 +912,7 @@ exports[`the twelve panels, as they render today > Experiences (experiences) 1`]
                 class="h-12 w-12 shrink-0 rounded border border-brand/40 object-cover"
                 data-thumbnail="row"
                 loading="lazy"
-                src="/experiences/retail.webp"
+                src="/images/experiences/retail.webp"
               />
               <span
                 class="min-w-0 flex-1 truncate"
@@ -985,7 +985,7 @@ exports[`the twelve panels, as they render today > Galleries (galleries) 1`] = `
                   class="h-12 w-12 shrink-0 rounded border border-brand/40 object-cover"
                   data-thumbnail="row"
                   loading="lazy"
-                  src="/atmosphere/dining.webp"
+                  src="/images/atmosphere/dining.webp"
                 />
                 <span
                   class="min-w-0 flex-1 truncate"
@@ -1024,7 +1024,7 @@ exports[`the twelve panels, as they render today > Galleries (galleries) 1`] = `
                   class="h-12 w-12 shrink-0 rounded border border-brand/40 object-cover"
                   data-thumbnail="row"
                   loading="lazy"
-                  src="/atmosphere/outsideLOGO.webp"
+                  src="/images/atmosphere/outsideLOGO.webp"
                 />
                 <span
                   class="min-w-0 flex-1 truncate"
@@ -1070,7 +1070,7 @@ exports[`the twelve panels, as they render today > Galleries (galleries) 1`] = `
                   class="h-12 w-12 shrink-0 rounded border border-brand/40 object-cover"
                   data-thumbnail="row"
                   loading="lazy"
-                  src="/atmosphere/ambience.webp"
+                  src="/images/atmosphere/ambience.webp"
                 />
                 <span
                   class="min-w-0 flex-1 truncate"
@@ -1116,7 +1116,7 @@ exports[`the twelve panels, as they render today > Galleries (galleries) 1`] = `
                   class="h-12 w-12 shrink-0 rounded border border-brand/40 object-cover"
                   data-thumbnail="row"
                   loading="lazy"
-                  src="/atmosphere/ceiling decor.webp"
+                  src="/images/atmosphere/ceiling%20decor.webp"
                 />
                 <span
                   class="min-w-0 flex-1 truncate"
@@ -1162,7 +1162,7 @@ exports[`the twelve panels, as they render today > Galleries (galleries) 1`] = `
                   class="h-12 w-12 shrink-0 rounded border border-brand/40 object-cover"
                   data-thumbnail="row"
                   loading="lazy"
-                  src="/atmosphere/front mirror.webp"
+                  src="/images/atmosphere/front%20mirror.webp"
                 />
                 <span
                   class="min-w-0 flex-1 truncate"
@@ -1208,7 +1208,7 @@ exports[`the twelve panels, as they render today > Galleries (galleries) 1`] = `
                   class="h-12 w-12 shrink-0 rounded border border-brand/40 object-cover"
                   data-thumbnail="row"
                   loading="lazy"
-                  src="/atmosphere/painting board.webp"
+                  src="/images/atmosphere/painting%20board.webp"
                 />
                 <span
                   class="min-w-0 flex-1 truncate"
@@ -1254,7 +1254,7 @@ exports[`the twelve panels, as they render today > Galleries (galleries) 1`] = `
                   class="h-12 w-12 shrink-0 rounded border border-brand/40 object-cover"
                   data-thumbnail="row"
                   loading="lazy"
-                  src="/atmosphere/room.webp"
+                  src="/images/atmosphere/room.webp"
                 />
                 <span
                   class="min-w-0 flex-1 truncate"
@@ -1300,7 +1300,7 @@ exports[`the twelve panels, as they render today > Galleries (galleries) 1`] = `
                   class="h-12 w-12 shrink-0 rounded border border-brand/40 object-cover"
                   data-thumbnail="row"
                   loading="lazy"
-                  src="/atmosphere/table.webp"
+                  src="/images/atmosphere/table.webp"
                 />
                 <span
                   class="min-w-0 flex-1 truncate"
@@ -1360,7 +1360,7 @@ exports[`the twelve panels, as they render today > Galleries (galleries) 1`] = `
                   class="h-12 w-12 shrink-0 rounded border border-brand/40 object-cover"
                   data-thumbnail="row"
                   loading="lazy"
-                  src="/our_story/cut.webp"
+                  src="/images/our_story/cut.webp"
                 />
                 <span
                   class="min-w-0 flex-1 truncate"
@@ -1399,7 +1399,7 @@ exports[`the twelve panels, as they render today > Galleries (galleries) 1`] = `
                   class="h-12 w-12 shrink-0 rounded border border-brand/40 object-cover"
                   data-thumbnail="row"
                   loading="lazy"
-                  src="/our_story/dinner.webp"
+                  src="/images/our_story/dinner.webp"
                 />
                 <span
                   class="min-w-0 flex-1 truncate"
@@ -1445,7 +1445,7 @@ exports[`the twelve panels, as they render today > Galleries (galleries) 1`] = `
                   class="h-12 w-12 shrink-0 rounded border border-brand/40 object-cover"
                   data-thumbnail="row"
                   loading="lazy"
-                  src="/our_story/handmaking.webp"
+                  src="/images/our_story/handmaking.webp"
                 />
                 <span
                   class="min-w-0 flex-1 truncate"
@@ -1491,7 +1491,7 @@ exports[`the twelve panels, as they render today > Galleries (galleries) 1`] = `
                   class="h-12 w-12 shrink-0 rounded border border-brand/40 object-cover"
                   data-thumbnail="row"
                   loading="lazy"
-                  src="/our_story/oven.webp"
+                  src="/images/our_story/oven.webp"
                 />
                 <span
                   class="min-w-0 flex-1 truncate"
@@ -1537,7 +1537,7 @@ exports[`the twelve panels, as they render today > Galleries (galleries) 1`] = `
                   class="h-12 w-12 shrink-0 rounded border border-brand/40 object-cover"
                   data-thumbnail="row"
                   loading="lazy"
-                  src="/our_story/shape.webp"
+                  src="/images/our_story/shape.webp"
                 />
                 <span
                   class="min-w-0 flex-1 truncate"
@@ -1583,7 +1583,7 @@ exports[`the twelve panels, as they render today > Galleries (galleries) 1`] = `
                   class="h-12 w-12 shrink-0 rounded border border-brand/40 object-cover"
                   data-thumbnail="row"
                   loading="lazy"
-                  src="/our_story/stuff.webp"
+                  src="/images/our_story/stuff.webp"
                 />
                 <span
                   class="min-w-0 flex-1 truncate"

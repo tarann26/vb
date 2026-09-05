@@ -46,10 +46,10 @@
           "heading": "From recent events",
           "layout": "scroll",
           "images": [
-            { "src": "/atmosphere/table.webp", "alt": "A laid table set for a private dinner" },
-            { "src": "/food/pizza1.webp", "alt": "A wood-fired pizza fresh from the oven" },
-            { "src": "/food/arrosticini.webp", "alt": "Arrosticini, grilled and plated" },
-            { "src": "/our_story/dinner.webp", "alt": "Guests seated for dinner" }
+            { "src": "/images/atmosphere/table.webp", "alt": "A laid table set for a private dinner" },
+            { "src": "/images/food/pizza1.webp", "alt": "A wood-fired pizza fresh from the oven" },
+            { "src": "/images/food/arrosticini.webp", "alt": "Arrosticini, grilled and plated" },
+            { "src": "/images/our_story/dinner.webp", "alt": "Guests seated for dinner" }
           ]
         }
       }
@@ -106,7 +106,7 @@
           "heading": "Sunday, 12pm",
           "layout": "hero",
           "images": [
-            { "src": "/experiences/pamphlet.webp", "alt": "The cooking class pamphlet: Sunday at 12pm, four children, four dishes" }
+            { "src": "/images/experiences/pamphlet.webp", "alt": "The cooking class pamphlet: Sunday at 12pm, four children, four dishes" }
           ]
         }
       },

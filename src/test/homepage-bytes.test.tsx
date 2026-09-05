@@ -334,6 +334,26 @@ import { AppRoutes } from '../App';
 // already carried, because only the drinks/experiences boundary and the
 // two wash/wash-warm boundaries either side of experiences and ourStory
 // were undifferentiated.
+// The image migration, 2026-08-21: 48325 -> 48713 (+388 bytes). Every
+// photograph the homepage paints moved from a file under public/ to an R2
+// object served through the Worker, so each rendered reference grew the
+// site-root prefix src/shared/image-host.ts defines. No markup changed shape;
+// nothing was added or removed; only the spelling of the paths moved.
+//
+// MEASURED, not derived, and measured in a way that also proves nothing else
+// moved. src/test/siteRootForm.ts turns a rendered page's migrated references
+// back into the paths they were written from and touches nothing else. Fed
+// this page's own `container.innerHTML`, it returns markup measuring 48325
+// bytes -- the number this test carried before the migration, exactly. That
+// is the attribution: if any other edit had ridden along in the same commit,
+// the undone form would land somewhere other than the old pin.
+//
+// The composition of the 388, from the same measurement rather than assumed:
+// the rendered page holds 52 references under the prefix (40 distinct; the
+// hero collage repeats several tiles), each seven bytes longer for the
+// prefix itself, and 12 spaces across those filenames that arrive as `%20`
+// rather than a raw space, two bytes each. 52 x 7 + 12 x 2 = 388, matching
+// the whole-page delta with nothing left over.
 describe('homepage byte count', () => {
   it('the public homepage is unchanged', () => {
     const { container } = render(
@@ -341,6 +361,6 @@ describe('homepage byte count', () => {
         <AppRoutes />
       </MemoryRouter>,
     );
-    expect(new TextEncoder().encode(container.innerHTML).length).toBe(48325);
+    expect(new TextEncoder().encode(container.innerHTML).length).toBe(48713);
   });
 });

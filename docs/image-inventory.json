@@ -1,5 +1,5 @@
 {
-  "builtAt": "2026-09-01T17:29:30.012Z",
+  "builtAt": "2026-09-03T16:12:19.931Z",
   "origin": "https://viabiancarestaurant.com",
   "references": [
     {
@@ -484,7 +484,7 @@
     },
     {
       "file": "src/content/types.ts",
-      "pointer": "line 187",
+      "pointer": "line 188",
       "path": "/team/kamalika-anand.webp",
       "source": "committed"
     },

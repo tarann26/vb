@@ -3,7 +3,7 @@
     "id": "catering",
     "title": "Catering",
     "description": "Bespoke and curated menus for up to 100 guests, cooked by our kitchen and brought to your event.",
-    "image": "/atmosphere/table.webp",
+    "image": "/images/atmosphere/table.webp",
     "link": "/catering",
     "comingSoon": false
   },
@@ -11,7 +11,7 @@
     "id": "cheeseboards",
     "title": "Cheeseboards",
     "description": "Boards put together by the kitchen and delivered across Delhi.",
-    "image": "/atmosphere/dining.webp",
+    "image": "/images/atmosphere/dining.webp",
     "link": "/cheeseboards",
     "comingSoon": false
   },
@@ -19,7 +19,7 @@
     "id": "cooking-class",
     "title": "Cooking Class",
     "description": "Every Sunday, four children cook four dishes with our kitchen.",
-    "image": "/experiences/pamphlet.webp",
+    "image": "/images/experiences/pamphlet.webp",
     "link": "/cooking-class",
     "comingSoon": false
   },
@@ -27,7 +27,7 @@
     "id": "membership",
     "title": "Membership",
     "description": "A booklet limited to one hundred a year, handpicked by Chef Kamalika.",
-    "image": "/atmosphere/ambience.webp",
+    "image": "/images/atmosphere/ambience.webp",
     "link": "/membership",
     "comingSoon": false
   },
@@ -35,14 +35,14 @@
     "id": "gifting",
     "title": "Gifting",
     "description": "Hampers and gift boxes from the kitchen, in time for the season.",
-    "image": "/food/tiramisu.webp",
+    "image": "/images/food/tiramisu.webp",
     "comingSoon": true
   },
   {
     "id": "retail",
     "title": "Retail",
     "description": "Our pantry shelf -- sauces, preserves and pasta to take home.",
-    "image": "/experiences/retail.webp",
+    "image": "/images/experiences/retail.webp",
     "comingSoon": true
   }
 ]
