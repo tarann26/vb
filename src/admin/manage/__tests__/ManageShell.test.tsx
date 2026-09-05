@@ -47,7 +47,24 @@ describe('areas mount once and stay mounted', () => {
     const user = userEvent.setup();
     renderDashboard('/edit/manage/menu', { wide: true });
 
-    await user.click(await screen.findByRole('button', { name: 'Dish A' }));
+    // Wait on a CHEAP selector, then assert the expensive thing once -- this
+    // file's own comment above `the Story & Photos area carries a Posts panel`
+    // explains why, and this line is the second time that lesson has been
+    // learned here. `findByRole` with a name filter re-sweeps role AND name
+    // over the whole shell every 50ms and starves the single thread React
+    // needs to commit the render it is waiting for; on Cloudflare's builder
+    // that tipped over at 4777ms of a 5000ms budget with "Unable to find
+    // role=button and name Dish A", while passing on a developer's machine.
+    // A row attribute is the cheap proof that dishes.json has landed AND
+    // rendered. Route-scoped for the same reason the other wait is: all five
+    // areas mount from the first render, so a bare `[data-item-row]` would
+    // resolve on a hidden area's row and prove nothing.
+    await waitFor(() => {
+      expect(
+        document.querySelector('[data-area="menu"]:not([hidden]) [data-panel="dishes"] [data-item-row]'),
+      ).not.toBeNull();
+    });
+    await user.click(screen.getByRole('button', { name: 'Dish A' }));
     const dishName = await screen.findByDisplayValue('Dish A');
     await user.clear(dishName);
     await user.type(dishName, 'Dish A Edited');
